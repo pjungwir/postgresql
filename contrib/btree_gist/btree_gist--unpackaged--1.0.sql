@@ -173,6 +173,14 @@ ALTER EXTENSION btree_gist ADD operator family gist_inet_ops using gist;
 ALTER EXTENSION btree_gist ADD operator class gist_inet_ops using gist;
 ALTER EXTENSION btree_gist ADD operator family gist_cidr_ops using gist;
 ALTER EXTENSION btree_gist ADD operator class gist_cidr_ops using gist;
+ALTER EXTENSION btree_gist ADD function gbt_uuid_consistent(internal,uuid,smallint,oid,internal);
+ALTER EXTENSION btree_gist ADD function gbt_uuid_compress(internal);
+ALTER EXTENSION btree_gist ADD function gbt_uuid_penalty(internal,internal,internal);
+ALTER EXTENSION btree_gist ADD function gbt_uuid_picksplit(internal,internal);
+ALTER EXTENSION btree_gist ADD function gbt_uuid_union(bytea,internal);
+ALTER EXTENSION btree_gist ADD function gbt_uuid_same(internal,internal,internal);
+ALTER EXTENSION btree_gist ADD operator family gist_uuid_ops using gist;
+ALTER EXTENSION btree_gist ADD operator class gist_uuid_ops using gist;
 
 
 -- Add functions and operators that are new in 9.1
@@ -477,3 +485,6 @@ ALTER OPERATOR FAMILY gist_inet_ops USING gist ADD
 
 ALTER OPERATOR FAMILY gist_cidr_ops USING gist ADD
 	OPERATOR	6	<> (inet, inet) ;
+
+ALTER OPERATOR FAMILY gist_uuid_ops USING gist ADD
+	OPERATOR	6	<>  (uuid, uuid) ;
