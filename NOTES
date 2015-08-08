@@ -1,0 +1,49 @@
+motiviation and history:
+
+    http://dba.stackexchange.com/questions/83604/optimizing-postgres-row-overlap-constraints-involving-uuids-and-gist
+    http://stackoverflow.com/questions/22720130/how-to-use-uuid-with-postgresql-gist-index-type
+    http://www.postgresql.org/message-id/CAH3i69njJ9AX1fzHwt6uoUzCMBqnaDBwhmAPhRQzzLWifb2WOA@mail.gmail.com
+    http://www.postgresql.org/message-id/C59F2565-4753-4C83-BDCD-A0F9430B1638@datafax.com
+    http://www.postgresql.org/message-id/CA+renyVepHxTO1c7dFbVjP1GYMUc0-3qDNWPN30-noo5MPyaVQ@mail.gmail.com
+
+You *can* index a range with the default btree index type:
+
+    DROP TABLE IF EXISTS r;
+    CREATE TABLE r (id INTEGER, p TSTZRANGE);
+    CREATE INDEX idx_btree ON r (id, p);
+
+*But* you must use a GiST index to create an exclusion constraint,
+because the regular btree index doesn't support the && operator.
+That's why `USING GIST` is necessary here:
+
+    CREATE EXTENSION btree_gist;
+
+    DROP TABLE IF EXISTS r1;
+    CREATE TABLE r1 (
+      id INTEGER,
+      p TSTZRANGE,
+      CONSTRAINT overlapping_times EXCLUDE USING GIST (
+        id WITH =,
+        p WITH &&
+      )
+    );
+
+This is what we want to make work, by adding UUID support to btree_gist:
+
+    DROP TABLE IF EXISTS r2;
+    CREATE TABLE r2 (
+      id UUID,
+      p TSTZRANGE,
+      CONSTRAINT overlapping_times EXCLUDE USING GIST (
+        id WITH =,
+        p WITH &&
+      )
+    );
+
+Things to do:
+
+    - Write tests for GIST indexes on UUID columns.
+    - Update the autoconf Makefile.
+    - Edit the sql control file to create UUID operators etc.
+    - Implement the C functions for those operators etc.
+
