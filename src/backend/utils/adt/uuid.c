@@ -25,8 +25,8 @@
 /* uuid size in bytes */
 #define UUID_LEN 16
 
-/* pg_uuid_t is declared to be struct pg_uuid_t in uuid.h */
-struct pg_uuid_t
+/* pg_uuid_t is declared to be union pg_uuid_t in uuid.h */
+union pg_uuid_t
 {
 	unsigned char data[UUID_LEN];
 };

@@ -18,7 +18,7 @@
 #define UUID_LEN 16
 
 /* opaque struct; defined in uuid.c */
-typedef struct pg_uuid_t pg_uuid_t;
+typedef union pg_uuid_t pg_uuid_t;
 
 /* fmgr interface macros */
 #define UUIDPGetDatum(X)		PointerGetDatum(X)
