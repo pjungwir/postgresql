@@ -176,6 +176,7 @@ quad_poly_tbl|t
 radix_text_tbl|t
 ramp|f
 real_city|f
+referencing_period_test|t
 reservations|f
 road|t
 shighway|t
@@ -218,6 +219,7 @@ trigger_parted_p1|t
 trigger_parted_p1_1|t
 varchar_tbl|f
 view_base_table|t
+without_overlaps_test|t
 -- restore normal output mode
 \a\t
 --
