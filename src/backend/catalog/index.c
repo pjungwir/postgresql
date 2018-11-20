@@ -2076,6 +2076,8 @@ index_constraint_create(Relation heapRelation,
 								   islocal,
 								   inhcount,
 								   noinherit,
+									 // TODO: set this for PKs too
+								   false,	/* contemporal */
 								   is_internal);
 
 	/*
