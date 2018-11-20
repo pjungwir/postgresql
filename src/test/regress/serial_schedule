@@ -21,6 +21,7 @@ test: enum
 test: money
 test: rangetypes
 test: multirangetypes
+test: without_overlaps
 test: pg_lsn
 test: regproc
 test: strings

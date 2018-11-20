@@ -7086,7 +7086,8 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 				i_indstatcols,
 				i_indstatvals,
 				i_inddependcollnames,
-				i_inddependcollversions;
+				i_inddependcollversions,
+				i_withoutoverlaps;
 	int			ntups;
 
 	for (i = 0; i < numTables; i++)
@@ -7206,7 +7207,8 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 							  "  WHERE attrelid = i.indexrelid AND "
 							  "    attstattarget >= 0) AS indstatvals, "
 							  "'{}' AS inddependcollnames, "
-							  "'{}' AS inddependcollversions "
+							  "'{}' AS inddependcollversions, "
+							  "c.conexclop IS NOT NULL AS withoutoverlaps "
 							  "FROM pg_catalog.pg_index i "
 							  "JOIN pg_catalog.pg_class t ON (t.oid = i.indexrelid) "
 							  "JOIN pg_catalog.pg_class t2 ON (t2.oid = i.indrelid) "
@@ -7247,7 +7249,8 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 							  "'' AS indstatcols, "
 							  "'' AS indstatvals, "
 							  "'{}' AS inddependcollnames, "
-							  "'{}' AS inddependcollversions "
+							  "'{}' AS inddependcollversions, "
+							  "null AS withoutoverlaps "
 							  "FROM pg_catalog.pg_index i "
 							  "JOIN pg_catalog.pg_class t ON (t.oid = i.indexrelid) "
 							  "LEFT JOIN pg_catalog.pg_constraint c "
@@ -7284,7 +7287,8 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 							  "'' AS indstatcols, "
 							  "'' AS indstatvals, "
 							  "'{}' AS inddependcollnames, "
-							  "'{}' AS inddependcollversions "
+							  "'{}' AS inddependcollversions, "
+							  "null AS withoutoverlaps "
 							  "FROM pg_catalog.pg_index i "
 							  "JOIN pg_catalog.pg_class t ON (t.oid = i.indexrelid) "
 							  "LEFT JOIN pg_catalog.pg_constraint c "
@@ -7317,7 +7321,8 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 							  "'' AS indstatcols, "
 							  "'' AS indstatvals, "
 							  "'{}' AS inddependcollnames, "
-							  "'{}' AS inddependcollversions "
+							  "'{}' AS inddependcollversions, "
+							  "null AS withoutoverlaps "
 							  "FROM pg_catalog.pg_index i "
 							  "JOIN pg_catalog.pg_class t ON (t.oid = i.indexrelid) "
 							  "LEFT JOIN pg_catalog.pg_depend d "
@@ -7353,7 +7358,8 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 							  "'' AS indstatcols, "
 							  "'' AS indstatvals, "
 							  "'{}' AS inddependcollnames, "
-							  "'{}' AS inddependcollversions "
+							  "'{}' AS inddependcollversions, "
+							  "null AS withoutoverlaps "
 							  "FROM pg_catalog.pg_index i "
 							  "JOIN pg_catalog.pg_class t ON (t.oid = i.indexrelid) "
 							  "LEFT JOIN pg_catalog.pg_depend d "
@@ -7395,6 +7401,7 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 		i_indstatvals = PQfnumber(res, "indstatvals");
 		i_inddependcollnames = PQfnumber(res, "inddependcollnames");
 		i_inddependcollversions = PQfnumber(res, "inddependcollversions");
+		i_withoutoverlaps = PQfnumber(res, "withoutoverlaps");
 
 		tbinfo->indexes = indxinfo =
 			(IndxInfo *) pg_malloc(ntups * sizeof(IndxInfo));
@@ -7460,6 +7467,7 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 				constrinfo[j].condeferred = *(PQgetvalue(res, j, i_condeferred)) == 't';
 				constrinfo[j].conislocal = true;
 				constrinfo[j].separate = true;
+				constrinfo[j].withoutoverlaps = *(PQgetvalue(res, j, i_withoutoverlaps)) == 't';
 
 				indxinfo[j].indexconstraint = constrinfo[j].dobj.dumpId;
 			}
@@ -16813,9 +16821,22 @@ dumpConstraint(Archive *fout, ConstraintInfo *coninfo)
 					break;
 				attname = getAttrName(indkey, tbinfo);
 
-				appendPQExpBuffer(q, "%s%s",
-								  (k == 0) ? "" : ", ",
-								  fmtId(attname));
+				if (k == 0)
+				{
+					appendPQExpBuffer(q, "%s",
+										fmtId(attname));
+				}
+				else if (k == indxinfo->indnkeyattrs - 1 &&
+						coninfo->withoutoverlaps)
+				{
+					appendPQExpBuffer(q, ", %s WITHOUT OVERLAPS",
+										fmtId(attname));
+				}
+				else
+				{
+					appendPQExpBuffer(q, ", %s",
+										fmtId(attname));
+				}
 			}
 
 			if (indxinfo->indnkeyattrs < indxinfo->indnattrs)
