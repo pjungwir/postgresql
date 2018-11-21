@@ -32,13 +32,25 @@ CREATE TABLE without_overlaps_test (
 -- PK with one column plus a range:
 
 CREATE TABLE without_overlaps_test (
-  id INTEGER,
+  -- Since we can't depend on having btree_gist here,
+  -- use an int4range instead of an int.
+  -- (The rangetypes regression test uses the same trick.)
+  id int4range,
   valid_at tstzrange,
   CONSTRAINT without_overlaps_pk PRIMARY KEY (id, WITHOUT OVERLAPS valid_at)
 );
 
 -- PK with two columns plus a range:
--- TODO
+CREATE TABLE without_overlaps_test2 (
+  -- Since we can't depend on having btree_gist here,
+  -- use an int4range instead of an int.
+  -- (The rangetypes regression test uses the same trick.)
+  id1 int4range,
+  id2 int4range,
+  valid_at tstzrange,
+  CONSTRAINT without_overlaps2_pk PRIMARY KEY (id1, id2, WITHOUT OVERLAPS valid_at)
+);
+
 
 -- PK with one column plus a PERIOD:
 -- TODO
@@ -54,14 +66,14 @@ CREATE TABLE without_overlaps_test (
 --
 
 -- okay:
-INSERT INTO without_overlaps_test VALUES (1, tstzrange('2018-01-02', '2018-02-03'));
-INSERT INTO without_overlaps_test VALUES (1, tstzrange('2018-03-03', '2018-04-04'));
-INSERT INTO without_overlaps_test VALUES (2, tstzrange('2018-01-01', '2018-01-05'));
-INSERT INTO without_overlaps_test VALUES (3, tstzrange('2018-01-01', NULL));
+INSERT INTO without_overlaps_test VALUES ('[1,1]', tstzrange('2018-01-02', '2018-02-03'));
+INSERT INTO without_overlaps_test VALUES ('[1,1]', tstzrange('2018-03-03', '2018-04-04'));
+INSERT INTO without_overlaps_test VALUES ('[2,2]', tstzrange('2018-01-01', '2018-01-05'));
+INSERT INTO without_overlaps_test VALUES ('[3,3]', tstzrange('2018-01-01', NULL));
 
 -- should fail:
-INSERT INTO without_overlaps_test VALUES (1, tstzrange('2018-01-01', '2018-01-05'));
+INSERT INTO without_overlaps_test VALUES ('[1,1]', tstzrange('2018-01-01', '2018-01-05'));
 INSERT INTO without_overlaps_test VALUES (NULL, tstzrange('2018-01-01', '2018-01-05'));
-INSERT INTO without_overlaps_test VALUES (3, NULL);
+INSERT INTO without_overlaps_test VALUES ('[3,3]', NULL);
 
 
