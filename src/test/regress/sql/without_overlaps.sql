@@ -1,0 +1,67 @@
+-- Tests for WITHOUT OVERLAPS.
+
+--
+-- test input parser
+--
+
+-- PK with no columns just WITHOUT OVERLAPS:
+
+CREATE TABLE without_overlaps_test (
+  valid_at tstzrange,
+  CONSTRAINT without_overlaps_pk PRIMARY KEY (WITHOUT OVERLAPS valid_at)
+);
+
+-- PK with a range column that isn't there:
+
+CREATE TABLE without_overlaps_test (
+  id INTEGER,
+  CONSTRAINT without_overlaps_pk PRIMARY KEY (id, WITHOUT OVERLAPS valid_at)
+);
+
+-- PK with a PERIOD that isn't there:
+-- TODO
+
+-- PK with a non-range column:
+
+CREATE TABLE without_overlaps_test (
+  id INTEGER,
+  valid_at TEXT,
+  CONSTRAINT without_overlaps_pk PRIMARY KEY (id, WITHOUT OVERLAPS valid_at)
+);
+
+-- PK with one column plus a range:
+
+CREATE TABLE without_overlaps_test (
+  id INTEGER,
+  valid_at tstzrange,
+  CONSTRAINT without_overlaps_pk PRIMARY KEY (id, WITHOUT OVERLAPS valid_at)
+);
+
+-- PK with two columns plus a range:
+-- TODO
+
+-- PK with one column plus a PERIOD:
+-- TODO
+
+-- PK with two columns plus a PERIOD:
+-- TODO
+
+-- PK with a custom range type:
+-- TODO
+
+--
+-- test PK inserts
+--
+
+-- okay:
+INSERT INTO without_overlaps_test VALUES (1, tstzrange('2018-01-02', '2018-02-03'));
+INSERT INTO without_overlaps_test VALUES (1, tstzrange('2018-03-03', '2018-04-04'));
+INSERT INTO without_overlaps_test VALUES (2, tstzrange('2018-01-01', '2018-01-05'));
+INSERT INTO without_overlaps_test VALUES (3, tstzrange('2018-01-01', NULL));
+
+-- should fail:
+INSERT INTO without_overlaps_test VALUES (1, tstzrange('2018-01-01', '2018-01-05'));
+INSERT INTO without_overlaps_test VALUES (NULL, tstzrange('2018-01-01', '2018-01-05'));
+INSERT INTO without_overlaps_test VALUES (3, NULL);
+
+
