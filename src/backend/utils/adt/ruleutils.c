@@ -2080,8 +2080,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 				 * then it uses WITHOUT OVERLAPS.
 				 */
 				SysCacheGetAttr(CONSTROID, tup,
-						  Anum_pg_constraint_conexclop,
-						  &isnull);
+						  Anum_pg_constraint_conexclop, &isnull);
 				keyatts = decompile_column_index_array(val, conForm->conrelid, !isnull, &buf);
 
 				appendStringInfoChar(&buf, ')');
