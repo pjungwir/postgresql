@@ -103,6 +103,12 @@ CATALOG(pg_constraint,2606,ConstraintRelationId)
 	/* Has a local definition and cannot be inherited */
 	bool		connoinherit;
 
+	/*
+	 * For primary and foreign keys, signifies the last column is a range 
+	 * and should use overlaps instead of equals.
+	 */
+	bool		contemporal;
+
 #ifdef CATALOG_VARLEN			/* variable-length fields start here */
 
 	/*
@@ -117,19 +123,19 @@ CATALOG(pg_constraint,2606,ConstraintRelationId)
 	int16		confkey[1];
 
 	/*
-	 * If a foreign key, the OIDs of the PK = FK equality operators for each
+	 * If a foreign key, the OIDs of the PK = FK comparison operators for each
 	 * column of the constraint
 	 */
 	Oid			conpfeqop[1];
 
 	/*
-	 * If a foreign key, the OIDs of the PK = PK equality operators for each
+	 * If a foreign key, the OIDs of the PK = PK comparison operators for each
 	 * column of the constraint (i.e., equality for the referenced columns)
 	 */
 	Oid			conppeqop[1];
 
 	/*
-	 * If a foreign key, the OIDs of the FK = FK equality operators for each
+	 * If a foreign key, the OIDs of the FK = FK comparison operators for each
 	 * column of the constraint (i.e., equality for the referencing columns)
 	 */
 	Oid			conffeqop[1];
@@ -211,6 +217,7 @@ extern Oid	CreateConstraintEntry(const char *constraintName,
 								  bool conIsLocal,
 								  int conInhCount,
 								  bool conNoInherit,
+								  bool conTemporal,
 								  bool is_internal);
 
 extern void RemoveConstraintById(Oid conId);
