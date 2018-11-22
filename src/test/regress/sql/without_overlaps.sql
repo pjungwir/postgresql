@@ -67,6 +67,12 @@ DROP TABLE without_overlaps_test2;
 DROP TYPE textrange;
 
 --
+-- test pg_get_constraintdef
+--
+
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'without_overlaps_pk';
+
+--
 -- test PK inserts
 --
 
