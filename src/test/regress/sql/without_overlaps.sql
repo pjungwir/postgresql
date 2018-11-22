@@ -42,14 +42,12 @@ CREATE TABLE without_overlaps_test (
 
 -- PK with two columns plus a range:
 CREATE TABLE without_overlaps_test2 (
-  -- Since we can't depend on having btree_gist here,
-  -- use an int4range instead of an int.
-  -- (The rangetypes regression test uses the same trick.)
   id1 int4range,
   id2 int4range,
   valid_at tstzrange,
   CONSTRAINT without_overlaps2_pk PRIMARY KEY (id1, id2, WITHOUT OVERLAPS valid_at)
 );
+DROP TABLE without_overlaps_test2;
 
 
 -- PK with one column plus a PERIOD:
@@ -59,7 +57,14 @@ CREATE TABLE without_overlaps_test2 (
 -- TODO
 
 -- PK with a custom range type:
--- TODO
+CREATE TYPE textrange AS range (subtype=text, collation="C");
+CREATE TABLE without_overlaps_test2 (
+  id int4range,
+  valid_at textrange,
+  CONSTRAINT without_overlaps2_pk PRIMARY KEY (id, WITHOUT OVERLAPS valid_at)
+);
+DROP TABLE without_overlaps_test2;
+DROP TYPE textrange;
 
 --
 -- test PK inserts
