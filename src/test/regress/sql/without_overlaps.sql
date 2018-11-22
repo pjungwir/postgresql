@@ -63,6 +63,7 @@ CREATE TABLE without_overlaps_test2 (
   valid_at textrange,
   CONSTRAINT without_overlaps2_pk PRIMARY KEY (id, WITHOUT OVERLAPS valid_at)
 );
+ALTER TABLE without_overlaps_test2 DROP CONSTRAINT without_overlaps2_pk;
 DROP TABLE without_overlaps_test2;
 DROP TYPE textrange;
 
