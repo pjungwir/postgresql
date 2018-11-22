@@ -53,6 +53,15 @@ CREATE TABLE without_overlaps_test2 (
 DROP TABLE without_overlaps_test2;
 DROP TYPE textrange;
 --
+-- test pg_get_constraintdef
+--
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'without_overlaps_pk';
+            pg_get_constraintdef             
+---------------------------------------------
+ PRIMARY KEY (id, WITHOUT OVERLAPS valid_at)
+(1 row)
+
+--
 -- test PK inserts
 --
 -- okay:
