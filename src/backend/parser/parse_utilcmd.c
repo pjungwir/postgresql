@@ -2387,24 +2387,56 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 			bool		found = false;
 			ColumnDef  *column = NULL;
 			ListCell   *columns;
-			foreach(columns, cxt->columns)
+			if (cxt->isalter)
 			{
-				column = castNode(ColumnDef, lfirst(columns));
-				// ereport(NOTICE, (errmsg("range %s vs column %s of type %d", without_overlaps_str, column->colname, column->typeName->typeOid)));
-				if (strcmp(column->colname, without_overlaps_str) == 0)
+				Relation rel = cxt->rel;
+				/*
+				 * Look up columns on existing table.
+				 */
+				for (int i = 0; i < rel->rd_att->natts; i++)
 				{
-					Oid colTypeOid = typenameTypeId(NULL, column->typeName);
-					if (type_is_range(colTypeOid))
-					{
-						found = true;
-						break;
+					Form_pg_attribute attr = TupleDescAttr(rel->rd_att, i);
+					const char *attname = NameStr(attr->attname);
+					if (strcmp(attname, without_overlaps_str) == 0) {
+						if (type_is_range(attr->atttypid))
+						{
+							found = true;
+							break;
+						}
+						else
+						{
+							ereport(ERROR,
+									(errcode(ERRCODE_DATATYPE_MISMATCH),
+									 errmsg("column \"%s\" named in WITHOUT OVERLAPS is not a range type",
+											without_overlaps_str)));
+						}
 					}
-					else
+				}
+			}
+			else
+			{
+				/*
+				 * Look up columns on the being-created table.
+				 */
+				foreach(columns, cxt->columns)
+				{
+					column = castNode(ColumnDef, lfirst(columns));
+					// ereport(NOTICE, (errmsg("range %s vs column %s of type %d", without_overlaps_str, column->colname, column->typeName->typeOid)));
+					if (strcmp(column->colname, without_overlaps_str) == 0)
 					{
-						ereport(ERROR,
-								(errcode(ERRCODE_DATATYPE_MISMATCH),
-								 errmsg("column \"%s\" named in WITHOUT OVERLAPS is not a range type",
-										without_overlaps_str)));
+						Oid colTypeOid = typenameTypeId(NULL, column->typeName);
+						if (type_is_range(colTypeOid))
+						{
+							found = true;
+							break;
+						}
+						else
+						{
+							ereport(ERROR,
+									(errcode(ERRCODE_DATATYPE_MISMATCH),
+									 errmsg("column \"%s\" named in WITHOUT OVERLAPS is not a range type",
+											without_overlaps_str)));
+						}
 					}
 				}
 			}
