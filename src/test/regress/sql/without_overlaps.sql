@@ -7,15 +7,15 @@
 -- PK with no columns just WITHOUT OVERLAPS:
 
 CREATE TABLE without_overlaps_test (
-  valid_at tsrange,
-  CONSTRAINT without_overlaps_pk PRIMARY KEY (WITHOUT OVERLAPS valid_at)
+	valid_at tsrange,
+	CONSTRAINT without_overlaps_pk PRIMARY KEY (WITHOUT OVERLAPS valid_at)
 );
 
 -- PK with a range column that isn't there:
 
 CREATE TABLE without_overlaps_test (
-  id INTEGER,
-  CONSTRAINT without_overlaps_pk PRIMARY KEY (id, WITHOUT OVERLAPS valid_at)
+	id INTEGER,
+	CONSTRAINT without_overlaps_pk PRIMARY KEY (id, WITHOUT OVERLAPS valid_at)
 );
 
 -- PK with a PERIOD that isn't there:
@@ -24,28 +24,28 @@ CREATE TABLE without_overlaps_test (
 -- PK with a non-range column:
 
 CREATE TABLE without_overlaps_test (
-  id INTEGER,
-  valid_at TEXT,
-  CONSTRAINT without_overlaps_pk PRIMARY KEY (id, WITHOUT OVERLAPS valid_at)
+	id INTEGER,
+	valid_at TEXT,
+	CONSTRAINT without_overlaps_pk PRIMARY KEY (id, WITHOUT OVERLAPS valid_at)
 );
 
 -- PK with one column plus a range:
 
 CREATE TABLE without_overlaps_test (
-  -- Since we can't depend on having btree_gist here,
-  -- use an int4range instead of an int.
-  -- (The rangetypes regression test uses the same trick.)
-  id int4range,
-  valid_at tsrange,
-  CONSTRAINT without_overlaps_pk PRIMARY KEY (id, WITHOUT OVERLAPS valid_at)
+	-- Since we can't depend on having btree_gist here,
+	-- use an int4range instead of an int.
+	-- (The rangetypes regression test uses the same trick.)
+	id int4range,
+	valid_at tsrange,
+	CONSTRAINT without_overlaps_pk PRIMARY KEY (id, WITHOUT OVERLAPS valid_at)
 );
 
 -- PK with two columns plus a range:
 CREATE TABLE without_overlaps_test2 (
-  id1 int4range,
-  id2 int4range,
-  valid_at tsrange,
-  CONSTRAINT without_overlaps2_pk PRIMARY KEY (id1, id2, WITHOUT OVERLAPS valid_at)
+	id1 int4range,
+	id2 int4range,
+	valid_at tsrange,
+	CONSTRAINT without_overlaps2_pk PRIMARY KEY (id1, id2, WITHOUT OVERLAPS valid_at)
 );
 DROP TABLE without_overlaps_test2;
 
@@ -59,13 +59,22 @@ DROP TABLE without_overlaps_test2;
 -- PK with a custom range type:
 CREATE TYPE textrange AS range (subtype=text, collation="C");
 CREATE TABLE without_overlaps_test2 (
-  id int4range,
-  valid_at textrange,
-  CONSTRAINT without_overlaps2_pk PRIMARY KEY (id, WITHOUT OVERLAPS valid_at)
+	id int4range,
+	valid_at textrange,
+	CONSTRAINT without_overlaps2_pk PRIMARY KEY (id, WITHOUT OVERLAPS valid_at)
 );
 ALTER TABLE without_overlaps_test2 DROP CONSTRAINT without_overlaps2_pk;
 DROP TABLE without_overlaps_test2;
 DROP TYPE textrange;
+
+DROP TABLE without_overlaps_test;
+CREATE TABLE without_overlaps_test (
+	id int4range,
+	valid_at tsrange
+);
+ALTER TABLE without_overlaps_test
+	ADD CONSTRAINT without_overlaps_pk
+	PRIMARY KEY (id, WITHOUT OVERLAPS valid_at);
 
 --
 -- test pg_get_constraintdef
