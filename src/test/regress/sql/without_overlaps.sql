@@ -57,15 +57,15 @@ DROP TABLE without_overlaps_test2;
 -- TODO
 
 -- PK with a custom range type:
-CREATE TYPE textrange AS range (subtype=text, collation="C");
+CREATE TYPE textrange2 AS range (subtype=text, collation="C");
 CREATE TABLE without_overlaps_test2 (
 	id int4range,
-	valid_at textrange,
+	valid_at textrange2,
 	CONSTRAINT without_overlaps2_pk PRIMARY KEY (id, WITHOUT OVERLAPS valid_at)
 );
 ALTER TABLE without_overlaps_test2 DROP CONSTRAINT without_overlaps2_pk;
 DROP TABLE without_overlaps_test2;
-DROP TYPE textrange;
+DROP TYPE textrange2;
 
 DROP TABLE without_overlaps_test;
 CREATE TABLE without_overlaps_test (
@@ -97,4 +97,18 @@ INSERT INTO without_overlaps_test VALUES ('[1,1]', tsrange('2018-01-01', '2018-0
 INSERT INTO without_overlaps_test VALUES (NULL, tsrange('2018-01-01', '2018-01-05'));
 INSERT INTO without_overlaps_test VALUES ('[3,3]', NULL);
 
+--
+-- test changing the PK's dependencies
+--
 
+CREATE TABLE without_overlaps_test2 (
+	id int4range,
+	valid_at tsrange,
+	CONSTRAINT without_overlaps2_pk PRIMARY KEY (id, WITHOUT OVERLAPS valid_at)
+);
+
+ALTER TABLE without_overlaps_test2 ALTER COLUMN valid_at DROP NOT NULL;
+ALTER TABLE without_overlaps_test2 ALTER COLUMN valid_at TYPE tstzrange USING tstzrange(lower(valid_at), upper(valid_at));
+ALTER TABLE without_overlaps_test2 RENAME COLUMN valid_at TO valid_thru;
+ALTER TABLE without_overlaps_test2 DROP COLUMN valid_thru;
+DROP TABLE without_overlaps_test2;

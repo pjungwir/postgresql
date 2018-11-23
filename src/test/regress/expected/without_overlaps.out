@@ -44,15 +44,15 @@ DROP TABLE without_overlaps_test2;
 -- PK with one column plus a PERIOD:
 -- PK with two columns plus a PERIOD:
 -- PK with a custom range type:
-CREATE TYPE textrange AS range (subtype=text, collation="C");
+CREATE TYPE textrange2 AS range (subtype=text, collation="C");
 CREATE TABLE without_overlaps_test2 (
 	id int4range,
-	valid_at textrange,
+	valid_at textrange2,
 	CONSTRAINT without_overlaps2_pk PRIMARY KEY (id, WITHOUT OVERLAPS valid_at)
 );
 ALTER TABLE without_overlaps_test2 DROP CONSTRAINT without_overlaps2_pk;
 DROP TABLE without_overlaps_test2;
-DROP TYPE textrange;
+DROP TYPE textrange2;
 DROP TABLE without_overlaps_test;
 CREATE TABLE without_overlaps_test (
 	id int4range,
@@ -88,3 +88,17 @@ DETAIL:  Failing row contains (null, ["Mon Jan 01 00:00:00 2018","Fri Jan 05 00:
 INSERT INTO without_overlaps_test VALUES ('[3,3]', NULL);
 ERROR:  null value in column "valid_at" violates not-null constraint
 DETAIL:  Failing row contains ([3,4), null).
+--
+-- test changing the PK's dependencies
+--
+CREATE TABLE without_overlaps_test2 (
+	id int4range,
+	valid_at tsrange,
+	CONSTRAINT without_overlaps2_pk PRIMARY KEY (id, WITHOUT OVERLAPS valid_at)
+);
+ALTER TABLE without_overlaps_test2 ALTER COLUMN valid_at DROP NOT NULL;
+ERROR:  column "valid_at" is in a primary key
+ALTER TABLE without_overlaps_test2 ALTER COLUMN valid_at TYPE tstzrange USING tstzrange(lower(valid_at), upper(valid_at));
+ALTER TABLE without_overlaps_test2 RENAME COLUMN valid_at TO valid_thru;
+ALTER TABLE without_overlaps_test2 DROP COLUMN valid_thru;
+DROP TABLE without_overlaps_test2;
