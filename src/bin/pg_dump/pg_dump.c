@@ -6772,7 +6772,8 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 				i_conoid,
 				i_condef,
 				i_tablespace,
-				i_indreloptions;
+				i_indreloptions,
+				i_withoutoverlaps;
 	int			ntups;
 
 	for (i = 0; i < numTables; i++)
@@ -6826,7 +6827,8 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 							  "c.oid AS conoid, "
 							  "pg_catalog.pg_get_constraintdef(c.oid, false) AS condef, "
 							  "(SELECT spcname FROM pg_catalog.pg_tablespace s WHERE s.oid = t.reltablespace) AS tablespace, "
-							  "t.reloptions AS indreloptions "
+							  "t.reloptions AS indreloptions, "
+								"c.conexclop IS NOT NULL AS withoutoverlaps "
 							  "FROM pg_catalog.pg_index i "
 							  "JOIN pg_catalog.pg_class t ON (t.oid = i.indexrelid) "
 							  "JOIN pg_catalog.pg_class t2 ON (t2.oid = i.indrelid) "
@@ -6863,7 +6865,8 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 							  "c.oid AS conoid, "
 							  "pg_catalog.pg_get_constraintdef(c.oid, false) AS condef, "
 							  "(SELECT spcname FROM pg_catalog.pg_tablespace s WHERE s.oid = t.reltablespace) AS tablespace, "
-							  "t.reloptions AS indreloptions "
+							  "t.reloptions AS indreloptions, "
+								"null AS withoutoverlaps "
 							  "FROM pg_catalog.pg_index i "
 							  "JOIN pg_catalog.pg_class t ON (t.oid = i.indexrelid) "
 							  "LEFT JOIN pg_catalog.pg_constraint c "
@@ -6896,7 +6899,8 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 							  "c.oid AS conoid, "
 							  "pg_catalog.pg_get_constraintdef(c.oid, false) AS condef, "
 							  "(SELECT spcname FROM pg_catalog.pg_tablespace s WHERE s.oid = t.reltablespace) AS tablespace, "
-							  "t.reloptions AS indreloptions "
+							  "t.reloptions AS indreloptions, "
+								"null AS withoutoverlaps "
 							  "FROM pg_catalog.pg_index i "
 							  "JOIN pg_catalog.pg_class t ON (t.oid = i.indexrelid) "
 							  "LEFT JOIN pg_catalog.pg_constraint c "
@@ -6925,7 +6929,8 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 							  "c.oid AS conoid, "
 							  "null AS condef, "
 							  "(SELECT spcname FROM pg_catalog.pg_tablespace s WHERE s.oid = t.reltablespace) AS tablespace, "
-							  "t.reloptions AS indreloptions "
+							  "t.reloptions AS indreloptions, "
+								"null AS withoutoverlaps "
 							  "FROM pg_catalog.pg_index i "
 							  "JOIN pg_catalog.pg_class t ON (t.oid = i.indexrelid) "
 							  "LEFT JOIN pg_catalog.pg_depend d "
@@ -6957,7 +6962,8 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 							  "c.oid AS conoid, "
 							  "null AS condef, "
 							  "(SELECT spcname FROM pg_catalog.pg_tablespace s WHERE s.oid = t.reltablespace) AS tablespace, "
-							  "null AS indreloptions "
+							  "null AS indreloptions, "
+								"null AS withoutoverlaps "
 							  "FROM pg_catalog.pg_index i "
 							  "JOIN pg_catalog.pg_class t ON (t.oid = i.indexrelid) "
 							  "LEFT JOIN pg_catalog.pg_depend d "
@@ -6995,6 +7001,7 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 		i_condef = PQfnumber(res, "condef");
 		i_tablespace = PQfnumber(res, "tablespace");
 		i_indreloptions = PQfnumber(res, "indreloptions");
+		i_withoutoverlaps = PQfnumber(res, "withoutoverlaps");
 
 		tbinfo->indexes = indxinfo =
 			(IndxInfo *) pg_malloc(ntups * sizeof(IndxInfo));
@@ -7052,6 +7059,7 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 				constrinfo[j].condeferred = *(PQgetvalue(res, j, i_condeferred)) == 't';
 				constrinfo[j].conislocal = true;
 				constrinfo[j].separate = true;
+				constrinfo[j].withoutoverlaps = *(PQgetvalue(res, j, i_withoutoverlaps)) == 't';
 
 				indxinfo[j].indexconstraint = constrinfo[j].dobj.dumpId;
 			}
@@ -16429,9 +16437,22 @@ dumpConstraint(Archive *fout, ConstraintInfo *coninfo)
 					break;
 				attname = getAttrName(indkey, tbinfo);
 
-				appendPQExpBuffer(q, "%s%s",
-								  (k == 0) ? "" : ", ",
-								  fmtId(attname));
+				if (k == 0)
+				{
+					appendPQExpBuffer(q, "%s",
+										fmtId(attname));
+				}
+				else if (k == indxinfo->indnkeyattrs - 1 &&
+						coninfo->withoutoverlaps)
+				{
+					appendPQExpBuffer(q, ", WITHOUT OVERLAPS %s",
+										fmtId(attname));
+				}
+				else
+				{
+					appendPQExpBuffer(q, ", %s",
+										fmtId(attname));
+				}
 			}
 
 			if (indxinfo->indnkeyattrs < indxinfo->indnattrs)
