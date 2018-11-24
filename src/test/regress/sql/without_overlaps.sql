@@ -8,14 +8,14 @@
 
 CREATE TABLE without_overlaps_test (
 	valid_at tsrange,
-	CONSTRAINT without_overlaps_pk PRIMARY KEY (WITHOUT OVERLAPS valid_at)
+	CONSTRAINT without_overlaps_pk PRIMARY KEY (valid_at WITHOUT OVERLAPS)
 );
 
 -- PK with a range column that isn't there:
 
 CREATE TABLE without_overlaps_test (
 	id INTEGER,
-	CONSTRAINT without_overlaps_pk PRIMARY KEY (id, WITHOUT OVERLAPS valid_at)
+	CONSTRAINT without_overlaps_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
 
 -- PK with a PERIOD that isn't there:
@@ -26,7 +26,7 @@ CREATE TABLE without_overlaps_test (
 CREATE TABLE without_overlaps_test (
 	id INTEGER,
 	valid_at TEXT,
-	CONSTRAINT without_overlaps_pk PRIMARY KEY (id, WITHOUT OVERLAPS valid_at)
+	CONSTRAINT without_overlaps_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
 
 -- PK with one column plus a range:
@@ -37,7 +37,7 @@ CREATE TABLE without_overlaps_test (
 	-- (The rangetypes regression test uses the same trick.)
 	id int4range,
 	valid_at tsrange,
-	CONSTRAINT without_overlaps_pk PRIMARY KEY (id, WITHOUT OVERLAPS valid_at)
+	CONSTRAINT without_overlaps_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
 
 -- PK with two columns plus a range:
@@ -45,7 +45,7 @@ CREATE TABLE without_overlaps_test2 (
 	id1 int4range,
 	id2 int4range,
 	valid_at tsrange,
-	CONSTRAINT without_overlaps2_pk PRIMARY KEY (id1, id2, WITHOUT OVERLAPS valid_at)
+	CONSTRAINT without_overlaps2_pk PRIMARY KEY (id1, id2, valid_at WITHOUT OVERLAPS)
 );
 DROP TABLE without_overlaps_test2;
 
@@ -61,7 +61,7 @@ CREATE TYPE textrange2 AS range (subtype=text, collation="C");
 CREATE TABLE without_overlaps_test2 (
 	id int4range,
 	valid_at textrange2,
-	CONSTRAINT without_overlaps2_pk PRIMARY KEY (id, WITHOUT OVERLAPS valid_at)
+	CONSTRAINT without_overlaps2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
 ALTER TABLE without_overlaps_test2 DROP CONSTRAINT without_overlaps2_pk;
 DROP TABLE without_overlaps_test2;
@@ -74,7 +74,7 @@ CREATE TABLE without_overlaps_test (
 );
 ALTER TABLE without_overlaps_test
 	ADD CONSTRAINT without_overlaps_pk
-	PRIMARY KEY (id, WITHOUT OVERLAPS valid_at);
+	PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
 
 --
 -- test pg_get_constraintdef
@@ -104,7 +104,7 @@ INSERT INTO without_overlaps_test VALUES ('[3,3]', NULL);
 CREATE TABLE without_overlaps_test2 (
 	id int4range,
 	valid_at tsrange,
-	CONSTRAINT without_overlaps2_pk PRIMARY KEY (id, WITHOUT OVERLAPS valid_at)
+	CONSTRAINT without_overlaps2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
 
 ALTER TABLE without_overlaps_test2 ALTER COLUMN valid_at DROP NOT NULL;

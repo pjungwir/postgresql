@@ -16573,7 +16573,7 @@ dumpConstraint(Archive *fout, ConstraintInfo *coninfo)
 				else if (k == indxinfo->indnkeyattrs - 1 &&
 						coninfo->withoutoverlaps)
 				{
-					appendPQExpBuffer(q, ", WITHOUT OVERLAPS %s",
+					appendPQExpBuffer(q, ", %s WITHOUT OVERLAPS",
 										fmtId(attname));
 				}
 				else

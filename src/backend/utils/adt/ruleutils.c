@@ -2343,7 +2343,7 @@ decompile_column_index_array(Datum column_index_array, Oid relId,
 		}
 		else if (withoutOverlaps && j == nKeys - 1)
 		{
-			appendStringInfo(buf, ", WITHOUT OVERLAPS %s", quote_identifier(colName));
+			appendStringInfo(buf, ", %s WITHOUT OVERLAPS", quote_identifier(colName));
 		}
 		else
 		{
