@@ -632,15 +632,15 @@ my %tests = (
 		},
 	},
 
-	'ALTER TABLE ONLY test_table ADD CONSTRAINT ... PRIMARY KEY (..., WITHOUT OVERLAPS ...)' => {
+	'ALTER TABLE ONLY test_table ADD CONSTRAINT ... PRIMARY KEY (..., ... WITHOUT OVERLAPS)' => {
 		create_sql  => 'CREATE TABLE dump_test.test_table_tpk (
 							col1 int4range,
 							col2 tstzrange,
 							CONSTRAINT test_table_tpk_pkey PRIMARY KEY
-								(col1, WITHOUT OVERLAPS col2));',
+								(col1, col2 WITHOUT OVERLAPS));',
 		regexp => qr/^
 			\QALTER TABLE ONLY dump_test.test_table_tpk\E \n^\s+
-			\QADD CONSTRAINT test_table_tpk_pkey PRIMARY KEY (col1, WITHOUT OVERLAPS col2);\E
+			\QADD CONSTRAINT test_table_tpk_pkey PRIMARY KEY (col1, col2 WITHOUT OVERLAPS);\E
 			/xm,
 		like => {
 			%full_runs,
