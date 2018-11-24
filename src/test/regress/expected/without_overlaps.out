@@ -102,3 +102,13 @@ ALTER TABLE without_overlaps_test2 ALTER COLUMN valid_at TYPE tstzrange USING ts
 ALTER TABLE without_overlaps_test2 RENAME COLUMN valid_at TO valid_thru;
 ALTER TABLE without_overlaps_test2 DROP COLUMN valid_thru;
 DROP TABLE without_overlaps_test2;
+--
+-- test FK parser
+--
+CREATE TABLE referencing_period_test (
+	id int4range,
+	valid_at tsrange,
+	CONSTRAINT referencing_period_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT referencing_period_fk FOREIGN KEY (id, PERIOD valid_at)
+		REFERENCES without_overlaps_test (id, PERIOD valid_at)
+);
