@@ -67,6 +67,10 @@ ALTER TABLE without_overlaps_test2 DROP CONSTRAINT without_overlaps2_pk;
 DROP TABLE without_overlaps_test2;
 DROP TYPE textrange2;
 
+--
+-- test ALTER TABLE ADD CONSTRAINT
+--
+
 DROP TABLE without_overlaps_test;
 CREATE TABLE without_overlaps_test (
 	id int4range,
@@ -120,7 +124,89 @@ DROP TABLE without_overlaps_test2;
 CREATE TABLE referencing_period_test (
 	id int4range,
 	valid_at tsrange,
+	parent_id int4range,
 	CONSTRAINT referencing_period_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
-	CONSTRAINT referencing_period_fk FOREIGN KEY (id, PERIOD valid_at)
+	CONSTRAINT referencing_period_fk FOREIGN KEY (parent_id, PERIOD valid_at)
 		REFERENCES without_overlaps_test (id, PERIOD valid_at)
 );
+DROP TABLE referencing_period_test;
+
+-- with inferred PK on the referenced table:
+CREATE TABLE referencing_period_test (
+	id int4range,
+	valid_at tsrange,
+	parent_id int4range,
+	CONSTRAINT referencing_period_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT referencing_period_fk FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES without_overlaps_test
+);
+DROP TABLE referencing_period_test;
+
+-- should fail because of duplicate referenced columns:
+CREATE TABLE referencing_period_test (
+	id int4range,
+	valid_at tsrange,
+	parent_id int4range,
+	CONSTRAINT referencing_period_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT referencing_period_fk FOREIGN KEY (parent_id, PERIOD parent_id)
+		REFERENCES without_overlaps_test (id, PERIOD id)
+);
+
+--
+-- test ALTER TABLE ADD CONSTRAINT
+--
+
+CREATE TABLE referencing_period_test (
+	id int4range,
+	valid_at tsrange,
+	parent_id int4range,
+	CONSTRAINT referencing_period_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+ALTER TABLE referencing_period_test
+  ADD CONSTRAINT referencing_period_fk
+  FOREIGN KEY (parent_id, PERIOD valid_at)
+  REFERENCES without_overlaps_test (id, PERIOD valid_at);
+ALTER TABLE referencing_period_test
+  DROP CONSTRAINT referencing_period_fk;
+-- with inferred PK on the referenced table:
+ALTER TABLE referencing_period_test
+  ADD CONSTRAINT referencing_period_fk
+  FOREIGN KEY (parent_id, PERIOD valid_at)
+  REFERENCES without_overlaps_test;
+
+-- should fail because of duplicate referenced columns:
+ALTER TABLE referencing_period_test
+  ADD CONSTRAINT referencing_period_fk2
+  FOREIGN KEY (parent_id, PERIOD parent_id)
+  REFERENCES without_overlaps_test (id, PERIOD id);
+
+--
+-- test pg_get_constraintdef
+--
+
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'referencing_period_fk';
+
+--
+-- test FK child inserts
+--
+INSERT INTO referencing_period_test VALUES ('[1,1]', tsrange('2018-01-02', '2018-02-01'), '[1,1]');
+-- should fail:
+INSERT INTO referencing_period_test VALUES ('[2,2]', tsrange('2018-01-02', '2018-04-01'), '[1,1]');
+-- now it should work:
+INSERT INTO without_overlaps_test VALUES ('[1,1]', tsrange('2018-02-03', '2018-03-03'));
+INSERT INTO referencing_period_test VALUES ('[2,2]', tsrange('2018-01-02', '2018-04-01'), '[1,1]');
+
+--
+-- test FK child updates
+--
+-- TODO
+
+--
+-- test FK parent updates
+--
+-- TODO
+
+--
+-- test FK parent deletes
+--
+-- TODO

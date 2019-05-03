@@ -3742,7 +3742,7 @@ ConstraintElem:
 					n->pktable			= $8;
 					n->fk_attrs			= $4;
 					n->fk_period		= $5;
-					n->pk_attrs		= linitial($9);
+					n->pk_attrs			= linitial($9);
 					n->pk_period		= lsecond($9);
 					n->fk_matchtype		= $10;
 					n->fk_upd_action	= (char) ($11 >> 8);
