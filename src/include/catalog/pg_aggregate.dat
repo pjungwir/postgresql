@@ -550,6 +550,11 @@
 { aggfnoid => 'jsonb_object_agg', aggtransfn => 'jsonb_object_agg_transfn',
   aggfinalfn => 'jsonb_object_agg_finalfn', aggtranstype => 'internal' },
 
+# range
+{ aggfnoid => 'range_agg(anyrange)', aggtransfn => 'range_agg_transfn',
+  aggfinalfn => 'range_agg_finalfn', aggfinalextra => 't',
+  aggtranstype => 'internal' },
+
 # ordered-set and hypothetical-set aggregates
 { aggfnoid => 'percentile_disc(float8,anyelement)', aggkind => 'o',
   aggnumdirectargs => '1', aggtransfn => 'ordered_set_transition',
