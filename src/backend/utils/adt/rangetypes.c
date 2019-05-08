@@ -1182,8 +1182,28 @@ range_agg_transfn(PG_FUNCTION_ARGS)
 	{
 		state = MemoryContextAlloc(aggContext, sizeof(RangeAggState));
 		state->inputs = initArrayResult(rangeTypeId, aggContext, false);
-		// TODO: get the arguments
-		state->flags = RANGE_AGG_GAPS_RAISE | RANGE_AGG_OVERLAPS_RAISE;
+
+		state->flags = 0x0;
+		switch (PG_NARGS())
+		{
+			case 2:
+				state->flags |= RANGE_AGG_GAPS_RAISE;
+				state->flags |= RANGE_AGG_OVERLAPS_RAISE;
+				break;
+			case 3:
+				if (PG_ARGISNULL(2))         state->flags |= RANGE_AGG_GAPS_SET_NULL;
+				else if (!PG_GETARG_BOOL(2)) state->flags |= RANGE_AGG_GAPS_RAISE;
+				state->flags |= RANGE_AGG_OVERLAPS_RAISE;
+				break;
+			case 4:
+				if (PG_ARGISNULL(2))         state->flags |= RANGE_AGG_GAPS_SET_NULL;
+				else if (!PG_GETARG_BOOL(2)) state->flags |= RANGE_AGG_GAPS_RAISE;
+				if (PG_ARGISNULL(3))         state->flags |= RANGE_AGG_OVERLAPS_SET_NULL;
+				else if (!PG_GETARG_BOOL(3)) state->flags |= RANGE_AGG_OVERLAPS_RAISE;
+				break;
+			default:
+				Assert(false);
+		}
 	}
 	else
 	{
@@ -1226,9 +1246,9 @@ range_agg_finalfn(PG_FUNCTION_ARGS)
 
 	state = PG_ARGISNULL(0) ? NULL : (RangeAggState *)PG_GETARG_POINTER(0);
 	if (state == NULL) PG_RETURN_NULL();
-	inputArray = state->inputs;
-	inputVals = inputArray->dvalues;
-	inputNulls = inputArray->dnulls;
+	inputArray  = state->inputs;
+	inputVals   = inputArray->dvalues;
+	inputNulls  = inputArray->dnulls;
 	inputLength = inputArray->nelems;
 	rangeTypeId = inputArray->element_type;
 
@@ -1240,7 +1260,7 @@ range_agg_finalfn(PG_FUNCTION_ARGS)
 	lastRange = DatumGetRangeTypeP(inputVals[0]);
 	for (i = 1; i < inputLength; i++)
 	{
-		Assert(inputNulls[i]);
+		Assert(!inputNulls[i]);
 		currentRange = DatumGetRangeTypeP(inputVals[i]);
 		/* range_adjacent_interval gives true
 		 * if *either* A meets B or B meets A,
