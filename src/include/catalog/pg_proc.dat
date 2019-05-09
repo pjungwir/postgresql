@@ -9624,6 +9624,11 @@
   prorettype => 'anyrange', proargtypes => 'anyrange',
   prosrc => 'aggregate_dummy' },
 
+# Making 2- and 3-param range_agg polymorphic is difficult
+# because it would take an anyrange and return an anyrange[],
+# which doesn't exist.
+# As a workaround we define separate functions for each built-in range type.
+# This is what causes the mess in src/test/regress/expected/opr_sanity.out.
 { oid => '8003', descr => 'aggregate transition function',
   proname => 'int4range_agg_transfn', proisstrict => 'f', prorettype => 'internal',
   proargtypes => 'internal int4range bool', prosrc => 'range_agg_transfn' },
