@@ -2446,6 +2446,15 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 			{
 				iparam->name = without_overlaps_str;	// TODO: pstrdup here?
 				iparam->expr = NULL;
+
+				/*
+				 * Force the column to NOT NULL since it is part of the primary key.
+				 */
+				AlterTableCmd *notnullcmd = makeNode(AlterTableCmd);
+
+				notnullcmd->subtype = AT_SetNotNull;
+				notnullcmd->name = pstrdup(without_overlaps_str);
+				notnullcmds = lappend(notnullcmds, notnullcmd);
 			}
 			else {
 				found = false;
