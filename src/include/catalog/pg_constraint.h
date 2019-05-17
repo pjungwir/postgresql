@@ -217,6 +217,7 @@ extern Oid CreateConstraintEntry(const char *constraintName,
 					  bool conIsLocal,
 					  int conInhCount,
 					  bool conNoInherit,
+					  bool conTemporal,
 					  bool is_internal);
 
 extern void RemoveConstraintById(Oid conId);

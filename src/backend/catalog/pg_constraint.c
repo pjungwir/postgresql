@@ -76,6 +76,7 @@ CreateConstraintEntry(const char *constraintName,
 					  bool conIsLocal,
 					  int conInhCount,
 					  bool conNoInherit,
+					  bool conTemporal,
 					  bool is_internal)
 {
 	Relation	conDesc;
@@ -184,8 +185,7 @@ CreateConstraintEntry(const char *constraintName,
 	values[Anum_pg_constraint_conislocal - 1] = BoolGetDatum(conIsLocal);
 	values[Anum_pg_constraint_coninhcount - 1] = Int32GetDatum(conInhCount);
 	values[Anum_pg_constraint_connoinherit - 1] = BoolGetDatum(conNoInherit);
-	// TODO: parameterize:
-	values[Anum_pg_constraint_contemporal - 1] = BoolGetDatum(false);
+	values[Anum_pg_constraint_contemporal - 1] = BoolGetDatum(conTemporal);
 	nulls[Anum_pg_constraint_contemporal - 1] = false;
 
 	if (conkeyArray)

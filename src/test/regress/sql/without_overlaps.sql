@@ -202,11 +202,47 @@ INSERT INTO referencing_period_test VALUES ('[2,2]', tsrange('2018-01-02', '2018
 -- TODO
 
 --
--- test FK parent updates
+-- test FK parent updates NO ACTION
+--
+-- TODO
+--
+-- test FK parent updates RESTRICT
+--
+-- TODO
+--
+-- test FK parent updates SET NULL
+--
+-- TODO
+--
+-- test FK parent updates SET DEFAULT
 --
 -- TODO
 
 --
--- test FK parent deletes
+-- test FK parent deletes NO ACTION
+--
+-- a PK delete that succeeds because the numeric id isn't referenced:
+INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
+DELETE FROM without_overlaps_test WHERE id = '[5,5]';
+-- a PK delete that succeeds even though the numeric id is referenced because the range isn't:
+INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
+INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-02-01', '2018-03-01'));
+INSERT INTO referencing_period_test VALUES ('[3,3]', tsrange('2018-01-05', '2018-01-10'), '[5,5]');
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_at = tsrange('2018-02-01', '2018-03-01');
+-- a PK delete that fails because both are referenced:
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+-- then delete the objecting FK record and the same PK delete succeeds:
+DELETE FROM referencing_period_test WHERE id = '[3,3]';
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+--
+-- test FK parent deletes RESTRICT
+--
+-- TODO
+--
+-- test FK parent deletes SET NULL
+--
+-- TODO
+--
+-- test FK parent deletes SET DEFAULT
 --
 -- TODO

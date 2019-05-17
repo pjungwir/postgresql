@@ -178,7 +178,29 @@ SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'referencing
 INSERT INTO referencing_period_test VALUES ('[1,1]', tsrange('2018-01-02', '2018-02-01'), '[1,1]');
 -- should fail:
 INSERT INTO referencing_period_test VALUES ('[2,2]', tsrange('2018-01-02', '2018-04-01'), '[1,1]');
-error message here
+ERROR:  insert or update on table "referencing_period_test" violates foreign key constraint "referencing_period_fk"
+DETAIL:  Key (parent_id, valid_at)=([1,2), ["Tue Jan 02 00:00:00 2018","Sun Apr 01 00:00:00 2018")) is not present in table "without_overlaps_test".
 -- now it should work:
 INSERT INTO without_overlaps_test VALUES ('[1,1]', tsrange('2018-02-03', '2018-03-03'));
-INSERT INTO referencing_period_test VALUES ('[2,2]', tsrange('2018-02-01', '2018-04-01'), '[1,1]');
+INSERT INTO referencing_period_test VALUES ('[2,2]', tsrange('2018-01-02', '2018-04-01'), '[1,1]');
+--
+-- test ...
+--
+--
+-- test FK parent deletes
+--
+-- a PK delete that succeeds because the numeric id isn't referenced:
+INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
+DELETE FROM without_overlaps_test WHERE id = '[5,5]';
+-- a PK delete that succeeds even though the numeric id is referenced because the range isn't:
+INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
+INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-02-01', '2018-03-01'));
+INSERT INTO referencing_period_test VALUES ('[3,3]', tsrange('2018-01-05', '2018-01-10'), '[5,5]');
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_at = tsrange('2018-02-01', '2018-03-01');
+-- a PK delete that fails because both are referenced:
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+ERROR:  update or delete on table "without_overlaps_test" violates foreign key constraint "referencing_period_fk" on table "referencing_period_test"
+DETAIL:  Key (id, valid_at)=([5,6), ["Mon Jan 01 00:00:00 2018","Thu Feb 01 00:00:00 2018")) is still referenced from table "referencing_period_test".
+-- then delete the objecting FK record and the same PK delete succeeds:
+DELETE FROM referencing_period_test WHERE id = '[3,3]';
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');

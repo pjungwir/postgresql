@@ -1985,7 +1985,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 			{
 				Datum		val;
 				bool		isnull;
-				bool	  noperiod;
+				bool		hasperiod;
 				const char *string;
 
 				/* Start off the constraint definition */
@@ -1999,12 +1999,12 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 						 constraintId);
 
 				/*
-				 * If it has exclusion-style operator OIDs
+				 * If it is a temporal foreign key
 				 * then it uses PERIOD.
 				 */
-				SysCacheGetAttr(CONSTROID, tup,
-						  Anum_pg_constraint_conexclop, &noperiod);
-				decompile_column_index_array(val, conForm->conrelid, false, !noperiod, &buf);
+				hasperiod = DatumGetBool(SysCacheGetAttr(CONSTROID, tup,
+						  Anum_pg_constraint_contemporal, &isnull));
+				decompile_column_index_array(val, conForm->conrelid, false, hasperiod, &buf);
 
 				/* add foreign relation name */
 				appendStringInfo(&buf, ") REFERENCES %s(",
@@ -2018,7 +2018,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 					elog(ERROR, "null confkey for constraint %u",
 						 constraintId);
 
-				decompile_column_index_array(val, conForm->confrelid, false, !noperiod, &buf);
+				decompile_column_index_array(val, conForm->confrelid, false, hasperiod, &buf);
 
 				appendStringInfoChar(&buf, ')');
 
