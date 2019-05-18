@@ -181,6 +181,32 @@ ALTER TABLE referencing_period_test
   REFERENCES without_overlaps_test (id, PERIOD id);
 
 --
+-- test with rows already
+--
+DELETE FROM referencing_period_test;
+ALTER TABLE referencing_period_test
+  DROP CONSTRAINT referencing_period_fk;
+INSERT INTO referencing_period_test VALUES ('[1,1]', tsrange('2018-01-02', '2018-02-01'), '[1,1]');
+ALTER TABLE referencing_period_test
+  ADD CONSTRAINT referencing_period_fk
+  FOREIGN KEY (parent_id, PERIOD valid_at)
+  REFERENCES without_overlaps_test;
+ALTER TABLE referencing_period_test
+  DROP CONSTRAINT referencing_period_fk;
+INSERT INTO referencing_period_test VALUES ('[2,2]', tsrange('2018-01-02', '2018-04-01'), '[1,1]');
+-- should fail:
+ALTER TABLE referencing_period_test
+  ADD CONSTRAINT referencing_period_fk
+  FOREIGN KEY (parent_id, PERIOD valid_at)
+  REFERENCES without_overlaps_test;
+-- okay again:
+DELETE FROM referencing_period_test;
+ALTER TABLE referencing_period_test
+  ADD CONSTRAINT referencing_period_fk
+  FOREIGN KEY (parent_id, PERIOD valid_at)
+  REFERENCES without_overlaps_test;
+
+--
 -- test pg_get_constraintdef
 --
 

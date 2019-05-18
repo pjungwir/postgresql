@@ -164,6 +164,33 @@ ALTER TABLE referencing_period_test
   REFERENCES without_overlaps_test (id, PERIOD id);
 ERROR:  foreign key referenced-columns list must not contain duplicates
 --
+-- test with rows already
+--
+DELETE FROM referencing_period_test;
+ALTER TABLE referencing_period_test
+  DROP CONSTRAINT referencing_period_fk;
+INSERT INTO referencing_period_test VALUES ('[1,1]', tsrange('2018-01-02', '2018-02-01'), '[1,1]');
+ALTER TABLE referencing_period_test
+  ADD CONSTRAINT referencing_period_fk
+  FOREIGN KEY (parent_id, PERIOD valid_at)
+  REFERENCES without_overlaps_test;
+ALTER TABLE referencing_period_test
+  DROP CONSTRAINT referencing_period_fk;
+INSERT INTO referencing_period_test VALUES ('[2,2]', tsrange('2018-01-02', '2018-04-01'), '[1,1]');
+-- should fail:
+ALTER TABLE referencing_period_test
+  ADD CONSTRAINT referencing_period_fk
+  FOREIGN KEY (parent_id, PERIOD valid_at)
+  REFERENCES without_overlaps_test;
+ERROR:  insert or update on table "referencing_period_test" violates foreign key constraint "referencing_period_fk"
+DETAIL:  Key (parent_id, valid_at)=([1,2), ["Tue Jan 02 00:00:00 2018","Sun Apr 01 00:00:00 2018")) is not present in table "without_overlaps_test".
+-- okay again:
+DELETE FROM referencing_period_test;
+ALTER TABLE referencing_period_test
+  ADD CONSTRAINT referencing_period_fk
+  FOREIGN KEY (parent_id, PERIOD valid_at)
+  REFERENCES without_overlaps_test;
+--
 -- test pg_get_constraintdef
 --
 SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'referencing_period_fk';

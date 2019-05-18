@@ -341,7 +341,7 @@ static CoercionPathType findFkeyCast(Oid targetTypeId, Oid sourceTypeId,
 static void validateCheckConstraint(Relation rel, HeapTuple constrtup);
 static void validateForeignKeyConstraint(char *conname,
 							 Relation rel, Relation pkrel,
-							 Oid pkindOid, Oid constraintOid);
+							 Oid pkindOid, Oid constraintOid, bool temporal);
 static void ATController(AlterTableStmt *parsetree,
 			 Relation rel, List *cmds, bool recurse, LOCKMODE lockmode);
 static void ATPrepCmd(List **wqueue, Relation rel, AlterTableCmd *cmd,
@@ -4687,7 +4687,8 @@ ATRewriteTables(AlterTableStmt *parsetree, List **wqueue, LOCKMODE lockmode)
 
 				validateForeignKeyConstraint(fkconstraint->conname, rel, refrel,
 											 con->refindid,
-											 con->conid);
+											 con->conid,
+											 fkconstraint->fk_period != NULL);
 
 				/*
 				 * No need to mark the constraint row as validated, we did
@@ -9248,7 +9249,7 @@ ATExecValidateConstraint(Relation rel, char *constrName, bool recurse,
 
 			validateForeignKeyConstraint(constrName, rel, refrel,
 										 con->conindid,
-										 con->oid);
+										 con->oid, con->contemporal);
 			table_close(refrel, NoLock);
 
 			/*
@@ -9809,7 +9810,8 @@ validateForeignKeyConstraint(char *conname,
 							 Relation rel,
 							 Relation pkrel,
 							 Oid pkindOid,
-							 Oid constraintOid)
+							 Oid constraintOid,
+							 bool temporal)
 {
 	TupleTableSlot *slot;
 	TableScanDesc scan;
@@ -9839,8 +9841,10 @@ validateForeignKeyConstraint(char *conname,
 	/*
 	 * See if we can do it with a single LEFT JOIN query.  A false result
 	 * indicates we must proceed with the fire-the-trigger method.
+	 * We can't do a LEFT JOIN for temporal FKs yet,
+	 * but we can once we support temporal left joins.
 	 */
-	if (RI_Initial_Check(&trig, rel, pkrel))
+	if (!temporal && RI_Initial_Check(&trig, rel, pkrel))
 		return;
 
 	/*
