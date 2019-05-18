@@ -8377,22 +8377,6 @@ CloneFkReferenced(Relation parentRel, Relation partitionRel)
 		fkconstraint->initdeferred = constrForm->condeferred;
 		fkconstraint->initially_valid = true;
 		fkconstraint->fk_matchtype = constrForm->confmatchtype;
-		// TODO: make sure we're initializing everything correctly:
-		// - attnums
-		// - numpks
-		// - numfks
-		// - fk_attrs
-		// - pk_attrs
-		// - pk_period
-		// - fk_period
-		// fkconstraint->pk_period = 
-		// fkconstraint->fk_period != null;
-		// TODO: So given the operator oids in conppeqop,
-		// can I figure out if it's an "overlaps" operator instead of an equality operator?
-		// I could query pg_operator or pg_amop.
-		// I can go from pg_operator to pg_amop to get the strategy and see if its equals RTOverlapStrategyNumber,
-		// but there can be several pg_amop entries for a single pg_operator.
-		// Maybe there is only one per amopmethod? I'm not sure. Nope....
 
 		/* set up colnames that are used to generate the constraint name */
 		for (int i = 0; i < numfks; i++)
@@ -8720,13 +8704,6 @@ FindFKComparisonOperators(Constraint *fkconstraint,
 	 */
 	ppeqop = get_opfamily_member(opfamily, opcintype, opcintype,
 								 eqstrategy);
-	// TODO: If this ^^^ works,
-	// why do I see multiple straegies for some operators in pg_amop,
-	// and also multiple operators for the same strategy?
-	// Is it because of opfamliy and lefttype/righttype?
-	// Blah: if it's this hard for me to infer temporal/not-temporal from pg_constraint,
-	// it is too hard for users in general,
-	// so I should just add a new boolean column called `contemporal`.
 
 	if (!OidIsValid(ppeqop))
 		elog(ERROR, "missing operator %d(%u,%u) in opfamily %u",
