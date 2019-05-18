@@ -9996,12 +9996,12 @@ createForeignKeyActionTriggers(Relation rel, Oid refRelOid, Constraint *fkconstr
 				fk_trigger->initdeferred = fkconstraint->initdeferred;
 				fk_trigger->funcname = SystemFuncName("TRI_FKey_noaction_del");
 				break;
-				/*
 			case FKCONSTR_ACTION_RESTRICT:
 				fk_trigger->deferrable = false;
 				fk_trigger->initdeferred = false;
-				fk_trigger->funcname = SystemFuncName("RI_FKey_restrict_del");
+				fk_trigger->funcname = SystemFuncName("TRI_FKey_restrict_del");
 				break;
+				/*
 			case FKCONSTR_ACTION_CASCADE:
 				fk_trigger->deferrable = false;
 				fk_trigger->initdeferred = false;

@@ -1380,7 +1380,6 @@ TRI_FKey_noaction_del(PG_FUNCTION_ARGS)
 Datum
 TRI_FKey_restrict_del(PG_FUNCTION_ARGS)
 {
-	// TODO
 	/* Check that this is a valid trigger call on the right time and event. */
 	ri_CheckTrigger(fcinfo, "TRI_FKey_restrict_del", RI_TRIGTYPE_DELETE);
 

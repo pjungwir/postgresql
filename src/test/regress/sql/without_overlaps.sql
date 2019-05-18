@@ -266,7 +266,25 @@ DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_at = tsrange('201
 --
 -- test FK parent deletes RESTRICT
 --
--- TODO
+ALTER TABLE referencing_period_test
+  DROP CONSTRAINT referencing_period_fk;
+ALTER TABLE referencing_period_test
+  ADD CONSTRAINT referencing_period_fk
+  FOREIGN KEY (parent_id, PERIOD valid_at)
+  REFERENCES without_overlaps_test
+  ON DELETE RESTRICT;
+INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
+DELETE FROM without_overlaps_test WHERE id = '[5,5]';
+-- a PK delete that succeeds even though the numeric id is referenced because the range isn't:
+INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
+INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-02-01', '2018-03-01'));
+INSERT INTO referencing_period_test VALUES ('[3,3]', tsrange('2018-01-05', '2018-01-10'), '[5,5]');
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_at = tsrange('2018-02-01', '2018-03-01');
+-- a PK delete that fails because both are referenced:
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+-- then delete the objecting FK record and the same PK delete succeeds:
+DELETE FROM referencing_period_test WHERE id = '[3,3]';
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
 --
 -- test FK parent deletes SET NULL
 --
