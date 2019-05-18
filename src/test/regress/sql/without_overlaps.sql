@@ -199,7 +199,10 @@ INSERT INTO referencing_period_test VALUES ('[2,2]', tsrange('2018-01-02', '2018
 --
 -- test FK child updates
 --
--- TODO
+UPDATE referencing_period_test SET valid_at = tsrange('2018-01-02', '2018-03-01') WHERE id = '[1,1]';
+-- should fail:
+UPDATE referencing_period_test SET valid_at = tsrange('2018-01-02', '2018-05-01') WHERE id = '[1,1]';
+UPDATE referencing_period_test SET parent_id = '[8,8]' WHERE id = '[1,1]';
 
 --
 -- test FK parent updates NO ACTION

@@ -9902,6 +9902,7 @@ CreateFKCheckTrigger(Oid myRelOid, Oid refRelOid, Constraint *fkconstraint,
 					 Oid constraintOid, Oid indexOid, bool on_insert)
 {
 	CreateTrigStmt *fk_trigger;
+	bool is_temporal = fkconstraint->fk_period;
 
 	/*
 	 * Note: for a self-referential FK (referencing and referenced tables are
@@ -9913,7 +9914,10 @@ CreateFKCheckTrigger(Oid myRelOid, Oid refRelOid, Constraint *fkconstraint,
 	 * and "RI_ConstraintTrigger_c_NNNN" for the check triggers.
 	 */
 	fk_trigger = makeNode(CreateTrigStmt);
-	fk_trigger->trigname = "RI_ConstraintTrigger_c";
+	if (is_temporal)
+		fk_trigger->trigname = "TRI_ConstraintTrigger_c";
+	else
+		fk_trigger->trigname = "RI_ConstraintTrigger_c";
 	fk_trigger->relation = NULL;
 	fk_trigger->row = true;
 	fk_trigger->timing = TRIGGER_TYPE_AFTER;
@@ -9921,12 +9925,18 @@ CreateFKCheckTrigger(Oid myRelOid, Oid refRelOid, Constraint *fkconstraint,
 	/* Either ON INSERT or ON UPDATE */
 	if (on_insert)
 	{
-		fk_trigger->funcname = SystemFuncName("RI_FKey_check_ins");
+		if (is_temporal)
+			fk_trigger->funcname = SystemFuncName("TRI_FKey_check_ins");
+		else
+			fk_trigger->funcname = SystemFuncName("RI_FKey_check_ins");
 		fk_trigger->events = TRIGGER_TYPE_INSERT;
 	}
 	else
 	{
-		fk_trigger->funcname = SystemFuncName("RI_FKey_check_upd");
+		if (is_temporal)
+			fk_trigger->funcname = SystemFuncName("TRI_FKey_check_upd");
+		else
+			fk_trigger->funcname = SystemFuncName("RI_FKey_check_upd");
 		fk_trigger->events = TRIGGER_TYPE_UPDATE;
 	}
 

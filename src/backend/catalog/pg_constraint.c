@@ -186,7 +186,6 @@ CreateConstraintEntry(const char *constraintName,
 	values[Anum_pg_constraint_coninhcount - 1] = Int32GetDatum(conInhCount);
 	values[Anum_pg_constraint_connoinherit - 1] = BoolGetDatum(conNoInherit);
 	values[Anum_pg_constraint_contemporal - 1] = BoolGetDatum(conTemporal);
-	nulls[Anum_pg_constraint_contemporal - 1] = false;
 
 	if (conkeyArray)
 		values[Anum_pg_constraint_conkey - 1] = PointerGetDatum(conkeyArray);
