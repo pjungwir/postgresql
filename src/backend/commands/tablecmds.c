@@ -8388,10 +8388,6 @@ CloneFkReferenced(Relation parentRel, Relation partitionRel)
 			fkconstraint->fk_attrs = lappend(fkconstraint->fk_attrs,
 											 makeString(NameStr(att->attname)));
 		}
-		if (constrForm->contemporal)
-		{
-		} else {
-		}
 
 		/*
 		 * Add the new foreign key constraint pointing to the new partition.
@@ -9982,17 +9978,17 @@ createForeignKeyActionTriggers(Relation rel, Oid refRelOid, Constraint *fkconstr
 			case FKCONSTR_ACTION_CASCADE:
 				fk_trigger->deferrable = false;
 				fk_trigger->initdeferred = false;
-				fk_trigger->funcname = SystemFuncName("RI_FKey_cascade_del");
+				fk_trigger->funcname = SystemFuncName("TRI_FKey_cascade_del");
 				break;
 			case FKCONSTR_ACTION_SETNULL:
 				fk_trigger->deferrable = false;
 				fk_trigger->initdeferred = false;
-				fk_trigger->funcname = SystemFuncName("RI_FKey_setnull_del");
+				fk_trigger->funcname = SystemFuncName("TRI_FKey_setnull_del");
 				break;
 			case FKCONSTR_ACTION_SETDEFAULT:
 				fk_trigger->deferrable = false;
 				fk_trigger->initdeferred = false;
-				fk_trigger->funcname = SystemFuncName("RI_FKey_setdefault_del");
+				fk_trigger->funcname = SystemFuncName("TRI_FKey_setdefault_del");
 				break;
 				*/
 			default:
