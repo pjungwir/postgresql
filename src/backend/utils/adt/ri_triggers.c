@@ -193,7 +193,7 @@ static int ri_NullCheck(TupleDesc tupdesc, TupleTableSlot *slot,
 static void ri_BuildQueryKey(RI_QueryKey *key,
 				 const RI_ConstraintInfo *riinfo,
 				 int32 constr_queryno);
-static bool ri_KeysEqual(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
+static bool ri_KeysStable(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
 			 const RI_ConstraintInfo *riinfo, bool rel_is_pk);
 static bool ri_AttributesEqual(Oid eq_opr, Oid typeid,
 				   Datum oldvalue, Datum newvalue);
@@ -1208,7 +1208,7 @@ RI_FKey_pk_upd_check_required(Trigger *trigger, Relation pk_rel,
 		return false;
 
 	/* If all old and new key values are equal, no check is needed */
-	if (newslot && ri_KeysEqual(pk_rel, oldslot, newslot, riinfo, true))
+	if (newslot && ri_KeysStable(pk_rel, oldslot, newslot, riinfo, true))
 		return false;
 
 	/* Else we need to fire the trigger. */
@@ -1296,7 +1296,7 @@ RI_FKey_fk_upd_check_required(Trigger *trigger, Relation fk_rel,
 		return true;
 
 	/* If all old and new key values are equal, no check is needed */
-	if (ri_KeysEqual(fk_rel, oldslot, newslot, riinfo, false))
+	if (ri_KeysStable(fk_rel, oldslot, newslot, riinfo, false))
 		return false;
 
 	/* Else we need to fire the trigger. */
@@ -2799,9 +2799,12 @@ ri_HashPreparedPlan(RI_QueryKey *key, SPIPlanPtr plan)
 
 
 /*
- * ri_KeysEqual -
+ * ri_KeysStable -
  *
- * Check if all key values in OLD and NEW are equal.
+ * Check if all key values in OLD and NEW are "equivalent":
+ * For normal FKs we check for equality.
+ * For temporal FKs we check that the PK side is a superset of its old value,
+ * or the FK side is a subset.
  *
  * Note: at some point we might wish to redefine this as checking for
  * "IS NOT DISTINCT" rather than "=", that is, allow two nulls to be
@@ -2809,7 +2812,7 @@ ri_HashPreparedPlan(RI_QueryKey *key, SPIPlanPtr plan)
  * previously found at least one of the rows to contain no nulls.
  */
 static bool
-ri_KeysEqual(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
+ri_KeysStable(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
 			 const RI_ConstraintInfo *riinfo, bool rel_is_pk)
 {
 	const int16 *attnums;
@@ -2842,29 +2845,43 @@ ri_KeysEqual(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
 
 		if (rel_is_pk)
 		{
-			/*
-			 * If we are looking at the PK table, then do a bytewise
-			 * comparison.  We must propagate PK changes if the value is
-			 * changed to one that "looks" different but would compare as
-			 * equal using the equality operator.  This only makes a
-			 * difference for ON UPDATE CASCADE, but for consistency we treat
-			 * all changes to the PK the same.
-			 */
-			Form_pg_attribute att = TupleDescAttr(oldslot->tts_tupleDescriptor, attnums[i] - 1);
+			if (riinfo->temporal)
+			{
+				return DatumGetBool(DirectFunctionCall2(range_contains, newvalue, oldvalue));
+			}
+			else
+			{
+				/*
+				 * If we are looking at the PK table, then do a bytewise
+				 * comparison.  We must propagate PK changes if the value is
+				 * changed to one that "looks" different but would compare as
+				 * equal using the equality operator.  This only makes a
+				 * difference for ON UPDATE CASCADE, but for consistency we treat
+				 * all changes to the PK the same.
+				 */
+				Form_pg_attribute att = TupleDescAttr(oldslot->tts_tupleDescriptor, attnums[i] - 1);
 
-			if (!datum_image_eq(oldvalue, newvalue, att->attbyval, att->attlen))
-				return false;
+				if (!datum_image_eq(oldvalue, newvalue, att->attbyval, att->attlen))
+					return false;
+			}
 		}
 		else
 		{
-			/*
-			 * For the FK table, compare with the appropriate equality
-			 * operator.  Changes that compare equal will still satisfy the
-			 * constraint after the update.
-			 */
-			if (!ri_AttributesEqual(riinfo->ff_eq_oprs[i], RIAttType(rel, attnums[i]),
-									oldvalue, newvalue))
-				return false;
+			if (riinfo->temporal)
+			{
+				return DatumGetBool(DirectFunctionCall2(range_contains, oldvalue, newvalue));
+			}
+			else
+			{
+				/*
+				 * For the FK table, compare with the appropriate equality
+				 * operator.  Changes that compare equal will still satisfy the
+				 * constraint after the update.
+				 */
+				if (!ri_AttributesEqual(riinfo->ff_eq_oprs[i], RIAttType(rel, attnums[i]),
+										oldvalue, newvalue))
+					return false;
+			}
 		}
 	}
 
