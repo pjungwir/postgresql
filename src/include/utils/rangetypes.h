@@ -115,6 +115,8 @@ extern bool range_overleft_internal(TypeCacheEntry *typcache, RangeType *r1,
 									RangeType *r2);
 extern bool range_overright_internal(TypeCacheEntry *typcache, RangeType *r1,
 									 RangeType *r2);
+extern RangeType *range_union_internal(TypeCacheEntry *typcache, RangeType *r1,
+										RangeType *r2, bool strict);
 
 /* assorted support functions */
 extern TypeCacheEntry *range_get_typcache(FunctionCallInfo fcinfo,

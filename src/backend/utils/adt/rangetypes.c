@@ -1020,7 +1020,7 @@ range_minus(PG_FUNCTION_ARGS)
  * Set union.  If strict is true, it is an error that the two input ranges
  * are not adjacent or overlapping.
  */
-static RangeType *
+RangeType *
 range_union_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2,
 					 bool strict)
 {

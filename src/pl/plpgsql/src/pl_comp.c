@@ -511,6 +511,7 @@ do_compile(FunctionCallInfo fcinfo,
 						rettypeid = INT4ARRAYOID;
 					else if (rettypeid == ANYRANGEOID)
 						rettypeid = INT4RANGEOID;
+					// TODO: else if (rettypeid == ANYMULTIRANGEOID) ....
 					else		/* ANYELEMENT or ANYNONARRAY */
 						rettypeid = INT4OID;
 					/* XXX what could we use for ANYENUM? */
@@ -2420,6 +2421,7 @@ plpgsql_resolve_polymorphic_argtypes(int numargs,
 				case ANYRANGEOID:
 					argtypes[i] = INT4RANGEOID;
 					break;
+				// TODO: case ANYMULTIRANGEOID....
 				default:
 					break;
 			}
