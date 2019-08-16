@@ -193,11 +193,11 @@ coerce_type(ParseState *pstate, Node *node,
 		 * Assume can_coerce_type verified that implicit coercion is okay.
 		 *
 		 * These cases are unlike the ones above because the exposed type of
-		 * the argument must be an actual array, enum, or range type.  In
+		 * the argument must be an actual array, enum, range, or multirange type.  In
 		 * particular the argument must *not* be an UNKNOWN constant.  If it
 		 * is, we just fall through; below, we'll call anyarray_in,
-		 * anyenum_in, or anyrange_in, which will produce an error.  Also, if
-		 * what we have is a domain over array, enum, or range, we have to
+		 * anyenum_in, anyrange_in, or anymultirange_in, which will produce an error.  Also, if
+		 * what we have is a domain over array, enum, range, or multirange, we have to
 		 * relabel it to its base type.
 		 *
 		 * Note: currently, we can't actually see a domain-over-enum here,
@@ -1680,8 +1680,10 @@ enforce_generic_type_consistency(const Oid *actual_arg_types,
 	Oid			elem_typeid = InvalidOid;
 	Oid			array_typeid = InvalidOid;
 	Oid			range_typeid = InvalidOid;
+	Oid			multirange_typeid = InvalidOid;
 	Oid			array_typelem;
 	Oid			range_typelem;
+	Oid			multirange_typelem;
 	bool		have_anyelement = (rettype == ANYELEMENTOID ||
 								   rettype == ANYNONARRAYOID ||
 								   rettype == ANYENUMOID);
@@ -1761,6 +1763,26 @@ enforce_generic_type_consistency(const Oid *actual_arg_types,
 								   format_type_be(range_typeid),
 								   format_type_be(actual_type))));
 			range_typeid = actual_type;
+		}
+		else if (decl_type == ANYMULTIRANGEOID)
+		{
+			have_generics = true;
+			if (actual_type == UNKNOWNOID)
+			{
+				have_unknowns = true;
+				continue;
+			}
+			if (allow_poly && decl_type == actual_type)
+				continue;		/* no new information here */
+			actual_type = getBaseType(actual_type);	/* flatten domains */
+			if (OidIsValid(multirange_typeid) && actual_type != multirange_typeid)
+				ereport(ERROR,
+						(errcode(ERRCODE_DATATYPE_MISMATCH),
+						 errmsg("arguments declared \"anymultirange\" are not all alike"),
+						 errdetail("%s versus %s",
+									 format_type_be(multirange_typeid),
+									 format_type_be(actual_type))));
+			multirange_typeid = actual_type;
 		}
 	}
 
@@ -1848,6 +1870,48 @@ enforce_generic_type_consistency(const Oid *actual_arg_types,
 		}
 	}
 
+	/* Get the element type based on the multirange type, if we have one */
+	if (OidIsValid(multirange_typeid))
+	{
+		// TODO: anymultirange syould require an anyrange and follow its type.
+		// TODO: take care that anymultirange should be a *range type*,
+		// whereas the others ar *base types*.
+		if (multirange_typeid == ANYMULTIRANGEOID && !have_anyelement)
+		{
+			/* Special case for ANYRANGE input: okay iff no ANYELEMENT */
+			multirange_typelem = ANYELEMENTOID;
+		}
+		else
+		{
+			multirange_typelem = get_multirange_subtype(multirange_typeid);
+			if (!OidIsValid(multirange_typelem))
+				ereport(ERROR,
+						(errcode(ERRCODE_DATATYPE_MISMATCH),
+						 errmsg("argument declared %s is not a multirange type but type %s",
+								"anymultirange",
+								format_type_be(multirange_typeid))));
+		}
+
+		if (!OidIsValid(elem_typeid))
+		{
+			/*
+			 * if we don't have an element type yet, use the one we just got
+			 */
+			elem_typeid = multirange_typelem;
+		}
+		else if (multirange_typelem != elem_typeid)
+		{
+			/* otherwise, they better match */
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("argument declared %s is not consistent with argument declared %s",
+							"anymultirange", "anyelement"),
+					 errdetail("%s versus %s",
+							   format_type_be(multirange_typeid),
+							   format_type_be(elem_typeid))));
+		}
+	}
+
 	if (!OidIsValid(elem_typeid))
 	{
 		if (allow_poly)
@@ -1855,6 +1919,7 @@ enforce_generic_type_consistency(const Oid *actual_arg_types,
 			elem_typeid = ANYELEMENTOID;
 			array_typeid = ANYARRAYOID;
 			range_typeid = ANYRANGEOID;
+			multirange_typeid = ANYMULTIRANGEOID;
 		}
 		else
 		{
@@ -1927,6 +1992,17 @@ enforce_generic_type_consistency(const Oid *actual_arg_types,
 				}
 				declared_arg_types[j] = range_typeid;
 			}
+			else if (decl_type == ANYMULTIRANGEOID)
+			{
+				if (!OidIsValid(multirange_typeid))
+				{
+					ereport(ERROR,
+							(errcode(ERRCODE_UNDEFINED_OBJECT),
+							 errmsg("could not find multirange type for data type %s",
+									format_type_be(elem_typeid))));
+				}
+				declared_arg_types[j] = multirange_typeid;
+			}
 		}
 	}
 
@@ -1956,6 +2032,19 @@ enforce_generic_type_consistency(const Oid *actual_arg_types,
 							format_type_be(elem_typeid))));
 		}
 		return range_typeid;
+	}
+
+	/* if we return ANYMULTIRANGE use the appropriate argument type */
+	if (rettype == ANYMULTIRANGEOID)
+	{
+		if (!OidIsValid(multirange_typeid))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("could not find multirange type for data type %s",
+						 format_type_be(elem_typeid))));
+		}
+		return multirange_typeid;
 	}
 
 	/* if we return ANYELEMENT use the appropriate argument type */
