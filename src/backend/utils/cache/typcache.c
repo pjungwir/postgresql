@@ -287,6 +287,7 @@ static uint64 tupledesc_id_counter = INVALID_TUPLEDESC_IDENTIFIER;
 
 static void load_typcache_tupdesc(TypeCacheEntry *typentry);
 static void load_rangetype_info(TypeCacheEntry *typentry);
+static void load_multirangetype_info(TypeCacheEntry *typentry);
 static void load_domaintype_info(TypeCacheEntry *typentry);
 static int	dcs_cmp(const void *a, const void *b);
 static void decr_dcc_refcount(DomainConstraintCache *dcc);
@@ -816,6 +817,16 @@ lookup_type_cache(Oid type_id, int flags)
 	}
 
 	/*
+	 * If requested, get information about a multirange type
+	 */
+	if ((flags & TYPECACHE_MULTIRANGE_INFO) &&
+		typentry->rngtype == NULL &&
+		typentry->typtype == TYPTYPE_MULTIRANGE)
+	{
+		load_multirangetype_info(typentry);
+	}
+
+	/*
 	 * If requested, get information about a domain type
 	 */
 	if ((flags & TYPECACHE_DOMAIN_BASE_INFO) &&
@@ -924,6 +935,33 @@ load_rangetype_info(TypeCacheEntry *typentry)
 
 	/* Lastly, set up link to the element type --- this marks data valid */
 	typentry->rngelemtype = lookup_type_cache(subtypeOid, 0);
+}
+
+
+/*
+ * load_multirangetype_info --- helper routine to set up multirange type
+ * information
+ */
+static void
+load_multirangetype_info(TypeCacheEntry *typentry)
+{
+	Form_pg_range pg_range;
+	HeapTuple	tup;
+	Oid			rangetypeOid;
+
+	/* get information from pg_range */
+	tup = SearchSysCache1(MULTIRANGETYPE, ObjectIdGetDatum(typentry->type_id));
+	/* should not fail, since we already checked typtype ... */
+	if (!HeapTupleIsValid(tup))
+		elog(ERROR, "cache lookup failed for multirange type %u",
+			 typentry->type_id);
+	pg_range = (Form_pg_range) GETSTRUCT(tup);
+
+	rangetypeOid = pg_range->rngtypid;
+
+	ReleaseSysCache(tup);
+
+	typentry->rngtype = lookup_type_cache(rangetypeOid, 0);
 }
 
 

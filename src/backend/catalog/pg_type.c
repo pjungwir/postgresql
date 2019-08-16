@@ -37,6 +37,9 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
+static int
+makeUniqueTypeName(char *dest, const char *typeName, size_t namelen, Oid typeNamespace);
+
 /* Potentially set by pg_upgrade_support functions */
 Oid			binary_upgrade_next_pg_type_oid = InvalidOid;
 
@@ -856,29 +859,10 @@ makeArrayTypeName(const char *typeName, Oid typeNamespace)
 {
 	char	   *arr = (char *) palloc(NAMEDATALEN);
 	int			namelen = strlen(typeName);
-	int			i;
+	int			underscores;
 
-	/*
-	 * The idea is to prepend underscores as needed until we make a name that
-	 * doesn't collide with anything...
-	 */
-	for (i = 1; i < NAMEDATALEN - 1; i++)
-	{
-		arr[i - 1] = '_';
-		if (i + namelen < NAMEDATALEN)
-			strcpy(arr + i, typeName);
-		else
-		{
-			memcpy(arr + i, typeName, NAMEDATALEN - i);
-			truncate_identifier(arr, NAMEDATALEN, false);
-		}
-		if (!SearchSysCacheExists2(TYPENAMENSP,
-								   CStringGetDatum(arr),
-								   ObjectIdGetDatum(typeNamespace)))
-			break;
-	}
-
-	if (i >= NAMEDATALEN - 1)
+	underscores = makeUniqueTypeName(arr, typeName, namelen, typeNamespace);
+	if (underscores >= NAMEDATALEN - 1)
 		ereport(ERROR,
 				(errcode(ERRCODE_DUPLICATE_OBJECT),
 				 errmsg("could not form array type name for type \"%s\"",
@@ -949,3 +933,88 @@ moveArrayTypeName(Oid typeOid, const char *typeName, Oid typeNamespace)
 
 	return true;
 }
+
+
+/*
+ * makeMultirangeTypeName
+ *	  - given a range type name, make a multirange type name for it
+ *
+ * the caller is responsible for pfreeing the result
+ */
+char *
+makeMultirangeTypeName(const char *rangeTypeName, Oid typeNamespace)
+{
+	char		arr[NAMEDATALEN];
+	char	   *arrunique = (char *) palloc(NAMEDATALEN);
+	int			namelen = strlen(rangeTypeName);
+	int			rangelen;
+	char	   *rangestr;
+	int			rangeoffset;
+	int			underscores;
+
+	/*
+	 * If the range type name contains "range" then change that to "multirange".
+	 * Otherwise add "multirange" to the end.
+	 * After that, prepend underscores as needed until we make a name that
+	 * doesn't collide with anything...
+	 */
+	strlcpy(arr, rangeTypeName, NAMEDATALEN);
+	rangestr = strstr(rangeTypeName, "range");
+	if (rangestr)
+	{
+		rangeoffset = rangestr - rangeTypeName;
+		rangelen = strlen(rangestr);
+		strlcpy(arr + rangeoffset, "multi", NAMEDATALEN - rangeoffset - 5);
+		strlcpy(arr + rangeoffset + 5, rangestr, NAMEDATALEN - rangeoffset - 5 - rangelen);
+		namelen += 5;
+	} else {
+		strlcpy(arr + namelen, "multirange", NAMEDATALEN - namelen - 10);
+		namelen += 10;
+	}
+
+	underscores = makeUniqueTypeName(arrunique, arr, namelen, typeNamespace);
+	if (underscores >= NAMEDATALEN - 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_DUPLICATE_OBJECT),
+				 errmsg("could not form multirange type name for type \"%s\"",
+						rangeTypeName)));
+
+	return arrunique;
+}
+
+/*
+ * makeUniqueTypeName: Prepend underscores as needed until we make a name that
+ * doesn't collide with anything. Always adds at least one.
+ *
+ * Returns the number of underscores added.
+ */
+int
+makeUniqueTypeName(char *dest, const char *typeName, size_t namelen, Oid typeNamespace)
+{
+	int			i;
+
+	for (i = 1; i < NAMEDATALEN - 1; i++)
+	{
+		dest[i - 1] = '_';
+		if (i + namelen < NAMEDATALEN)
+			strcpy(dest + i, typeName);
+		else
+		{
+			// Note to reviewer:
+			// this was memcpy before, not strlcpy,
+			// but that can copy from past the end of typeName.
+			// Not a big deal problaby but still worth changing.
+			// I can do it in a different commit if you like.
+			strlcpy(dest + i, typeName, NAMEDATALEN);
+			truncate_identifier(dest, NAMEDATALEN, false);
+		}
+		if (!SearchSysCacheExists2(TYPENAMENSP,
+								   CStringGetDatum(dest),
+								   ObjectIdGetDatum(typeNamespace)))
+			break;
+	}
+
+	return i;
+}
+
+

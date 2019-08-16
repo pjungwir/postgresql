@@ -1288,7 +1288,10 @@ DefineRange(CreateRangeStmt *stmt)
 	Oid			typeNamespace;
 	Oid			typoid;
 	char	   *rangeArrayName;
+	char	   *multirangeTypeName;
+	char	   *multirangeArrayName;
 	Oid			rangeArrayOid;
+	Oid			multirangeArrayOid;
 	Oid			rangeSubtype = InvalidOid;
 	List	   *rangeSubOpclassName = NIL;
 	List	   *rangeCollationName = NIL;
@@ -1336,6 +1339,8 @@ DefineRange(CreateRangeStmt *stmt)
 					(errcode(ERRCODE_DUPLICATE_OBJECT),
 					 errmsg("type \"%s\" already exists", typeName)));
 	}
+
+	// TODO: Do that ^^^ for multiranges too?
 
 	/*
 	 * Unlike DefineType(), we don't insist on a shell type existing first, as
@@ -1456,6 +1461,9 @@ DefineRange(CreateRangeStmt *stmt)
 	/* Allocate OID for array type */
 	rangeArrayOid = AssignTypeArrayOid();
 
+	/* Allocate OID for multirange array type */
+	multirangeArrayOid = AssignTypeArrayOid();
+
 	/* Create the pg_type entry */
 	address =
 		TypeCreate(InvalidOid,	/* no predetermined type OID */
@@ -1534,6 +1542,80 @@ DefineRange(CreateRangeStmt *stmt)
 			   InvalidOid);		/* typcollation */
 
 	pfree(rangeArrayName);
+
+	/* Create the multirange that goes with it */
+
+	multirangeTypeName = makeMultirangeTypeName(typeName, typeNamespace);
+
+	TypeCreate(InvalidOid,	/* no predetermined type OID */
+			   multirangeTypeName,	/* type name */
+			   typeNamespace,	/* namespace */
+			   InvalidOid,	/* relation oid (n/a here) */
+			   0,			/* relation kind (ditto) */
+			   GetUserId(), /* owner's ID */
+			   -1,			/* internal size (always varlena) */
+			   TYPTYPE_MULTIRANGE,	/* type-type (multirange type) */
+			   TYPCATEGORY_MULTIRANGE,	/* type-category (multirange type) */
+			   false,		/* multirange types are never preferred */
+			   DEFAULT_TYPDELIM,	/* array element delimiter */
+			   F_MULTIRANGE_IN,	/* input procedure */
+			   F_MULTIRANGE_OUT, /* output procedure */
+			   F_MULTIRANGE_RECV,	/* receive procedure */
+			   F_MULTIRANGE_SEND,	/* send procedure */
+			   InvalidOid,	/* typmodin procedure - none */
+			   InvalidOid,	/* typmodout procedure - none */
+			   F_MULTIRANGE_TYPANALYZE,	/* analyze procedure */
+			   InvalidOid,	/* element type ID - none */
+			   false,		/* this is not an array type */
+			   multirangeArrayOid,	/* array type we are about to create */
+			   InvalidOid,	/* base type ID (only for domains) */
+			   NULL,		/* never a default type value */
+			   NULL,		/* no binary form available either */
+			   false,		/* never passed by value */
+			   alignment,	/* alignment */
+			   'x',			/* TOAST strategy (always extended) */
+			   -1,			/* typMod (Domains only) */
+			   0,			/* Array dimensions of typbasetype */
+			   false,		/* Type NOT NULL */
+			   InvalidOid); /* type's collation (ranges never have one) */
+
+	/* Create the multirange's array type */
+
+	multirangeArrayName = makeArrayTypeName(multirangeTypeName, typeNamespace);
+
+	TypeCreate(multirangeArrayOid,	/* force assignment of this type OID */
+			   multirangeArrayName,	/* type name */
+			   typeNamespace,	/* namespace */
+			   InvalidOid,		/* relation oid (n/a here) */
+			   0,				/* relation kind (ditto) */
+			   GetUserId(),		/* owner's ID */
+			   -1,				/* internal size (always varlena) */
+			   TYPTYPE_BASE,	/* type-type (base type) */
+			   TYPCATEGORY_ARRAY,	/* type-category (array) */
+			   false,			/* array types are never preferred */
+			   DEFAULT_TYPDELIM,	/* array element delimiter */
+			   F_ARRAY_IN,		/* input procedure */
+			   F_ARRAY_OUT,		/* output procedure */
+			   F_ARRAY_RECV,	/* receive procedure */
+			   F_ARRAY_SEND,	/* send procedure */
+			   InvalidOid,		/* typmodin procedure - none */
+			   InvalidOid,		/* typmodout procedure - none */
+			   F_ARRAY_TYPANALYZE,	/* analyze procedure */
+			   typoid,			/* element type ID */
+			   true,			/* yes this is an array type */
+			   InvalidOid,		/* no further array type */
+			   InvalidOid,		/* base type ID */
+			   NULL,			/* never a default type value */
+			   NULL,			/* binary default isn't sent either */
+			   false,			/* never passed by value */
+			   alignment,		/* alignment - same as range's */
+			   'x',				/* ARRAY is always toastable */
+			   -1,				/* typMod (Domains only) */
+			   0,				/* Array dimensions of typbasetype */
+			   false,			/* Type NOT NULL */
+			   InvalidOid);		/* typcollation */
+
+	pfree(multirangeArrayName);
 
 	/* And create the constructor functions for this range type */
 	makeRangeConstructors(typeName, typeNamespace, typoid, rangeSubtype);

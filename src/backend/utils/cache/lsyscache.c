@@ -3278,6 +3278,33 @@ get_range_collation(Oid rangeOid)
 		return InvalidOid;
 }
 
+/*				---------- PG_MULTIRANGE CACHE ----------				 */
+
+/*
+ * get_multirange_subtype
+ *		Returns the subtype of a given multirange type
+ *
+ * Returns InvalidOid if the type is not a multirange type.
+ */
+Oid
+get_multirange_subtype(Oid multirangeOid)
+{
+	HeapTuple	tp;
+
+	tp = SearchSysCache1(MULTIRANGETYPE, ObjectIdGetDatum(multirangeOid));
+	if (HeapTupleIsValid(tp))
+	{
+		Form_pg_range rngtup = (Form_pg_range) GETSTRUCT(tp);
+		Oid			result;
+
+		result = rngtup->rngtypid;
+		ReleaseSysCache(tp);
+		return result;
+	}
+	else
+		return InvalidOid;
+}
+
 /*				---------- PG_INDEX CACHE ----------				 */
 
 /*

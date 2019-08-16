@@ -59,6 +59,7 @@ OBJS = \
 	mac8.o \
 	mcxtfuncs.o \
 	misc.o \
+	multirangetypes.o \
 	name.o \
 	network.o \
 	network_gist.o \

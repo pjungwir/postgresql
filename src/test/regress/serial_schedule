@@ -51,6 +51,7 @@ test: misc_sanity
 test: comments
 test: expressions
 test: unicode
+test: multirangetypes
 test: create_function_1
 test: create_type
 test: create_table

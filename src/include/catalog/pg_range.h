@@ -45,6 +45,9 @@ CATALOG(pg_range,3541,RangeRelationId)
 
 	/* subtype difference as a float8, or 0 */
 	regproc		rngsubdiff BKI_LOOKUP(pg_proc);
+
+	/* OID of the range's multirange type */
+	Oid			mltrngtypid BKI_LOOKUP(pg_type);
 } FormData_pg_range;
 
 /* ----------------
@@ -56,6 +59,9 @@ typedef FormData_pg_range *Form_pg_range;
 
 DECLARE_UNIQUE_INDEX(pg_range_rngtypid_index, 3542, on pg_range using btree(rngtypid oid_ops));
 #define RangeTypidIndexId					3542
+
+DECLARE_UNIQUE_INDEX(pg_range_mltrngtypid_index, 8001, on pg_range using btree(mltrngtypid oid_ops));
+#define RangeMultirangeTypidIndexId			8001
 
 /*
  * prototypes for functions in pg_range.c
