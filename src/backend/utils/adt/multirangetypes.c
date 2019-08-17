@@ -90,9 +90,17 @@ multirange_in(PG_FUNCTION_ARGS)
 	rangetyp = typcache->rngtype;
 	rngtypoid = rangetyp->type_id;
 
+	lower.val = Int32GetDatum(1);
 	lower.lower = true;
+	lower.infinite = false;
+	lower.inclusive = true;
+
+	upper.val = Int32GetDatum(4);
 	upper.lower = false;
-	lastRange = make_range(rangetyp, &lower, &upper, true);
+	upper.infinite = false;
+	upper.inclusive = false;
+
+	lastRange = make_range(rangetyp, &lower, &upper, false);
 
 	ret = make_multirange(mltrngtypoid, rangetyp, 1, &lastRange);
 	PG_RETURN_MULTIRANGE_P(ret);
@@ -210,7 +218,7 @@ multirange_in(PG_FUNCTION_ARGS)
 Datum
 multirange_out(PG_FUNCTION_ARGS)
 {
-	char	   *output_str = "{[1,2]}";;
+	char	   *output_str = "{[1,2]}";
 	PG_RETURN_CSTRING(output_str);
 #if 0
 	MultiRangeType  *multirange = PG_GETARG_MULTIRANGE_P(0);
@@ -398,6 +406,7 @@ make_multirange(Oid mltrngtypoid, TypeCacheEntry *rangetyp, int range_count, Ran
 	multirange = palloc0(bytelen);
 	SET_VARSIZE(multirange, bytelen);
 
+#if 0
 	/* Now fill in the datum */
 	multirange->multirangetypid = mltrngtypoid;
 
@@ -409,6 +418,7 @@ make_multirange(Oid mltrngtypoid, TypeCacheEntry *rangetyp, int range_count, Ran
 		memcpy(ptr, range, VARSIZE(range));
 		// memcpy(MAXALIGN(ptr), range, VARSIZE(range));
 	}
+#endif
 
 	return multirange;
 }
