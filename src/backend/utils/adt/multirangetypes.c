@@ -360,7 +360,7 @@ multirange_get_typcache(FunctionCallInfo fcinfo, Oid mltrngtypid)
 		typcache->type_id != mltrngtypid)
 	{
 		typcache = lookup_type_cache(mltrngtypid, TYPECACHE_MULTIRANGE_INFO);
-		if (typcache->rngelemtype == NULL)
+		if (typcache->rngtype == NULL)
 			elog(ERROR, "type %u is not a multirange type", mltrngtypid);
 		fcinfo->flinfo->fn_extra = (void *) typcache;
 	}
