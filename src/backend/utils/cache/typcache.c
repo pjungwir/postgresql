@@ -961,7 +961,7 @@ load_multirangetype_info(TypeCacheEntry *typentry)
 
 	ReleaseSysCache(tup);
 
-	typentry->rngtype = lookup_type_cache(rangetypeOid, 0);
+	typentry->rngtype = lookup_type_cache(rangetypeOid, TYPECACHE_RANGE_INFO);
 }
 
 
