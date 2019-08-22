@@ -3,39 +3,77 @@
 -- test input parser
 --
 -- negative tests; should fail
-select ''::multitextrange;
-select '{"-[a,z)"}'::multitextrange;
-select '{"[a,z) - "}'::multitextrange;
-select '{"(",a)"}'::multitextrange;
-select '{"(,,a)"}'::multitextrange;
-select '{"(),a)"}'::multitextrange;
-select '{"(a,))"}'::multitextrange;
-select '{"(],a)"}'::multitextrange;
-select '{"(a,])"}'::multitextrange;
-select '{"[z,a]"}'::multitextrange;
-
+select ''::textmultirange;
+ERROR:  malformed multirange literal: ""
+LINE 1: select ''::textmultirange;
+               ^
+DETAIL:  Missing left bracket.
+select '{-[a,z)}'::textmultirange;
+ERROR:  malformed multirange literal: "{-[a,z)}"
+LINE 1: select '{-[a,z)}'::textmultirange;
+               ^
+DETAIL:  Expected range start.
+select '{[a,z) - }'::textmultirange;
+ERROR:  malformed multirange literal: "{[a,z) - }"
+LINE 1: select '{[a,z) - }'::textmultirange;
+               ^
+DETAIL:  Expected comma or end of multirange.
+select '{(",a)}'::textmultirange;
+ERROR:  malformed multirange literal: "{(",a)}"
+LINE 1: select '{(",a)}'::textmultirange;
+               ^
+DETAIL:  Unexpected end of input.
+select '{(,,a)}'::textmultirange;
+ERROR:  malformed range literal: "(,,a)"
+LINE 1: select '{(,,a)}'::textmultirange;
+               ^
+DETAIL:  Too many commas.
+select '{(),a)}'::textmultirange;
+ERROR:  malformed range literal: "()"
+LINE 1: select '{(),a)}'::textmultirange;
+               ^
+DETAIL:  Missing comma after lower bound.
+select '{(a,))}'::textmultirange;
+ERROR:  malformed multirange literal: "{(a,))}"
+LINE 1: select '{(a,))}'::textmultirange;
+               ^
+DETAIL:  Expected comma or end of multirange.
+select '{(],a)}'::textmultirange;
+ERROR:  malformed range literal: "(]"
+LINE 1: select '{(],a)}'::textmultirange;
+               ^
+DETAIL:  Missing comma after lower bound.
+select '{(a,])}'::textmultirange;
+ERROR:  malformed multirange literal: "{(a,])}"
+LINE 1: select '{(a,])}'::textmultirange;
+               ^
+DETAIL:  Expected comma or end of multirange.
+select '{[z,a]}'::textmultirange;
+ERROR:  range lower bound must be less than or equal to range upper bound
+LINE 1: select '{[z,a]}'::textmultirange;
+               ^
 -- should succeed
-select '{}'::multitextrange;
-select '  {}  '::multitextrange;
-select ' { empty, empty }  '::multitextrange;
-select ' {"( " a " " a ", " z " " z " )"}  "}'::multitextrange;
-select '{"(,z)"}'::multitextrange;
-select '{"(a,)"}'::multitextrange;
-select '{"[,z]"}'::multitextrange;
-select '{"[a,]"}'::multitextrange;
-select '{"(,)"}'::multitextrange;
-select '{"[ , ]"}'::multitextrange;
-select '{"["",""]"}'::multitextrange;
-select '{"[",",","]"}'::multitextrange;
-select '{"["\\","\\"]"}'::multitextrange;
-select '{"(\\,a)"}'::multitextrange;
-select '{"((,z)"}'::multitextrange;
-select '{"([,z)"}'::multitextrange;
-select '{"(!,()"}'::multitextrange;
-select '{"(!,[)"}'::multitextrange;
-select '{"[a,a]"}'::multitextrange;
+select '{}'::textmultirange;
+select '  {}  '::textmultirange;
+select ' { empty, empty }  '::textmultirange;
+select ' {( " a " " a ", " z " " z " )}  }'::textmultirange;
+select '{(,z)}'::textmultirange;
+select '{(a,)}'::textmultirange;
+select '{[,z]}'::textmultirange;
+select '{[a,]}'::textmultirange;
+select '{(,)}'::textmultirange;
+select '{[ , ]}'::textmultirange;
+select '{["",""]}'::textmultirange;
+select '{[",",","]}'::textmultirange;
+select '{["\\","\\"]}'::textmultirange;
+select '{(\\,a)}'::textmultirange;
+select '{((,z)}'::textmultirange;
+select '{([,z)}'::textmultirange;
+select '{(!,()}'::textmultirange;
+select '{(!,[)}'::textmultirange;
+select '{[a,a]}'::textmultirange;
 -- these are allowed but normalize to empty:
-select '{"[a,a)"}'::multitextrange;
-select '{"(a,a]"}'::multitextrange;
-select '{"(a,a)"}'::multitextrange;
+select '{[a,a)}'::textmultirange;
+select '{(a,a]}'::textmultirange;
+select '{(a,a)}'::textmultirange;
 -- TODO: more, see rangetypes.sql

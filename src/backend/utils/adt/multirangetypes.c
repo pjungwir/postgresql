@@ -36,12 +36,21 @@
 /* fn_extra cache entry for one of the range I/O functions */
 typedef struct MultirangeIOData
 {
-	TypeCacheEntry *typcache;	/* range type's typcache entry */
+	TypeCacheEntry *typcache;	/* multirange type's typcache entry */
 	Oid			typiofunc;		/* range type's I/O function */
 	Oid			typioparam;		/* range type's I/O parameter */
 	FmgrInfo	proc;			/* lookup result for typiofunc */
 } MultirangeIOData;
 
+typedef enum
+{
+	MULTIRANGE_BEFORE_RANGE,
+	MULTIRANGE_IN_RANGE,
+	MULTIRANGE_IN_RANGE_QUOTED,
+	MULTIRANGE_IN_RANGE_ESCAPED,
+	MULTIRANGE_AFTER_RANGE,
+	MULTIRANGE_FINISHED,
+} MultirangeParseState;
 
 static MultirangeIOData *get_multirange_io_data(FunctionCallInfo fcinfo, Oid rngtypid,
 									  IOFuncSelector func);
@@ -69,6 +78,18 @@ static Pointer datum_write(Pointer ptr, Datum datum, bool typbyval,
 
 /*
  * Converts string to multirange.
+ *
+ * We expect curly brackets to bound the list,
+ * with zero or more ranges separated by commas.
+ * We accept whitespace anywhere:
+ * before/after our brackets and around the commas.
+ * Ranges can be the empty literal or some stuff inside parens/brackets.
+ * Mostly we delegate parsing the individual range contents
+ * to range_in, but we have to detect quoting and backslash-escaping
+ * which can happen for range bounds.
+ * Backslashes can escape something inside or outside a quoted string,
+ * and a quoted string can escape quote marks either either backslashes
+ * or double double-quotes.
  */
 Datum
 multirange_in(PG_FUNCTION_ARGS)
@@ -76,143 +97,154 @@ multirange_in(PG_FUNCTION_ARGS)
 	char			   *input_str = PG_GETARG_CSTRING(0);
 	Oid					mltrngtypoid = PG_GETARG_OID(1);
 	Oid					typmod = PG_GETARG_INT32(2);
-	TypeCacheEntry	   *typcache;
 	TypeCacheEntry	   *rangetyp;
 	Oid					rngtypoid;
-	RangeType		   *lastRange;
-	RangeBound lower;
-	RangeBound upper;
+	int32				range_count = 0;
+	int32				range_capacity = 8;
+	RangeType		  **ranges = palloc(range_capacity * sizeof(RangeType *));
+	MultirangeIOData *cache;
 	MultirangeType		*ret;
+	MultirangeParseState parse_state;
+	const char *ptr = input_str;
+	const char *range_str;
+	int32 range_str_len;
+	char *range_str_copy;
 	
 	check_stack_depth();		/* recurses when subtype is a range type */
-
-	typcache = multirange_get_typcache(fcinfo, mltrngtypoid);
-	rangetyp = typcache->rngtype;
-	rngtypoid = rangetyp->type_id;
-
-	lower.val = Int32GetDatum(1);
-	lower.lower = true;
-	lower.infinite = false;
-	lower.inclusive = true;
-
-	upper.val = Int32GetDatum(4);
-	upper.lower = false;
-	upper.infinite = false;
-	upper.inclusive = false;
-
-	lastRange = make_range(rangetyp, &lower, &upper, false);
-
-	ret = make_multirange(mltrngtypoid, rangetyp, 1, &lastRange);
-	PG_RETURN_MULTIRANGE_P(ret);
-
-#if 0
-	char			   *input_str = PG_GETARG_CSTRING(0);
-	Oid					mltrngtypoid = PG_GETARG_OID(1);
-	Oid					typmod = PG_GETARG_INT32(2);
-	TypeCacheEntry	   *typcache;
-	TypeCacheEntry	   *rngtype;
-	Oid					rngtypoid;
-	// Oid					rngtypmod;
-	Datum				range_array_datum;
-	ArrayType			*range_array;
-	Datum				*ranges;
-	bool				*null_ranges;
-	int					ranges_length;
-	// MultirangeType	   *multirange;
-	// MultirangeIOData   *cache;
-	int					i;
-	RangeType		   *lastRange;
-	RangeType		   *currentRange;
-
-	check_stack_depth();		/* recurses when subtype is a range type */
-
-	typcache = multirange_get_typcache(fcinfo, mltrngtypoid);
-	rangetyp = typcache->rngtype;
-	rngtypoid = rngtype->type_id;
-
-	// rngtypmod = typcache->rngtype->
-	// typcache->rngtype->type_id
-	// If a multirange has a typemod we pass it down to the ranges:
-	range_array_datum = DirectFunctionCall3(array_in, rngtypoid, typmod);
-	range_array = DatumGetArrayTypeP(range_array);
-	deconstruct_array(range_array, rngtypoid, rngtype->typlen,
-			rngtype->typbyval, rngtype->typalign,
-			&ranges, &null_ranges, &ranges_length);
-
-	if (ranges_length == 0)
-	{
-		// TODO: Build an empty multirange and return that.
-	}
-	
-	/* If any elements are NULL, the result is NULL. */
-	for (i = 0; i < ranges_length; i++)
-	{
-		if (null_ranges[i]) PG_RETURN_NULL();
-	}
-
-	qsort_arg(ranges, ranges_length, sizeof(Datum), range_compare_by_lower, rngtype);
-
-	lastRange = NULL;
-	for (i = 0; i < ranges_length; i++)
-	{
-		/* Skip empties */
-		RangeType *currentRange = DatumGetRangeTypeP(ranges[i]);
-		RangeBound upper, lower;
-		bool empty;
-		range_deserialize(typcache, currentRange, &lower, &upper, &empty);
-
-		if (empty) continue;
-
-		if (!lastRange) {
-			lastRange = r;
-			continue;
-		}
-
-		if (range_adjacent_internal(typcache, lastRange, currentRange))
-		{
-			lastRange = range_union_internal(typcache, lastRange, currentRange, false);
-
-		} else if (range_before_internal(typcache, lastRange, currentRange))
-		{
-			// TODO: add lastRange to the multirange
-			lastRange = currentRange;
-
-		} else // they must overlap
-		{
-			lastRange = range_union_internal(typcache, lastRange, currentRange, false);
-		}
-	}
-	if (lastRange) {
-		// TODO: add lastRange to the multirange
-	}
-
-
 
 	cache = get_multirange_io_data(fcinfo, mltrngtypoid, IOFunc_input);
+	rangetyp = cache->typcache->rngtype;
+	rngtypoid = rangetyp->type_id;
 
-	/* parse */
-	range_parse(input_str, &flags, &lbound_str, &ubound_str);
+	/* consume whitespace */
+	while (*ptr != '\0' && isspace((unsigned char) *ptr))
+		ptr++;
 
-	/* call element type's input function */
-	if (RANGE_HAS_LBOUND(flags))
-		lower.val = InputFunctionCall(&cache->proc, lbound_str,
-									  cache->typioparam, typmod);
-	if (RANGE_HAS_UBOUND(flags))
-		upper.val = InputFunctionCall(&cache->proc, ubound_str,
-									  cache->typioparam, typmod);
+	if (*ptr == '{')
+		ptr++;
+	else
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
+				 errmsg("malformed multirange literal: \"%s\"",
+						input_str),
+				 errdetail("Missing left bracket.")));
 
-	lower.infinite = (flags & RANGE_LB_INF) != 0;
-	lower.inclusive = (flags & RANGE_LB_INC) != 0;
-	lower.lower = true;
-	upper.infinite = (flags & RANGE_UB_INF) != 0;
-	upper.inclusive = (flags & RANGE_UB_INC) != 0;
-	upper.lower = false;
+	/* consume ranges */
+	parse_state = MULTIRANGE_BEFORE_RANGE;
+	for (; parse_state != MULTIRANGE_FINISHED; ptr++)
+	{
+		char ch = *ptr;
 
-	/* serialize and canonicalize */
-	range = make_range(cache->typcache, &lower, &upper, flags & RANGE_EMPTY);
+		if (ch == '\0')
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
+					 errmsg("malformed multirange literal: \"%s\"",
+							input_str),
+					 errdetail("Unexpected end of input.")));
 
-	PG_RETURN_MULTIRANGE_P(range);
-#endif
+		/* skip whitespace */;
+		if (isspace((unsigned char) ch))
+			continue;
+
+		switch (parse_state) {
+			case MULTIRANGE_BEFORE_RANGE:
+				if (ch == '[' || ch == '(')
+				{
+					range_str = ptr;
+					parse_state = MULTIRANGE_IN_RANGE;
+				}
+				else if (ch == '}' && range_count == 0)
+					parse_state = MULTIRANGE_FINISHED;
+				else if (pg_strncasecmp(ptr, RANGE_EMPTY_LITERAL,
+					   strlen(RANGE_EMPTY_LITERAL)) == 0)
+				{
+					// TODO: DRY up with below:
+					if (range_capacity == range_count)
+					{
+						range_capacity *= 2;
+						ranges = (RangeType **) repalloc(ranges,
+								range_capacity * sizeof(RangeType *));
+					}
+					ranges[range_count++] = DatumGetRangeTypeP(
+							InputFunctionCall(&cache->proc, RANGE_EMPTY_LITERAL,
+								cache->typioparam, typmod));
+					ptr += strlen(RANGE_EMPTY_LITERAL) - 1;
+					parse_state = MULTIRANGE_AFTER_RANGE;
+				}
+				else
+					ereport(ERROR,
+							(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
+							 errmsg("malformed multirange literal: \"%s\"",
+									input_str),
+							 errdetail("Expected range start.")));
+				break;
+			case MULTIRANGE_IN_RANGE:
+				if (ch == '"')
+					parse_state = MULTIRANGE_IN_RANGE_QUOTED;
+				else if (ch == '\\')
+					parse_state = MULTIRANGE_IN_RANGE_ESCAPED;
+				else if (ch == ']' || ch == ')') {
+					range_str_len = ptr - range_str + 2;
+					range_str_copy = palloc0(range_str_len);
+					strlcpy(range_str_copy, range_str, range_str_len);
+					// TODO: DRY up with below:
+					if (range_capacity == range_count)
+					{
+						range_capacity *= 2;
+						ranges = (RangeType **) repalloc(ranges,
+								range_capacity * sizeof(RangeType *));
+					}
+					ranges[range_count++] = DatumGetRangeTypeP(
+							InputFunctionCall(&cache->proc, range_str_copy,
+								cache->typioparam, typmod));
+					parse_state = MULTIRANGE_AFTER_RANGE;
+				}
+				else
+					/* include it in range_str */;
+				break;
+			case MULTIRANGE_IN_RANGE_QUOTED:
+				if (ch == '"')
+					if (*(ptr + 1) == '"')
+					{
+						/* two quote marks means an escaped quote mark */
+						ptr++;
+					}
+					else
+						parse_state = MULTIRANGE_IN_RANGE;
+				else if (ch == '\\')
+					parse_state = MULTIRANGE_IN_RANGE_ESCAPED;
+				else
+					/* include it in range_str */;
+				break;
+			case MULTIRANGE_IN_RANGE_ESCAPED:
+				/* include it in range_str */
+				break;
+			case MULTIRANGE_AFTER_RANGE:
+				if (ch == ',')
+					parse_state = MULTIRANGE_BEFORE_RANGE;
+				else if (ch == '}')
+					parse_state = MULTIRANGE_FINISHED;
+				else
+					ereport(ERROR,
+							(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
+							 errmsg("malformed multirange literal: \"%s\"",
+									input_str),
+							 errdetail("Expected comma or end of multirange.")));
+				break;
+			default:
+				elog(ERROR, "Unknown parse state: %d", parse_state);
+		}
+	}
+
+	if (*ptr != '\0')
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
+				 errmsg("malformed multirange literal: \"%s\"",
+						input_str),
+				 errdetail("Junk after right bracket.")));
+
+	ret = make_multirange(mltrngtypoid, rangetyp, range_count, ranges);
+	PG_RETURN_MULTIRANGE_P(ret);
 }
 
 Datum
@@ -226,7 +258,6 @@ multirange_out(PG_FUNCTION_ARGS)
 	char *rangeStr;
 	Pointer ptr = (char *) multirange;
 	Pointer end = ptr + VARSIZE(multirange);
-	ptr = (char *) MAXALIGN(multirange + 1);
 
 	cache = get_multirange_io_data(fcinfo, mltrngtypoid, IOFunc_output);
 
@@ -234,6 +265,7 @@ multirange_out(PG_FUNCTION_ARGS)
 
 	appendStringInfoChar(&buf, '{');
 
+	ptr = (char *) MAXALIGN(multirange + 1);
 	while (ptr < end) {
 		range = (RangeType *)ptr;
 		rangeStr = OutputFunctionCall(&cache->proc, RangeTypePGetDatum(range));
@@ -259,33 +291,39 @@ multirange_recv(PG_FUNCTION_ARGS)
 	StringInfo	buf = (StringInfo) PG_GETARG_POINTER(0);
 	Oid			mltrngtypoid = PG_GETARG_OID(1);
 	int32		typmod = PG_GETARG_INT32(2);
-	TypeCacheEntry	   *typcache;
+	MultirangeIOData	*cache;
 	TypeCacheEntry	   *rangetyp;
-	Oid					rngtypoid;
-	RangeType		   *lastRange;
-	RangeBound lower;
-	RangeBound upper;
+	uint32				range_count;
+	RangeType		   **ranges;
 	MultirangeType		*ret;
+	int i;
 
 	check_stack_depth();		/* recurses when subtype is a range type */
 
-	typcache = multirange_get_typcache(fcinfo, mltrngtypoid);
-	rangetyp = typcache->rngtype;
-	rngtypoid = rangetyp->type_id;
+	cache = get_multirange_io_data(fcinfo, mltrngtypoid, IOFunc_receive);
+	rangetyp = cache->typcache->rngtype;
 
-	lower.val = Int32GetDatum(1);
-	lower.lower = true;
-	lower.infinite = false;
-	lower.inclusive = true;
+	range_count = pq_getmsgint(buf, 4);
+	ranges = palloc0(range_count * sizeof(RangeType *));
+	for (i = 0; i < range_count; i++) {
+		uint32		range_len = pq_getmsgint(buf, 4);
+		const char *range_data = pq_getmsgbytes(buf, range_len);
+		StringInfoData range_buf;
 
-	upper.val = Int32GetDatum(4);
-	upper.lower = false;
-	upper.infinite = false;
-	upper.inclusive = false;
+		initStringInfo(&range_buf);
+		appendBinaryStringInfo(&range_buf, range_data, range_len);
 
-	lastRange = make_range(rangetyp, &lower, &upper, false);
+		ranges[i] = DatumGetRangeTypeP(
+						ReceiveFunctionCall(&cache->proc,
+											&range_buf,
+											cache->typioparam,
+											typmod));
+		pfree(range_buf.data);
+	}
 
-	ret = make_multirange(mltrngtypoid, rangetyp, 1, &lastRange);
+	pq_getmsgend(buf);
+
+	ret = make_multirange(mltrngtypoid, rangetyp, range_count, ranges);
 	PG_RETURN_MULTIRANGE_P(ret);
 }
 
@@ -293,11 +331,31 @@ Datum
 multirange_send(PG_FUNCTION_ARGS)
 {
 	MultirangeType  *multirange = PG_GETARG_MULTIRANGE_P(0);
+	Oid mltrngtypoid = MultirangeTypeGetOid(multirange);
 	StringInfo	buf = makeStringInfo();
+	MultirangeIOData   *cache;
+	Pointer ptr = (char *) multirange;
+	Pointer end = ptr + VARSIZE(multirange);
 
 	check_stack_depth();		/* recurses when subtype is a range type */
 
-	pq_sendbyte(buf, '.');	// TODO
+	cache = get_multirange_io_data(fcinfo, mltrngtypoid, IOFunc_send);
+
+	/* construct output */
+	pq_begintypsend(buf);
+
+	pq_sendint32(buf, multirange->rangeCount);
+
+	ptr = (char *) MAXALIGN(multirange + 1);
+	while (ptr < end) {
+		Datum range	= RangeTypePGetDatum((RangeType *)ptr);
+		range = PointerGetDatum(SendFunctionCall(&cache->proc, range));
+		uint32		range_len = VARSIZE(range) - VARHDRSZ;
+		char	   *range_data = VARDATA(range);
+		pq_sendint32(buf, range_len);
+		pq_sendbytes(buf, range_data, range_len);
+		ptr += MAXALIGN(VARSIZE(range));
+	}
 
 	PG_RETURN_BYTEA_P(pq_endtypsend(buf));
 }
@@ -402,6 +460,7 @@ multirange_get_typcache(FunctionCallInfo fcinfo, Oid mltrngtypid)
 
 /*
  * This serializes the multirange from a list of non-null ranges.
+ * It also sorts the ranges and merges any that touch. TODO!
  * The ranges should already be detoasted.
  * This should be used by most callers.
  */
@@ -431,6 +490,7 @@ make_multirange(Oid mltrngtypoid, TypeCacheEntry *rangetyp, int range_count, Ran
 
 	/* Now fill in the datum */
 	multirange->multirangetypid = mltrngtypoid;
+	multirange->rangeCount = range_count;
 
 	ptr = (char *) MAXALIGN(multirange + 1);
 	for (i = 0; i < range_count; i++)
@@ -442,3 +502,20 @@ make_multirange(Oid mltrngtypoid, TypeCacheEntry *rangetyp, int range_count, Ran
 
 	return multirange;
 }
+
+/*
+ *----------------------------------------------------------
+ * GENERIC FUNCTIONS
+ *----------------------------------------------------------
+ */
+
+#if 0
+/* Construct multirange value from zero or more arguments */
+// TODO: we'll need an anyrangearray polymorphic type if we want to implement this,
+// since there is no such thing as an anyrange[].
+Datum
+multirange_constructor(PG_FUNCTION_ARGS)
+{
+	Datum		arg1 = PG_GETARG_DATUM(0);
+}
+#endif
