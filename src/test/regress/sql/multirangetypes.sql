@@ -20,7 +20,7 @@ select '{[z,a]}'::textmultirange;
 select '{}'::textmultirange;
 select '  {}  '::textmultirange;
 select ' { empty, empty }  '::textmultirange;
-select ' {( " a " " a ", " z " " z " )}  }'::textmultirange;
+select ' {( " a " " a ", " z " " z " )  }'::textmultirange;
 select '{(,z)}'::textmultirange;
 select '{(a,)}'::textmultirange;
 select '{[,z]}'::textmultirange;

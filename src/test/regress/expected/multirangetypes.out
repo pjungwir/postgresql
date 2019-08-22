@@ -54,26 +54,136 @@ LINE 1: select '{[z,a]}'::textmultirange;
                ^
 -- should succeed
 select '{}'::textmultirange;
+ textmultirange 
+----------------
+ {}
+(1 row)
+
 select '  {}  '::textmultirange;
+ textmultirange 
+----------------
+ {}
+(1 row)
+
 select ' { empty, empty }  '::textmultirange;
-select ' {( " a " " a ", " z " " z " )}  }'::textmultirange;
+ textmultirange 
+----------------
+ {emptyempty}
+(1 row)
+
+select ' {( " a " " a ", " z " " z " )  }'::textmultirange;
+       textmultirange       
+----------------------------
+ {("  a   a ","  z   z  ")}
+(1 row)
+
 select '{(,z)}'::textmultirange;
+ textmultirange 
+----------------
+ {(,z)}
+(1 row)
+
 select '{(a,)}'::textmultirange;
+ textmultirange 
+----------------
+ {(a,)}
+(1 row)
+
 select '{[,z]}'::textmultirange;
+ textmultirange 
+----------------
+ {(,z]}
+(1 row)
+
 select '{[a,]}'::textmultirange;
+ textmultirange 
+----------------
+ {[a,)}
+(1 row)
+
 select '{(,)}'::textmultirange;
+ textmultirange 
+----------------
+ {(,)}
+(1 row)
+
 select '{[ , ]}'::textmultirange;
+ textmultirange 
+----------------
+ {[" "," "]}
+(1 row)
+
 select '{["",""]}'::textmultirange;
+ textmultirange 
+----------------
+ {["",""]}
+(1 row)
+
 select '{[",",","]}'::textmultirange;
+ textmultirange 
+----------------
+ {[",",","]}
+(1 row)
+
 select '{["\\","\\"]}'::textmultirange;
+ textmultirange 
+----------------
+ {["\\","\\"]}
+(1 row)
+
 select '{(\\,a)}'::textmultirange;
+ textmultirange 
+----------------
+ {("\\",a)}
+(1 row)
+
 select '{((,z)}'::textmultirange;
+ textmultirange 
+----------------
+ {("(",z)}
+(1 row)
+
 select '{([,z)}'::textmultirange;
+ textmultirange 
+----------------
+ {("[",z)}
+(1 row)
+
 select '{(!,()}'::textmultirange;
+ textmultirange 
+----------------
+ {(!,"(")}
+(1 row)
+
 select '{(!,[)}'::textmultirange;
+ textmultirange 
+----------------
+ {(!,"[")}
+(1 row)
+
 select '{[a,a]}'::textmultirange;
+ textmultirange 
+----------------
+ {[a,a]}
+(1 row)
+
 -- these are allowed but normalize to empty:
 select '{[a,a)}'::textmultirange;
+ textmultirange 
+----------------
+ {empty}
+(1 row)
+
 select '{(a,a]}'::textmultirange;
+ textmultirange 
+----------------
+ {empty}
+(1 row)
+
 select '{(a,a)}'::textmultirange;
+ textmultirange 
+----------------
+ {empty}
+(1 row)
+
 -- TODO: more, see rangetypes.sql
