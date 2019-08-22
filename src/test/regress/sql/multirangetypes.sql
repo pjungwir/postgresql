@@ -5,40 +5,40 @@
 --
 
 -- negative tests; should fail
-select ''::multitextrange;
-select '{"-[a,z)"}'::multitextrange;
-select '{"[a,z) - "}'::multitextrange;
-select '{"(",a)"}'::multitextrange;
-select '{"(,,a)"}'::multitextrange;
-select '{"(),a)"}'::multitextrange;
-select '{"(a,))"}'::multitextrange;
-select '{"(],a)"}'::multitextrange;
-select '{"(a,])"}'::multitextrange;
-select '{"[z,a]"}'::multitextrange;
+select ''::textmultirange;
+select '{-[a,z)}'::textmultirange;
+select '{[a,z) - }'::textmultirange;
+select '{(",a)}'::textmultirange;
+select '{(,,a)}'::textmultirange;
+select '{(),a)}'::textmultirange;
+select '{(a,))}'::textmultirange;
+select '{(],a)}'::textmultirange;
+select '{(a,])}'::textmultirange;
+select '{[z,a]}'::textmultirange;
 
 -- should succeed
-select '{}'::multitextrange;
-select '  {}  '::multitextrange;
-select ' { empty, empty }  '::multitextrange;
-select ' {"( " a " " a ", " z " " z " )"}  "}'::multitextrange;
-select '{"(,z)"}'::multitextrange;
-select '{"(a,)"}'::multitextrange;
-select '{"[,z]"}'::multitextrange;
-select '{"[a,]"}'::multitextrange;
-select '{"(,)"}'::multitextrange;
-select '{"[ , ]"}'::multitextrange;
-select '{"["",""]"}'::multitextrange;
-select '{"[",",","]"}'::multitextrange;
-select '{"["\\","\\"]"}'::multitextrange;
-select '{"(\\,a)"}'::multitextrange;
-select '{"((,z)"}'::multitextrange;
-select '{"([,z)"}'::multitextrange;
-select '{"(!,()"}'::multitextrange;
-select '{"(!,[)"}'::multitextrange;
-select '{"[a,a]"}'::multitextrange;
+select '{}'::textmultirange;
+select '  {}  '::textmultirange;
+select ' { empty, empty }  '::textmultirange;
+select ' {( " a " " a ", " z " " z " )}  }'::textmultirange;
+select '{(,z)}'::textmultirange;
+select '{(a,)}'::textmultirange;
+select '{[,z]}'::textmultirange;
+select '{[a,]}'::textmultirange;
+select '{(,)}'::textmultirange;
+select '{[ , ]}'::textmultirange;
+select '{["",""]}'::textmultirange;
+select '{[",",","]}'::textmultirange;
+select '{["\\","\\"]}'::textmultirange;
+select '{(\\,a)}'::textmultirange;
+select '{((,z)}'::textmultirange;
+select '{([,z)}'::textmultirange;
+select '{(!,()}'::textmultirange;
+select '{(!,[)}'::textmultirange;
+select '{[a,a]}'::textmultirange;
 -- these are allowed but normalize to empty:
-select '{"[a,a)"}'::multitextrange;
-select '{"(a,a]"}'::multitextrange;
-select '{"(a,a)"}'::multitextrange;
+select '{[a,a)}'::textmultirange;
+select '{(a,a]}'::textmultirange;
+select '{(a,a)}'::textmultirange;
 
 -- TODO: more, see rangetypes.sql
