@@ -38,7 +38,8 @@
 #include "utils/syscache.h"
 
 static int
-makeUniqueTypeName(char *dest, const char *typeName, size_t namelen, Oid typeNamespace);
+makeUniqueTypeName(char *dest, const char *typeName, size_t namelen, Oid typeNamespace,
+		bool tryOriginalName);
 
 /* Potentially set by pg_upgrade_support functions */
 Oid			binary_upgrade_next_pg_type_oid = InvalidOid;
@@ -861,7 +862,7 @@ makeArrayTypeName(const char *typeName, Oid typeNamespace)
 	int			namelen = strlen(typeName);
 	int			underscores;
 
-	underscores = makeUniqueTypeName(arr, typeName, namelen, typeNamespace);
+	underscores = makeUniqueTypeName(arr, typeName, namelen, typeNamespace, false);
 	if (underscores >= NAMEDATALEN - 1)
 		ereport(ERROR,
 				(errcode(ERRCODE_DUPLICATE_OBJECT),
@@ -944,8 +945,8 @@ moveArrayTypeName(Oid typeOid, const char *typeName, Oid typeNamespace)
 char *
 makeMultirangeTypeName(const char *rangeTypeName, Oid typeNamespace)
 {
-	char		arr[NAMEDATALEN];
-	char	   *arrunique = (char *) palloc(NAMEDATALEN);
+	char		mltrng[NAMEDATALEN];
+	char	   *mltrngunique = (char *) palloc(NAMEDATALEN);
 	int			namelen = strlen(rangeTypeName);
 	int			rangelen;
 	char	   *rangestr;
@@ -958,60 +959,76 @@ makeMultirangeTypeName(const char *rangeTypeName, Oid typeNamespace)
 	 * After that, prepend underscores as needed until we make a name that
 	 * doesn't collide with anything...
 	 */
-	strlcpy(arr, rangeTypeName, NAMEDATALEN);
+	strlcpy(mltrng, rangeTypeName, NAMEDATALEN);
 	rangestr = strstr(rangeTypeName, "range");
 	if (rangestr)
 	{
 		rangeoffset = rangestr - rangeTypeName;
 		rangelen = strlen(rangestr);
-		strlcpy(arr + rangeoffset, "multi", NAMEDATALEN - rangeoffset - 5);
-		strlcpy(arr + rangeoffset + 5, rangestr, NAMEDATALEN - rangeoffset - 5 - rangelen);
+		strlcpy(mltrng + rangeoffset, "multi", NAMEDATALEN - rangeoffset);
+		strlcpy(mltrng + rangeoffset + 5, rangestr, NAMEDATALEN - rangeoffset - 5);
 		namelen += 5;
 	} else {
-		strlcpy(arr + namelen, "multirange", NAMEDATALEN - namelen - 10);
+		strlcpy(mltrng + namelen, "multirange", NAMEDATALEN - namelen);
 		namelen += 10;
 	}
 
-	underscores = makeUniqueTypeName(arrunique, arr, namelen, typeNamespace);
+	underscores = makeUniqueTypeName(mltrngunique, mltrng, namelen, typeNamespace, true);
 	if (underscores >= NAMEDATALEN - 1)
 		ereport(ERROR,
 				(errcode(ERRCODE_DUPLICATE_OBJECT),
 				 errmsg("could not form multirange type name for type \"%s\"",
 						rangeTypeName)));
 
-	return arrunique;
+	return mltrngunique;
 }
 
 /*
  * makeUniqueTypeName: Prepend underscores as needed until we make a name that
- * doesn't collide with anything. Always adds at least one.
+ * doesn't collide with anything. Tries the original typeName if requested.
  *
  * Returns the number of underscores added.
  */
 int
-makeUniqueTypeName(char *dest, const char *typeName, size_t namelen, Oid typeNamespace)
+makeUniqueTypeName(char *dest, const char *typeName, size_t namelen, Oid typeNamespace,
+		bool tryOriginalName)
 {
 	int			i;
 
-	for (i = 1; i < NAMEDATALEN - 1; i++)
+	for (i = 0; i < NAMEDATALEN - 1; i++)
 	{
-		dest[i - 1] = '_';
-		if (i + namelen < NAMEDATALEN)
-			strcpy(dest + i, typeName);
+		if (i == 0)
+		{
+			if (tryOriginalName &&
+				!SearchSysCacheExists2(TYPENAMENSP,
+									   CStringGetDatum(typeName),
+									   ObjectIdGetDatum(typeNamespace)))
+			{
+				strcpy(dest, typeName);
+				break;
+			}
+
+		}
 		else
 		{
-			// Note to reviewer:
-			// this was memcpy before, not strlcpy,
-			// but that can copy from past the end of typeName.
-			// Not a big deal problaby but still worth changing.
-			// I can do it in a different commit if you like.
-			strlcpy(dest + i, typeName, NAMEDATALEN);
-			truncate_identifier(dest, NAMEDATALEN, false);
+			dest[i - 1] = '_';
+			if (i + namelen < NAMEDATALEN)
+				strcpy(dest + i, typeName);
+			else
+			{
+				// Note to reviewer:
+				// this was memcpy before, not strlcpy,
+				// but that can copy from past the end of typeName.
+				// Not a big deal problaby but still worth changing.
+				// I can do it in a different commit if you like.
+				strlcpy(dest + i, typeName, NAMEDATALEN);
+				truncate_identifier(dest, NAMEDATALEN, false);
+			}
+			if (!SearchSysCacheExists2(TYPENAMENSP,
+									   CStringGetDatum(dest),
+									   ObjectIdGetDatum(typeNamespace)))
+				break;
 		}
-		if (!SearchSysCacheExists2(TYPENAMENSP,
-								   CStringGetDatum(dest),
-								   ObjectIdGetDatum(typeNamespace)))
-			break;
 	}
 
 	return i;

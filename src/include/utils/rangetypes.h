@@ -29,6 +29,8 @@ typedef struct
 	/* Following the OID are zero to two bound values, then a flags byte */
 } RangeType;
 
+#define RANGE_EMPTY_LITERAL "empty"
+
 /* Use this macro in preference to fetching rangetypid field directly */
 #define RangeTypeGetOid(r)	((r)->rangetypid)
 

@@ -69,7 +69,7 @@ DECLARE_UNIQUE_INDEX(pg_range_mltrngtypid_index, 8001, on pg_range using btree(m
 
 extern void RangeCreate(Oid rangeTypeOid, Oid rangeSubType, Oid rangeCollation,
 						Oid rangeSubOpclass, RegProcedure rangeCanonical,
-						RegProcedure rangeSubDiff);
+						RegProcedure rangeSubDiff, Oid multirangeTypeOid);
 extern void RangeDelete(Oid rangeTypeOid);
 
 #endif							/* PG_RANGE_H */

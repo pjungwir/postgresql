@@ -43,8 +43,6 @@
 #include "utils/timestamp.h"
 
 
-#define RANGE_EMPTY_LITERAL "empty"
-
 /* fn_extra cache entry for one of the range I/O functions */
 typedef struct RangeIOData
 {

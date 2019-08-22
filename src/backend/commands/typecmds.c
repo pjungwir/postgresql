@@ -1287,6 +1287,7 @@ DefineRange(CreateRangeStmt *stmt)
 	char	   *typeName;
 	Oid			typeNamespace;
 	Oid			typoid;
+	Oid			mltrngtypoid;
 	char	   *rangeArrayName;
 	char	   *multirangeTypeName;
 	char	   *multirangeArrayName;
@@ -1308,6 +1309,7 @@ DefineRange(CreateRangeStmt *stmt)
 	AclResult	aclresult;
 	ListCell   *lc;
 	ObjectAddress address;
+	ObjectAddress mltrngaddress;
 
 	/* Convert list of names to a name and namespace */
 	typeNamespace = QualifiedNameGetCreationNamespace(stmt->typeName,
@@ -1339,8 +1341,6 @@ DefineRange(CreateRangeStmt *stmt)
 					(errcode(ERRCODE_DUPLICATE_OBJECT),
 					 errmsg("type \"%s\" already exists", typeName)));
 	}
-
-	// TODO: Do that ^^^ for multiranges too?
 
 	/*
 	 * Unlike DefineType(), we don't insist on a shell type existing first, as
@@ -1500,9 +1500,47 @@ DefineRange(CreateRangeStmt *stmt)
 	Assert(typoid == InvalidOid || typoid == address.objectId);
 	typoid = address.objectId;
 
+	/* Create the multirange that goes with it */
+
+	multirangeTypeName = makeMultirangeTypeName(typeName, typeNamespace);
+
+	mltrngaddress =
+		TypeCreate(InvalidOid,	/* no predetermined type OID */
+			   multirangeTypeName,	/* type name */
+			   typeNamespace,	/* namespace */
+			   InvalidOid,	/* relation oid (n/a here) */
+			   0,			/* relation kind (ditto) */
+			   GetUserId(), /* owner's ID */
+			   -1,			/* internal size (always varlena) */
+			   TYPTYPE_MULTIRANGE,	/* type-type (multirange type) */
+			   TYPCATEGORY_MULTIRANGE,	/* type-category (multirange type) */
+			   false,		/* multirange types are never preferred */
+			   DEFAULT_TYPDELIM,	/* array element delimiter */
+			   F_MULTIRANGE_IN,	/* input procedure */
+			   F_MULTIRANGE_OUT, /* output procedure */
+			   F_MULTIRANGE_RECV,	/* receive procedure */
+			   F_MULTIRANGE_SEND,	/* send procedure */
+			   InvalidOid,	/* typmodin procedure - none */
+			   InvalidOid,	/* typmodout procedure - none */
+			   F_MULTIRANGE_TYPANALYZE,	/* analyze procedure */
+			   InvalidOid,	/* element type ID - none */
+			   false,		/* this is not an array type */
+			   multirangeArrayOid,	/* array type we are about to create */
+			   InvalidOid,	/* base type ID (only for domains) */
+			   NULL,		/* never a default type value */
+			   NULL,		/* no binary form available either */
+			   false,		/* never passed by value */
+			   alignment,	/* alignment */
+			   'x',			/* TOAST strategy (always extended) */
+			   -1,			/* typMod (Domains only) */
+			   0,			/* Array dimensions of typbasetype */
+			   false,		/* Type NOT NULL */
+			   InvalidOid); /* type's collation (ranges never have one) */
+	mltrngtypoid = mltrngaddress.objectId;
+
 	/* Create the entry in pg_range */
 	RangeCreate(typoid, rangeSubtype, rangeCollation, rangeSubOpclass,
-				rangeCanonical, rangeSubtypeDiff);
+				rangeCanonical, rangeSubtypeDiff, mltrngtypoid);
 
 	/*
 	 * Create the array type that goes with it.
@@ -1543,42 +1581,6 @@ DefineRange(CreateRangeStmt *stmt)
 
 	pfree(rangeArrayName);
 
-	/* Create the multirange that goes with it */
-
-	multirangeTypeName = makeMultirangeTypeName(typeName, typeNamespace);
-
-	TypeCreate(InvalidOid,	/* no predetermined type OID */
-			   multirangeTypeName,	/* type name */
-			   typeNamespace,	/* namespace */
-			   InvalidOid,	/* relation oid (n/a here) */
-			   0,			/* relation kind (ditto) */
-			   GetUserId(), /* owner's ID */
-			   -1,			/* internal size (always varlena) */
-			   TYPTYPE_MULTIRANGE,	/* type-type (multirange type) */
-			   TYPCATEGORY_MULTIRANGE,	/* type-category (multirange type) */
-			   false,		/* multirange types are never preferred */
-			   DEFAULT_TYPDELIM,	/* array element delimiter */
-			   F_MULTIRANGE_IN,	/* input procedure */
-			   F_MULTIRANGE_OUT, /* output procedure */
-			   F_MULTIRANGE_RECV,	/* receive procedure */
-			   F_MULTIRANGE_SEND,	/* send procedure */
-			   InvalidOid,	/* typmodin procedure - none */
-			   InvalidOid,	/* typmodout procedure - none */
-			   F_MULTIRANGE_TYPANALYZE,	/* analyze procedure */
-			   InvalidOid,	/* element type ID - none */
-			   false,		/* this is not an array type */
-			   multirangeArrayOid,	/* array type we are about to create */
-			   InvalidOid,	/* base type ID (only for domains) */
-			   NULL,		/* never a default type value */
-			   NULL,		/* no binary form available either */
-			   false,		/* never passed by value */
-			   alignment,	/* alignment */
-			   'x',			/* TOAST strategy (always extended) */
-			   -1,			/* typMod (Domains only) */
-			   0,			/* Array dimensions of typbasetype */
-			   false,		/* Type NOT NULL */
-			   InvalidOid); /* type's collation (ranges never have one) */
-
 	/* Create the multirange's array type */
 
 	multirangeArrayName = makeArrayTypeName(multirangeTypeName, typeNamespace);
@@ -1601,7 +1603,7 @@ DefineRange(CreateRangeStmt *stmt)
 			   InvalidOid,		/* typmodin procedure - none */
 			   InvalidOid,		/* typmodout procedure - none */
 			   F_ARRAY_TYPANALYZE,	/* analyze procedure */
-			   typoid,			/* element type ID */
+			   mltrngtypoid,	/* element type ID */
 			   true,			/* yes this is an array type */
 			   InvalidOid,		/* no further array type */
 			   InvalidOid,		/* base type ID */
@@ -1615,6 +1617,7 @@ DefineRange(CreateRangeStmt *stmt)
 			   false,			/* Type NOT NULL */
 			   InvalidOid);		/* typcollation */
 
+	pfree(multirangeTypeName);
 	pfree(multirangeArrayName);
 
 	/* And create the constructor functions for this range type */
