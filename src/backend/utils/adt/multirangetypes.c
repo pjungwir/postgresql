@@ -46,8 +46,9 @@ typedef enum
 {
 	MULTIRANGE_BEFORE_RANGE,
 	MULTIRANGE_IN_RANGE,
-	MULTIRANGE_IN_RANGE_QUOTED,
 	MULTIRANGE_IN_RANGE_ESCAPED,
+	MULTIRANGE_IN_RANGE_QUOTED,
+	MULTIRANGE_IN_RANGE_QUOTED_ESCAPED,
 	MULTIRANGE_AFTER_RANGE,
 	MULTIRANGE_FINISHED,
 } MultirangeParseState;
@@ -202,6 +203,10 @@ multirange_in(PG_FUNCTION_ARGS)
 				else
 					/* include it in range_str */;
 				break;
+			case MULTIRANGE_IN_RANGE_ESCAPED:
+				/* include it in range_str */
+				parse_state = MULTIRANGE_IN_RANGE;
+				break;
 			case MULTIRANGE_IN_RANGE_QUOTED:
 				if (ch == '"')
 					if (*(ptr + 1) == '"')
@@ -212,12 +217,9 @@ multirange_in(PG_FUNCTION_ARGS)
 					else
 						parse_state = MULTIRANGE_IN_RANGE;
 				else if (ch == '\\')
-					parse_state = MULTIRANGE_IN_RANGE_ESCAPED;
+					parse_state = MULTIRANGE_IN_RANGE_QUOTED_ESCAPED;
 				else
 					/* include it in range_str */;
-				break;
-			case MULTIRANGE_IN_RANGE_ESCAPED:
-				/* include it in range_str */
 				break;
 			case MULTIRANGE_AFTER_RANGE:
 				if (ch == ',')
@@ -231,10 +233,18 @@ multirange_in(PG_FUNCTION_ARGS)
 									input_str),
 							 errdetail("Expected comma or end of multirange.")));
 				break;
+			case MULTIRANGE_IN_RANGE_QUOTED_ESCAPED:
+				/* include it in range_str */
+				parse_state = MULTIRANGE_IN_RANGE_QUOTED;
+				break;
 			default:
 				elog(ERROR, "Unknown parse state: %d", parse_state);
 		}
 	}
+
+	/* consume whitespace */
+	while (*ptr != '\0' && isspace((unsigned char) *ptr))
+		ptr++;
 
 	if (*ptr != '\0')
 		ereport(ERROR,
@@ -473,9 +483,11 @@ make_multirange(Oid mltrngtypoid, TypeCacheEntry *rangetyp, int range_count, Ran
 	int32 bytelen;
 	Pointer ptr;
 
-	/* Count space for varlena header and multirange type's OID */
-	bytelen = sizeof(MultirangeType);
-	Assert(bytelen == MAXALIGN(bytelen));
+	/*
+	 * Count space for varlena header, multirange type's OID,
+	 * other fields, and padding so that RangeTypes start aligned.
+	 */
+	bytelen = MAXALIGN(sizeof(MultirangeType));
 
 	/* Count space for all ranges */
 	for (i = 0; i < range_count; i++)
