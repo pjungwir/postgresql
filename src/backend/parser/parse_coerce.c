@@ -1672,6 +1672,8 @@ enforce_generic_type_consistency(const Oid *actual_arg_types,
 								   rettype == ANYENUMOID);
 	bool		have_anynonarray = (rettype == ANYNONARRAYOID);
 	bool		have_anyenum = (rettype == ANYENUMOID);
+	bool		have_anyrange = (rettype == ANYRANGEOID);
+	bool		have_anymultirange = (rettype == ANYMULTIRANGEOID);
 
 	/*
 	 * Loop through the arguments to see if we have any that are polymorphic.
@@ -1749,7 +1751,7 @@ enforce_generic_type_consistency(const Oid *actual_arg_types,
 		}
 		else if (decl_type == ANYMULTIRANGEOID)
 		{
-			have_generics = true;
+			n_poly_args++;
 			if (actual_type == UNKNOWNOID)
 			{
 				have_unknowns = true;
@@ -1870,24 +1872,13 @@ enforce_generic_type_consistency(const Oid *actual_arg_types,
 		/* Get the element type based on the multirange type, if we have one */
 		if (OidIsValid(multirange_typeid))
 		{
-			// TODO: anymultirange should require an anyrange and follow its type.
-			// TODO: take care that anymultirange should be a *range type*,
-			// whereas the others are *base types*.
-			if (multirange_typeid == ANYMULTIRANGEOID && !have_anyelement)
-			{
-				/* Special case for ANYRANGE input: okay iff no ANYELEMENT */
-				multirange_typelem = ANYELEMENTOID;
-			}
-			else
-			{
-				multirange_typelem = get_multirange_subtype(multirange_typeid);
-				if (!OidIsValid(multirange_typelem))
-					ereport(ERROR,
-							(errcode(ERRCODE_DATATYPE_MISMATCH),
-							 errmsg("argument declared %s is not a multirange type but type %s",
-									"anymultirange",
-									format_type_be(multirange_typeid))));
-			}
+			multirange_typelem = get_multirange_subtype(multirange_typeid);
+			if (!OidIsValid(multirange_typelem))
+				ereport(ERROR,
+						(errcode(ERRCODE_DATATYPE_MISMATCH),
+						 errmsg("argument declared %s is not a multirange type but type %s",
+								"anymultirange",
+								format_type_be(multirange_typeid))));
 
 			if (!OidIsValid(elem_typeid))
 			{
@@ -1929,6 +1920,47 @@ enforce_generic_type_consistency(const Oid *actual_arg_types,
 						 errmsg("could not determine polymorphic type because input has type %s",
 								"unknown")));
 			}
+		}
+
+		if (!OidIsValid(range_typeid))
+		{
+			/*
+			 * If we don't have a range type yet, use the one we just got
+			 */
+			range_typeid = multirange_typelem;
+			range_typelem = get_range_subtype(range_typeid);
+		}
+		else if (multirange_typelem != range_typeid)
+		{
+			/* otherwise, they better match */
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("argument declared %s is not consistent with argument declared %s",
+							"anymultirange", "anyrange"),
+					 errdetail("%s versus %s",
+							   format_type_be(multirange_typeid),
+							   format_type_be(range_typeid))));
+		}
+
+		/*
+		 * Infer the element type too if needed
+		 * (if there is an ANYMULTIRANGE and ANYELEMENT,
+		 * with no ANYRANGE).
+		 */
+		if (!OidIsValid(elem_typeid))
+		{
+			elem_typeid = get_range_subtype(range_typeid);
+		}
+		else if (range_typelem != elem_typeid)
+		{
+			/* otherwise, they better match */
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("argument declared %s is not consistent with argument declared %s",
+							"anymultirange", "anyelement"),
+					 errdetail("%s versus %s",
+							   format_type_be(multirange_typeid),
+							   format_type_be(elem_typeid))));
 		}
 
 		if (have_anynonarray && elem_typeid != ANYELEMENTOID)
@@ -2050,10 +2082,13 @@ enforce_generic_type_consistency(const Oid *actual_arg_types,
 	{
 		if (!OidIsValid(multirange_typeid))
 		{
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("could not find multirange type for data type %s",
-						 format_type_be(elem_typeid))));
+			if (OidIsValid(range_typeid))
+				multirange_typeid = get_range_multirange(range_typeid);
+			else
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_OBJECT),
+						 errmsg("could not find multirange type for data type %s",
+							 format_type_be(elem_typeid))));
 		}
 		return multirange_typeid;
 	}
