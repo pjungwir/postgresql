@@ -55,20 +55,9 @@ typedef enum
 
 static MultirangeIOData *get_multirange_io_data(FunctionCallInfo fcinfo, Oid rngtypid,
 									  IOFuncSelector func);
-/*
-static char range_parse_flags(const char *flags_str);
-static void range_parse(const char *input_str, char *flags, char **lbound_str,
-						char **ubound_str);
-static const char *range_parse_bound(const char *string, const char *ptr,
-									 char **bound_str, bool *infinite);
-static char *range_deparse(char flags, const char *lbound_str,
-						   const char *ubound_str);
-static char *range_bound_escape(const char *value);
-static Size datum_compute_size(Size sz, Datum datum, bool typbyval,
-							   char typalign, int16 typlen, char typstorage);
-static Pointer datum_write(Pointer ptr, Datum datum, bool typbyval,
-						   char typalign, int16 typlen, char typstorage);
-						   */
+static int32
+multirange_canonicalize(TypeCacheEntry *rangetyp, int32 input_range_count,
+		RangeType **ranges);
 
 
 /*
@@ -100,8 +89,10 @@ multirange_in(PG_FUNCTION_ARGS)
 	Oid					typmod = PG_GETARG_INT32(2);
 	TypeCacheEntry	   *rangetyp;
 	Oid					rngtypoid;
+	int32				ranges_seen = 0;
 	int32				range_count = 0;
 	int32				range_capacity = 8;
+	RangeType		   *range;
 	RangeType		  **ranges = palloc(range_capacity * sizeof(RangeType *));
 	MultirangeIOData *cache;
 	MultirangeType		*ret;
@@ -154,7 +145,7 @@ multirange_in(PG_FUNCTION_ARGS)
 					range_str = ptr;
 					parse_state = MULTIRANGE_IN_RANGE;
 				}
-				else if (ch == '}' && range_count == 0)
+				else if (ch == '}' && ranges_seen == 0)
 					parse_state = MULTIRANGE_FINISHED;
 				else if (pg_strncasecmp(ptr, RANGE_EMPTY_LITERAL,
 					   strlen(RANGE_EMPTY_LITERAL)) == 0)
@@ -166,9 +157,12 @@ multirange_in(PG_FUNCTION_ARGS)
 						ranges = (RangeType **) repalloc(ranges,
 								range_capacity * sizeof(RangeType *));
 					}
-					ranges[range_count++] = DatumGetRangeTypeP(
+					ranges_seen++;
+					range = DatumGetRangeTypeP(
 							InputFunctionCall(&cache->proc, RANGE_EMPTY_LITERAL,
 								cache->typioparam, typmod));
+					if (!RangeIsEmpty(range))
+						ranges[range_count++] = range;
 					ptr += strlen(RANGE_EMPTY_LITERAL) - 1;
 					parse_state = MULTIRANGE_AFTER_RANGE;
 				}
@@ -195,9 +189,12 @@ multirange_in(PG_FUNCTION_ARGS)
 						ranges = (RangeType **) repalloc(ranges,
 								range_capacity * sizeof(RangeType *));
 					}
-					ranges[range_count++] = DatumGetRangeTypeP(
+					ranges_seen++;
+					range = DatumGetRangeTypeP(
 							InputFunctionCall(&cache->proc, range_str_copy,
 								cache->typioparam, typmod));
+					if (!RangeIsEmpty(range))
+						ranges[range_count++] = range;
 					parse_state = MULTIRANGE_AFTER_RANGE;
 				}
 				else
@@ -268,6 +265,7 @@ multirange_out(PG_FUNCTION_ARGS)
 	char *rangeStr;
 	Pointer ptr = (char *) multirange;
 	Pointer end = ptr + VARSIZE(multirange);
+	int32 range_count = 0;
 
 	cache = get_multirange_io_data(fcinfo, mltrngtypoid, IOFunc_output);
 
@@ -277,10 +275,13 @@ multirange_out(PG_FUNCTION_ARGS)
 
 	ptr = (char *) MAXALIGN(multirange + 1);
 	while (ptr < end) {
+		if (range_count > 0)
+			appendStringInfoChar(&buf, ',');
 		range = (RangeType *)ptr;
 		rangeStr = OutputFunctionCall(&cache->proc, RangeTypePGetDatum(range));
 		appendStringInfoString(&buf, rangeStr);
 		ptr += MAXALIGN(VARSIZE(range));
+		range_count++;
 	}
 
 	appendStringInfoChar(&buf, '}');
@@ -470,18 +471,25 @@ multirange_get_typcache(FunctionCallInfo fcinfo, Oid mltrngtypid)
 
 /*
  * This serializes the multirange from a list of non-null ranges.
- * It also sorts the ranges and merges any that touch. TODO!
- * The ranges should already be detoasted.
+ * It also sorts the ranges and merges any that touch.
+ * The ranges should already be detoasted, and there should be no NULLs.
  * This should be used by most callers.
+ *
+ * Note that we may change the `ranges` parameter (the pointers, but not
+ * any already-existing RangeType contents).
  */
 MultirangeType *
-make_multirange(Oid mltrngtypoid, TypeCacheEntry *rangetyp, int range_count, RangeType **ranges)
+make_multirange(Oid mltrngtypoid, TypeCacheEntry *rangetyp, int32 range_count,
+		RangeType **ranges)
 {
 	MultirangeType *multirange;
 	RangeType  *range;
 	int i;
 	int32 bytelen;
 	Pointer ptr;
+
+	/* Sort and merge input ranges. */
+	range_count = multirange_canonicalize(rangetyp, range_count, ranges);
 
 	/*
 	 * Count space for varlena header, multirange type's OID,
@@ -513,6 +521,67 @@ make_multirange(Oid mltrngtypoid, TypeCacheEntry *rangetyp, int range_count, Ran
 	}
 
 	return multirange;
+}
+
+/*
+ * Converts a list of any ranges you like into a list that is sorted and merged.
+ * Changes the contents of `ranges`.
+ * Returns the number of slots actually used,
+ * which may be less than input_range_count but never more.
+ * We assume that no input ranges are null, but empties are okay.
+ */
+static int32
+multirange_canonicalize(TypeCacheEntry *rangetyp, int32 input_range_count,
+		RangeType **ranges)
+{
+	RangeType *lastRange = NULL;
+	RangeType *currentRange;
+	int32 i;
+	int32 output_range_count = 0;
+
+	/* Sort the ranges so we can find the ones that overlap/meet. */
+	qsort_arg(ranges, input_range_count, sizeof(RangeType *), range_compare,
+			rangetyp);
+
+	/* Now merge where possible: */
+	for (i = 0; i < input_range_count; i++)
+	{
+		currentRange = ranges[i];
+		if (RangeIsEmpty(currentRange))
+			continue;
+
+		if (lastRange == NULL)
+		{
+			ranges[output_range_count++] = lastRange = currentRange;
+			continue;
+		}
+
+		/*
+		 * range_adjacent_internal gives true if *either* A meets B
+		 * or B meets A, which is not quite want we want, but we rely
+		 * on the sorting above to rule out B meets A ever happening.
+		 */
+		if (range_adjacent_internal(rangetyp, lastRange, currentRange))
+		{
+			/* The two ranges touch (without overlap), so merge them: */
+			ranges[output_range_count - 1] = lastRange =
+				range_union_internal(rangetyp, lastRange, currentRange, false);
+		}
+		else if (range_before_internal(rangetyp, lastRange, currentRange))
+		{
+			/* There's a gap, so make a new entry: */
+			lastRange = ranges[output_range_count] = currentRange;
+			output_range_count++;
+		}
+		else
+		{
+			/* They must overlap, so merge them: */
+			ranges[output_range_count - 1] = lastRange =
+				range_union_internal(rangetyp, lastRange, currentRange, true);
+		}
+	}
+
+	return output_range_count;
 }
 
 /*

@@ -93,6 +93,7 @@ num_exp_sub|t
 num_input_test|f
 num_result|f
 numrange_test|t
+nummultirange_test|f
 onek|t
 onek2|t
 path_tbl|f

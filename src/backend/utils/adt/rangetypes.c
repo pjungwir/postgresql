@@ -1936,6 +1936,44 @@ range_cmp_bound_values(TypeCacheEntry *typcache, const RangeBound *b1,
 }
 
 /*
+ * Compares two ranges so we can qsort them.
+ * This espects that you give qsort a RangeType **,
+ * so the RangeTypes can be in diverse locations,
+ * as long as you have a list of pointers to them all.
+ */
+int
+range_compare(const void *key1, const void *key2, void *arg)
+{
+	RangeType *r1 = * (RangeType **) key1;
+	RangeType *r2 = * (RangeType **) key2;
+	TypeCacheEntry *typcache = (TypeCacheEntry *) arg;
+	RangeBound lower1;
+	RangeBound upper1;
+	RangeBound lower2;
+	RangeBound upper2;
+	bool empty1;
+	bool empty2;
+	int cmp;
+
+	range_deserialize(typcache, r1, &lower1, &upper1, &empty1);
+	range_deserialize(typcache, r2, &lower2, &upper2, &empty2);
+
+	if (empty1 && empty2)
+		cmp = 0;
+	else if (empty1)
+		cmp = -1;
+	else if (empty2)
+		cmp = 1;
+	else {
+		cmp = range_cmp_bounds(typcache, &lower1, &lower2);
+		if (cmp == 0)
+			cmp = range_cmp_bounds(typcache, &upper1, &upper2);
+	}
+
+	return cmp;
+}
+
+/*
  * Build an empty range value of the type indicated by the typcache entry.
  */
 RangeType *
