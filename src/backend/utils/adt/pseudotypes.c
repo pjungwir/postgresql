@@ -253,6 +253,30 @@ anymultirange_out(PG_FUNCTION_ARGS)
 }
 
 /*
+ * anyrangearray_in		- input routine for pseudo-type ANYRANGEARRAY.
+ */
+Datum
+anyrangearray_in(PG_FUNCTION_ARGS)
+{
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("cannot accept a value of type %s", "anyrangearray")));
+
+	PG_RETURN_VOID();			/* keep compiler quiet */
+}
+
+/*
+ * anyrangearray_out		- output routine for pseudo-type ANYRANGEARRAY.
+ *
+ * We may as well allow this, since array_out will in fact work.
+ */
+Datum
+anyrangearray_out(PG_FUNCTION_ARGS)
+{
+	return array_out(fcinfo);
+}
+
+/*
  * void
  *
  * We support void_in so that PL functions can return VOID without any
