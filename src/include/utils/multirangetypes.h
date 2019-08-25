@@ -95,7 +95,7 @@ extern void multirange_deserialize(TypeCacheEntry *typcache, MultirangeType *ran
 // extern char range_get_flags(RangeType *range);
 // extern void range_set_contain_empty(RangeType *range);
 extern MultirangeType *make_multirange(Oid mltrngtypoid,
-		TypeCacheEntry *typcache, int range_count, RangeType **ranges);
+		TypeCacheEntry *typcache, int32 range_count, RangeType **ranges);
 /*
 extern int	range_cmp_bounds(TypeCacheEntry *typcache, RangeBound *b1,
 							 RangeBound *b2);
