@@ -8,6 +8,21 @@ ERROR:  malformed multirange literal: ""
 LINE 1: select ''::textmultirange;
                ^
 DETAIL:  Missing left bracket.
+select '{,}'::textmultirange;
+ERROR:  malformed multirange literal: "{,}"
+LINE 1: select '{,}'::textmultirange;
+               ^
+DETAIL:  Expected range start.
+select '{[a,c),}'::textmultirange;
+ERROR:  malformed multirange literal: "{[a,c),}"
+LINE 1: select '{[a,c),}'::textmultirange;
+               ^
+DETAIL:  Expected range start.
+select '{,[a,c)}'::textmultirange;
+ERROR:  malformed multirange literal: "{,[a,c)}"
+LINE 1: select '{,[a,c)}'::textmultirange;
+               ^
+DETAIL:  Expected range start.
 select '{-[a,z)}'::textmultirange;
 ERROR:  malformed multirange literal: "{-[a,z)}"
 LINE 1: select '{-[a,z)}'::textmultirange;
@@ -68,7 +83,7 @@ select '  {}  '::textmultirange;
 select ' { empty, empty }  '::textmultirange;
  textmultirange 
 ----------------
- {emptyempty}
+ {}
 (1 row)
 
 select ' {( " a " " a ", " z " " z " )  }'::textmultirange;
@@ -167,23 +182,90 @@ select '{[a,a]}'::textmultirange;
  {[a,a]}
 (1 row)
 
+select '{[a,a],[a,b]}'::textmultirange;
+ textmultirange 
+----------------
+ {[a,b]}
+(1 row)
+
+select '{[a,b), [b,e]}'::textmultirange;
+ textmultirange 
+----------------
+ {[a,e]}
+(1 row)
+
+select '{[a,d), [b,f]}'::textmultirange;
+ textmultirange 
+----------------
+ {[a,f]}
+(1 row)
+
+select '{[a,a],[b,b]}'::textmultirange;
+ textmultirange 
+----------------
+ {[a,a],[b,b]}
+(1 row)
+
+select '{[a,a], [b,b]}'::textmultirange;
+ textmultirange 
+----------------
+ {[a,a],[b,b]}
+(1 row)
+
+select '{[a,a], [c,c]}'::textmultirange;
+ textmultirange 
+----------------
+ {[a,a],[c,c]}
+(1 row)
+
+select '{[a,a], [b,b], [c,c]}'::textmultirange;
+   textmultirange    
+---------------------
+ {[a,a],[b,b],[c,c]}
+(1 row)
+
+select '{[a,d], [b,e]}'::textmultirange;
+ textmultirange 
+----------------
+ {[a,e]}
+(1 row)
+
+select '{[a,d), [d,e)}'::textmultirange;
+ textmultirange 
+----------------
+ {[a,e)}
+(1 row)
+
 -- these are allowed but normalize to empty:
 select '{[a,a)}'::textmultirange;
  textmultirange 
 ----------------
- {empty}
+ {}
 (1 row)
 
 select '{(a,a]}'::textmultirange;
  textmultirange 
 ----------------
- {empty}
+ {}
 (1 row)
 
 select '{(a,a)}'::textmultirange;
  textmultirange 
 ----------------
- {empty}
+ {}
 (1 row)
 
+--
+-- create some test data and test the operators
+--
+CREATE TABLE nummultirange_test (nmr NUMMULTIRANGE);
+--create index nummultirange_test_btree on nummultirange_test(nmr);
+INSERT INTO nummultirange_test VALUES('{}');
+INSERT INTO nummultirange_test VALUES('{[,)}');
+INSERT INTO nummultirange_test VALUES('{[3,]}');
+INSERT INTO nummultirange_test VALUES('{[,), [3,]}');
+INSERT INTO nummultirange_test VALUES('{[, 5)}');
+-- INSERT INTO nummultirange_test VALUES(nummultirange(1.1, 2.2));
+INSERT INTO nummultirange_test VALUES('{empty}');
+-- INSERT INTO nummultirange_test VALUES(nummultirange(1.7, 1.7, '[]'));
 -- TODO: more, see rangetypes.sql
