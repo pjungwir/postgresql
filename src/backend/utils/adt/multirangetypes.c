@@ -585,6 +585,41 @@ multirange_canonicalize(TypeCacheEntry *rangetyp, int32 input_range_count,
 }
 
 /*
+ * multirange_deserialize: deconstruct a multirange value
+ *
+ * NB: the given multirange object must be fully detoasted; it cannot have a
+ * short varlena header.
+ */
+void
+multirange_deserialize(MultirangeType *multirange,
+				  int32 *range_count, RangeType ***ranges)
+{
+	RangeType *r;
+	Pointer ptr;
+	Pointer end;
+	int32 i;
+
+	*range_count = multirange->rangeCount;
+	if (*range_count == 0)
+	{
+		ranges = NULL;
+		return;
+	}
+
+	*ranges = palloc0(*range_count * sizeof(RangeType *));
+
+	ptr = (char *) multirange;
+	end = ptr + VARSIZE(multirange);
+	ptr = (char *) MAXALIGN(multirange + 1);
+	i = 0;
+	while (ptr < end) {
+		r = (RangeType *) ptr;
+		(*ranges)[i++] = r;
+
+		ptr += MAXALIGN(VARSIZE(r));
+	}
+}
+/*
  *----------------------------------------------------------
  * GENERIC FUNCTIONS
  *----------------------------------------------------------
@@ -600,3 +635,171 @@ multirange_constructor(PG_FUNCTION_ARGS)
 	Datum		arg1 = PG_GETARG_DATUM(0);
 }
 #endif
+
+/* multirange, multirange -> bool functions */
+
+/* equality (internal version) */
+bool
+multirange_eq_internal(TypeCacheEntry *typcache, MultirangeType *mr1, MultirangeType *mr2)
+{
+#if 0
+	RangeBound	lower1,
+				lower2;
+	RangeBound	upper1,
+				upper2;
+	bool		empty1,
+				empty2;
+
+	/* Different types should be prevented by ANYRANGE matching rules */
+	if (RangeTypeGetOid(r1) != RangeTypeGetOid(r2))
+		elog(ERROR, "range types do not match");
+
+	range_deserialize(typcache, r1, &lower1, &upper1, &empty1);
+	range_deserialize(typcache, r2, &lower2, &upper2, &empty2);
+
+	if (empty1 && empty2)
+		return true;
+	if (empty1 != empty2)
+		return false;
+
+	if (range_cmp_bounds(typcache, &lower1, &lower2) != 0)
+		return false;
+
+	if (range_cmp_bounds(typcache, &upper1, &upper2) != 0)
+		return false;
+
+#endif
+	return true;
+}
+
+/* equality */
+Datum
+multirange_eq(PG_FUNCTION_ARGS)
+{
+	MultirangeType  *mr1 = PG_GETARG_MULTIRANGE_P(0);
+	MultirangeType  *mr2 = PG_GETARG_MULTIRANGE_P(1);
+	TypeCacheEntry *typcache;
+
+	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr1));
+
+	PG_RETURN_BOOL(multirange_eq_internal(typcache, mr1, mr2));
+}
+
+/* inequality (internal version) */
+bool
+multirange_ne_internal(TypeCacheEntry *typcache, MultirangeType *mr1, MultirangeType *mr2)
+{
+	return (!multirange_eq_internal(typcache, mr1, mr2));
+}
+
+/* inequality */
+Datum
+multirange_ne(PG_FUNCTION_ARGS)
+{
+	MultirangeType  *mr1 = PG_GETARG_MULTIRANGE_P(0);
+	MultirangeType  *mr2 = PG_GETARG_MULTIRANGE_P(1);
+	TypeCacheEntry *typcache;
+
+	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr1));
+
+	PG_RETURN_BOOL(multirange_ne_internal(typcache, mr1, mr2));
+}
+
+/* Btree support */
+
+/* btree comparator */
+Datum
+multirange_cmp(PG_FUNCTION_ARGS)
+{
+	MultirangeType  *mr1 = PG_GETARG_MULTIRANGE_P(0);
+	MultirangeType  *mr2 = PG_GETARG_MULTIRANGE_P(1);
+	int32			range_count_1;
+	int32			range_count_2;
+	int32			range_count_max;
+	int32			i;
+	RangeType	  **ranges1;
+	RangeType	  **ranges2;
+	RangeType	   *r1;
+	RangeType	   *r2;
+	TypeCacheEntry *typcache;
+	int			cmp = 0;	/* If both are empty we'll use this. */
+
+	check_stack_depth();		/* recurses when subtype is a range type */
+
+	/* Different types should be prevented by ANYMULTIRANGE matching rules */
+	if (MultirangeTypeGetOid(mr1) != MultirangeTypeGetOid(mr2))
+		elog(ERROR, "multirange types do not match");
+
+	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr1));
+
+	multirange_deserialize(mr1, &range_count_1, &ranges1);
+	multirange_deserialize(mr2, &range_count_2, &ranges2);
+
+	/* Loop over source data */
+	range_count_max = Max(range_count_1, range_count_2);
+	for (i = 0; i < range_count_max; i++)
+	{
+		/*
+		 * If one multirange is shorter,
+		 * it's as if it had empty ranges at the end to extend its length.
+		 * An empty range compares earlier than any other range,
+		 * so the shorter multirange comes before the longer.
+		 * This is the same behavior as in other types, e.g. in strings
+		 * 'aaa' < 'aaaaaa'.
+		 */
+		if (i >= range_count_1)
+		{
+			cmp = -1;
+			break;
+		}
+		if (i >= range_count_2)
+		{
+			cmp = 1;
+			break;
+		}
+		r1 = ranges1[i];
+		r2 = ranges2[i];
+
+		cmp = range_cmp_internal(typcache->rngtype, r1, r2);
+		if (cmp != 0) break;
+	}
+	
+	PG_FREE_IF_COPY(mr1, 0);
+	PG_FREE_IF_COPY(mr2, 1);
+
+	PG_RETURN_INT32(cmp);
+}
+
+/* inequality operators using the multirange_cmp function */
+Datum
+multirange_lt(PG_FUNCTION_ARGS)
+{
+	int			cmp = multirange_cmp(fcinfo);
+
+	PG_RETURN_BOOL(cmp < 0);
+}
+
+Datum
+multirange_le(PG_FUNCTION_ARGS)
+{
+	int			cmp = multirange_cmp(fcinfo);
+
+	PG_RETURN_BOOL(cmp <= 0);
+}
+
+Datum
+multirange_ge(PG_FUNCTION_ARGS)
+{
+	int			cmp = multirange_cmp(fcinfo);
+
+	PG_RETURN_BOOL(cmp >= 0);
+}
+
+Datum
+multirange_gt(PG_FUNCTION_ARGS)
+{
+	int			cmp = multirange_cmp(fcinfo);
+
+	PG_RETURN_BOOL(cmp > 0);
+}
+
