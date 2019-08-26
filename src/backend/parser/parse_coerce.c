@@ -187,7 +187,8 @@ coerce_type(ParseState *pstate, Node *node,
 	}
 	if (targetTypeId == ANYARRAYOID ||
 		targetTypeId == ANYENUMOID ||
-		targetTypeId == ANYRANGEOID)
+		targetTypeId == ANYRANGEOID ||
+		targetTypeId == ANYMULTIRANGEOID)
 	{
 		/*
 		 * Assume can_coerce_type verified that implicit coercion is okay.
@@ -1481,6 +1482,8 @@ check_generic_type_consistency(const Oid *actual_arg_types,
 	Oid			array_typelem;
 	Oid			range_typeid = InvalidOid;
 	Oid			range_typelem;
+	Oid			multirange_typeid = InvalidOid;
+	Oid			multirange_typelem;
 	bool		have_anyelement = false;
 	bool		have_anynonarray = false;
 	bool		have_anyenum = false;
@@ -1527,6 +1530,15 @@ check_generic_type_consistency(const Oid *actual_arg_types,
 				return false;
 			range_typeid = actual_type;
 		}
+		else if (decl_type == ANYMULTIRANGEOID)
+		{
+			if (actual_type == UNKNOWNOID)
+				continue;
+			actual_type = getBaseType(actual_type); /* flatten domains */
+			if (OidIsValid(multirange_typeid) && actual_type != multirange_typeid)
+				return false;
+			multirange_typeid = actual_type;
+		}
 	}
 
 	/* Get the element type based on the array type, if we have one */
@@ -1569,6 +1581,37 @@ check_generic_type_consistency(const Oid *actual_arg_types,
 		{
 			/*
 			 * if we don't have an element type yet, use the one we just got
+			 */
+			elem_typeid = range_typelem;
+		}
+		else if (range_typelem != elem_typeid)
+		{
+			/* otherwise, they better match */
+			return false;
+		}
+	}
+
+	/* Get the element type based on the multirange type, if we have one */
+	if (OidIsValid(multirange_typeid))
+	{
+		multirange_typelem = get_multirange_subtype(multirange_typeid);
+		if (!OidIsValid(multirange_typelem))
+			return false;		/* should be a multirange, but isn't */
+
+		if (!OidIsValid(range_typeid))
+		{
+			/*
+			 * If we don't have a range type yet, use the one we just got
+			 */
+			range_typeid = multirange_typelem;
+			range_typelem = get_range_subtype(multirange_typelem);
+			if (!OidIsValid(range_typelem))
+				return false;		/* should be a range, but isn't */
+		}
+		if (!OidIsValid(elem_typeid))
+		{
+			/*
+			 * If we don't have an element type yet, use the one we just got
 			 */
 			elem_typeid = range_typelem;
 		}
@@ -2120,7 +2163,11 @@ resolve_generic_type(Oid declared_type,
 		else if (context_declared_type == ANYELEMENTOID ||
 				 context_declared_type == ANYNONARRAYOID ||
 				 context_declared_type == ANYENUMOID ||
-				 context_declared_type == ANYRANGEOID)
+				 // TODO: shouldn't anyrange and anymultirange
+				 // return an array of their *elements*
+				 // to be consistent with the other polymorphic functions + docs?:
+				 context_declared_type == ANYRANGEOID ||
+				 context_declared_type == ANYMULTIRANGEOID)
 		{
 			/* Use the array type corresponding to actual type */
 			Oid			array_typeid = get_array_type(context_actual_type);
@@ -2136,7 +2183,11 @@ resolve_generic_type(Oid declared_type,
 	else if (declared_type == ANYELEMENTOID ||
 			 declared_type == ANYNONARRAYOID ||
 			 declared_type == ANYENUMOID ||
-			 declared_type == ANYRANGEOID)
+			 declared_type == ANYRANGEOID ||
+			 // TODO: If we have anyrange + anyrange the old code looks wrong,
+			 // because it will deduce the unknown anyrange to be the *element type*
+			 // of the known anyrange. Right? I should try to write a test case for this....
+			 declared_type == ANYMULTIRANGEOID)
 	{
 		if (context_declared_type == ANYARRAYOID)
 		{
@@ -2163,6 +2214,19 @@ resolve_generic_type(Oid declared_type,
 						 errmsg("argument declared %s is not a range type but type %s",
 								"anyrange", format_type_be(context_base_type))));
 			return range_typelem;
+		}
+		else if (context_declared_type == ANYMULTIRANGEOID)
+		{
+			/* Use the element type corresponding to actual type */
+			Oid			context_base_type = getBaseType(context_actual_type);
+			Oid			multirange_typelem = get_multirange_subtype(context_base_type);
+
+			if (!OidIsValid(multirange_typelem))
+				ereport(ERROR,
+						(errcode(ERRCODE_DATATYPE_MISMATCH),
+						 errmsg("argument declared %s is not a multirange type but type %s",
+								"anymultirange", format_type_be(context_base_type))));
+			return multirange_typelem;
 		}
 		else if (context_declared_type == ANYELEMENTOID ||
 				 context_declared_type == ANYNONARRAYOID ||
@@ -2284,6 +2348,11 @@ IsBinaryCoercible(Oid srctype, Oid targettype)
 	/* Also accept any range type as coercible to ANYRANGE */
 	if (targettype == ANYRANGEOID)
 		if (type_is_range(srctype))
+			return true;
+
+	/* Also accept any multirange type as coercible to ANMULTIYRANGE */
+	if (targettype == ANYMULTIRANGEOID)
+		if (type_is_multirange(srctype))
 			return true;
 
 	/* Also accept any composite type as coercible to RECORD */

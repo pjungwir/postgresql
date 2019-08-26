@@ -1135,13 +1135,12 @@ range_intersect(PG_FUNCTION_ARGS)
 
 /* Btree support */
 
-/* btree comparator */
-Datum
-range_cmp(PG_FUNCTION_ARGS)
+/*
+ * Internal version of range_cmp
+ */
+int
+range_cmp_internal(TypeCacheEntry *typcache, const RangeType *r1, const RangeType *r2)
 {
-	RangeType  *r1 = PG_GETARG_RANGE_P(0);
-	RangeType  *r2 = PG_GETARG_RANGE_P(1);
-	TypeCacheEntry *typcache;
 	RangeBound	lower1,
 				lower2;
 	RangeBound	upper1,
@@ -1149,14 +1148,6 @@ range_cmp(PG_FUNCTION_ARGS)
 	bool		empty1,
 				empty2;
 	int			cmp;
-
-	check_stack_depth();		/* recurses when subtype is a range type */
-
-	/* Different types should be prevented by ANYRANGE matching rules */
-	if (RangeTypeGetOid(r1) != RangeTypeGetOid(r2))
-		elog(ERROR, "range types do not match");
-
-	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
 
 	range_deserialize(typcache, r1, &lower1, &upper1, &empty1);
 	range_deserialize(typcache, r2, &lower2, &upper2, &empty2);
@@ -1174,6 +1165,28 @@ range_cmp(PG_FUNCTION_ARGS)
 		if (cmp == 0)
 			cmp = range_cmp_bounds(typcache, &upper1, &upper2);
 	}
+
+	return cmp;
+}
+
+/* btree comparator */
+Datum
+range_cmp(PG_FUNCTION_ARGS)
+{
+	RangeType  *r1 = PG_GETARG_RANGE_P(0);
+	RangeType  *r2 = PG_GETARG_RANGE_P(1);
+	TypeCacheEntry *typcache;
+	int			cmp;
+
+	check_stack_depth();		/* recurses when subtype is a range type */
+
+	/* Different types should be prevented by ANYRANGE matching rules */
+	if (RangeTypeGetOid(r1) != RangeTypeGetOid(r2))
+		elog(ERROR, "range types do not match");
+
+	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
+
+	cmp = range_cmp_internal(typcache, r1, r2);
 
 	PG_FREE_IF_COPY(r1, 0);
 	PG_FREE_IF_COPY(r2, 1);
