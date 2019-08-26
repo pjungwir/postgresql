@@ -43,8 +43,10 @@ select '{[a,a],[a,b]}'::textmultirange;
 select '{[a,b), [b,e]}'::textmultirange;
 select '{[a,d), [b,f]}'::textmultirange;
 select '{[a,a],[b,b]}'::textmultirange;
+-- without canonicalization, we can't join these:
 select '{[a,a], [b,b]}'::textmultirange;
-select '{[a,a], [c,c]}'::textmultirange;
+-- with canonicalization, we can join these:
+select '{[1,2], [3,4]}'::int4multirange;
 select '{[a,a], [b,b], [c,c]}'::textmultirange;
 select '{[a,d], [b,e]}'::textmultirange;
 select '{[a,d), [d,e)}'::textmultirange;
@@ -68,5 +70,6 @@ INSERT INTO nummultirange_test VALUES('{[, 5)}');
 -- INSERT INTO nummultirange_test VALUES(nummultirange(1.1, 2.2));
 INSERT INTO nummultirange_test VALUES('{empty}');
 -- INSERT INTO nummultirange_test VALUES(nummultirange(1.7, 1.7, '[]'));
+SELECT * FROM nummultirange_test ORDER BY nmr;
 
 -- TODO: more, see rangetypes.sql
