@@ -2584,6 +2584,16 @@ type_is_range(Oid typid)
 }
 
 /*
+ * type_is_multirange
+ *	  Returns true if the given type is a multirange type.
+ */
+bool
+type_is_multirange(Oid typid)
+{
+	return (get_typtype(typid) == TYPTYPE_MULTIRANGE);
+}
+
+/*
  * get_type_category_preferred
  *
  *		Given the type OID, fetch its category and preferred-type status.

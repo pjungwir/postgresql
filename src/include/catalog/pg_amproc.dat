@@ -285,6 +285,8 @@
   amprocrighttype => 'tsquery', amprocnum => '1', amproc => 'tsquery_cmp' },
 { amprocfamily => 'btree/range_ops', amproclefttype => 'anyrange',
   amprocrighttype => 'anyrange', amprocnum => '1', amproc => 'range_cmp' },
+{ amprocfamily => 'btree/multirange_ops', amproclefttype => 'anymultirange',
+  amprocrighttype => 'anymultirange', amprocnum => '1', amproc => 'multirange_cmp' },
 { amprocfamily => 'btree/jsonb_ops', amproclefttype => 'jsonb',
   amprocrighttype => 'jsonb', amprocnum => '1', amproc => 'jsonb_cmp' },
 { amprocfamily => 'btree/xid8_ops', amproclefttype => 'xid8',

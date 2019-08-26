@@ -56,11 +56,11 @@ typedef struct
 // extern bool range_contains_elem_internal(TypeCacheEntry *typcache, RangeType *r, Datum val);
 
 /* internal versions of the above */
+extern bool multirange_eq_internal(TypeCacheEntry *typcache, MultirangeType *mr1,
+								   MultirangeType *mr2);
+extern bool multirange_ne_internal(TypeCacheEntry *typcache, MultirangeType *mr1,
+								   MultirangeType *mr2);
 /*
-extern bool range_eq_internal(TypeCacheEntry *typcache, RangeType *r1,
-							  RangeType *r2);
-extern bool range_ne_internal(TypeCacheEntry *typcache, RangeType *r1,
-							  RangeType *r2);
 extern bool range_contains_internal(TypeCacheEntry *typcache, RangeType *r1,
 									RangeType *r2);
 extern bool range_contained_by_internal(TypeCacheEntry *typcache, RangeType *r1,
@@ -87,11 +87,8 @@ extern MultirangeType *multirange_serialize(TypeCacheEntry *typcache,
 								  RangeBound *lower,
 								  RangeBound *upper, bool empty);
 								  */
-/*
-extern void multirange_deserialize(TypeCacheEntry *typcache, MultirangeType *range,
-							  RangeBound *lower, RangeBound *upper,
-							  bool *empty);
-							  */
+extern void multirange_deserialize(MultirangeType *range,
+								   int32 *range_count, RangeType ***ranges);
 extern MultirangeType *make_multirange(Oid mltrngtypoid,
 		TypeCacheEntry *typcache, int32 range_count, RangeType **ranges);
 

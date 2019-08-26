@@ -189,6 +189,7 @@ coerce_type(ParseState *pstate, Node *node,
 	if (targetTypeId == ANYARRAYOID ||
 		targetTypeId == ANYENUMOID ||
 		targetTypeId == ANYRANGEOID ||
+		targetTypeId == ANYMULTIRANGEOID ||
 		targetTypeId == ANYCOMPATIBLEARRAYOID ||
 		targetTypeId == ANYCOMPATIBLERANGEOID)
 	{
@@ -1620,8 +1621,10 @@ check_generic_type_consistency(const Oid *actual_arg_types,
 	Oid			elem_typeid = InvalidOid;
 	Oid			array_typeid = InvalidOid;
 	Oid			range_typeid = InvalidOid;
+	Oid			multirange_typeid = InvalidOid;
 	Oid			anycompatible_range_typeid = InvalidOid;
 	Oid			anycompatible_range_typelem = InvalidOid;
+	bool		have_anyelement = false;
 	bool		have_anynonarray = false;
 	bool		have_anyenum = false;
 	bool		have_anycompatible_nonarray = false;
@@ -1670,6 +1673,14 @@ check_generic_type_consistency(const Oid *actual_arg_types,
 				return false;
 			range_typeid = actual_type;
 		}
+		else if (decl_type == ANYMULTIRANGEOID)
+		{
+			if (actual_type == UNKNOWNOID)
+				continue;
+			actual_type = getBaseType(actual_type); /* flatten domains */
+			if (OidIsValid(multirange_typeid) && actual_type != multirange_typeid)
+				return false;
+			multirange_typeid = actual_type;
 		else if (decl_type == ANYCOMPATIBLEOID ||
 				 decl_type == ANYCOMPATIBLENONARRAYOID)
 		{
@@ -1770,6 +1781,39 @@ check_generic_type_consistency(const Oid *actual_arg_types,
 		{
 			/*
 			 * if we don't have an element type yet, use the one we just got
+			 */
+			elem_typeid = range_typelem;
+		}
+		else if (range_typelem != elem_typeid)
+		{
+			/* otherwise, they better match */
+			return false;
+		}
+	}
+
+	/* Get the element type based on the multirange type, if we have one */
+	if (OidIsValid(multirange_typeid))
+	{
+		Oid			multirange_typelem;
+
+		multirange_typelem = get_multirange_subtype(multirange_typeid);
+		if (!OidIsValid(multirange_typelem))
+			return false;		/* should be a multirange, but isn't */
+
+		if (!OidIsValid(range_typeid))
+		{
+			/*
+			 * If we don't have a range type yet, use the one we just got
+			 */
+			range_typeid = multirange_typelem;
+			range_typelem = get_range_subtype(multirange_typelem);
+			if (!OidIsValid(range_typelem))
+				return false;		/* should be a range, but isn't */
+		}
+		if (!OidIsValid(elem_typeid))
+		{
+			/*
+			 * If we don't have an element type yet, use the one we just got
 			 */
 			elem_typeid = range_typelem;
 		}
@@ -2756,6 +2800,11 @@ IsBinaryCoercible(Oid srctype, Oid targettype)
 	/* Also accept any range type as coercible to ANY[COMPATIBLE]RANGE */
 	if (targettype == ANYRANGEOID || targettype == ANYCOMPATIBLERANGEOID)
 		if (type_is_range(srctype))
+			return true;
+
+	/* Also accept any multirange type as coercible to ANMULTIYRANGE */
+	if (targettype == ANYMULTIRANGEOID)
+		if (type_is_multirange(srctype))
 			return true;
 
 	/* Also accept any composite type as coercible to RECORD */
