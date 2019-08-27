@@ -642,33 +642,35 @@ multirange_constructor(PG_FUNCTION_ARGS)
 bool
 multirange_eq_internal(TypeCacheEntry *typcache, MultirangeType *mr1, MultirangeType *mr2)
 {
-#if 0
-	RangeBound	lower1,
-				lower2;
-	RangeBound	upper1,
-				upper2;
-	bool		empty1,
-				empty2;
+	int32			range_count_1;
+	int32			range_count_2;
+	int32			i;
+	RangeType	  **ranges1;
+	RangeType	  **ranges2;
+	RangeType	   *r1;
+	RangeType	   *r2;
 
-	/* Different types should be prevented by ANYRANGE matching rules */
-	if (RangeTypeGetOid(r1) != RangeTypeGetOid(r2))
-		elog(ERROR, "range types do not match");
+	check_stack_depth();		/* recurses when subtype is a range type */
 
-	range_deserialize(typcache, r1, &lower1, &upper1, &empty1);
-	range_deserialize(typcache, r2, &lower2, &upper2, &empty2);
+	/* Different types should be prevented by ANYMULTIRANGE matching rules */
+	if (MultirangeTypeGetOid(mr1) != MultirangeTypeGetOid(mr2))
+		elog(ERROR, "multirange types do not match");
 
-	if (empty1 && empty2)
-		return true;
-	if (empty1 != empty2)
+	multirange_deserialize(mr1, &range_count_1, &ranges1);
+	multirange_deserialize(mr2, &range_count_2, &ranges2);
+
+	if (range_count_1 != range_count_2)
 		return false;
 
-	if (range_cmp_bounds(typcache, &lower1, &lower2) != 0)
-		return false;
+	for (i = 0; i < range_count_1; i++)
+	{
+		r1 = ranges1[i];
+		r2 = ranges2[i];
 
-	if (range_cmp_bounds(typcache, &upper1, &upper2) != 0)
-		return false;
+		if (!range_eq_internal(typcache->rngtype, r1, r2))
+			return false;
+	}
 
-#endif
 	return true;
 }
 
