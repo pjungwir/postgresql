@@ -1396,11 +1396,6 @@
   amoprighttype => 'anymultirange', amopstrategy => '1',
   amopopr => '=(anymultirange,anymultirange)', amopmethod => 'hash' },
 
-# GiST multirange_ops
-{ amopfamily => 'gist/multirange_ops', amoplefttype => 'anymultirange',
-  amoprighttype => 'anymultirange', amopstrategy => '18',
-  amopopr => '=(anymultirange,anymultirange)', amopmethod => 'gist' },
-
 # SP-GiST quad_point_ops
 { amopfamily => 'spgist/quad_point_ops', amoplefttype => 'point',
   amoprighttype => 'point', amopstrategy => '11', amopopr => '|>>(point,point)',

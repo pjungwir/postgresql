@@ -236,9 +236,5 @@
   opfmethod => 'btree', opfname => 'multirange_ops' },
 { oid => '8035',
   opfmethod => 'hash', opfname => 'multirange_ops' },
-{ oid => '8036',
-  opfmethod => 'gist', opfname => 'multirange_ops' },
-{ oid => '8037',
-  opfmethod => 'spgist', opfname => 'multirange_ops' },
 
 ]
