@@ -60,7 +60,7 @@ select '{(a,a)}'::textmultirange;
 --
 
 CREATE TABLE nummultirange_test (nmr NUMMULTIRANGE);
---create index nummultirange_test_btree on nummultirange_test(nmr);
+CREATE INDEX nummultirange_test_btree ON nummultirange_test(nmr);
 
 INSERT INTO nummultirange_test VALUES('{}');
 INSERT INTO nummultirange_test VALUES('{[,)}');
@@ -71,5 +71,28 @@ INSERT INTO nummultirange_test VALUES('{[, 5)}');
 INSERT INTO nummultirange_test VALUES('{empty}');
 -- INSERT INTO nummultirange_test VALUES(nummultirange(1.7, 1.7, '[]'));
 SELECT * FROM nummultirange_test ORDER BY nmr;
+
+-- TODO: more, see rangetypes.sql
+
+-- first, verify non-indexed results
+SET enable_seqscan    = t;
+SET enable_indexscan  = f;
+SET enable_bitmapscan = f;
+
+select * from nummultirange_test where nmr = '{[3,]}';
+
+-- TODO: more, see rangetypes.sql
+
+-- now check same queries using index
+SET enable_seqscan    = f;
+SET enable_indexscan  = t;
+SET enable_bitmapscan = f;
+select * from nummultirange_test where nmr = '{[3,]}';
+
+-- TODO: more, see rangetypes.sql
+
+RESET enable_seqscan;
+RESET enable_indexscan;
+RESET enable_bitmapscan;
 
 -- TODO: more, see rangetypes.sql
