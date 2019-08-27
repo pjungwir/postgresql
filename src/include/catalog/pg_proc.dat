@@ -10032,6 +10032,12 @@
 { oid => '8026',
   proname => 'multirange_gt', prorettype => 'bool',
   proargtypes => 'anymultirange anymultirange', prosrc => 'multirange_gt' },
+{ oid => '8038', descr => 'hash a multirange',
+  proname => 'hash_multirange', prorettype => 'int4', proargtypes => 'anymultirange',
+  prosrc => 'hash_multirange' },
+{ oid => '8039', descr => 'hash a multirange',
+  proname => 'hash_multirange_extended', prorettype => 'int8',
+  proargtypes => 'anymultirange int8', prosrc => 'hash_multirange_extended' },
 
 # date, time, timestamp constructors
 { oid => '3846', descr => 'construct date',

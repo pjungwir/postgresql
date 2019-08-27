@@ -1229,13 +1229,10 @@ range_gt(PG_FUNCTION_ARGS)
 
 /* Hash support */
 
-/* hash a range value */
-Datum
-hash_range(PG_FUNCTION_ARGS)
+uint32
+hash_range_internal(TypeCacheEntry *typcache, RangeType *r)
 {
-	RangeType  *r = PG_GETARG_RANGE_P(0);
 	uint32		result;
-	TypeCacheEntry *typcache;
 	TypeCacheEntry *scache;
 	RangeBound	lower;
 	RangeBound	upper;
@@ -1243,10 +1240,6 @@ hash_range(PG_FUNCTION_ARGS)
 	char		flags;
 	uint32		lower_hash;
 	uint32		upper_hash;
-
-	check_stack_depth();		/* recurses when subtype is a range type */
-
-	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r));
 
 	/* deserialize */
 	range_deserialize(typcache, r, &lower, &upper, &empty);
@@ -1289,20 +1282,27 @@ hash_range(PG_FUNCTION_ARGS)
 	result = (result << 1) | (result >> 31);
 	result ^= upper_hash;
 
-	PG_RETURN_INT32(result);
+	return result;
 }
 
-/*
- * Returns 64-bit value by hashing a value to a 64-bit value, with a seed.
- * Otherwise, similar to hash_range.
- */
+/* hash a range value */
 Datum
-hash_range_extended(PG_FUNCTION_ARGS)
+hash_range(PG_FUNCTION_ARGS)
 {
 	RangeType  *r = PG_GETARG_RANGE_P(0);
-	Datum		seed = PG_GETARG_DATUM(1);
-	uint64		result;
 	TypeCacheEntry *typcache;
+
+	check_stack_depth();		/* recurses when subtype is a range type */
+
+	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r));
+
+	PG_RETURN_INT32(hash_range_internal(typcache, r));
+}
+
+uint64
+hash_range_extended_internal(TypeCacheEntry *typcache, RangeType *r, Datum seed)
+{
+	uint64		result;
 	TypeCacheEntry *scache;
 	RangeBound	lower;
 	RangeBound	upper;
@@ -1310,10 +1310,6 @@ hash_range_extended(PG_FUNCTION_ARGS)
 	char		flags;
 	uint64		lower_hash;
 	uint64		upper_hash;
-
-	check_stack_depth();
-
-	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r));
 
 	range_deserialize(typcache, r, &lower, &upper, &empty);
 	flags = range_get_flags(r);
@@ -1353,7 +1349,25 @@ hash_range_extended(PG_FUNCTION_ARGS)
 	result = ROTATE_HIGH_AND_LOW_32BITS(result);
 	result ^= upper_hash;
 
-	PG_RETURN_UINT64(result);
+	return result;
+}
+
+/*
+ * Returns 64-bit value by hashing a value to a 64-bit value, with a seed.
+ * Otherwise, similar to hash_range.
+ */
+Datum
+hash_range_extended(PG_FUNCTION_ARGS)
+{
+	RangeType  *r = PG_GETARG_RANGE_P(0);
+	Datum		seed = PG_GETARG_DATUM(1);
+	TypeCacheEntry *typcache;
+
+	check_stack_depth();
+
+	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r));
+
+	PG_RETURN_UINT64(hash_range_extended_internal(typcache, r, seed));
 }
 
 /*

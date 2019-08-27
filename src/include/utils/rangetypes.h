@@ -99,6 +99,9 @@ extern bool range_contains_elem_internal(TypeCacheEntry *typcache, const RangeTy
 /* internal versions of the above */
 extern int range_cmp_internal(TypeCacheEntry *typcache, const RangeType *r1,
 							  const RangeType *r2);
+extern uint32 hash_range_internal(TypeCacheEntry *typcache, RangeType *r);
+extern uint64 hash_range_extended_internal(TypeCacheEntry *typcache, RangeType *r,
+										   Datum seed);
 extern bool range_eq_internal(TypeCacheEntry *typcache, const RangeType *r1,
 							  const RangeType *r2);
 extern bool range_ne_internal(TypeCacheEntry *typcache, const RangeType *r1,

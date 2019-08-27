@@ -803,3 +803,76 @@ multirange_gt(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(cmp > 0);
 }
 
+/* Hash support */
+
+/* hash a multirange value */
+Datum
+hash_multirange(PG_FUNCTION_ARGS)
+{
+	MultirangeType  *mr = PG_GETARG_MULTIRANGE_P(0);
+	uint32		result = 1;
+	TypeCacheEntry *typcache;
+	int32			range_count;
+	RangeType	  **ranges;
+	int32			i;
+	RangeType	   *r;
+
+	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
+
+	multirange_deserialize(mr, &range_count, &ranges);
+	for (i = 0; i < range_count; i++)
+	{
+		uint32		elthash;
+
+		r = ranges[i];
+		elthash = hash_range_internal(typcache->rngtype, r);
+
+		/*
+		 * Use the same approach as hash_array
+		 * to combine the individual elements' hash values:
+		 */
+		result = (result << 5) - result + elthash;
+	}
+
+	PG_FREE_IF_COPY(mr, 0);
+
+	PG_RETURN_UINT32(result);
+}
+
+/*
+ * Returns 64-bit value by hashing a value to a 64-bit value, with a seed.
+ * Otherwise, similar to hash_multirange.
+ */
+Datum
+hash_multirange_extended(PG_FUNCTION_ARGS)
+{
+	MultirangeType  *mr = PG_GETARG_MULTIRANGE_P(0);
+	Datum		seed = PG_GETARG_DATUM(1);
+	uint64		result = 1;
+	TypeCacheEntry *typcache;
+	int32			range_count;
+	RangeType	  **ranges;
+	int32			i;
+	RangeType	   *r;
+
+	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
+
+	multirange_deserialize(mr, &range_count, &ranges);
+	for (i = 0; i < range_count; i++)
+	{
+		uint64		elthash;
+
+		r = ranges[i];
+		elthash = hash_range_extended_internal(typcache->rngtype, r, seed);
+
+		/*
+		 * Use the same approach as hash_array
+		 * to combine the individual elements' hash values:
+		 */
+		result = (result << 5) - result + elthash;
+	}
+
+	PG_FREE_IF_COPY(mr, 0);
+
+	PG_RETURN_UINT64(result);
+}
