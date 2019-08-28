@@ -727,6 +727,16 @@ multirange_constructor0(PG_FUNCTION_ARGS)
 		ereport(ERROR, (errmsg("Zero-param multirange constructor shouldn't have arguments")));
 }
 
+/* multirange -> bool functions */
+
+/* is multirange empty? */
+Datum
+multirange_empty(PG_FUNCTION_ARGS)
+{
+	MultirangeType  *mr = PG_GETARG_MULTIRANGE_P(0);
+
+	PG_RETURN_BOOL(mr->rangeCount == 0);
+}
 
 /* multirange, multirange -> bool functions */
 
