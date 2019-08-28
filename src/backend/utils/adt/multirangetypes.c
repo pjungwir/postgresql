@@ -31,6 +31,7 @@
 #include "utils/rangetypes.h"
 #include "utils/multirangetypes.h"
 #include "utils/timestamp.h"
+#include "utils/array.h"
 
 
 /* fn_extra cache entry for one of the range I/O functions */
@@ -625,16 +626,107 @@ multirange_deserialize(MultirangeType *multirange,
  *----------------------------------------------------------
  */
 
-#if 0
-/* Construct multirange value from zero or more arguments */
-// TODO: we'll need an anyrangearray polymorphic type if we want to implement this,
-// since there is no such thing as an anyrange[].
+/*
+ * Construct multirange value from zero or more ranges.
+ * Since this is a variadic function we get passed an array.
+ * The array must contain range types that match our return value,
+ * and there must be no NULLs.
+ */
 Datum
-multirange_constructor(PG_FUNCTION_ARGS)
+multirange_constructor1(PG_FUNCTION_ARGS)
 {
-	Datum		arg1 = PG_GETARG_DATUM(0);
+	Oid			mltrngtypid = get_fn_expr_rettype(fcinfo->flinfo);
+	Oid			rngtypid;
+	TypeCacheEntry *typcache;
+	TypeCacheEntry *rangetyp;
+	ArrayType	*rangeArray;
+	int	range_count;
+	Datum	*elements;
+	bool	*nulls;
+	RangeType **ranges;
+	int dims;
+	int	i;
+
+	typcache = multirange_get_typcache(fcinfo, mltrngtypid);
+	rangetyp = typcache->rngtype;
+
+	/*
+	 * A no-arg invocation should call multirange_constructor0 instead,
+	 * but returning an empty range is what that does.
+	 */
+
+	if (PG_NARGS() == 0)
+		PG_RETURN_MULTIRANGE_P(make_multirange(mltrngtypid, rangetyp, 0, NULL));
+
+	/*
+	 * These checks should be guaranteed by our signature,
+	 * but let's do them just in case.
+	 */
+
+	if (PG_ARGISNULL(0))
+		ereport(ERROR, (errmsg("Can't construct multirange with a NULL input")));
+
+	rangeArray = PG_GETARG_ARRAYTYPE_P(0);
+
+	dims = ARR_NDIM(rangeArray);
+	if (dims > 1)
+		ereport(ERROR, (errmsg("Can't construct multirange with a multi-dimensional array")));
+
+	rngtypid = ARR_ELEMTYPE(rangeArray);
+	if (rngtypid != rangetyp->type_id)
+		ereport(ERROR, (errmsg("type %u does not match constructor type", rngtypid)));
+
+	/*
+	 * Be careful: we can still be called with zero ranges, like this:
+	 * `int4multirange(variadic '{}'::int4range[])
+	 */
+	if (dims == 0)
+	{
+		range_count = 0;
+		ranges = NULL;
+	}
+	else
+	{
+		deconstruct_array(rangeArray, rngtypid, rangetyp->typlen, rangetyp->typbyval,
+				rangetyp->typalign, &elements, &nulls, &range_count);
+
+		ranges = palloc0(range_count * sizeof(RangeType *));
+		for (i = 0; i < range_count; i++)
+		{
+			if (nulls[i])
+				ereport(ERROR, (errmsg("Can't construct multirange with a NULL element")));
+
+			/* make_multirange will do its own copy */
+			ranges[i] = DatumGetRangeTypeP(elements[i]);
+		}
+	}
+
+	PG_RETURN_MULTIRANGE_P(make_multirange(mltrngtypid, rangetyp, range_count, ranges));
 }
-#endif
+
+/*
+ * Constructor just like multirange_constructor1,
+ * but opr_sanity gets angry if the same internal function
+ * handles multiple functions with different arg counts.
+ */
+Datum
+multirange_constructor0(PG_FUNCTION_ARGS)
+{
+	Oid			mltrngtypid = get_fn_expr_rettype(fcinfo->flinfo);
+	TypeCacheEntry *typcache;
+	TypeCacheEntry *rangetyp;
+
+	typcache = multirange_get_typcache(fcinfo, mltrngtypid);
+	rangetyp = typcache->rngtype;
+
+	/* We should always be called with no arguments */
+
+	if (PG_NARGS() == 0)
+		PG_RETURN_MULTIRANGE_P(make_multirange(mltrngtypid, rangetyp, 0, NULL));
+	else
+		ereport(ERROR, (errmsg("Zero-param multirange constructor shouldn't have arguments")));
+}
+
 
 /* multirange, multirange -> bool functions */
 
