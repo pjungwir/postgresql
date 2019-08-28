@@ -258,6 +258,33 @@ select '{(a,a)}'::textmultirange;
 (1 row)
 
 --
+-- test the constructor
+---
+select textmultirange();
+ textmultirange 
+----------------
+ {}
+(1 row)
+
+select textmultirange(textrange('a', 'c'));
+ textmultirange 
+----------------
+ {[a,c)}
+(1 row)
+
+select textmultirange(textrange('a', 'c'), textrange('f', 'g'));
+ textmultirange 
+----------------
+ {[a,c),[f,g)}
+(1 row)
+
+select textmultirange(textrange('a', 'c'), textrange('b', 'd'));
+ textmultirange 
+----------------
+ {[a,d)}
+(1 row)
+
+--
 -- create some test data and test the operators
 --
 CREATE TABLE nummultirange_test (nmr NUMMULTIRANGE);

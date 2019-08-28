@@ -108,6 +108,8 @@ Oid			binary_upgrade_next_array_pg_type_oid = InvalidOid;
 
 static void makeRangeConstructors(const char *name, Oid namespace,
 								  Oid rangeOid, Oid subtype);
+static void makeMultirangeConstructors(const char *name, Oid namespace,
+								  Oid multirangeOid, Oid rangeArrayOid);
 static Oid	findTypeInputFunction(List *procname, Oid typeOid);
 static Oid	findTypeOutputFunction(List *procname, Oid typeOid);
 static Oid	findTypeReceiveFunction(List *procname, Oid typeOid);
@@ -1617,11 +1619,13 @@ DefineRange(CreateRangeStmt *stmt)
 			   false,			/* Type NOT NULL */
 			   InvalidOid);		/* typcollation */
 
-	pfree(multirangeTypeName);
-	pfree(multirangeArrayName);
-
 	/* And create the constructor functions for this range type */
 	makeRangeConstructors(typeName, typeNamespace, typoid, rangeSubtype);
+	makeMultirangeConstructors(multirangeTypeName, typeNamespace,
+							   mltrngtypoid, rangeArrayOid);
+
+	pfree(multirangeTypeName);
+	pfree(multirangeArrayName);
 
 	return address;
 }
@@ -1699,6 +1703,83 @@ makeRangeConstructors(const char *name, Oid namespace,
 	}
 }
 
+/*
+ * We make a separate multirange constructor for each range type
+ * so its name can include the base type, like range constructors do.
+ * If we had an anyrangearray polymorphic type we could use it here,
+ * but since each type has its own constructor name there's no need.
+ */
+static void
+makeMultirangeConstructors(const char *name, Oid namespace,
+					  Oid multirangeOid, Oid rangeArrayOid)
+{
+	static const char *const prosrc[2] = {"multirange_constructor0",
+	"multirange_constructor1"};
+	static const int pronargs[2] = {0, 1};
+
+	Oid			constructorArgTypes[0];
+	ObjectAddress myself,
+				referenced;
+	int			i;
+
+	constructorArgTypes[0] = rangeArrayOid;
+
+	Datum allParamTypes[1] = {ObjectIdGetDatum(rangeArrayOid)};
+	ArrayType *allParameterTypes = construct_array(allParamTypes, 1, OIDOID,
+												   sizeof(Oid), true, 'i');
+	Datum constructorAllParamTypes[2] = {PointerGetDatum(NULL), PointerGetDatum(allParameterTypes)};
+
+	Datum paramModes[1] = {CharGetDatum(FUNC_PARAM_VARIADIC)};
+	ArrayType *parameterModes = construct_array(paramModes, 1, CHAROID,
+										  1, true, 'c');
+	Datum constructorParamModes[2] = {PointerGetDatum(NULL), PointerGetDatum(parameterModes)};
+
+	referenced.classId = TypeRelationId;
+	referenced.objectId = multirangeOid;
+	referenced.objectSubId = 0;
+
+	for (i = 0; i < lengthof(prosrc); i++)
+	{
+		oidvector  *constructorArgTypesVector;
+
+		constructorArgTypesVector = buildoidvector(constructorArgTypes,
+												   pronargs[i]);
+
+		myself = ProcedureCreate(name,	/* name: same as multirange type */
+								 namespace, /* namespace */
+								 false, /* replace */
+								 false, /* returns set */
+								 multirangeOid,	/* return type */
+								 BOOTSTRAP_SUPERUSERID, /* proowner */
+								 INTERNALlanguageId,	/* language */
+								 F_FMGR_INTERNAL_VALIDATOR, /* language validator */
+								 prosrc[i], /* prosrc */
+								 NULL,	/* probin */
+								 PROKIND_FUNCTION,
+								 false, /* security_definer */
+								 false, /* leakproof */
+								 false, /* isStrict */
+								 PROVOLATILE_IMMUTABLE, /* volatility */
+								 PROPARALLEL_SAFE,	/* parallel safety */
+								 constructorArgTypesVector, /* parameterTypes */
+								 constructorAllParamTypes[i], /* allParameterTypes */
+								 constructorParamModes[i], /* parameterModes */
+								 PointerGetDatum(NULL), /* parameterNames */
+								 NIL,	/* parameterDefaults */
+								 PointerGetDatum(NULL), /* trftypes */
+								 PointerGetDatum(NULL), /* proconfig */
+								 InvalidOid,	/* prosupport */
+								 1.0,	/* procost */
+								 0.0);	/* prorows */
+
+		/*
+		 * Make the constructors internally-dependent on the multirange type
+		 * so that they go away silently when the type is dropped.  Note that
+		 * pg_dump depends on this choice to avoid dumping the constructors.
+		 */
+		recordDependencyOn(&myself, &referenced, DEPENDENCY_INTERNAL);
+	}
+}
 
 /*
  * Find suitable I/O functions for a type.

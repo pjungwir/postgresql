@@ -56,6 +56,14 @@ select '{(a,a]}'::textmultirange;
 select '{(a,a)}'::textmultirange;
 
 --
+-- test the constructor
+---
+select textmultirange();
+select textmultirange(textrange('a', 'c'));
+select textmultirange(textrange('a', 'c'), textrange('f', 'g'));
+select textmultirange(textrange('a', 'c'), textrange('b', 'd'));
+
+--
 -- create some test data and test the operators
 --
 
