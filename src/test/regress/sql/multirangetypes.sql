@@ -81,7 +81,8 @@ INSERT INTO nummultirange_test VALUES(nummultirange(numrange(1.1, 2.2)));
 INSERT INTO nummultirange_test VALUES('{empty}');
 INSERT INTO nummultirange_test VALUES(nummultirange(numrange(1.7, 1.7, '[]'), numrange(1.7, 1.9)));
 INSERT INTO nummultirange_test VALUES(nummultirange(numrange(1.7, 1.7, '[]'), numrange(1.9, 2.1)));
-SELECT * FROM nummultirange_test ORDER BY nmr;
+
+SELECT nmr, isempty(nmr) FROM nummultirange_test ORDER BY nmr;
 
 -- TODO: more, see rangetypes.sql
 
