@@ -84,6 +84,16 @@ INSERT INTO nummultirange_test VALUES(nummultirange(numrange(1.7, 1.7, '[]'), nu
 
 SELECT nmr, isempty(nmr) FROM nummultirange_test ORDER BY nmr;
 
+-- overlaps
+SELECT * FROM nummultirange_test WHERE range_overlaps_multirange(numrange(4.0, 4.2), nmr);
+SELECT * FROM nummultirange_test WHERE numrange(4.0, 4.2) && nmr;
+SELECT * FROM nummultirange_test WHERE multirange_overlaps_range(nmr, numrange(4.0, 4.2));
+SELECT * FROM nummultirange_test WHERE nmr && numrange(4.0, 4.2);
+SELECT * FROM nummultirange_test WHERE multirange_overlaps_multirange(nmr, nummultirange(numrange(4.0, 4.2), numrange(6.0, 7.0)));
+SELECT * FROM nummultirange_test WHERE nmr && nummultirange(numrange(4.0, 4.2), numrange(6.0, 7.0));
+SELECT * FROM nummultirange_test WHERE nmr && nummultirange(numrange(6.0, 7.0));
+SELECT * FROM nummultirange_test WHERE nmr && nummultirange(numrange(6.0, 7.0), numrange(8.0, 9.0));
+
 -- mr contains x
 SELECT * FROM nummultirange_test WHERE multirange_contains_elem(nmr, 4.0);
 SELECT * FROM nummultirange_test WHERE nmr @> 4.0;
@@ -101,6 +111,18 @@ SELECT * FROM nummultirange_test WHERE multirange_contained_by_multirange('{[4.0
 SELECT * FROM nummultirange_test WHERE '{[4.0,4.2), [6.0, 8.0)}'::nummultirange <@ nmr;
 
 -- TODO: more, see rangetypes.sql
+
+SELECT 'empty'::numrange && nummultirange();
+SELECT 'empty'::numrange && nummultirange(numrange(1,2));
+SELECT nummultirange() && 'empty'::numrange;
+SELECT nummultirange(numrange(1,2)) && 'empty'::numrange;
+SELECT nummultirange() && nummultirange();
+SELECT nummultirange() && nummultirange(numrange(1,2));
+SELECT nummultirange(numrange(1,2)) && nummultirange();
+SELECT nummultirange(numrange(3,4)) && nummultirange(numrange(1,2), numrange(7,8));
+SELECT nummultirange(numrange(3,4)) && nummultirange(numrange(1,2), numrange(3.5,8));
+SELECT nummultirange(numrange(1,2), numrange(3.5,8)) && numrange(3,4);
+SELECT nummultirange(numrange(1,2), numrange(3.5,8)) && nummultirange(numrange(3,4));
 
 SELECT nummultirange() @> nummultirange();
 SELECT nummultirange() @> 'empty'::numrange;
