@@ -73,11 +73,13 @@ extern bool range_overlaps_multirange_internal(TypeCacheEntry *typcache, RangeTy
 extern bool multirange_overlaps_multirange_internal(TypeCacheEntry *typcache,
 													MultirangeType *mr1,
 													MultirangeType *mr2);
+extern bool range_before_multirange_internal(TypeCacheEntry *typcache, RangeType *r,
+											 MultirangeType *mr);
+extern bool range_after_multirange_internal(TypeCacheEntry *typcache, RangeType *r,
+											MultirangeType *mr);
+extern bool multirange_before_multirange_internal(TypeCacheEntry *typcache, MultirangeType *mr1,
+												  MultirangeType *mr2);
 /*
-extern bool range_before_internal(TypeCacheEntry *typcache, RangeType *r1,
-								  RangeType *r2);
-extern bool range_after_internal(TypeCacheEntry *typcache, RangeType *r1,
-								 RangeType *r2);
 extern bool range_adjacent_internal(TypeCacheEntry *typcache, RangeType *r1,
 									RangeType *r2);
 extern bool range_overleft_internal(TypeCacheEntry *typcache, RangeType *r1,

@@ -141,6 +141,44 @@ SELECT nummultirange(numrange(1,5)) @> numrange(1,5);
 SELECT nummultirange(numrange(-4,-2), numrange(1,5)) @> numrange(1,5);
 SELECT nummultirange(numrange(1,5), numrange(8,9)) @> numrange(1,5);
 
+select 'empty'::numrange << nummultirange();
+select numrange(1,2) << nummultirange();
+select numrange(1,2) << nummultirange(numrange(3,4));
+select numrange(1,2) << nummultirange(numrange(0,4));
+select numrange(1,2) << nummultirange(numrange(0,4), numrange(7,8));
+select nummultirange() << 'empty'::numrange;
+select nummultirange() << numrange(1,2);
+select nummultirange(numrange(3,4)) << numrange(3,6);
+select nummultirange(numrange(0,2)) << numrange(3,6);
+select nummultirange(numrange(0,2), numrange(7,8)) << numrange(3,6);
+select nummultirange(numrange(-4,-2), numrange(0,2)) << numrange(3,6);
+select nummultirange() << nummultirange();
+select nummultirange() << nummultirange(numrange(1,2));
+select nummultirange(numrange(1,2)) << nummultirange();
+select nummultirange(numrange(1,2)) << nummultirange(numrange(1,2));
+select nummultirange(numrange(1,2)) << nummultirange(numrange(3,4));
+select nummultirange(numrange(1,2)) << nummultirange(numrange(3,4), numrange(7,8));
+select nummultirange(numrange(1,2), numrange(4,5)) << nummultirange(numrange(3,4), numrange(7,8));
+
+select nummultirange() >> 'empty'::numrange;
+select nummultirange() >> numrange(1,2);
+select nummultirange(numrange(3,4)) >> numrange(1,2);
+select nummultirange(numrange(0,4)) >> numrange(1,2);
+select nummultirange(numrange(0,4), numrange(7,8)) >> numrange(1,2);
+select 'empty'::numrange >> nummultirange();
+select numrange(1,2) >> nummultirange();
+select numrange(3,6) >> nummultirange(numrange(3,4));
+select numrange(3,6) >> nummultirange(numrange(0,2));
+select numrange(3,6) >> nummultirange(numrange(0,2), numrange(7,8));
+select numrange(3,6) >> nummultirange(numrange(-4,-2), numrange(0,2));
+select nummultirange() >> nummultirange();
+select nummultirange(numrange(1,2)) >> nummultirange();
+select nummultirange() >> nummultirange(numrange(1,2));
+select nummultirange(numrange(1,2)) >> nummultirange(numrange(1,2));
+select nummultirange(numrange(3,4)) >> nummultirange(numrange(1,2));
+select nummultirange(numrange(3,4), numrange(7,8)) >> nummultirange(numrange(1,2));
+select nummultirange(numrange(3,4), numrange(7,8)) >> nummultirange(numrange(1,2), numrange(4,5));
+
 -- TODO: more, see rangetypes.sql
 
 -- first, verify non-indexed results
