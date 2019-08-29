@@ -995,6 +995,7 @@ range_overlaps_multirange_internal(TypeCacheEntry *typcache, RangeType *r, Multi
 	{
 		if (++i >= range_count)
 			return false;
+		mrr = ranges[i];
 	}
 
 	/* Now either we overlap or we passed r */
@@ -1048,6 +1049,7 @@ multirange_overlaps_multirange_internal(TypeCacheEntry *typcache, MultirangeType
 		{
 			if (++i1 >= range_count1)
 				return false;
+			r1 = ranges1[i1];
 		}
 
 		/*
