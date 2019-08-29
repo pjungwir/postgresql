@@ -316,6 +316,78 @@ SELECT nmr, isempty(nmr) FROM nummultirange_test ORDER BY nmr;
  {[3,)}                | f
 (11 rows)
 
+SELECT * FROM nummultirange_test WHERE multirange_contains_elem(nmr, 4.0);
+  nmr   
+--------
+ {(,)}
+ {[3,)}
+ {(,)}
+ {(,5)}
+(4 rows)
+
+SELECT * FROM nummultirange_test WHERE nmr @> 4.0;
+  nmr   
+--------
+ {(,)}
+ {[3,)}
+ {(,)}
+ {(,5)}
+(4 rows)
+
+SELECT * FROM nummultirange_test WHERE multirange_contains_range(nmr, numrange(4.0, 4.2));
+  nmr   
+--------
+ {(,)}
+ {[3,)}
+ {(,)}
+ {(,5)}
+(4 rows)
+
+SELECT * FROM nummultirange_test WHERE nmr @> numrange(4.0, 4.2);
+  nmr   
+--------
+ {(,)}
+ {[3,)}
+ {(,)}
+ {(,5)}
+(4 rows)
+
+SELECT * FROM nummultirange_test WHERE elem_contained_by_multirange(4.0, nmr);
+  nmr   
+--------
+ {(,)}
+ {[3,)}
+ {(,)}
+ {(,5)}
+(4 rows)
+
+SELECT * FROM nummultirange_test WHERE 4.0 <@ nmr;
+  nmr   
+--------
+ {(,)}
+ {[3,)}
+ {(,)}
+ {(,5)}
+(4 rows)
+
+SELECT * FROM nummultirange_test WHERE range_contained_by_multirange(numrange(4.0, 4.2), nmr);
+  nmr   
+--------
+ {(,)}
+ {[3,)}
+ {(,)}
+ {(,5)}
+(4 rows)
+
+SELECT * FROM nummultirange_test WHERE numrange(4.0, 4.2) <@ nmr;
+  nmr   
+--------
+ {(,)}
+ {[3,)}
+ {(,)}
+ {(,5)}
+(4 rows)
+
 -- TODO: more, see rangetypes.sql
 -- first, verify non-indexed results
 SET enable_seqscan    = t;
