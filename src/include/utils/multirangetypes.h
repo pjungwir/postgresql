@@ -64,6 +64,9 @@ extern bool multirange_contains_elem_internal(TypeCacheEntry *typcache, Multiran
 											  Datum elem);
 extern bool multirange_contains_range_internal(TypeCacheEntry *typcache, MultirangeType *mr,
 											   RangeType *r);
+extern bool multirange_contains_multirange_internal(TypeCacheEntry *typcache,
+													MultirangeType *mr1,
+													MultirangeType *mr2);
 /*
 extern bool range_contained_by_internal(TypeCacheEntry *typcache, RangeType *r1,
 										RangeType *r2);
