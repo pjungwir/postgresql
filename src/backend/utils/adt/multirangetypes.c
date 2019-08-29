@@ -926,6 +926,143 @@ multirange_ne(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(multirange_ne_internal(typcache, mr1, mr2));
 }
 
+/* overlaps? */
+Datum
+range_overlaps_multirange(PG_FUNCTION_ARGS)
+{
+	RangeType *r = PG_GETARG_RANGE_P(0);
+	MultirangeType *mr = PG_GETARG_MULTIRANGE_P(1);
+	TypeCacheEntry *typcache;
+
+	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
+
+	PG_RETURN_BOOL(range_overlaps_multirange_internal(typcache, r, mr));
+}
+
+Datum
+multirange_overlaps_range(PG_FUNCTION_ARGS)
+{
+	MultirangeType *mr = PG_GETARG_MULTIRANGE_P(0);
+	RangeType *r = PG_GETARG_RANGE_P(1);
+	TypeCacheEntry *typcache;
+
+	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
+
+	PG_RETURN_BOOL(range_overlaps_multirange_internal(typcache, r, mr));
+}
+
+Datum
+multirange_overlaps_multirange(PG_FUNCTION_ARGS)
+{
+	MultirangeType *mr1 = PG_GETARG_MULTIRANGE_P(0);
+	MultirangeType *mr2 = PG_GETARG_MULTIRANGE_P(1);
+	TypeCacheEntry *typcache;
+
+	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr1));
+
+	PG_RETURN_BOOL(multirange_overlaps_multirange_internal(typcache, mr1, mr2));
+}
+
+bool
+range_overlaps_multirange_internal(TypeCacheEntry *typcache, RangeType *r, MultirangeType *mr)
+{
+	TypeCacheEntry *rangetyp;
+	int32			range_count;
+	int32			i;
+	RangeType	  **ranges;
+	RangeType	   *mrr;
+
+	check_stack_depth();		/* recurses when subtype is a range type */
+
+	/*
+	 * Empties never overlap, even with empties.
+	 * (This seems strange since they *do* contain each other,
+	 * but we want to follow how ranges work.)
+	 */
+	if (RangeIsEmpty(r) || MultirangeIsEmpty(mr))
+		return false;
+
+	rangetyp = typcache->rngtype;
+
+	multirange_deserialize(mr, &range_count, &ranges);
+
+	/* Scan through mrr and once it gets to r they either overlap or not */
+	mrr = ranges[0];
+
+	/* Discard mrrs while mrr << r */
+	i = 0;
+	while (range_before_internal(rangetyp, mrr, r))
+	{
+		if (++i >= range_count)
+			return false;
+	}
+
+	/* Now either we overlap or we passed r */
+	return range_overlaps_internal(rangetyp, mrr, r);
+}
+
+bool
+multirange_overlaps_multirange_internal(TypeCacheEntry *typcache, MultirangeType *mr1,
+		MultirangeType *mr2)
+{
+	TypeCacheEntry *rangetyp;
+	int32			range_count1;
+	int32			range_count2;
+	int32			i1;
+	int32			i2;
+	RangeType	  **ranges1;
+	RangeType	  **ranges2;
+	RangeType	   *r1;
+	RangeType	   *r2;
+
+	check_stack_depth();		/* recurses when subtype is a range type */
+
+	/*
+	 * Empties never overlap, even with empties.
+	 * (This seems strange since they *do* contain each other,
+	 * but we want to follow how ranges work.)
+	 */
+	if (MultirangeIsEmpty(mr1) || MultirangeIsEmpty(mr2))
+		return false;
+
+	rangetyp = typcache->rngtype;
+
+	multirange_deserialize(mr1, &range_count1, &ranges1);
+	multirange_deserialize(mr2, &range_count2, &ranges2);
+
+	/*
+	 * Every range in mr1 gets a chance to overlap with the ranges in mr2,
+	 * but we can use their ordering to avoid O(n^2).
+	 * This is similar to range_overlaps_multirange
+	 * where r1 : r2 :: mrr : r,
+	 * but there if we don't find an overlap with r we're done,
+	 * and here if we don't find an overlap with r2 we try the next r2.
+	 */
+	r1 = ranges1[0];
+	for (i1 = 0, i2 = 0; i2 < range_count2; i2++)
+	{
+		r2 = ranges2[i2];
+
+		/* Discard r1s while r1 << r2 */
+		while (range_before_internal(rangetyp, r1, r2))
+		{
+			if (++i1 >= range_count1)
+				return false;
+		}
+
+		/*
+		 * If r1 && r2, we're done,
+		 * otherwise we failed to find an overlap for r2,
+		 * so go to the next one.
+		 */
+		if (range_overlaps_internal(rangetyp, r1, r2))
+			return true;
+	}
+
+	/* We looked through all of mr2 without finding an overlap */
+	return false;
+}
+
 /* contains? */
 Datum
 multirange_contains_multirange(PG_FUNCTION_ARGS)
