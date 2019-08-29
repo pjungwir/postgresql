@@ -37,7 +37,8 @@ typedef struct
 } MultirangeType;
 
 /* Use this macro in preference to fetching multirangetypid field directly */
-#define MultirangeTypeGetOid(r)	((r)->multirangetypid)
+#define MultirangeTypeGetOid(mr)	((mr)->multirangetypid)
+#define MultirangeIsEmpty(mr)  ((mr)->rangeCount == 0)
 
 /*
  * fmgr macros for multirange type objects
@@ -67,16 +68,17 @@ extern bool multirange_contains_range_internal(TypeCacheEntry *typcache, Multira
 extern bool multirange_contains_multirange_internal(TypeCacheEntry *typcache,
 													MultirangeType *mr1,
 													MultirangeType *mr2);
+extern bool range_overlaps_multirange_internal(TypeCacheEntry *typcache, RangeType *r,
+											   MultirangeType *mr);
+extern bool multirange_overlaps_multirange_internal(TypeCacheEntry *typcache,
+													MultirangeType *mr1,
+													MultirangeType *mr2);
 /*
-extern bool range_contained_by_internal(TypeCacheEntry *typcache, RangeType *r1,
-										RangeType *r2);
 extern bool range_before_internal(TypeCacheEntry *typcache, RangeType *r1,
 								  RangeType *r2);
 extern bool range_after_internal(TypeCacheEntry *typcache, RangeType *r1,
 								 RangeType *r2);
 extern bool range_adjacent_internal(TypeCacheEntry *typcache, RangeType *r1,
-									RangeType *r2);
-extern bool range_overlaps_internal(TypeCacheEntry *typcache, RangeType *r1,
 									RangeType *r2);
 extern bool range_overleft_internal(TypeCacheEntry *typcache, RangeType *r1,
 									RangeType *r2);
