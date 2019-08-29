@@ -727,6 +727,7 @@ multirange_constructor0(PG_FUNCTION_ARGS)
 		ereport(ERROR, (errmsg("Zero-param multirange constructor shouldn't have arguments")));
 }
 
+
 /* multirange -> bool functions */
 
 /* is multirange empty? */
@@ -737,6 +738,116 @@ multirange_empty(PG_FUNCTION_ARGS)
 
 	PG_RETURN_BOOL(mr->rangeCount == 0);
 }
+
+
+/* multirange, element -> bool functions */
+
+/* contains? */
+Datum
+multirange_contains_elem(PG_FUNCTION_ARGS)
+{
+	MultirangeType  *mr = PG_GETARG_MULTIRANGE_P(0);
+	Datum		val = PG_GETARG_DATUM(1);
+	TypeCacheEntry *typcache;
+
+	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
+
+	PG_RETURN_BOOL(multirange_contains_elem_internal(typcache, mr, val));
+}
+
+/* contained by? */
+Datum
+elem_contained_by_multirange(PG_FUNCTION_ARGS)
+{
+	Datum		val = PG_GETARG_DATUM(0);
+	MultirangeType  *mr = PG_GETARG_MULTIRANGE_P(1);
+	TypeCacheEntry *typcache;
+
+	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
+
+	PG_RETURN_BOOL(multirange_contains_elem_internal(typcache, mr, val));
+}
+
+/*
+ * Test whether multirange mr contains a specific element value.
+ */
+bool
+multirange_contains_elem_internal(TypeCacheEntry *typcache, MultirangeType *mr, Datum val)
+{
+	TypeCacheEntry *rangetyp;
+	int32	range_count;
+	RangeType	**ranges;
+	RangeType	*r;
+	int	i;
+
+	rangetyp = typcache->rngtype;
+
+	multirange_deserialize(mr, &range_count, &ranges);
+
+	for (i = 0; i < range_count; i++)
+	{
+		r = ranges[i];
+		if (range_contains_elem_internal(rangetyp, r, val))
+			return true;
+	}
+
+	return false;
+}
+
+/* multirange, range -> bool functions */
+
+/* contains? */
+Datum
+multirange_contains_range(PG_FUNCTION_ARGS)
+{
+	MultirangeType  *mr = PG_GETARG_MULTIRANGE_P(0);
+	RangeType *r = PG_GETARG_RANGE_P(1);
+	TypeCacheEntry *typcache;
+
+	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
+
+	PG_RETURN_BOOL(multirange_contains_range_internal(typcache, mr, r));
+}
+
+/* contained by? */
+Datum
+range_contained_by_multirange(PG_FUNCTION_ARGS)
+{
+	RangeType *r = PG_GETARG_RANGE_P(0);
+	MultirangeType  *mr = PG_GETARG_MULTIRANGE_P(1);
+	TypeCacheEntry *typcache;
+
+	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
+
+	PG_RETURN_BOOL(multirange_contains_range_internal(typcache, mr, r));
+}
+
+/*
+ * Test whether multirange mr contains a specific element value.
+ */
+bool
+multirange_contains_range_internal(TypeCacheEntry *typcache, MultirangeType *mr, RangeType *r)
+{
+	TypeCacheEntry *rangetyp;
+	int32	range_count;
+	RangeType	**ranges;
+	RangeType	*mrr;
+	int	i;
+
+	rangetyp = typcache->rngtype;
+
+	multirange_deserialize(mr, &range_count, &ranges);
+
+	for (i = 0; i < range_count; i++)
+	{
+		mrr = ranges[i];
+		if (range_contains_internal(rangetyp, mrr, r))
+			return true;
+	}
+
+	return false;
+}
+
 
 /* multirange, multirange -> bool functions */
 
