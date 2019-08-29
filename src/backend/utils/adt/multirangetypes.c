@@ -836,6 +836,12 @@ multirange_contains_range_internal(TypeCacheEntry *typcache, MultirangeType *mr,
 
 	rangetyp = typcache->rngtype;
 
+	/*
+	 * Every multirange contains an infinite number of empty ranges,
+	 * even an empty one.
+	 */
+	if (RangeIsEmpty(r)) return true;
+
 	multirange_deserialize(mr, &range_count, &ranges);
 
 	for (i = 0; i < range_count; i++)
