@@ -823,7 +823,7 @@ range_contained_by_multirange(PG_FUNCTION_ARGS)
 }
 
 /*
- * Test whether multirange mr contains a specific element value.
+ * Test whether multirange mr contains a specific range r.
  */
 bool
 multirange_contains_range_internal(TypeCacheEntry *typcache, MultirangeType *mr, RangeType *r)
@@ -918,6 +918,97 @@ multirange_ne(PG_FUNCTION_ARGS)
 	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr1));
 
 	PG_RETURN_BOOL(multirange_ne_internal(typcache, mr1, mr2));
+}
+
+/* contains? */
+Datum
+multirange_contains_multirange(PG_FUNCTION_ARGS)
+{
+	MultirangeType  *mr1 = PG_GETARG_MULTIRANGE_P(0);
+	MultirangeType	*mr2 = PG_GETARG_MULTIRANGE_P(1);
+	TypeCacheEntry *typcache;
+
+	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr1));
+
+	PG_RETURN_BOOL(multirange_contains_multirange_internal(typcache, mr1, mr2));
+}
+
+/* contained by? */
+Datum
+multirange_contained_by_multirange(PG_FUNCTION_ARGS)
+{
+	MultirangeType	*mr1 = PG_GETARG_MULTIRANGE_P(0);
+	MultirangeType  *mr2 = PG_GETARG_MULTIRANGE_P(1);
+	TypeCacheEntry *typcache;
+
+	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr1));
+
+	PG_RETURN_BOOL(multirange_contains_multirange_internal(typcache, mr2, mr1));
+}
+
+/*
+ * Test whether multirange mr1 contains every range from another multirange mr2.
+ */
+bool
+multirange_contains_multirange_internal(TypeCacheEntry *typcache,
+		MultirangeType *mr1, MultirangeType *mr2)
+{
+	TypeCacheEntry *rangetyp;
+	int32	range_count1;
+	int32	range_count2;
+	RangeType	**ranges1;
+	RangeType	**ranges2;
+	RangeType	*r1;
+	RangeType	*r2;
+	int	i1, i2;
+
+	rangetyp = typcache->rngtype;
+
+	multirange_deserialize(mr1, &range_count1, &ranges1);
+	multirange_deserialize(mr2, &range_count2, &ranges2);
+
+	/*
+	 * We follow the same logic for empties as ranges:
+	 * - an empty multirange contains an empty range/multirange.
+	 * - an empty multirange can't contain any other range/multirange.
+	 * - an empty multirange is contained by any other range/multirange.
+	 */
+
+	if (range_count2 == 0)
+		return true;
+	if (range_count1 == 0)
+		return false;
+
+	/*
+	 * Every range in mr2 must be contained by some range in mr1.
+	 * To avoid O(n^2) we walk through both ranges in tandem.
+	 */
+	r1 = ranges1[0];
+	for (i1 = 0, i2 = 0; i2 < range_count2; i2++)
+	{
+		r2 = ranges2[i2];
+
+		/* Discard r1s while r1 << r2 */
+		while (range_before_internal(rangetyp, r1, r2))
+		{
+			if (++i1 >= range_count1)
+				return false;
+		}
+
+		/*
+		 * If r1 @> r2, go to the next r2,
+		 * otherwise return false (since every r1[n] and r1[n+1] must have a gap).
+		 * Note this will give weird answers if you don't canonicalize,
+		 * e.g. with a custom int2multirange {[1,1], [2,2]} there is a "gap".
+		 * But that is consistent with other range operators,
+		 * e.g. '[1,1]'::int2range -|- '[2,2]'::int2range is false.
+		 */
+		if (!range_contains_internal(rangetyp, r1, r2))
+			return false;
+	}
+
+	/* All ranges in mr2 are satisfied */
+	return true;
 }
 
 /* Btree support */
