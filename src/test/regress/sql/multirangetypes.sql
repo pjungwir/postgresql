@@ -102,6 +102,25 @@ SELECT * FROM nummultirange_test WHERE '{[4.0,4.2), [6.0, 8.0)}'::nummultirange 
 
 -- TODO: more, see rangetypes.sql
 
+SELECT nummultirange() @> nummultirange();
+SELECT nummultirange() @> 'empty'::numrange;
+SELECT 'empty'::numrange <@ nummultirange();
+SELECT nummultirange(numrange(null,null)) @> numrange(1,2);
+SELECT nummultirange(numrange(null,null)) @> numrange(null,2);
+SELECT nummultirange(numrange(null,null)) @> numrange(2,null);
+SELECT nummultirange(numrange(null,5)) @> numrange(null,3);
+SELECT nummultirange(numrange(null,5)) @> numrange(null,8);
+SELECT nummultirange(numrange(5,null)) @> numrange(8,null);
+SELECT nummultirange(numrange(5,null)) @> numrange(3,null);
+SELECT nummultirange(numrange(1,5)) @> numrange(8,9);
+SELECT nummultirange(numrange(1,5)) @> numrange(3,9);
+SELECT nummultirange(numrange(1,5)) @> numrange(1,4);
+SELECT nummultirange(numrange(1,5)) @> numrange(1,5);
+SELECT nummultirange(numrange(-4,-2), numrange(1,5)) @> numrange(1,5);
+SELECT nummultirange(numrange(1,5), numrange(8,9)) @> numrange(1,5);
+
+-- TODO: more, see rangetypes.sql
+
 -- first, verify non-indexed results
 SET enable_seqscan    = t;
 SET enable_indexscan  = f;
