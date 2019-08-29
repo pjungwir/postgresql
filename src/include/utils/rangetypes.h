@@ -94,8 +94,6 @@ typedef struct
  * prototypes for functions defined in rangetypes.c
  */
 
-extern bool range_contains_elem_internal(TypeCacheEntry *typcache, const RangeType *r, Datum val);
-
 /* internal versions of the above */
 extern int range_cmp_internal(TypeCacheEntry *typcache, const RangeType *r1,
 							  const RangeType *r2);
@@ -108,6 +106,8 @@ extern bool range_ne_internal(TypeCacheEntry *typcache, const RangeType *r1,
 							  const RangeType *r2);
 extern bool range_contains_internal(TypeCacheEntry *typcache, const RangeType *r1,
 									const RangeType *r2);
+extern bool range_contains_elem_internal(TypeCacheEntry *typcache, const RangeType *r,
+										 Datum val);
 extern bool range_contained_by_internal(TypeCacheEntry *typcache, const RangeType *r1,
 										const RangeType *r2);
 extern bool range_before_internal(TypeCacheEntry *typcache, const RangeType *r1,

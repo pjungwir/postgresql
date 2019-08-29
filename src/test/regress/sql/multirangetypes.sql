@@ -84,6 +84,15 @@ INSERT INTO nummultirange_test VALUES(nummultirange(numrange(1.7, 1.7, '[]'), nu
 
 SELECT nmr, isempty(nmr) FROM nummultirange_test ORDER BY nmr;
 
+SELECT * FROM nummultirange_test WHERE multirange_contains_elem(nmr, 4.0);
+SELECT * FROM nummultirange_test WHERE nmr @> 4.0;
+SELECT * FROM nummultirange_test WHERE multirange_contains_range(nmr, numrange(4.0, 4.2));
+SELECT * FROM nummultirange_test WHERE nmr @> numrange(4.0, 4.2);
+SELECT * FROM nummultirange_test WHERE elem_contained_by_multirange(4.0, nmr);
+SELECT * FROM nummultirange_test WHERE 4.0 <@ nmr;
+SELECT * FROM nummultirange_test WHERE range_contained_by_multirange(numrange(4.0, 4.2), nmr);
+SELECT * FROM nummultirange_test WHERE numrange(4.0, 4.2) <@ nmr;
+
 -- TODO: more, see rangetypes.sql
 
 -- first, verify non-indexed results

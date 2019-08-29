@@ -60,9 +60,11 @@ extern bool multirange_eq_internal(TypeCacheEntry *typcache, MultirangeType *mr1
 								   MultirangeType *mr2);
 extern bool multirange_ne_internal(TypeCacheEntry *typcache, MultirangeType *mr1,
 								   MultirangeType *mr2);
+extern bool multirange_contains_elem_internal(TypeCacheEntry *typcache, MultirangeType *mr,
+											  Datum elem);
+extern bool multirange_contains_range_internal(TypeCacheEntry *typcache, MultirangeType *mr,
+											   RangeType *r);
 /*
-extern bool range_contains_internal(TypeCacheEntry *typcache, RangeType *r1,
-									RangeType *r2);
 extern bool range_contained_by_internal(TypeCacheEntry *typcache, RangeType *r1,
 										RangeType *r2);
 extern bool range_before_internal(TypeCacheEntry *typcache, RangeType *r1,
