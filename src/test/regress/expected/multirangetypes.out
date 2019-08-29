@@ -316,6 +316,7 @@ SELECT nmr, isempty(nmr) FROM nummultirange_test ORDER BY nmr;
  {[3,)}                | f
 (11 rows)
 
+-- mr contains x
 SELECT * FROM nummultirange_test WHERE multirange_contains_elem(nmr, 4.0);
   nmr   
 --------
@@ -352,6 +353,23 @@ SELECT * FROM nummultirange_test WHERE nmr @> numrange(4.0, 4.2);
  {(,5)}
 (4 rows)
 
+SELECT * FROM nummultirange_test WHERE multirange_contains_multirange(nmr, '{[4.0,4.2), [6.0, 8.0)}');
+  nmr   
+--------
+ {(,)}
+ {[3,)}
+ {(,)}
+(3 rows)
+
+SELECT * FROM nummultirange_test WHERE nmr @> '{[4.0,4.2), [6.0, 8.0)}'::nummultirange;
+  nmr   
+--------
+ {(,)}
+ {[3,)}
+ {(,)}
+(3 rows)
+
+-- x is contained by mr
 SELECT * FROM nummultirange_test WHERE elem_contained_by_multirange(4.0, nmr);
   nmr   
 --------
@@ -387,6 +405,22 @@ SELECT * FROM nummultirange_test WHERE numrange(4.0, 4.2) <@ nmr;
  {(,)}
  {(,5)}
 (4 rows)
+
+SELECT * FROM nummultirange_test WHERE multirange_contained_by_multirange('{[4.0,4.2), [6.0, 8.0)}', nmr);
+  nmr   
+--------
+ {(,)}
+ {[3,)}
+ {(,)}
+(3 rows)
+
+SELECT * FROM nummultirange_test WHERE '{[4.0,4.2), [6.0, 8.0)}'::nummultirange <@ nmr;
+  nmr   
+--------
+ {(,)}
+ {[3,)}
+ {(,)}
+(3 rows)
 
 -- TODO: more, see rangetypes.sql
 -- first, verify non-indexed results
