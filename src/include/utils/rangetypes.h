@@ -138,6 +138,7 @@ extern void range_deserialize(TypeCacheEntry *typcache, const RangeType *range,
 							  RangeBound *lower, RangeBound *upper,
 							  bool *empty);
 extern char range_get_flags(const RangeType *range);
+extern bool range_has_flag(const RangeType *range, char flag);
 extern void range_set_contain_empty(RangeType *range);
 extern RangeType *make_range(TypeCacheEntry *typcache, RangeBound *lower,
 							 RangeBound *upper, bool empty);
