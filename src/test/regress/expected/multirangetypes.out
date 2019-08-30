@@ -672,6 +672,270 @@ SELECT nummultirange(numrange(1,5), numrange(8,9)) @> numrange(1,5);
  t
 (1 row)
 
+SELECT 'empty'::numrange &< nummultirange();
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT 'empty'::numrange &< nummultirange(numrange(1,2));
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT nummultirange() &< 'empty'::numrange;
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT nummultirange(numrange(1,2)) &< 'empty'::numrange;
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT nummultirange() &< nummultirange();
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT nummultirange(numrange(1,2)) &< nummultirange();
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT nummultirange() &< nummultirange(numrange(1,2));
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT numrange(6,7) &< nummultirange(numrange(3,4));
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT numrange(1,2) &< nummultirange(numrange(3,4));
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT numrange(1,4) &< nummultirange(numrange(3,4));
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT numrange(1,6) &< nummultirange(numrange(3,4));
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT numrange(3.5,6) &< nummultirange(numrange(3,4));
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT nummultirange(numrange(6,7)) &< numrange(3,4);
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT nummultirange(numrange(1,2)) &< numrange(3,4);
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT nummultirange(numrange(1,4)) &< numrange(3,4);
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT nummultirange(numrange(1,6)) &< numrange(3,4);
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT nummultirange(numrange(3.5,6)) &< numrange(3,4);
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT nummultirange(numrange(6,7)) &< nummultirange(numrange(3,4));
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT nummultirange(numrange(1,2)) &< nummultirange(numrange(3,4));
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT nummultirange(numrange(1,4)) &< nummultirange(numrange(3,4));
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT nummultirange(numrange(1,6)) &< nummultirange(numrange(3,4));
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT nummultirange(numrange(3.5,6)) &< nummultirange(numrange(3,4));
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT nummultirange() &> 'empty'::numrange;
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT nummultirange(numrange(1,2)) &> 'empty'::numrange;
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT 'empty'::numrange &> nummultirange();
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT 'empty'::numrange &> nummultirange(numrange(1,2));
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT nummultirange() &> nummultirange();
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT nummultirange() &> nummultirange(numrange(1,2));
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT nummultirange(numrange(1,2)) &> nummultirange();
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT nummultirange(numrange(3,4)) &> numrange(6,7);
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT nummultirange(numrange(3,4)) &> numrange(1,2);
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT nummultirange(numrange(3,4)) &> numrange(1,4);
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT nummultirange(numrange(3,4)) &> numrange(1,6);
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT nummultirange(numrange(3,4)) &> numrange(3.5,6);
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT numrange(3,4) &> nummultirange(numrange(6,7));
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT numrange(3,4) &> nummultirange(numrange(1,2));
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT numrange(3,4) &> nummultirange(numrange(1,4));
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT numrange(3,4) &> nummultirange(numrange(1,6));
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT numrange(3,4) &> nummultirange(numrange(3.5,6));
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT nummultirange(numrange(3,4)) &> nummultirange(numrange(6,7));
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT nummultirange(numrange(3,4)) &> nummultirange(numrange(1,2));
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT nummultirange(numrange(3,4)) &> nummultirange(numrange(1,4));
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT nummultirange(numrange(3,4)) &> nummultirange(numrange(1,6));
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT nummultirange(numrange(3,4)) &> nummultirange(numrange(3.5,6));
+ ?column? 
+----------
+ f
+(1 row)
+
 SELECT 'empty'::numrange -|- nummultirange();
  ?column? 
 ----------
