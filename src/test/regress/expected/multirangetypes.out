@@ -316,6 +316,22 @@ SELECT nmr, isempty(nmr), lower(nmr), upper(nmr) FROM nummultirange_test ORDER B
  {[3,)}                | f       |     3 |      
 (11 rows)
 
+SELECT nmr, lower_inc(nmr), lower_inf(nmr), upper_inc(nmr), upper_inf(nmr) FROM nummultirange_test ORDER BY nmr;
+          nmr          | lower_inc | lower_inf | upper_inc | upper_inf 
+-----------------------+-----------+-----------+-----------+-----------
+ {}                    | f         | f         | f         | f
+ {}                    | f         | f         | f         | f
+ {}                    | f         | f         | f         | f
+ {}                    | f         | f         | f         | f
+ {(,5)}                | f         | t         | f         | f
+ {(,)}                 | f         | t         | f         | t
+ {(,)}                 | f         | t         | f         | t
+ {[1.1,2.2)}           | t         | f         | f         | f
+ {[1.7,1.7],[1.9,2.1)} | t         | f         | f         | f
+ {[1.7,1.9)}           | t         | f         | f         | f
+ {[3,)}                | t         | f         | f         | t
+(11 rows)
+
 -- overlaps
 SELECT * FROM nummultirange_test WHERE range_overlaps_multirange(numrange(4.0, 4.2), nmr);
   nmr   

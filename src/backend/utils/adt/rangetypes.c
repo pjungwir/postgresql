@@ -508,9 +508,7 @@ Datum
 range_empty(PG_FUNCTION_ARGS)
 {
 	RangeType  *r1 = PG_GETARG_RANGE_P(0);
-	char		flags = range_get_flags(r1);
-
-	PG_RETURN_BOOL(flags & RANGE_EMPTY);
+	PG_RETURN_BOOL(range_has_flag(r1, RANGE_EMPTY));
 }
 
 /* is lower bound inclusive? */
@@ -518,9 +516,7 @@ Datum
 range_lower_inc(PG_FUNCTION_ARGS)
 {
 	RangeType  *r1 = PG_GETARG_RANGE_P(0);
-	char		flags = range_get_flags(r1);
-
-	PG_RETURN_BOOL(flags & RANGE_LB_INC);
+	PG_RETURN_BOOL(range_has_flag(r1, RANGE_LB_INC));
 }
 
 /* is upper bound inclusive? */
@@ -528,9 +524,7 @@ Datum
 range_upper_inc(PG_FUNCTION_ARGS)
 {
 	RangeType  *r1 = PG_GETARG_RANGE_P(0);
-	char		flags = range_get_flags(r1);
-
-	PG_RETURN_BOOL(flags & RANGE_UB_INC);
+	PG_RETURN_BOOL(range_has_flag(r1, RANGE_UB_INC));
 }
 
 /* is lower bound infinite? */
@@ -538,9 +532,7 @@ Datum
 range_lower_inf(PG_FUNCTION_ARGS)
 {
 	RangeType  *r1 = PG_GETARG_RANGE_P(0);
-	char		flags = range_get_flags(r1);
-
-	PG_RETURN_BOOL(flags & RANGE_LB_INF);
+	PG_RETURN_BOOL(range_has_flag(r1, RANGE_LB_INF));
 }
 
 /* is upper bound infinite? */
@@ -548,9 +540,7 @@ Datum
 range_upper_inf(PG_FUNCTION_ARGS)
 {
 	RangeType  *r1 = PG_GETARG_RANGE_P(0);
-	char		flags = range_get_flags(r1);
-
-	PG_RETURN_BOOL(flags & RANGE_UB_INF);
+	PG_RETURN_BOOL(range_has_flag(r1, RANGE_UB_INF));
 }
 
 
@@ -1827,6 +1817,20 @@ range_get_flags(const RangeType *range)
 {
 	/* fetch the flag byte from datum's last byte */
 	return *((char *) range + VARSIZE(range) - 1);
+}
+
+/*
+ * range_has_flag: set whether a range has a specific flag.
+ *
+ * This lets expose some of our functions that just check flags
+ * to the rest of the code base (like to multiranges)
+ * without writing full-fledged *_internal versions.
+ */
+bool
+range_has_flag(const RangeType *r1, char flag)
+{
+	char		flags = range_get_flags(r1);
+	return flags & flag;
 }
 
 /*
