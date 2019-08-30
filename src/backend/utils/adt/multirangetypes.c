@@ -1281,6 +1281,67 @@ range_after_multirange_internal(TypeCacheEntry *typcache, RangeType *r,
 	return range_after_internal(typcache->rngtype, r, ranges[range_count - 1]);
 }
 
+/* adjacent to? */
+Datum
+range_adjacent_multirange(PG_FUNCTION_ARGS)
+{
+	RangeType	*r = PG_GETARG_RANGE_P(0);
+	MultirangeType  *mr = PG_GETARG_MULTIRANGE_P(1);
+	TypeCacheEntry *typcache;
+	int32 range_count;
+	RangeType	**ranges;
+
+	if (RangeIsEmpty(r) || MultirangeIsEmpty(mr))
+		return false;
+
+	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
+
+	multirange_deserialize(mr, &range_count, &ranges);
+
+	PG_RETURN_BOOL(range_adjacent_internal(typcache->rngtype, r, ranges[0]));
+}
+
+Datum
+multirange_adjacent_range(PG_FUNCTION_ARGS)
+{
+	MultirangeType  *mr = PG_GETARG_MULTIRANGE_P(0);
+	RangeType	*r = PG_GETARG_RANGE_P(1);
+	TypeCacheEntry *typcache;
+	int32 range_count;
+	RangeType	**ranges;
+
+	if (RangeIsEmpty(r) || MultirangeIsEmpty(mr))
+		return false;
+
+	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
+
+	multirange_deserialize(mr, &range_count, &ranges);
+
+	PG_RETURN_BOOL(range_adjacent_internal(typcache->rngtype, ranges[range_count - 1], r));
+}
+
+Datum
+multirange_adjacent_multirange(PG_FUNCTION_ARGS)
+{
+	MultirangeType  *mr1 = PG_GETARG_MULTIRANGE_P(0);
+	MultirangeType  *mr2 = PG_GETARG_MULTIRANGE_P(1);
+	TypeCacheEntry *typcache;
+	int32 range_count1;
+	int32 range_count2;
+	RangeType	**ranges1;
+	RangeType	**ranges2;
+
+	if (MultirangeIsEmpty(mr1) || MultirangeIsEmpty(mr2))
+		return false;
+
+	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr1));
+
+	multirange_deserialize(mr1, &range_count1, &ranges1);
+	multirange_deserialize(mr2, &range_count2, &ranges2);
+
+	PG_RETURN_BOOL(range_adjacent_internal(typcache->rngtype, ranges1[range_count1 - 1], ranges2[0]));
+}
+
 /* Btree support */
 
 /* btree comparator */
