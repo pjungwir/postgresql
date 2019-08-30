@@ -728,6 +728,61 @@ multirange_constructor0(PG_FUNCTION_ARGS)
 }
 
 
+/* multirange -> element type functions */
+
+/* extract lower bound value */
+Datum
+multirange_lower(PG_FUNCTION_ARGS)
+{
+	MultirangeType  *mr = PG_GETARG_MULTIRANGE_P(0);
+	TypeCacheEntry *typcache;
+	int32	range_count;
+	RangeType	**ranges;
+	bool		isnull;
+	Datum		result;
+
+	if (MultirangeIsEmpty(mr))
+		PG_RETURN_NULL();
+
+	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
+
+	multirange_deserialize(mr, &range_count, &ranges);
+
+	result = range_lower_internal(typcache->rngtype, ranges[0], &isnull);
+
+	if (isnull)
+		PG_RETURN_NULL();
+	else
+		PG_RETURN_DATUM(result);
+}
+
+/* extract upper bound value */
+Datum
+multirange_upper(PG_FUNCTION_ARGS)
+{
+	MultirangeType  *mr = PG_GETARG_MULTIRANGE_P(0);
+	TypeCacheEntry *typcache;
+	int32	range_count;
+	RangeType	**ranges;
+	bool		isnull;
+	Datum		result;
+
+	if (MultirangeIsEmpty(mr))
+		PG_RETURN_NULL();
+
+	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
+
+	multirange_deserialize(mr, &range_count, &ranges);
+
+	result = range_upper_internal(typcache->rngtype, ranges[range_count - 1], &isnull);
+
+	if (isnull)
+		PG_RETURN_NULL();
+	else
+		PG_RETURN_DATUM(result);
+}
+
+
 /* multirange -> bool functions */
 
 /* is multirange empty? */
