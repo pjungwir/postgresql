@@ -794,6 +794,71 @@ multirange_empty(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(mr->rangeCount == 0);
 }
 
+/* is lower bound inclusive? */
+Datum
+multirange_lower_inc(PG_FUNCTION_ARGS)
+{
+	MultirangeType  *mr = PG_GETARG_MULTIRANGE_P(0);
+	int32	range_count;
+	RangeType	**ranges;
+
+	if (MultirangeIsEmpty(mr))
+		PG_RETURN_BOOL(false);
+
+	multirange_deserialize(mr, &range_count, &ranges);
+
+	PG_RETURN_BOOL(range_has_flag(ranges[0], RANGE_LB_INC));
+}
+
+/* is upper bound inclusive? */
+Datum
+multirange_upper_inc(PG_FUNCTION_ARGS)
+{
+	MultirangeType  *mr = PG_GETARG_MULTIRANGE_P(0);
+	int32	range_count;
+	RangeType	**ranges;
+
+	if (MultirangeIsEmpty(mr))
+		PG_RETURN_BOOL(false);
+
+	multirange_deserialize(mr, &range_count, &ranges);
+
+	PG_RETURN_BOOL(range_has_flag(ranges[range_count - 1], RANGE_UB_INC));
+}
+
+/* is lower bound infinite? */
+Datum
+multirange_lower_inf(PG_FUNCTION_ARGS)
+{
+	MultirangeType  *mr = PG_GETARG_MULTIRANGE_P(0);
+	int32	range_count;
+	RangeType	**ranges;
+
+	if (MultirangeIsEmpty(mr))
+		PG_RETURN_BOOL(false);
+
+	multirange_deserialize(mr, &range_count, &ranges);
+
+	PG_RETURN_BOOL(range_has_flag(ranges[0], RANGE_LB_INF));
+}
+
+/* is upper bound infinite? */
+Datum
+multirange_upper_inf(PG_FUNCTION_ARGS)
+{
+	MultirangeType  *mr = PG_GETARG_MULTIRANGE_P(0);
+	int32	range_count;
+	RangeType	**ranges;
+
+	if (MultirangeIsEmpty(mr))
+		PG_RETURN_BOOL(false);
+
+	multirange_deserialize(mr, &range_count, &ranges);
+
+	PG_RETURN_BOOL(range_has_flag(ranges[range_count - 1], RANGE_UB_INF));
+}
+
+
 
 /* multirange, element -> bool functions */
 
