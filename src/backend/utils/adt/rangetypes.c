@@ -429,19 +429,37 @@ range_lower(PG_FUNCTION_ARGS)
 {
 	RangeType  *r1 = PG_GETARG_RANGE_P(0);
 	TypeCacheEntry *typcache;
+	bool isnull;
+	Datum result;
+
+	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
+
+	result = range_lower_internal(typcache, r1, &isnull);
+
+	if (isnull)
+		PG_RETURN_NULL();
+	else
+		PG_RETURN_DATUM(result);
+}
+
+Datum
+range_lower_internal(TypeCacheEntry *typcache, const RangeType *r1, bool *isnull)
+{
 	RangeBound	lower;
 	RangeBound	upper;
 	bool		empty;
-
-	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
 
 	range_deserialize(typcache, r1, &lower, &upper, &empty);
 
 	/* Return NULL if there's no finite lower bound */
 	if (empty || lower.infinite)
-		PG_RETURN_NULL();
+	{
+		*isnull = true;
+		return 0;
+	}
 
-	PG_RETURN_DATUM(lower.val);
+	*isnull = false;
+	return lower.val;
 }
 
 /* extract upper bound value */
@@ -450,19 +468,36 @@ range_upper(PG_FUNCTION_ARGS)
 {
 	RangeType  *r1 = PG_GETARG_RANGE_P(0);
 	TypeCacheEntry *typcache;
+	bool isnull;
+	Datum	result;
+
+	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
+
+	result = range_upper_internal(typcache, r1, &isnull);
+
+	if (isnull)
+		PG_RETURN_NULL();
+	else
+		PG_RETURN_DATUM(result);
+}
+
+Datum range_upper_internal(TypeCacheEntry *typcache, const RangeType *r1, bool *isnull)
+{
 	RangeBound	lower;
 	RangeBound	upper;
 	bool		empty;
-
-	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
 
 	range_deserialize(typcache, r1, &lower, &upper, &empty);
 
 	/* Return NULL if there's no finite upper bound */
 	if (empty || upper.infinite)
-		PG_RETURN_NULL();
+	{
+		*isnull = true;
+		return 0;
+	}
 
-	PG_RETURN_DATUM(upper.val);
+	*isnull = false;
+	return upper.val;
 }
 
 
