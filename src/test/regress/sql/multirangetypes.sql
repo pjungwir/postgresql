@@ -82,7 +82,7 @@ INSERT INTO nummultirange_test VALUES('{empty}');
 INSERT INTO nummultirange_test VALUES(nummultirange(numrange(1.7, 1.7, '[]'), numrange(1.7, 1.9)));
 INSERT INTO nummultirange_test VALUES(nummultirange(numrange(1.7, 1.7, '[]'), numrange(1.9, 2.1)));
 
-SELECT nmr, isempty(nmr) FROM nummultirange_test ORDER BY nmr;
+SELECT nmr, isempty(nmr), lower(nmr), upper(nmr) FROM nummultirange_test ORDER BY nmr;
 
 -- overlaps
 SELECT * FROM nummultirange_test WHERE range_overlaps_multirange(numrange(4.0, 4.2), nmr);
