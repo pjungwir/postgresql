@@ -728,6 +728,84 @@ multirange_constructor0(PG_FUNCTION_ARGS)
 }
 
 
+/* multirange, multirange -> multirange type functions */
+
+Datum
+range_union_multirange(PG_FUNCTION_ARGS)
+{
+	RangeType	*r = PG_GETARG_RANGE_P(0);
+	MultirangeType *mr = PG_GETARG_MULTIRANGE_P(1);
+	TypeCacheEntry *typcache;
+
+	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
+
+	PG_RETURN_MULTIRANGE_P(range_union_multirange_internal(typcache, r, mr));
+}
+
+Datum
+multirange_union_range(PG_FUNCTION_ARGS)
+{
+	MultirangeType *mr = PG_GETARG_MULTIRANGE_P(0);
+	RangeType	*r = PG_GETARG_RANGE_P(1);
+	TypeCacheEntry *typcache;
+
+	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
+
+	PG_RETURN_MULTIRANGE_P(range_union_multirange_internal(typcache, r, mr));
+}
+
+Datum
+multirange_union_multirange(PG_FUNCTION_ARGS)
+{
+	MultirangeType	*mr1 = PG_GETARG_MULTIRANGE_P(0);
+	MultirangeType	*mr2 = PG_GETARG_MULTIRANGE_P(1);
+	TypeCacheEntry *typcache;
+	int32		range_count1;
+	int32		range_count2;
+	int32		range_count3;
+	RangeType	**ranges1;
+	RangeType	**ranges2;
+	RangeType	**ranges3;
+
+	if (MultirangeIsEmpty(mr1))
+		PG_RETURN_MULTIRANGE_P(mr2);
+	if (MultirangeIsEmpty(mr2))
+		PG_RETURN_MULTIRANGE_P(mr1);
+
+	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr1));
+
+	multirange_deserialize(mr1, &range_count1, &ranges1);
+	multirange_deserialize(mr2, &range_count2, &ranges2);
+
+	range_count3 = range_count1 + range_count2;
+	ranges3 = palloc0(range_count3 * sizeof(RangeType *));
+	memcpy(ranges3, ranges1, range_count1 * sizeof(RangeType *));
+	memcpy(ranges3 + range_count1, ranges2, range_count2 * sizeof(RangeType *));
+	PG_RETURN_MULTIRANGE_P(make_multirange(typcache->type_id, typcache->rngtype,
+				range_count3, ranges3));
+}
+
+MultirangeType *range_union_multirange_internal(TypeCacheEntry *typcache, RangeType *r,
+		MultirangeType *mr)
+{
+	int32		range_count;
+	RangeType	**ranges1;
+	RangeType	**ranges2;
+
+	if (RangeIsEmpty(r))
+		return mr;
+	if (MultirangeIsEmpty(mr))
+		return make_multirange(typcache->type_id, typcache->rngtype, 1, &r);
+
+	multirange_deserialize(mr, &range_count, &ranges1);
+
+	ranges2 = palloc0((range_count + 1) * sizeof(RangeType *));
+
+	memcpy(ranges2, ranges1, range_count * sizeof(RangeType *));
+	ranges2[range_count] = r;
+	return make_multirange(typcache->type_id, typcache->rngtype, range_count + 1, ranges2);
+}
+
 /* multirange -> element type functions */
 
 /* extract lower bound value */
@@ -1243,7 +1321,7 @@ multirange_overleft_multirange(PG_FUNCTION_ARGS)
 	multirange_deserialize(mr1, &range_count1, &ranges1);
 	multirange_deserialize(mr2, &range_count2, &ranges2);
 
-	PG_RETURN_BOOL(range_overleft_internal(typcache->rngtype, ranges1[range_count - 1], ranges2[range_count - 1]));
+	PG_RETURN_BOOL(range_overleft_internal(typcache->rngtype, ranges1[range_count1 - 1], ranges2[range_count2 - 1]));
 }
 
 /* does not extend to left of? */

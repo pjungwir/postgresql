@@ -1254,6 +1254,96 @@ select nummultirange(numrange(3,4), numrange(7,8)) >> nummultirange(numrange(1,2
  f
 (1 row)
 
+SELECT 'empty'::numrange + nummultirange();
+ ?column? 
+----------
+ {}
+(1 row)
+
+SELECT nummultirange() + 'empty'::numrange;
+ ?column? 
+----------
+ {}
+(1 row)
+
+SELECT nummultirange() + nummultirange();
+ ?column? 
+----------
+ {}
+(1 row)
+
+SELECT 'empty'::numrange + nummultirange(numrange(1,2));
+ ?column? 
+----------
+ {[1,2)}
+(1 row)
+
+SELECT numrange(1,2) + nummultirange();
+ ?column? 
+----------
+ {[1,2)}
+(1 row)
+
+SELECT nummultirange(numrange(1,2)) + 'empty'::numrange;
+ ?column? 
+----------
+ {[1,2)}
+(1 row)
+
+SELECT nummultirange() + numrange(1,2);
+ ?column? 
+----------
+ {[1,2)}
+(1 row)
+
+SELECT nummultirange() + nummultirange(numrange(1,2));
+ ?column? 
+----------
+ {[1,2)}
+(1 row)
+
+SELECT nummultirange(numrange(1,2)) + nummultirange();
+ ?column? 
+----------
+ {[1,2)}
+(1 row)
+
+SELECT nummultirange(numrange(1,2)) + nummultirange(numrange(1,2));
+ ?column? 
+----------
+ {[1,2)}
+(1 row)
+
+SELECT nummultirange(numrange(1,2)) + nummultirange(numrange(2,4));
+ ?column? 
+----------
+ {[1,4)}
+(1 row)
+
+SELECT nummultirange(numrange(1,2)) + nummultirange(numrange(3,4));
+   ?column?    
+---------------
+ {[1,2),[3,4)}
+(1 row)
+
+SELECT nummultirange(numrange(1,2), numrange(4,5)) + nummultirange(numrange(2,4));
+ ?column? 
+----------
+ {[1,5)}
+(1 row)
+
+SELECT nummultirange(numrange(1,2), numrange(4,5)) + nummultirange(numrange(3,4));
+   ?column?    
+---------------
+ {[1,2),[3,5)}
+(1 row)
+
+SELECT nummultirange(numrange(1,2), numrange(4,5)) + nummultirange(numrange(0,9));
+ ?column? 
+----------
+ {[0,9)}
+(1 row)
+
 -- TODO: more, see rangetypes.sql
 -- first, verify non-indexed results
 SET enable_seqscan    = t;

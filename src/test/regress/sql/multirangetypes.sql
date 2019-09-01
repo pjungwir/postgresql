@@ -244,6 +244,22 @@ select nummultirange(numrange(3,4)) >> nummultirange(numrange(1,2));
 select nummultirange(numrange(3,4), numrange(7,8)) >> nummultirange(numrange(1,2));
 select nummultirange(numrange(3,4), numrange(7,8)) >> nummultirange(numrange(1,2), numrange(4,5));
 
+SELECT 'empty'::numrange + nummultirange();
+SELECT nummultirange() + 'empty'::numrange;
+SELECT nummultirange() + nummultirange();
+SELECT 'empty'::numrange + nummultirange(numrange(1,2));
+SELECT numrange(1,2) + nummultirange();
+SELECT nummultirange(numrange(1,2)) + 'empty'::numrange;
+SELECT nummultirange() + numrange(1,2);
+SELECT nummultirange() + nummultirange(numrange(1,2));
+SELECT nummultirange(numrange(1,2)) + nummultirange();
+SELECT nummultirange(numrange(1,2)) + nummultirange(numrange(1,2));
+SELECT nummultirange(numrange(1,2)) + nummultirange(numrange(2,4));
+SELECT nummultirange(numrange(1,2)) + nummultirange(numrange(3,4));
+SELECT nummultirange(numrange(1,2), numrange(4,5)) + nummultirange(numrange(2,4));
+SELECT nummultirange(numrange(1,2), numrange(4,5)) + nummultirange(numrange(3,4));
+SELECT nummultirange(numrange(1,2), numrange(4,5)) + nummultirange(numrange(0,9));
+
 -- TODO: more, see rangetypes.sql
 
 -- first, verify non-indexed results

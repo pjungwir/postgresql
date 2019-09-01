@@ -79,6 +79,8 @@ extern bool range_after_multirange_internal(TypeCacheEntry *typcache, RangeType 
 											MultirangeType *mr);
 extern bool multirange_before_multirange_internal(TypeCacheEntry *typcache, MultirangeType *mr1,
 												  MultirangeType *mr2);
+extern MultirangeType *range_union_multirange_internal(TypeCacheEntry *typcache, RangeType *r,
+												  MultirangeType *mr);
 /*
 extern bool range_adjacent_internal(TypeCacheEntry *typcache, RangeType *r1,
 									RangeType *r2);
