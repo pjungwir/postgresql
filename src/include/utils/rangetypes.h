@@ -128,6 +128,8 @@ extern bool range_overright_internal(TypeCacheEntry *typcache, const RangeType *
 									 const RangeType *r2);
 extern RangeType *range_union_internal(TypeCacheEntry *typcache, RangeType *r1,
 										RangeType *r2, bool strict);
+extern RangeType *range_minus_internal(TypeCacheEntry *typcache, RangeType *r1,
+									   RangeType *r2);
 
 /* assorted support functions */
 extern TypeCacheEntry *range_get_typcache(FunctionCallInfo fcinfo,
@@ -150,5 +152,8 @@ extern int	range_compare(const void *key1, const void *key2, void *arg);
 extern bool bounds_adjacent(TypeCacheEntry *typcache, RangeBound bound1,
 							RangeBound bound2);
 extern RangeType *make_empty_range(TypeCacheEntry *typcache);
+extern bool range_split_internal(TypeCacheEntry *typcache, RangeType *r1,
+								 RangeType *r2, RangeType **output1,
+								 RangeType **output2);
 
 #endif							/* RANGETYPES_H */
