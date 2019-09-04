@@ -806,6 +806,172 @@ MultirangeType *range_union_multirange_internal(TypeCacheEntry *typcache, RangeT
 	return make_multirange(typcache->type_id, typcache->rngtype, range_count + 1, ranges2);
 }
 
+Datum
+range_minus_multirange(PG_FUNCTION_ARGS)
+{
+	RangeType *r = PG_GETARG_RANGE_P(0);
+	MultirangeType *mr = PG_GETARG_MULTIRANGE_P(1);
+	Oid	mltrngtypoid = MultirangeTypeGetOid(mr);
+	TypeCacheEntry *typcache;
+	TypeCacheEntry *rangetyp;
+	int32	range_count;
+	RangeType	**ranges;
+
+	typcache = multirange_get_typcache(fcinfo, mltrngtypoid);
+	rangetyp = typcache->rngtype;
+
+	if (RangeIsEmpty(r) || MultirangeIsEmpty(mr))
+		PG_RETURN_MULTIRANGE_P(make_multirange(mltrngtypoid, rangetyp, 1, &r));
+
+	multirange_deserialize(mr, &range_count, &ranges);
+
+	PG_RETURN_MULTIRANGE_P(multirange_minus_multirange_internal(mltrngtypoid,
+																rangetyp,
+																1,
+																&r,
+																range_count,
+																ranges));
+}
+
+Datum
+multirange_minus_range(PG_FUNCTION_ARGS)
+{
+	MultirangeType *mr = PG_GETARG_MULTIRANGE_P(0);
+	RangeType *r = PG_GETARG_RANGE_P(1);
+	Oid	mltrngtypoid = MultirangeTypeGetOid(mr);
+	TypeCacheEntry *typcache;
+	TypeCacheEntry *rangetyp;
+	int32	range_count;
+	RangeType	**ranges;
+
+	typcache = multirange_get_typcache(fcinfo, mltrngtypoid);
+	rangetyp = typcache->rngtype;
+
+	if (MultirangeIsEmpty(mr) || RangeIsEmpty(r))
+		PG_RETURN_MULTIRANGE_P(mr);
+
+	multirange_deserialize(mr, &range_count, &ranges);
+
+	PG_RETURN_MULTIRANGE_P(multirange_minus_multirange_internal(mltrngtypoid,
+																rangetyp,
+																range_count,
+																ranges,
+																1,
+																&r));
+}
+
+Datum
+multirange_minus_multirange(PG_FUNCTION_ARGS)
+{
+	MultirangeType *mr1 = PG_GETARG_MULTIRANGE_P(0);
+	MultirangeType *mr2 = PG_GETARG_MULTIRANGE_P(1);
+	Oid	mltrngtypoid = MultirangeTypeGetOid(mr1);
+	TypeCacheEntry *typcache;
+	TypeCacheEntry *rangetyp;
+	int32	range_count1;
+	int32	range_count2;
+	RangeType	**ranges1;
+	RangeType	**ranges2;
+
+	typcache = multirange_get_typcache(fcinfo, mltrngtypoid);
+	rangetyp = typcache->rngtype;
+
+	if (MultirangeIsEmpty(mr1) || MultirangeIsEmpty(mr2))
+		PG_RETURN_MULTIRANGE_P(mr1);
+
+	multirange_deserialize(mr1, &range_count1, &ranges1);
+	multirange_deserialize(mr2, &range_count2, &ranges2);
+
+	PG_RETURN_MULTIRANGE_P(multirange_minus_multirange_internal(mltrngtypoid,
+																rangetyp,
+																range_count1,
+																ranges1,
+																range_count2,
+																ranges2));
+}
+
+MultirangeType *
+multirange_minus_multirange_internal(Oid mltrngtypoid, TypeCacheEntry *rangetyp,
+		int32 range_count1, RangeType **ranges1, int32 range_count2, RangeType **ranges2)
+{
+	RangeType	*r1;
+	RangeType	*r2;
+	RangeType	**ranges3;
+	int32	range_count3;
+	int32	i1;
+	int32	i2;
+
+	/*
+	 * Worst case: every range in ranges1 makes a different cut
+	 * to some range in ranges2.
+	 */
+	ranges3 = palloc0((range_count1 + range_count2) * sizeof(RangeType *));
+	range_count3 = 0;
+
+	/*
+	 * For each range in mr1, keep subtracting until it's gone
+	 * or the ranges in mr2 have passed it.
+	 * After a subtraction we assign what's left back to r1.
+	 * The parallel progress through mr1 and mr2 is similar to
+	 * multirange_overlaps_multirange_internal.
+	 */
+	r2 = ranges2[0];
+	for (i1 = 0, i2 = 0; i1 < range_count1; i1++)
+	{
+		r1 = ranges1[i1];
+
+		/* Discard r2s while r2 << r1 */
+		while (r2 != NULL && range_before_internal(rangetyp, r2, r1))
+		{
+			r2 = ++i2 >= range_count2 ? NULL : ranges2[i2];
+		}
+
+		while (r2 != NULL)
+		{
+			if (range_split_internal(rangetyp, r1, r2, &ranges3[range_count3], &r1))
+			{
+				/* If r2 takes a bite out of the middle of r1, we need two outputs */
+				range_count3++;
+				r2 = ++i2 >= range_count2 ? NULL : ranges2[i2];
+
+			} else if (range_overlaps_internal(rangetyp, r1, r2))
+			{
+				/*
+				 * If r2 overlaps r1, replace r1 with r1 - r2.
+				 */
+				r1 = range_minus_internal(rangetyp, r1, r2);
+
+				/*
+				 * If r2 goes past r1, then we need to stay with it,
+				 * in case it hits future r1s.
+				 * Otherwise we need to keep r1, in case future r2s hit it.
+				 * Since we already subtracted, there's no point in using the
+				 * overright/overleft calls.
+				 */
+				if (RangeIsEmpty(r1) || range_before_internal(rangetyp, r1, r2))
+					break;
+				else
+					r2 = ++i2 >= range_count2 ? NULL : ranges2[i2];
+
+			} else {
+				/*
+				 * This and all future r2s are past r1, so keep them.
+				 * Also assign whatever is left of r1 to the result.
+				 */
+				break;
+			}
+		}
+
+		/*
+		 * Nothing else can remove anything from r1, so keep it.
+		 * Even if r1 is empty here, make_multirange will remove it.
+		 */
+		ranges3[range_count3++] = r1;
+	}
+
+	return make_multirange(mltrngtypoid, rangetyp, range_count3, ranges3);
+}
+
 /* multirange -> element type functions */
 
 /* extract lower bound value */
