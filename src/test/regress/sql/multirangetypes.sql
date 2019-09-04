@@ -260,6 +260,33 @@ SELECT nummultirange(numrange(1,2), numrange(4,5)) + nummultirange(numrange(2,4)
 SELECT nummultirange(numrange(1,2), numrange(4,5)) + nummultirange(numrange(3,4));
 SELECT nummultirange(numrange(1,2), numrange(4,5)) + nummultirange(numrange(0,9));
 
+SELECT 'empty'::numrange - nummultirange();
+SELECT nummultirange() - 'empty'::numrange;
+SELECT nummultirange() - nummultirange();
+SELECT 'empty'::numrange - nummultirange(numrange(1,2));
+SELECT numrange(1,2) - nummultirange();
+SELECT nummultirange(numrange(1,2)) - 'empty'::numrange;
+SELECT nummultirange() - numrange(1,2);
+SELECT nummultirange() - nummultirange(numrange(1,2));
+SELECT nummultirange(numrange(1,2)) - nummultirange();
+SELECT nummultirange(numrange(1,2), numrange(3,4)) - nummultirange();
+SELECT nummultirange(numrange(1,2)) - nummultirange(numrange(1,2));
+SELECT nummultirange(numrange(1,2)) - nummultirange(numrange(2,4));
+SELECT nummultirange(numrange(1,2)) - nummultirange(numrange(3,4));
+SELECT nummultirange(numrange(1,4)) - nummultirange(numrange(1,2));
+SELECT nummultirange(numrange(1,4)) - nummultirange(numrange(2,3));
+SELECT nummultirange(numrange(1,4)) - nummultirange(numrange(0,8));
+SELECT nummultirange(numrange(1,4)) - nummultirange(numrange(0,2));
+SELECT nummultirange(numrange(1,8)) - nummultirange(numrange(0,2), numrange(3,4));
+SELECT nummultirange(numrange(1,8)) - nummultirange(numrange(2,3), numrange(5,null));
+SELECT nummultirange(numrange(1,2), numrange(4,5)) - nummultirange(numrange(-2,0));
+SELECT nummultirange(numrange(1,2), numrange(4,5)) - nummultirange(numrange(2,4));
+SELECT nummultirange(numrange(1,2), numrange(4,5)) - nummultirange(numrange(3,5));
+SELECT nummultirange(numrange(1,2), numrange(4,5)) - nummultirange(numrange(0,9));
+SELECT nummultirange(numrange(1,3), numrange(4,5)) - nummultirange(numrange(2,9));
+SELECT nummultirange(numrange(1,2), numrange(4,5)) - nummultirange(numrange(8,9));
+SELECT nummultirange(numrange(1,2), numrange(4,5)) - nummultirange(numrange(-2,0), numrange(8,9));
+
 -- TODO: more, see rangetypes.sql
 
 -- first, verify non-indexed results
