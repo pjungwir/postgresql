@@ -287,6 +287,27 @@ SELECT nummultirange(numrange(1,3), numrange(4,5)) - nummultirange(numrange(2,9)
 SELECT nummultirange(numrange(1,2), numrange(4,5)) - nummultirange(numrange(8,9));
 SELECT nummultirange(numrange(1,2), numrange(4,5)) - nummultirange(numrange(-2,0), numrange(8,9));
 
+SELECT 'empty'::numrange * nummultirange();
+SELECT nummultirange() * 'empty'::numrange;
+SELECT nummultirange() * nummultirange();
+SELECT 'empty'::numrange * nummultirange(numrange(1,2));
+SELECT numrange(1,2) * nummultirange();
+SELECT nummultirange(numrange(1,2)) * 'empty'::numrange;
+SELECT nummultirange() * numrange(1,2);
+SELECT nummultirange() * nummultirange(numrange(1,2));
+SELECT nummultirange(numrange(1,2)) * nummultirange();
+SELECT '{[1,3)}'::nummultirange * '{[1,5)}'::nummultirange;
+SELECT '{[1,3)}'::nummultirange * '{[0,5)}'::nummultirange;
+SELECT '{[1,3)}'::nummultirange * '{[0,2)}'::nummultirange;
+SELECT '{[1,3)}'::nummultirange * '{[2,5)}'::nummultirange;
+SELECT '{[1,4)}'::nummultirange * '{[2,3)}'::nummultirange;
+SELECT '{[1,4)}'::nummultirange * '{[0,2), [3,5)}'::nummultirange;
+SELECT '{[1,4), [7,10)}'::nummultirange * '{[0,8), [9,12)}'::nummultirange;
+SELECT '{[1,4), [7,10)}'::nummultirange * '{[9,12)}'::nummultirange;
+SELECT '{[1,4), [7,10)}'::nummultirange * '{[-5,-4), [5,6), [9,12)}'::nummultirange;
+SELECT '{[1,4), [7,10)}'::nummultirange * '{[0,2), [3,8), [9,12)}'::nummultirange;
+SELECT '{[1,4), [7,10)}'::nummultirange * '{[0,2), [3,8), [9,12)}'::nummultirange;
+
 -- TODO: more, see rangetypes.sql
 
 -- first, verify non-indexed results
