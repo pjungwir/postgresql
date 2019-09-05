@@ -87,6 +87,12 @@ extern MultirangeType *multirange_minus_multirange_internal(Oid mltrngtypoid,
 															RangeType **ranges1,
 															int32 range_count2,
 															RangeType **ranges2);
+extern MultirangeType *multirange_intersect_multirange_internal(Oid mltrngtypoid,
+																TypeCacheEntry *rangetyp,
+																int32 range_count1,
+																RangeType **ranges1,
+																int32 range_count2,
+																RangeType **ranges2);
 
 /* assorted support functions */
 extern TypeCacheEntry *multirange_get_typcache(FunctionCallInfo fcinfo,
@@ -95,5 +101,6 @@ extern void multirange_deserialize(MultirangeType *range,
 								   int32 *range_count, RangeType ***ranges);
 extern MultirangeType *make_multirange(Oid mltrngtypoid,
 		TypeCacheEntry *typcache, int32 range_count, RangeType **ranges);
+extern MultirangeType *make_empty_multirange(Oid mltrngtypoid, TypeCacheEntry *rangetyp);
 
 #endif							/* MULTIRANGETYPES_H */
