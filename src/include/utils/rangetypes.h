@@ -130,6 +130,8 @@ extern RangeType *range_union_internal(TypeCacheEntry *typcache, RangeType *r1,
 										RangeType *r2, bool strict);
 extern RangeType *range_minus_internal(TypeCacheEntry *typcache, RangeType *r1,
 									   RangeType *r2);
+extern RangeType *range_intersect_internal(TypeCacheEntry *typcache, RangeType *r1,
+										   RangeType *r2);
 
 /* assorted support functions */
 extern TypeCacheEntry *range_get_typcache(FunctionCallInfo fcinfo,
