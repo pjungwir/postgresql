@@ -10230,6 +10230,13 @@
   proname => 'range_agg', prokind => 'a', proisstrict => 'f',
   prorettype => 'anymultirange', proargtypes => 'anyrange',
   prosrc => 'aggregate_dummy' },
+{ oid => '8135', descr => 'range aggregate by intersecting',
+  proname => 'multirange_intersect_agg_transfn', prorettype => 'anymultirange',
+  proargtypes => 'anymultirange anymultirange', prosrc => 'multirange_intersect_agg_transfn'},
+{ oid => '8136', descr => 'range aggregate by intersecting',
+  proname => 'range_intersect_agg', prokind => 'a', proisstrict => 'f',
+  prorettype => 'anymultirange', proargtypes => 'anymultirange',
+  prosrc => 'aggregate_dummy'},
 
 # date, time, timestamp constructors
 { oid => '3846', descr => 'construct date',
