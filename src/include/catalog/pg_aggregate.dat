@@ -538,6 +538,11 @@
   aggtransfn => 'bytea_string_agg_transfn',
   aggfinalfn => 'bytea_string_agg_finalfn', aggtranstype => 'internal' },
 
+# range
+{ aggfnoid => 'range_agg(anyrange)', aggtransfn => 'range_agg_transfn',
+  aggfinalfn => 'range_agg_finalfn', aggfinalextra => 't',
+  aggtranstype => 'internal' },
+
 # json
 { aggfnoid => 'json_agg', aggtransfn => 'json_agg_transfn',
   aggfinalfn => 'json_agg_finalfn', aggtranstype => 'internal' },

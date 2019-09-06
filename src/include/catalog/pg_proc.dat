@@ -10213,6 +10213,16 @@
   prorettype => 'int8multirange', proargtypes => '_int8range',
   proallargtypes => '{_int8range}', proargmodes => '{v}',
   prosrc => 'multirange_constructor1' },
+{ oid => '8130', descr => 'aggregate transition function',
+  proname => 'range_agg_transfn', proisstrict => 'f', prorettype => 'internal',
+  proargtypes => 'internal anyrange', prosrc => 'range_agg_transfn' },
+{ oid => '8131', descr => 'aggregate final function',
+  proname => 'range_agg_finalfn', proisstrict => 'f', prorettype => 'anymultirange',
+  proargtypes => 'internal anyrange', prosrc => 'range_agg_finalfn' },
+{ oid => '8132', descr => 'combine aggregate input into a multirange',
+  proname => 'range_agg', prokind => 'a', proisstrict => 'f',
+  prorettype => 'anymultirange', proargtypes => 'anyrange',
+  prosrc => 'aggregate_dummy' },
 
 # date, time, timestamp constructors
 { oid => '3846', descr => 'construct date',

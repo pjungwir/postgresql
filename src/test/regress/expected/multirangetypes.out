@@ -1620,6 +1620,64 @@ SELECT '{[1,4), [7,10)}'::nummultirange * '{[0,2), [3,8), [9,12)}'::nummultirang
  {[1,2),[3,4),[7,8),[9,10)}
 (1 row)
 
+--
+-- range_agg function
+--
+create table reservations ( room_id integer not null, booked_during daterange );
+insert into reservations values
+-- 1: has a meets and a gap
+(1, daterange('2018-07-01', '2018-07-07')),
+(1, daterange('2018-07-07', '2018-07-14')),
+(1, daterange('2018-07-20', '2018-07-22')),
+-- 2: just a single row
+(2, daterange('2018-07-01', '2018-07-03')),
+-- 3: one null range
+(3, NULL),
+-- 4: two null ranges
+(4, NULL),
+(4, NULL),
+-- 5: a null range and a non-null range
+(5, NULL),
+(5, daterange('2018-07-01', '2018-07-03')),
+-- 6: has overlap
+(6, daterange('2018-07-01', '2018-07-07')),
+(6, daterange('2018-07-05', '2018-07-10')),
+-- 7: two ranges that meet: no gap or overlap
+(7, daterange('2018-07-01', '2018-07-07')),
+(7, daterange('2018-07-07', '2018-07-14')),
+-- 8: an empty range
+(8, 'empty'::daterange)
+;
+SELECT   room_id, range_agg(booked_during)
+FROM     reservations
+GROUP BY room_id
+ORDER BY room_id;
+ room_id |                     range_agg                     
+---------+---------------------------------------------------
+       1 | {[07-01-2018,07-14-2018),[07-20-2018,07-22-2018)}
+       2 | {[07-01-2018,07-03-2018)}
+       3 | 
+       4 | 
+       5 | {[07-01-2018,07-03-2018)}
+       6 | {[07-01-2018,07-10-2018)}
+       7 | {[07-01-2018,07-14-2018)}
+       8 | {}
+(8 rows)
+
+-- range_agg on a custom range type too
+SELECT  range_agg(r)
+FROM    (VALUES
+          ('[a,c]'::textrange),
+          ('[b,b]'::textrange),
+          ('[c,f]'::textrange),
+          ('[g,h)'::textrange),
+          ('[h,j)'::textrange)
+        ) t(r);
+   range_agg   
+---------------
+ {[a,f],[g,j)}
+(1 row)
+
 -- TODO: more, see rangetypes.sql
 -- first, verify non-indexed results
 SET enable_seqscan    = t;
