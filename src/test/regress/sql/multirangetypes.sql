@@ -351,6 +351,10 @@ FROM    (VALUES
           ('[h,j)'::textrange)
         ) t(r);
 
+select range_intersect_agg(nmr) from nummultirange_test;
+select range_intersect_agg(nmr) from nummultirange_test where false;
+select range_intersect_agg(nmr) from nummultirange_test where nmr @> 4.0;
+
 -- TODO: more, see rangetypes.sql
 
 -- first, verify non-indexed results
