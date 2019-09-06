@@ -353,6 +353,8 @@ FROM    (VALUES
 
 select range_intersect_agg(nmr) from nummultirange_test;
 select range_intersect_agg(nmr) from nummultirange_test where false;
+-- test with just one input:
+select range_intersect_agg(nmr) from (values ('{[1,2]}'::nummultirange)) t(nmr);
 select range_intersect_agg(nmr) from nummultirange_test where nmr @> 4.0;
 
 -- TODO: more, see rangetypes.sql

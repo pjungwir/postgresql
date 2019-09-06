@@ -1690,6 +1690,13 @@ select range_intersect_agg(nmr) from nummultirange_test where false;
  
 (1 row)
 
+-- test with just one input:
+select range_intersect_agg(nmr) from (values ('{[1,2]}'::nummultirange)) t(nmr);
+ range_intersect_agg 
+---------------------
+ {[1,2]}
+(1 row)
+
 select range_intersect_agg(nmr) from nummultirange_test where nmr @> 4.0;
  range_intersect_agg 
 ---------------------
