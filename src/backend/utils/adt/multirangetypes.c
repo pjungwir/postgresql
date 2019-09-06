@@ -1136,6 +1136,75 @@ multirange_intersect_multirange_internal(Oid mltrngtypoid, TypeCacheEntry *range
 	return make_multirange(mltrngtypoid, rangetyp, range_count3, ranges3);
 }
 
+/*
+ * range_agg_transfn: combine adjacent/overlapping ranges.
+ *
+ * All we do here is gather the input ranges into an array
+ * so that the finalfn can sort and combine them.
+ */
+Datum
+range_agg_transfn(PG_FUNCTION_ARGS)
+{
+	MemoryContext aggContext;
+	Oid rngtypoid;
+	ArrayBuildState *state;
+
+	if (!AggCheckCallContext(fcinfo, &aggContext))
+		elog(ERROR, "range_agg_transfn called in non-aggregate context");
+
+	rngtypoid = get_fn_expr_argtype(fcinfo->flinfo, 1);
+	if (!type_is_range(rngtypoid))
+		ereport(ERROR, (errmsg("range_agg must be called with a range")));
+
+	if (PG_ARGISNULL(0))
+		state = initArrayResult(rngtypoid, aggContext, false);
+	else
+		state = (ArrayBuildState *) PG_GETARG_POINTER(0);
+
+	/* skip NULLs */
+	if (!PG_ARGISNULL(1))
+		accumArrayResult(state, PG_GETARG_DATUM(1), false, rngtypoid, aggContext);
+
+	PG_RETURN_POINTER(state);
+}
+
+/*
+ * range_agg_finalfn: use our internal array to merge touching ranges.
+ */
+Datum
+range_agg_finalfn(PG_FUNCTION_ARGS)
+{
+	MemoryContext aggContext;
+	Oid	mltrngtypoid;
+	TypeCacheEntry *typcache;
+	ArrayBuildState *state;
+	int32	range_count;
+	RangeType	**ranges;
+	int	i;
+
+	if (!AggCheckCallContext(fcinfo, &aggContext))
+		elog(ERROR, "range_agg_finalfn called in non-aggregate context");
+
+	state = PG_ARGISNULL(0) ? NULL : (ArrayBuildState *) PG_GETARG_POINTER(0);
+	if (state == NULL)
+		PG_RETURN_NULL();
+
+	/* Also return NULL if we had zero inputs, like other aggregates */
+	range_count = state->nelems;
+	if (range_count == 0)
+		PG_RETURN_NULL();
+
+	mltrngtypoid = get_fn_expr_rettype(fcinfo->flinfo);
+	typcache = multirange_get_typcache(fcinfo, mltrngtypoid);
+
+	ranges = palloc0(range_count * sizeof(RangeType *));
+	for (i = 0; i < range_count; i++)
+		ranges[i] = DatumGetRangeTypeP(state->dvalues[i]);
+
+	PG_RETURN_MULTIRANGE_P(make_multirange(mltrngtypoid, typcache->rngtype, range_count, ranges));
+}
+
+
 /* multirange -> element type functions */
 
 /* extract lower bound value */
