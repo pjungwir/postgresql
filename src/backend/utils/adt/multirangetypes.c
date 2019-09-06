@@ -1204,6 +1204,45 @@ range_agg_finalfn(PG_FUNCTION_ARGS)
 	PG_RETURN_MULTIRANGE_P(make_multirange(mltrngtypoid, typcache->rngtype, range_count, ranges));
 }
 
+Datum
+multirange_intersect_agg_transfn(PG_FUNCTION_ARGS)
+{
+	MemoryContext aggContext;
+	Oid mltrngtypoid;
+	TypeCacheEntry *typcache;
+	MultirangeType	*result;
+	MultirangeType	*current;
+	int32	range_count1;
+	int32	range_count2;
+	RangeType	**ranges1;
+	RangeType	**ranges2;
+
+	if (!AggCheckCallContext(fcinfo, &aggContext))
+		elog(ERROR, "multirange_intersect_agg_transfn called in non-aggregate context");
+
+	mltrngtypoid = get_fn_expr_argtype(fcinfo->flinfo, 1);
+	if (!type_is_multirange(mltrngtypoid))
+		ereport(ERROR, (errmsg("range_intersect_agg must be called with a multirange")));
+
+	typcache = multirange_get_typcache(fcinfo, mltrngtypoid);
+
+	/* strictness ensures these are non-null */
+	result = PG_GETARG_MULTIRANGE_P(0);
+	current = PG_GETARG_MULTIRANGE_P(1);
+
+	multirange_deserialize(result, &range_count1, &ranges1);
+	multirange_deserialize(current, &range_count2, &ranges2);
+
+	result = multirange_intersect_multirange_internal(mltrngtypoid,
+													  typcache->rngtype,
+													  range_count1,
+													  ranges1,
+													  range_count2,
+													  ranges2);
+	PG_RETURN_RANGE_P(result);
+}
+
+
 /* multirange -> element type functions */
 
 /* extract lower bound value */
