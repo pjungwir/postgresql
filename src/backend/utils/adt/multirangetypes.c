@@ -1093,9 +1093,9 @@ multirange_intersect_multirange_internal(Oid mltrngtypoid, TypeCacheEntry *range
 	/*
 	 * For each range in mr1, keep intersecting until
 	 * the ranges in mr2 have passed it.
-	 * After an we assign what's left back to r1.
 	 * The parallel progress through mr1 and mr2 is similar to
-	 * multirange_minus_multirange_internal.
+	 * multirange_minus_multirange_internal,
+	 * but we don't have to assign back to r1.
 	 */
 	r2 = ranges2[0];
 	for (i1 = 0, i2 = 0; i1 < range_count1; i1++)
@@ -1203,7 +1203,6 @@ range_agg_finalfn(PG_FUNCTION_ARGS)
 
 	PG_RETURN_MULTIRANGE_P(make_multirange(mltrngtypoid, typcache->rngtype, range_count, ranges));
 }
-
 
 /* multirange -> element type functions */
 
