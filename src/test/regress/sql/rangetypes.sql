@@ -118,6 +118,10 @@ select numrange(1.0, 2.0) * numrange(2.0, 3.0);
 select numrange(1.0, 2.0) * numrange(1.5, 3.0);
 select numrange(1.0, 2.0) * numrange(2.5, 3.0);
 
+select range_intersect_agg(nr) from numrange_test;
+select range_intersect_agg(nr) from numrange_test where false;
+select range_intersect_agg(nr) from numrange_test where nr @> 4.0;
+
 create table numrange_test2(nr numrange);
 create index numrange_test2_hash_idx on numrange_test2 using hash (nr);
 

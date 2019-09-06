@@ -1220,6 +1220,35 @@ range_split_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2,
 	return false;
 }
 
+/* range -> range aggregate functions */
+
+Datum
+range_intersect_agg_transfn(PG_FUNCTION_ARGS)
+{
+	MemoryContext aggContext;
+	Oid rngtypoid;
+	TypeCacheEntry *typcache;
+	RangeType	*result;
+	RangeType	*current;
+
+	if (!AggCheckCallContext(fcinfo, &aggContext))
+		elog(ERROR, "range_intersect_agg_transfn called in non-aggregate context");
+
+	rngtypoid = get_fn_expr_argtype(fcinfo->flinfo, 1);
+	if (!type_is_range(rngtypoid))
+		ereport(ERROR, (errmsg("range_intersect_agg must be called with a range")));
+
+	typcache = range_get_typcache(fcinfo, rngtypoid);
+
+	/* strictness ensures these are non-null */
+	result = PG_GETARG_RANGE_P(0);
+	current = PG_GETARG_RANGE_P(1);
+
+	result = range_intersect_internal(typcache, result, current);
+	PG_RETURN_RANGE_P(result);
+}
+
+
 /* Btree support */
 
 /*
