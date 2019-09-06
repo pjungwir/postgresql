@@ -539,6 +539,8 @@
   aggfinalfn => 'bytea_string_agg_finalfn', aggtranstype => 'internal' },
 
 # range
+{ aggfnoid => 'range_intersect_agg(anyrange)',
+  aggtransfn => 'range_intersect_agg_transfn', aggtranstype => 'anyrange' },
 { aggfnoid => 'range_agg(anyrange)', aggtransfn => 'range_agg_transfn',
   aggfinalfn => 'range_agg_finalfn', aggfinalextra => 't',
   aggtranstype => 'internal' },

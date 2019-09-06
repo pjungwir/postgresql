@@ -9921,6 +9921,13 @@
 { oid => '3169', descr => 'restriction selectivity for range operators',
   proname => 'rangesel', provolatile => 's', prorettype => 'float8',
   proargtypes => 'internal oid internal int4', prosrc => 'rangesel' },
+{ oid => '8133', descr => 'range aggregate by intersecting',
+  proname => 'range_intersect_agg_transfn', prorettype => 'anyrange',
+  proargtypes => 'anyrange anyrange', prosrc => 'range_intersect_agg_transfn'},
+{ oid => '8134', descr => 'range aggregate by intersecting',
+  proname => 'range_intersect_agg', prokind => 'a', proisstrict => 'f',
+  prorettype => 'anyrange', proargtypes => 'anyrange',
+  prosrc => 'aggregate_dummy'},
 
 { oid => '3914', descr => 'convert an int4 range to canonical form',
   proname => 'int4range_canonical', prorettype => 'int4range',
