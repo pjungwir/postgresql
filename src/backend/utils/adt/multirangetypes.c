@@ -739,6 +739,18 @@ multirange_constructor0(PG_FUNCTION_ARGS)
 
 /* multirange union */
 Datum
+range_union_range(PG_FUNCTION_ARGS)
+{
+	RangeType	*r1 = PG_GETARG_RANGE_P(0);
+	RangeType *r2 = PG_GETARG_RANGE_P(1);
+	Oid	mltrngtypoid = get_fn_expr_rettype(fcinfo->flinfo);
+	TypeCacheEntry *typcache = multirange_get_typcache(fcinfo, mltrngtypoid);
+	MultirangeType *mr = make_multirange(mltrngtypoid, typcache->rngtype, 1, &r2);
+
+	PG_RETURN_MULTIRANGE_P(range_union_multirange_internal(typcache, r1, mr));
+}
+
+Datum
 range_union_multirange(PG_FUNCTION_ARGS)
 {
 	RangeType	*r = PG_GETARG_RANGE_P(0);
