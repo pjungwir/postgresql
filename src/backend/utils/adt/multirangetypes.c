@@ -1018,6 +1018,29 @@ multirange_minus_multirange_internal(Oid mltrngtypoid, TypeCacheEntry *rangetyp,
 
 /* multirange intersection */
 Datum
+range_intersect_range(PG_FUNCTION_ARGS)
+{
+	RangeType *r1 = PG_GETARG_RANGE_P(0);
+	RangeType *r2 = PG_GETARG_RANGE_P(1);
+	Oid			mltrngtypoid = get_fn_expr_rettype(fcinfo->flinfo);
+	TypeCacheEntry *typcache;
+	TypeCacheEntry *rangetyp;
+
+	typcache = multirange_get_typcache(fcinfo, mltrngtypoid);
+	rangetyp = typcache->rngtype;
+
+	if (RangeIsEmpty(r1) || RangeIsEmpty(r2))
+		PG_RETURN_MULTIRANGE_P(make_empty_multirange(mltrngtypoid, rangetyp));
+
+	PG_RETURN_MULTIRANGE_P(multirange_intersect_multirange_internal(mltrngtypoid,
+																	rangetyp,
+																	1,
+																	&r1,
+																	1,
+																	&r2));
+}
+
+Datum
 range_intersect_multirange(PG_FUNCTION_ARGS)
 {
 	RangeType *r1 = PG_GETARG_RANGE_P(0);
