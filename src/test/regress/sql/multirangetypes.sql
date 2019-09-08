@@ -439,4 +439,39 @@ create function multirangetypes_sql(q anymultirange, b anyarray, out c anyelemen
 select multirangetypes_sql(int4multirange(int4range(1,10)), ARRAY[2,20]);
 select multirangetypes_sql(nummultirange(numrange(1,10)), ARRAY[2,20]);  -- match failure
 
+--
+-- Arrays of multiranges
+--
+
+select ARRAY[nummultirange(numrange(1.1, 1.2)), nummultirange(numrange(12.3, 155.5))];
+
+create table i8mr_array (f1 int, f2 int8multirange[]);
+insert into i8mr_array values (42, array[int8multirange(int8range(1,10)), int8multirange(int8range(2,20))]);
+select * from i8mr_array;
+drop table i8mr_array;
+
+--
+-- Multiranges of arrays
+--
+
+select arraymultirange(arrayrange(ARRAY[1,2], ARRAY[2,1]));
+select arraymultirange(arrayrange(ARRAY[2,1], ARRAY[1,2]));  -- fail
+
+select array[1,1] <@ arraymultirange(arrayrange(array[1,2], array[2,1]));
+select array[1,3] <@ arraymultirange(arrayrange(array[1,2], array[2,1]));
+
+--
+-- Ranges of composites
+--
+
+create type two_ints as (a int, b int);
+create type two_ints_range as range (subtype = two_ints);
+
+-- with force_parallel_mode on, this exercises tqueue.c's range remapping
+select *, row_to_json(upper(t)) as u from
+  (values (two_ints_multirange(two_ints_range(row(1,2), row(3,4)))),
+          (two_ints_multirange(two_ints_range(row(5,6), row(7,8))))) v(t);
+
+drop type two_ints cascade;
+
 -- TODO: more, see rangetypes.sql
