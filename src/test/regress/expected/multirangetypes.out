@@ -1254,6 +1254,12 @@ select nummultirange(numrange(3,4), numrange(7,8)) >> nummultirange(numrange(1,2
  f
 (1 row)
 
+SELECT 'empty'::numrange @+ 'empty'::numrange;
+ ?column? 
+----------
+ {}
+(1 row)
+
 SELECT 'empty'::numrange @+ nummultirange();
  ?column? 
 ----------
@@ -1272,6 +1278,12 @@ SELECT nummultirange() @+ nummultirange();
  {}
 (1 row)
 
+SELECT 'empty'::numrange @+ numrange(1,2);
+ ?column? 
+----------
+ {[1,2)}
+(1 row)
+
 SELECT 'empty'::numrange @+ nummultirange(numrange(1,2));
  ?column? 
 ----------
@@ -1285,6 +1297,12 @@ SELECT numrange(1,2) @+ nummultirange();
 (1 row)
 
 SELECT nummultirange(numrange(1,2)) @+ 'empty'::numrange;
+ ?column? 
+----------
+ {[1,2)}
+(1 row)
+
+SELECT numrange(1,2) @+ 'empty'::numrange;
  ?column? 
 ----------
  {[1,2)}
@@ -1306,6 +1324,24 @@ SELECT nummultirange(numrange(1,2)) @+ nummultirange();
  ?column? 
 ----------
  {[1,2)}
+(1 row)
+
+SELECT numrange(1,2) @+ numrange(1,2);
+ ?column? 
+----------
+ {[1,2)}
+(1 row)
+
+SELECT numrange(1,2) @+ numrange(2,4);
+ ?column? 
+----------
+ {[1,4)}
+(1 row)
+
+SELECT numrange(1,2) @+ numrange(3,4);
+   ?column?    
+---------------
+ {[1,2),[3,4)}
 (1 row)
 
 SELECT nummultirange(numrange(1,2)) @+ nummultirange(numrange(1,2));
