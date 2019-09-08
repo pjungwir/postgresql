@@ -266,15 +266,23 @@ SELECT nummultirange(numrange(1,2), numrange(4,5)) @+ nummultirange(numrange(2,4
 SELECT nummultirange(numrange(1,2), numrange(4,5)) @+ nummultirange(numrange(3,4));
 SELECT nummultirange(numrange(1,2), numrange(4,5)) @+ nummultirange(numrange(0,9));
 
+SELECT 'empty'::numrange @- 'empty'::numrange;
 SELECT 'empty'::numrange @- nummultirange();
 SELECT nummultirange() @- 'empty'::numrange;
 SELECT nummultirange() @- nummultirange();
+SELECT 'empty'::numrange @- numrange(1,2);
 SELECT 'empty'::numrange @- nummultirange(numrange(1,2));
 SELECT numrange(1,2) @- nummultirange();
 SELECT nummultirange(numrange(1,2)) @- 'empty'::numrange;
+SELECT 'empty'::numrange @- numrange(1,2);
+SELECT numrange(1,2) @- 'empty'::numrange;
 SELECT nummultirange() @- numrange(1,2);
 SELECT nummultirange() @- nummultirange(numrange(1,2));
 SELECT nummultirange(numrange(1,2)) @- nummultirange();
+SELECT numrange(1,3) @- numrange(1,3);
+SELECT numrange(1,3) @- numrange(1,2);
+SELECT numrange(1,3) @- numrange(2,4);
+SELECT numrange(1,3) @- numrange(3,4);
 SELECT nummultirange(numrange(1,2), numrange(3,4)) @- nummultirange();
 SELECT nummultirange(numrange(1,2)) @- nummultirange(numrange(1,2));
 SELECT nummultirange(numrange(1,2)) @- nummultirange(numrange(2,4));
