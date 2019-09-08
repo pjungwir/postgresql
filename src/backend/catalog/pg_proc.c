@@ -102,8 +102,6 @@ ProcedureCreate(const char *procedureName,
 	bool		genericOutParam = false;
 	bool		anyrangeInParam = false;
 	bool		anyrangeOutParam = false;
-	bool		anymultirangeInParam = false;
-	bool		anymultirangeOutParam = false;
 	bool		internalInParam = false;
 	bool		internalOutParam = false;
 	Oid			variadicType = InvalidOid;
