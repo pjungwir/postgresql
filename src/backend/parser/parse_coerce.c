@@ -2626,20 +2626,22 @@ check_valid_polymorphic_signature(Oid ret_type,
 								  const Oid *declared_arg_types,
 								  int nargs)
 {
-	if (ret_type == ANYRANGEOID || ret_type == ANYCOMPATIBLERANGEOID)
+	if (ret_type == ANYRANGEOID || ret_type == ANYMULTIRANGEOID ||
+		ret_type == ANYCOMPATIBLERANGEOID)
 	{
 		/*
-		 * ANYRANGE requires an ANYRANGE input, else we can't tell which of
-		 * several range types with the same element type to use.  Likewise
-		 * for ANYCOMPATIBLERANGE.
+		 * ANYRANGE and ANYMULTIRANGE require an ANYRANGE or ANYMULTIRANGE input,
+		 * else we can't tell which of several range types with the same element
+		 * type to use. Likewise for ANYCOMPATIBLERANGE.
 		 */
 		for (int i = 0; i < nargs; i++)
 		{
-			if (declared_arg_types[i] == ret_type)
+			if (declared_arg_types[i] == ANYRANGEOID ||
+				declared_arg_types[i] == ANYMULTIRANGEOID)
 				return NULL;	/* OK */
 		}
-		return psprintf(_("A result of type %s requires at least one input of type %s."),
-						format_type_be(ret_type), format_type_be(ret_type));
+		return psprintf(_("A result of type %s requires at least one input of type anyrange or anymultirange."),
+						format_type_be(ret_type));
 	}
 	else if (IsPolymorphicTypeFamily1(ret_type))
 	{

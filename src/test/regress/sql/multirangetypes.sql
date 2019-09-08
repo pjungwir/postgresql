@@ -403,3 +403,40 @@ RESET enable_indexscan;
 RESET enable_bitmapscan;
 
 -- TODO: more, see rangetypes.sql
+
+--
+-- Test polymorphic type system
+--
+
+create function anyarray_anymultirange_func(a anyarray, r anymultirange)
+  returns anyelement as 'select $1[1] + lower($2);' language sql;
+
+select anyarray_anymultirange_func(ARRAY[1,2], int4multirange(int4range(10,20)));
+
+-- should fail
+select anyarray_anymultirange_func(ARRAY[1,2], nummultirange(numrange(10,20)));
+
+drop function anyarray_anymultirange_func(anyarray, anymultirange);
+
+-- should fail
+create function bogus_func(anyelement)
+  returns anymultirange as 'select int4multirange(int4range(1,10))' language sql;
+
+-- should fail
+create function bogus_func(int)
+  returns anymultirange as 'select int4multirange(int4range(1,10))' language sql;
+
+create function range_add_bounds(anymultirange)
+  returns anyelement as 'select lower($1) + upper($1)' language sql;
+
+select range_add_bounds(int4multirange(int4range(1, 17)));
+select range_add_bounds(nummultirange(numrange(1.0001, 123.123)));
+
+create function multirangetypes_sql(q anymultirange, b anyarray, out c anyelement)
+  as $$ select upper($1) + $2[1] $$
+  language sql;
+
+select multirangetypes_sql(int4multirange(int4range(1,10)), ARRAY[2,20]);
+select multirangetypes_sql(nummultirange(numrange(1,10)), ARRAY[2,20]);  -- match failure
+
+-- TODO: more, see rangetypes.sql
