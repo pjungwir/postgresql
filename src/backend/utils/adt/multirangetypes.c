@@ -828,6 +828,29 @@ MultirangeType *range_union_multirange_internal(TypeCacheEntry *typcache, RangeT
 
 /* multirange minus */
 Datum
+range_minus_range(PG_FUNCTION_ARGS)
+{
+	RangeType *r1 = PG_GETARG_RANGE_P(0);
+	RangeType *r2 = PG_GETARG_RANGE_P(1);
+	Oid			mltrngtypoid = get_fn_expr_rettype(fcinfo->flinfo);
+	TypeCacheEntry *typcache;
+	TypeCacheEntry *rangetyp;
+
+	typcache = multirange_get_typcache(fcinfo, mltrngtypoid);
+	rangetyp = typcache->rngtype;
+
+	if (RangeIsEmpty(r1) || RangeIsEmpty(r2))
+		PG_RETURN_MULTIRANGE_P(make_multirange(mltrngtypoid, rangetyp, 1, &r1));
+
+	PG_RETURN_MULTIRANGE_P(multirange_minus_multirange_internal(mltrngtypoid,
+																rangetyp,
+																1,
+																&r1,
+																1,
+																&r2));
+}
+
+Datum
 range_minus_multirange(PG_FUNCTION_ARGS)
 {
 	RangeType *r = PG_GETARG_RANGE_P(0);
