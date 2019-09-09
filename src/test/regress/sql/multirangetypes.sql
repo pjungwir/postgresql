@@ -474,4 +474,14 @@ select *, row_to_json(upper(t)) as u from
 
 drop type two_ints cascade;
 
+--
+-- Check behavior when subtype lacks a hash function
+--
+
+set enable_sort = off;  -- try to make it pick a hash setop implementation
+
+select '{(2,5)}'::cashmultirange except select '{(5,6)}'::cashmultirange;
+
+reset enable_sort;
+
 -- TODO: more, see rangetypes.sql
