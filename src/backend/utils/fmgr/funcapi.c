@@ -564,6 +564,9 @@ resolve_polymorphic_tupdesc(TupleDesc tupdesc, oidvector *declared_args,
 	bool		have_anyelement_result = false;
 	bool		have_anyarray_result = false;
 	bool		have_anyrange_result = false;
+	bool		have_anymultirange_result = false;
+	bool		have_anynonarray = false;
+	bool		have_anyenum = false;
 	polymorphic_actuals poly_actuals;
 	Oid			anycollation = InvalidOid;
 	int			i;
@@ -586,6 +589,9 @@ resolve_polymorphic_tupdesc(TupleDesc tupdesc, oidvector *declared_args,
 			case ANYRANGEOID:
 				have_polymorphic_result = true;
 				have_anyrange_result = true;
+				break;
+			case ANYMULTIRANGEOID:
+				have_anymultirange_result = true;
 				break;
 			default:
 				break;
@@ -636,6 +642,10 @@ resolve_polymorphic_tupdesc(TupleDesc tupdesc, oidvector *declared_args,
 						return false;
 				}
 				break;
+			case ANYMULTIRANGEOID:
+				if (!OidIsValid(anymultirange_type))
+					anymultirange_type = get_call_expr_argtype(call_expr, i);
+				break;
 			default:
 				break;
 		}
@@ -650,6 +660,9 @@ resolve_polymorphic_tupdesc(TupleDesc tupdesc, oidvector *declared_args,
 
 	if (have_anyrange_result && !OidIsValid(poly_actuals.anyrange_type))
 		resolve_anyrange_from_others(&poly_actuals);
+
+	if (have_anymultirange_result && !OidIsValid(poly_actuals.anymultirange_type))
+		resolve_anymultirange_from_others(&poly_actuals);
 
 	/*
 	 * Identify the collation to use for polymorphic OUT parameters. (It'll
@@ -708,6 +721,14 @@ resolve_polymorphic_tupdesc(TupleDesc tupdesc, oidvector *declared_args,
 								   0);
 				/* no collation should be attached to a range type */
 				break;
+			case ANYMULTIRANGEOID:
+				TupleDescInitEntry(tupdesc, i + 1,
+								   NameStr(att->attname),
+								   anymultirange_type,
+								   -1,
+								   0);
+				/* no collation should be attached to a multirange type */
+				break;
 			default:
 				break;
 		}
@@ -735,6 +756,7 @@ resolve_polymorphic_argtypes(int numargs, Oid *argtypes, char *argmodes,
 	bool		have_anyelement_result = false;
 	bool		have_anyarray_result = false;
 	bool		have_anyrange_result = false;
+	bool		have_anymultirange_result = false;
 	polymorphic_actuals poly_actuals;
 	int			inargno;
 	int			i;
@@ -808,6 +830,21 @@ resolve_polymorphic_argtypes(int numargs, Oid *argtypes, char *argmodes,
 					argtypes[i] = poly_actuals.anyrange_type;
 				}
 				break;
+			case ANYMULTIRANGEOID:
+				if (argmode == PROARGMODE_OUT || argmode == PROARGMODE_TABLE)
+					have_anymultirange_result = true;
+				else
+				{
+					if (!OidIsValid(anymultirange_type))
+					{
+						anymultirange_type = get_call_expr_argtype(call_expr,
+															  inargno);
+						if (!OidIsValid(anymultirange_type))
+							return false;
+					}
+					argtypes[i] = anymultirange_type;
+				}
+				break;
 			default:
 				break;
 		}
@@ -829,6 +866,9 @@ resolve_polymorphic_argtypes(int numargs, Oid *argtypes, char *argmodes,
 	if (have_anyrange_result && !OidIsValid(poly_actuals.anyrange_type))
 		resolve_anyrange_from_others(&poly_actuals);
 
+	if (have_anymultirange_result && !OidIsValid(poly_actuals.anymultirange_type))
+		resolve_anymultirange_from_others(&poly_actuals);
+
 	/* And finally replace the output column types as needed */
 	for (i = 0; i < numargs; i++)
 	{
@@ -844,6 +884,9 @@ resolve_polymorphic_argtypes(int numargs, Oid *argtypes, char *argmodes,
 				break;
 			case ANYRANGEOID:
 				argtypes[i] = poly_actuals.anyrange_type;
+				break;
+			case ANYMULTIRANGEOID:
+				argtypes[i] = anymultirange_type;
 				break;
 			default:
 				break;

@@ -484,4 +484,33 @@ select '{(2,5)}'::cashmultirange except select '{(5,6)}'::cashmultirange;
 
 reset enable_sort;
 
--- TODO: more, see rangetypes.sql
+--
+-- OUT/INOUT/TABLE functions
+--
+
+create function mr_outparam_succeed(i anymultirange, out r anymultirange, out t text)
+  as $$ select $1, 'foo'::text $$ language sql;
+
+select * from mr_outparam_succeed(int4multirange(int4range(1,2)));
+
+create function mr_inoutparam_succeed(out i anyelement, inout r anymultirange)
+  as $$ select upper($1), $1 $$ language sql;
+
+select * from mr_inoutparam_succeed(int4multirange(int4range(1,2)));
+
+create function mr_table_succeed(i anyelement, r anymultirange) returns table(i anyelement, r anymultirange)
+  as $$ select $1, $2 $$ language sql;
+
+select * from mr_table_succeed(123, int4multirange(int4range(1,11)));
+
+-- should fail
+create function mr_outparam_fail(i anyelement, out r anymultirange, out t text)
+  as $$ select '[1,10]', 'foo' $$ language sql;
+
+--should fail
+create function mr_inoutparam_fail(inout i anyelement, out r anymultirange)
+  as $$ select $1, '[1,10]' $$ language sql;
+
+--should fail
+create function mr_table_fail(i anyelement) returns table(i anyelement, r anymultirange)
+  as $$ select $1, '[1,10]' $$ language sql;
