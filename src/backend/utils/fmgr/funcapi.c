@@ -566,6 +566,9 @@ resolve_polymorphic_tupdesc(TupleDesc tupdesc, oidvector *declared_args,
 	bool		have_anyelement_result = false;
 	bool		have_anyarray_result = false;
 	bool		have_anyrange_result = false;
+	bool		have_anymultirange_result = false;
+	bool		have_anynonarray = false;
+	bool		have_anyenum = false;
 	bool		have_anycompatible_result = false;
 	bool		have_anycompatible_array_result = false;
 	bool		have_anycompatible_range_result = false;
@@ -594,6 +597,9 @@ resolve_polymorphic_tupdesc(TupleDesc tupdesc, oidvector *declared_args,
 				have_polymorphic_result = true;
 				have_anyrange_result = true;
 				break;
+			case ANYMULTIRANGEOID:
+				have_polymorphic_result = true;
+				have_anymultirange_result = true;
 			case ANYCOMPATIBLEOID:
 			case ANYCOMPATIBLENONARRAYOID:
 				have_polymorphic_result = true;
@@ -660,6 +666,15 @@ resolve_polymorphic_tupdesc(TupleDesc tupdesc, oidvector *declared_args,
 						return false;
 				}
 				break;
+			case ANYMULTIRANGEOID:
+				if (!OidIsValid(anymultirange_type))
+				{
+					poly_actuals.anymultirange_type =
+						get_call_expr_argtype(call_expr, i);
+					if (!OidIsValid(poly_actuals.anymultirange_type))
+						return false;
+				}
+				break;
 			case ANYCOMPATIBLEOID:
 			case ANYCOMPATIBLENONARRAYOID:
 				if (!OidIsValid(anyc_actuals.anyelement_type))
@@ -702,6 +717,9 @@ resolve_polymorphic_tupdesc(TupleDesc tupdesc, oidvector *declared_args,
 
 	if (have_anyrange_result && !OidIsValid(poly_actuals.anyrange_type))
 		resolve_anyrange_from_others(&poly_actuals);
+
+	if (have_anymultirange_result && !OidIsValid(poly_actuals.anymultirange_type))
+		resolve_anymultirange_from_others(&poly_actuals);
 
 	if (have_anycompatible_result && !OidIsValid(anyc_actuals.anyelement_type))
 		resolve_anyelement_from_others(&anyc_actuals);
@@ -780,6 +798,14 @@ resolve_polymorphic_tupdesc(TupleDesc tupdesc, oidvector *declared_args,
 								   0);
 				/* no collation should be attached to a range type */
 				break;
+			case ANYMULTIRANGEOID:
+				TupleDescInitEntry(tupdesc, i + 1,
+								   NameStr(att->attname),
+								   poly_actuals.anymultirange_type,
+								   -1,
+								   0);
+				/* no collation should be attached to a multirange type */
+				break;
 			case ANYCOMPATIBLEOID:
 			case ANYCOMPATIBLENONARRAYOID:
 				TupleDescInitEntry(tupdesc, i + 1,
@@ -834,6 +860,7 @@ resolve_polymorphic_argtypes(int numargs, Oid *argtypes, char *argmodes,
 	bool		have_anyelement_result = false;
 	bool		have_anyarray_result = false;
 	bool		have_anyrange_result = false;
+	bool		have_anymultirange_result = false;
 	bool		have_anycompatible_result = false;
 	bool		have_anycompatible_array_result = false;
 	bool		have_anycompatible_range_result = false;
@@ -912,6 +939,22 @@ resolve_polymorphic_argtypes(int numargs, Oid *argtypes, char *argmodes,
 					argtypes[i] = poly_actuals.anyrange_type;
 				}
 				break;
+			case ANYMULTIRANGEOID:
+				if (argmode == PROARGMODE_OUT || argmode == PROARGMODE_TABLE)
+					have_polymorphic_result = true;
+					have_anymultirange_result = true;
+				else
+				{
+					if (!OidIsValid(anymultirange_type))
+					{
+						poly_actuals.anymultirange_type =
+							get_call_expr_argtype(call_expr, inargno);
+						if (!OidIsValid(poly_actuals.anymultirange_type))
+							return false;
+					}
+					argtypes[i] = poly_actuals.anymultirange_type;
+				}
+				break;
 			case ANYCOMPATIBLEOID:
 			case ANYCOMPATIBLENONARRAYOID:
 				if (argmode == PROARGMODE_OUT || argmode == PROARGMODE_TABLE)
@@ -988,6 +1031,9 @@ resolve_polymorphic_argtypes(int numargs, Oid *argtypes, char *argmodes,
 	if (have_anyrange_result && !OidIsValid(poly_actuals.anyrange_type))
 		resolve_anyrange_from_others(&poly_actuals);
 
+	if (have_anymultirange_result && !OidIsValid(poly_actuals.anymultirange_type))
+		resolve_anymultirange_from_others(&poly_actuals);
+
 	if (have_anycompatible_result && !OidIsValid(anyc_actuals.anyelement_type))
 		resolve_anyelement_from_others(&anyc_actuals);
 
@@ -1013,6 +1059,8 @@ resolve_polymorphic_argtypes(int numargs, Oid *argtypes, char *argmodes,
 			case ANYRANGEOID:
 				argtypes[i] = poly_actuals.anyrange_type;
 				break;
+			case ANYMULTIRANGEOID:
+				argtypes[i] = poly_actuals.anymultirange_type;
 			case ANYCOMPATIBLEOID:
 			case ANYCOMPATIBLENONARRAYOID:
 				argtypes[i] = anyc_actuals.anyelement_type;
