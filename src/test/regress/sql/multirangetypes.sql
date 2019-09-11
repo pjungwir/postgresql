@@ -488,16 +488,36 @@ reset enable_sort;
 -- OUT/INOUT/TABLE functions
 --
 
+-- infer anymultirange from anymultirange
 create function mr_outparam_succeed(i anymultirange, out r anymultirange, out t text)
   as $$ select $1, 'foo'::text $$ language sql;
 
 select * from mr_outparam_succeed(int4multirange(int4range(1,2)));
 
+-- infer anyarray from anymultirange
+create function mr_outparam_succeed2(i anymultirange, out r anyarray, out t text)
+  as $$ select ARRAY[upper($1)], 'foo'::text $$ language sql;
+
+select * from mr_outparam_succeed2(int4multirange(int4range(1,2)));
+
+-- infer anyrange from anymultirange
+create function mr_outparam_succeed3(i anymultirange, out r anyrange, out t text)
+  as $$ select range_merge($1), 'foo'::text $$ language sql;
+select * from mr_outparam_succeed3(int4multirange(int4range(1,2)));
+
+-- infer anymultirange from anyrange
+create function mr_outparam_succeed4(i anyrange, out r anymultirange, out t text)
+  as $$ select $1 @+ $1, 'foo'::text $$ language sql;
+
+select * from mr_outparam_succeed4(int4range(1,2));
+
+-- infer anyelement from anymultirange
 create function mr_inoutparam_succeed(out i anyelement, inout r anymultirange)
   as $$ select upper($1), $1 $$ language sql;
 
 select * from mr_inoutparam_succeed(int4multirange(int4range(1,2)));
 
+-- infer anyelement+anymultirange from anyelement+anymultirange
 create function mr_table_succeed(i anyelement, r anymultirange) returns table(i anyelement, r anymultirange)
   as $$ select $1, $2 $$ language sql;
 

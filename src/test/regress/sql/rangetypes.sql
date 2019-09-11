@@ -532,6 +532,7 @@ reset enable_sort;
 -- OUT/INOUT/TABLE functions
 --
 
+-- infer anyrange from anyrange
 create function outparam_succeed(i anyrange, out r anyrange, out t text)
   as $$ select $1, 'foo'::text $$ language sql;
 
@@ -543,6 +544,13 @@ create function outparam2_succeed(r anyrange, out lu anyarray, out ul anyarray)
 
 select * from outparam2_succeed(int4range(1,11));
 
+-- infer anyarray from anyrange
+create function outparam_succeed2(i anyrange, out r anyarray, out t text)
+  as $$ select ARRAY[upper($1)], 'foo'::text $$ language sql;
+
+select * from outparam_succeed2(int4range(int4range(1,2)));
+
+-- infer anyelement from anyrange
 create function inoutparam_succeed(out i anyelement, inout r anyrange)
   as $$ select upper($1), $1 $$ language sql;
 
