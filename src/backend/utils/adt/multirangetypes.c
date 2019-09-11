@@ -2255,6 +2255,29 @@ multirange_gt(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(cmp > 0);
 }
 
+/* multirange -> range functions */
+
+/* Find the smallest range that includes everything in the multirange */
+Datum
+range_merge_from_multirange(PG_FUNCTION_ARGS)
+{
+	MultirangeType	*mr = PG_GETARG_MULTIRANGE_P(0);
+	Oid	mltrngtypoid = MultirangeTypeGetOid(mr);
+	TypeCacheEntry *typcache;
+	int32			range_count;
+	RangeType	  **ranges;
+
+	typcache = multirange_get_typcache(fcinfo, mltrngtypoid);
+
+	if (MultirangeIsEmpty(mr))
+		PG_RETURN_RANGE_P(make_empty_range(typcache->rngtype));
+
+	multirange_deserialize(mr, &range_count, &ranges);
+
+	PG_RETURN_RANGE_P(range_union_internal(typcache->rngtype, ranges[0],
+																				 ranges[range_count - 1], false));
+}
+
 /* Hash support */
 
 /* hash a multirange value */
