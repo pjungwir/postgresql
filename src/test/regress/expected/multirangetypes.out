@@ -1380,6 +1380,24 @@ SELECT nummultirange(numrange(1,2), numrange(4,5)) @+ nummultirange(numrange(0,9
  {[0,9)}
 (1 row)
 
+SELECT range_merge(nummultirange());
+ range_merge 
+-------------
+ empty
+(1 row)
+
+SELECT range_merge(nummultirange(numrange(1,2)));
+ range_merge 
+-------------
+ [1,2)
+(1 row)
+
+SELECT range_merge(nummultirange(numrange(1,2), numrange(7,8)));
+ range_merge 
+-------------
+ [1,8)
+(1 row)
+
 SELECT 'empty'::numrange @- 'empty'::numrange;
  ?column? 
 ----------
