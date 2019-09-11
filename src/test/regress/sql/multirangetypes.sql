@@ -266,6 +266,10 @@ SELECT nummultirange(numrange(1,2), numrange(4,5)) @+ nummultirange(numrange(2,4
 SELECT nummultirange(numrange(1,2), numrange(4,5)) @+ nummultirange(numrange(3,4));
 SELECT nummultirange(numrange(1,2), numrange(4,5)) @+ nummultirange(numrange(0,9));
 
+SELECT range_merge(nummultirange());
+SELECT range_merge(nummultirange(numrange(1,2)));
+SELECT range_merge(nummultirange(numrange(1,2), numrange(7,8)));
+
 SELECT 'empty'::numrange @- 'empty'::numrange;
 SELECT 'empty'::numrange @- nummultirange();
 SELECT nummultirange() @- 'empty'::numrange;
