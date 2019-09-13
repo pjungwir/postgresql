@@ -2189,32 +2189,70 @@ set enable_nestloop to default;
 set enable_hashjoin to default;
 set enable_mergejoin to default;
 DROP TABLE nummultirange_test2;
--- first, verify non-indexed results
-SET enable_seqscan    = t;
-SET enable_indexscan  = f;
-SET enable_bitmapscan = f;
-select * from nummultirange_test where nmr = '{[3,]}';
-  nmr   
---------
- {[3,)}
+--
+-- Test user-defined multirange of floats
+--
+select '{[123.001, 5.e9)}'::float8multirange @> 888.882::float8;
+ ?column? 
+----------
+ t
 (1 row)
 
--- TODO: more, see rangetypes.sql
--- now check same queries using index
-SET enable_seqscan    = f;
-SET enable_indexscan  = t;
-SET enable_bitmapscan = f;
-select * from nummultirange_test where nmr = '{[3,]}';
-  nmr   
---------
- {[3,)}
+create table float8multirange_test(f8mr float8multirange, i int);
+insert into float8multirange_test values(float8multirange(float8range(-100.00007, '1.111113e9')), 42);
+select * from float8multirange_test;
+           f8mr            | i  
+---------------------------+----
+ {[-100.00007,1111113000)} | 42
 (1 row)
 
--- TODO: more, see rangetypes.sql
-RESET enable_seqscan;
-RESET enable_indexscan;
-RESET enable_bitmapscan;
--- TODO: more, see rangetypes.sql
+drop table float8multirange_test;
+--
+-- Test multirange types over domains
+--
+create domain mydomain as int4;
+create type mydomainrange as range(subtype=mydomain);
+select '{[4,50)}'::mydomainmultirange @> 7::mydomain;
+ ?column? 
+----------
+ t
+(1 row)
+
+drop domain mydomain cascade;
+NOTICE:  drop cascades to type mydomainrange
+--
+-- Test domains over multirange types
+--
+create domain restrictedmultirange as int4multirange check (upper(value) < 10);
+select '{[4,5)}'::restrictedmultirange @> 7;
+ ?column? 
+----------
+ f
+(1 row)
+
+select '{[4,50)}'::restrictedmultirange @> 7; -- should fail
+ERROR:  value for domain restrictedmultirange violates check constraint "restrictedmultirange_check"
+drop domain restrictedmultirange;
+--
+-- Test multiple multirange types over the same subtype
+--
+create type textrange1 as range(subtype=text, collation="C");
+create type textrange2 as range(subtype=text, collation="C");
+select textmultirange1(textrange2('a','Z'));  -- should fail
+ERROR:  function textmultirange1(textrange2) does not exist
+LINE 1: select textmultirange1(textrange2('a','Z'));
+               ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+select textmultirange1(textrange1('a','Z')) @> 'b'::text;
+ERROR:  range lower bound must be less than or equal to range upper bound
+select textmultirange2(textrange2('a','z')) @> 'b'::text;
+ ?column? 
+----------
+ t
+(1 row)
+
+drop type textrange1;
+drop type textrange2;
 --
 -- Test polymorphic type system
 --
