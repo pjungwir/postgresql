@@ -429,7 +429,37 @@ select range_intersect_agg(nmr) from nummultirange_test where false;
 select range_intersect_agg(nmr) from (values ('{[1,2]}'::nummultirange)) t(nmr);
 select range_intersect_agg(nmr) from nummultirange_test where nmr @> 4.0;
 
--- TODO: more, see rangetypes.sql
+create table nummultirange_test2(nmr nummultirange);
+create index nummultirange_test2_hash_idx on nummultirange_test2 using hash (nmr);
+
+INSERT INTO nummultirange_test2 VALUES('{[, 5)}');
+INSERT INTO nummultirange_test2 VALUES(nummultirange(numrange(1.1, 2.2)));
+INSERT INTO nummultirange_test2 VALUES(nummultirange(numrange(1.1, 2.2)));
+INSERT INTO nummultirange_test2 VALUES(nummultirange(numrange(1.1, 2.2,'()')));
+INSERT INTO nummultirange_test2 VALUES('{}');
+
+select * from nummultirange_test2 where nmr = '{}';
+select * from nummultirange_test2 where nmr = nummultirange(numrange(1.1, 2.2));
+select * from nummultirange_test2 where nmr = nummultirange(numrange(1.1, 2.3));
+
+set enable_nestloop=t;
+set enable_hashjoin=f;
+set enable_mergejoin=f;
+select * from nummultirange_test natural join nummultirange_test2 order by nmr;
+set enable_nestloop=f;
+set enable_hashjoin=t;
+set enable_mergejoin=f;
+select * from nummultirange_test natural join nummultirange_test2 order by nmr;
+set enable_nestloop=f;
+set enable_hashjoin=f;
+set enable_mergejoin=t;
+select * from nummultirange_test natural join nummultirange_test2 order by nmr;
+
+set enable_nestloop to default;
+set enable_hashjoin to default;
+set enable_mergejoin to default;
+
+DROP TABLE nummultirange_test2;
 
 -- first, verify non-indexed results
 SET enable_seqscan    = t;
