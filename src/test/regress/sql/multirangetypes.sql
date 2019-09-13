@@ -461,28 +461,47 @@ set enable_mergejoin to default;
 
 DROP TABLE nummultirange_test2;
 
--- first, verify non-indexed results
-SET enable_seqscan    = t;
-SET enable_indexscan  = f;
-SET enable_bitmapscan = f;
+--
+-- Test user-defined multirange of floats
+--
 
-select * from nummultirange_test where nmr = '{[3,]}';
+select '{[123.001, 5.e9)}'::float8multirange @> 888.882::float8;
+create table float8multirange_test(f8mr float8multirange, i int);
+insert into float8multirange_test values(float8multirange(float8range(-100.00007, '1.111113e9')), 42);
+select * from float8multirange_test;
+drop table float8multirange_test;
 
--- TODO: more, see rangetypes.sql
+--
+-- Test multirange types over domains
+--
 
--- now check same queries using index
-SET enable_seqscan    = f;
-SET enable_indexscan  = t;
-SET enable_bitmapscan = f;
-select * from nummultirange_test where nmr = '{[3,]}';
+create domain mydomain as int4;
+create type mydomainrange as range(subtype=mydomain);
+select '{[4,50)}'::mydomainmultirange @> 7::mydomain;
+drop domain mydomain cascade;
 
--- TODO: more, see rangetypes.sql
+--
+-- Test domains over multirange types
+--
 
-RESET enable_seqscan;
-RESET enable_indexscan;
-RESET enable_bitmapscan;
+create domain restrictedmultirange as int4multirange check (upper(value) < 10);
+select '{[4,5)}'::restrictedmultirange @> 7;
+select '{[4,50)}'::restrictedmultirange @> 7; -- should fail
+drop domain restrictedmultirange;
 
--- TODO: more, see rangetypes.sql
+--
+-- Test multiple multirange types over the same subtype
+--
+
+create type textrange1 as range(subtype=text, collation="C");
+create type textrange2 as range(subtype=text, collation="C");
+
+select textmultirange1(textrange2('a','Z'));  -- should fail
+select textmultirange1(textrange1('a','Z')) @> 'b'::text;
+select textmultirange2(textrange2('a','z')) @> 'b'::text;
+
+drop type textrange1;
+drop type textrange2;
 
 --
 -- Test polymorphic type system

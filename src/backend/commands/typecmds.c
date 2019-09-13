@@ -741,7 +741,8 @@ DefineDomain(CreateDomainStmt *stmt)
 		typtype != TYPTYPE_COMPOSITE &&
 		typtype != TYPTYPE_DOMAIN &&
 		typtype != TYPTYPE_ENUM &&
-		typtype != TYPTYPE_RANGE)
+		typtype != TYPTYPE_RANGE &&
+		typtype != TYPTYPE_MULTIRANGE)
 		ereport(ERROR,
 				(errcode(ERRCODE_DATATYPE_MISMATCH),
 				 errmsg("\"%s\" is not a valid base type for a domain",
