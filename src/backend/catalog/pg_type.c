@@ -37,9 +37,8 @@
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
-static int
-makeUniqueTypeName(char *dest, const char *typeName, size_t namelen, Oid typeNamespace,
-		bool tryOriginalName);
+static int	makeUniqueTypeName(char *dest, const char *typeName, size_t namelen,
+							   Oid typeNamespace, bool tryOriginalName);
 
 /* Potentially set by pg_upgrade_support functions */
 Oid			binary_upgrade_next_pg_type_oid = InvalidOid;
@@ -954,10 +953,10 @@ makeMultirangeTypeName(const char *rangeTypeName, Oid typeNamespace)
 	int			underscores;
 
 	/*
-	 * If the range type name contains "range" then change that to "multirange".
-	 * Otherwise add "multirange" to the end.
-	 * After that, prepend underscores as needed until we make a name that
-	 * doesn't collide with anything...
+	 * If the range type name contains "range" then change that to
+	 * "multirange". Otherwise add "multirange" to the end. After that,
+	 * prepend underscores as needed until we make a name that doesn't collide
+	 * with anything...
 	 */
 	strlcpy(mltrng, rangeTypeName, NAMEDATALEN);
 	rangestr = strstr(rangeTypeName, "range");
@@ -968,7 +967,9 @@ makeMultirangeTypeName(const char *rangeTypeName, Oid typeNamespace)
 		strlcpy(mltrng + rangeoffset, "multi", NAMEDATALEN - rangeoffset);
 		strlcpy(mltrng + rangeoffset + 5, rangestr, NAMEDATALEN - rangeoffset - 5);
 		namelen += 5;
-	} else {
+	}
+	else
+	{
 		strlcpy(mltrng + namelen, "multirange", NAMEDATALEN - namelen);
 		namelen += 10;
 	}
@@ -991,7 +992,7 @@ makeMultirangeTypeName(const char *rangeTypeName, Oid typeNamespace)
  */
 int
 makeUniqueTypeName(char *dest, const char *typeName, size_t namelen, Oid typeNamespace,
-		bool tryOriginalName)
+				   bool tryOriginalName)
 {
 	int			i;
 
@@ -1016,11 +1017,6 @@ makeUniqueTypeName(char *dest, const char *typeName, size_t namelen, Oid typeNam
 				strcpy(dest + i, typeName);
 			else
 			{
-				// Note to reviewer:
-				// this was memcpy before, not strlcpy,
-				// but that can copy from past the end of typeName.
-				// Not a big deal problaby but still worth changing.
-				// I can do it in a different commit if you like.
 				strlcpy(dest + i, typeName, NAMEDATALEN);
 				truncate_identifier(dest, NAMEDATALEN, false);
 			}
@@ -1033,5 +1029,3 @@ makeUniqueTypeName(char *dest, const char *typeName, size_t namelen, Oid typeNam
 
 	return i;
 }
-
-

@@ -109,7 +109,7 @@ Oid			binary_upgrade_next_array_pg_type_oid = InvalidOid;
 static void makeRangeConstructors(const char *name, Oid namespace,
 								  Oid rangeOid, Oid subtype);
 static void makeMultirangeConstructors(const char *name, Oid namespace,
-								  Oid multirangeOid, Oid rangeArrayOid);
+									   Oid multirangeOid, Oid rangeArrayOid);
 static Oid	findTypeInputFunction(List *procname, Oid typeOid);
 static Oid	findTypeOutputFunction(List *procname, Oid typeOid);
 static Oid	findTypeReceiveFunction(List *procname, Oid typeOid);
@@ -1509,36 +1509,36 @@ DefineRange(CreateRangeStmt *stmt)
 
 	mltrngaddress =
 		TypeCreate(InvalidOid,	/* no predetermined type OID */
-			   multirangeTypeName,	/* type name */
-			   typeNamespace,	/* namespace */
-			   InvalidOid,	/* relation oid (n/a here) */
-			   0,			/* relation kind (ditto) */
-			   GetUserId(), /* owner's ID */
-			   -1,			/* internal size (always varlena) */
-			   TYPTYPE_MULTIRANGE,	/* type-type (multirange type) */
-			   TYPCATEGORY_MULTIRANGE,	/* type-category (multirange type) */
-			   false,		/* multirange types are never preferred */
-			   DEFAULT_TYPDELIM,	/* array element delimiter */
-			   F_MULTIRANGE_IN,	/* input procedure */
-			   F_MULTIRANGE_OUT, /* output procedure */
-			   F_MULTIRANGE_RECV,	/* receive procedure */
-			   F_MULTIRANGE_SEND,	/* send procedure */
-			   InvalidOid,	/* typmodin procedure - none */
-			   InvalidOid,	/* typmodout procedure - none */
-			   F_MULTIRANGE_TYPANALYZE,	/* analyze procedure */
-			   InvalidOid,	/* element type ID - none */
-			   false,		/* this is not an array type */
-			   multirangeArrayOid,	/* array type we are about to create */
-			   InvalidOid,	/* base type ID (only for domains) */
-			   NULL,		/* never a default type value */
-			   NULL,		/* no binary form available either */
-			   false,		/* never passed by value */
-			   alignment,	/* alignment */
-			   'x',			/* TOAST strategy (always extended) */
-			   -1,			/* typMod (Domains only) */
-			   0,			/* Array dimensions of typbasetype */
-			   false,		/* Type NOT NULL */
-			   InvalidOid); /* type's collation (ranges never have one) */
+				   multirangeTypeName,	/* type name */
+				   typeNamespace,	/* namespace */
+				   InvalidOid,	/* relation oid (n/a here) */
+				   0,			/* relation kind (ditto) */
+				   GetUserId(), /* owner's ID */
+				   -1,			/* internal size (always varlena) */
+				   TYPTYPE_MULTIRANGE,	/* type-type (multirange type) */
+				   TYPCATEGORY_MULTIRANGE,	/* type-category (multirange type) */
+				   false,		/* multirange types are never preferred */
+				   DEFAULT_TYPDELIM,	/* array element delimiter */
+				   F_MULTIRANGE_IN, /* input procedure */
+				   F_MULTIRANGE_OUT,	/* output procedure */
+				   F_MULTIRANGE_RECV,	/* receive procedure */
+				   F_MULTIRANGE_SEND,	/* send procedure */
+				   InvalidOid,	/* typmodin procedure - none */
+				   InvalidOid,	/* typmodout procedure - none */
+				   F_MULTIRANGE_TYPANALYZE, /* analyze procedure */
+				   InvalidOid,	/* element type ID - none */
+				   false,		/* this is not an array type */
+				   multirangeArrayOid,	/* array type we are about to create */
+				   InvalidOid,	/* base type ID (only for domains) */
+				   NULL,		/* never a default type value */
+				   NULL,		/* no binary form available either */
+				   false,		/* never passed by value */
+				   alignment,	/* alignment */
+				   'x',			/* TOAST strategy (always extended) */
+				   -1,			/* typMod (Domains only) */
+				   0,			/* Array dimensions of typbasetype */
+				   false,		/* Type NOT NULL */
+				   InvalidOid); /* type's collation (ranges never have one) */
 	mltrngtypoid = mltrngaddress.objectId;
 
 	/* Create the entry in pg_range */
@@ -1589,7 +1589,7 @@ DefineRange(CreateRangeStmt *stmt)
 	multirangeArrayName = makeArrayTypeName(multirangeTypeName, typeNamespace);
 
 	TypeCreate(multirangeArrayOid,	/* force assignment of this type OID */
-			   multirangeArrayName,	/* type name */
+			   multirangeArrayName, /* type name */
 			   typeNamespace,	/* namespace */
 			   InvalidOid,		/* relation oid (n/a here) */
 			   0,				/* relation kind (ditto) */
@@ -1712,7 +1712,7 @@ makeRangeConstructors(const char *name, Oid namespace,
  */
 static void
 makeMultirangeConstructors(const char *name, Oid namespace,
-					  Oid multirangeOid, Oid rangeArrayOid)
+						   Oid multirangeOid, Oid rangeArrayOid)
 {
 	static const char *const prosrc[2] = {"multirange_constructor0",
 	"multirange_constructor1"};
@@ -1725,15 +1725,15 @@ makeMultirangeConstructors(const char *name, Oid namespace,
 
 	constructorArgTypes[0] = rangeArrayOid;
 
-	Datum allParamTypes[1] = {ObjectIdGetDatum(rangeArrayOid)};
-	ArrayType *allParameterTypes = construct_array(allParamTypes, 1, OIDOID,
-												   sizeof(Oid), true, 'i');
-	Datum constructorAllParamTypes[2] = {PointerGetDatum(NULL), PointerGetDatum(allParameterTypes)};
+	Datum		allParamTypes[1] = {ObjectIdGetDatum(rangeArrayOid)};
+	ArrayType  *allParameterTypes = construct_array(allParamTypes, 1, OIDOID,
+													sizeof(Oid), true, 'i');
+	Datum		constructorAllParamTypes[2] = {PointerGetDatum(NULL), PointerGetDatum(allParameterTypes)};
 
-	Datum paramModes[1] = {CharGetDatum(FUNC_PARAM_VARIADIC)};
-	ArrayType *parameterModes = construct_array(paramModes, 1, CHAROID,
-										  1, true, 'c');
-	Datum constructorParamModes[2] = {PointerGetDatum(NULL), PointerGetDatum(parameterModes)};
+	Datum		paramModes[1] = {CharGetDatum(FUNC_PARAM_VARIADIC)};
+	ArrayType  *parameterModes = construct_array(paramModes, 1, CHAROID,
+												 1, true, 'c');
+	Datum		constructorParamModes[2] = {PointerGetDatum(NULL), PointerGetDatum(parameterModes)};
 
 	referenced.classId = TypeRelationId;
 	referenced.objectId = multirangeOid;
@@ -1750,7 +1750,7 @@ makeMultirangeConstructors(const char *name, Oid namespace,
 								 namespace, /* namespace */
 								 false, /* replace */
 								 false, /* returns set */
-								 multirangeOid,	/* return type */
+								 multirangeOid, /* return type */
 								 BOOTSTRAP_SUPERUSERID, /* proowner */
 								 INTERNALlanguageId,	/* language */
 								 F_FMGR_INTERNAL_VALIDATOR, /* language validator */
@@ -1763,8 +1763,8 @@ makeMultirangeConstructors(const char *name, Oid namespace,
 								 PROVOLATILE_IMMUTABLE, /* volatility */
 								 PROPARALLEL_SAFE,	/* parallel safety */
 								 constructorArgTypesVector, /* parameterTypes */
-								 constructorAllParamTypes[i], /* allParameterTypes */
-								 constructorParamModes[i], /* parameterModes */
+								 constructorAllParamTypes[i],	/* allParameterTypes */
+								 constructorParamModes[i],	/* parameterModes */
 								 PointerGetDatum(NULL), /* parameterNames */
 								 NIL,	/* parameterDefaults */
 								 PointerGetDatum(NULL), /* trftypes */

@@ -429,8 +429,8 @@ range_lower(PG_FUNCTION_ARGS)
 {
 	RangeType  *r1 = PG_GETARG_RANGE_P(0);
 	TypeCacheEntry *typcache;
-	bool isnull;
-	Datum result;
+	bool		isnull;
+	Datum		result;
 
 	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
 
@@ -468,8 +468,8 @@ range_upper(PG_FUNCTION_ARGS)
 {
 	RangeType  *r1 = PG_GETARG_RANGE_P(0);
 	TypeCacheEntry *typcache;
-	bool isnull;
-	Datum	result;
+	bool		isnull;
+	Datum		result;
 
 	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
 
@@ -481,7 +481,8 @@ range_upper(PG_FUNCTION_ARGS)
 		PG_RETURN_DATUM(result);
 }
 
-Datum range_upper_internal(TypeCacheEntry *typcache, const RangeType *r1, bool *isnull)
+Datum
+range_upper_internal(TypeCacheEntry *typcache, const RangeType *r1, bool *isnull)
 {
 	RangeBound	lower;
 	RangeBound	upper;
@@ -508,6 +509,7 @@ Datum
 range_empty(PG_FUNCTION_ARGS)
 {
 	RangeType  *r1 = PG_GETARG_RANGE_P(0);
+
 	PG_RETURN_BOOL(range_has_flag(r1, RANGE_EMPTY));
 }
 
@@ -516,6 +518,7 @@ Datum
 range_lower_inc(PG_FUNCTION_ARGS)
 {
 	RangeType  *r1 = PG_GETARG_RANGE_P(0);
+
 	PG_RETURN_BOOL(range_has_flag(r1, RANGE_LB_INC));
 }
 
@@ -524,6 +527,7 @@ Datum
 range_upper_inc(PG_FUNCTION_ARGS)
 {
 	RangeType  *r1 = PG_GETARG_RANGE_P(0);
+
 	PG_RETURN_BOOL(range_has_flag(r1, RANGE_UB_INC));
 }
 
@@ -532,6 +536,7 @@ Datum
 range_lower_inf(PG_FUNCTION_ARGS)
 {
 	RangeType  *r1 = PG_GETARG_RANGE_P(0);
+
 	PG_RETURN_BOOL(range_has_flag(r1, RANGE_LB_INF));
 }
 
@@ -540,6 +545,7 @@ Datum
 range_upper_inf(PG_FUNCTION_ARGS)
 {
 	RangeType  *r1 = PG_GETARG_RANGE_P(0);
+
 	PG_RETURN_BOOL(range_has_flag(r1, RANGE_UB_INF));
 }
 
@@ -1187,7 +1193,7 @@ range_intersect_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2)
  */
 bool
 range_split_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2,
-		RangeType **output1, RangeType **output2)
+					 RangeType **output1, RangeType **output2)
 {
 	RangeBound	lower1,
 				lower2;
@@ -1200,12 +1206,12 @@ range_split_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2,
 	range_deserialize(typcache, r2, &lower2, &upper2, &empty2);
 
 	if (range_cmp_bounds(typcache, &lower1, &lower2) < 0 &&
-			range_cmp_bounds(typcache, &upper1, &upper2) > 0)
+		range_cmp_bounds(typcache, &upper1, &upper2) > 0)
 	{
 		/*
-		 * Need to invert inclusive/exclusive for the lower2 and upper2 points.
-		 * They can't be infinite though.
-		 * We're allowed to overwrite these RangeBounds since they only exist locally.
+		 * Need to invert inclusive/exclusive for the lower2 and upper2
+		 * points. They can't be infinite though. We're allowed to overwrite
+		 * these RangeBounds since they only exist locally.
 		 */
 		lower2.inclusive = !lower2.inclusive;
 		lower2.lower = false;
@@ -1226,10 +1232,10 @@ Datum
 range_intersect_agg_transfn(PG_FUNCTION_ARGS)
 {
 	MemoryContext aggContext;
-	Oid rngtypoid;
+	Oid			rngtypoid;
 	TypeCacheEntry *typcache;
-	RangeType	*result;
-	RangeType	*current;
+	RangeType  *result;
+	RangeType  *current;
 
 	if (!AggCheckCallContext(fcinfo, &aggContext))
 		elog(ERROR, "range_intersect_agg_transfn called in non-aggregate context");
@@ -1921,6 +1927,7 @@ bool
 range_has_flag(const RangeType *r1, char flag)
 {
 	char		flags = range_get_flags(r1);
+
 	return flags & flag;
 }
 
@@ -2101,16 +2108,16 @@ range_cmp_bound_values(TypeCacheEntry *typcache, const RangeBound *b1,
 int
 range_compare(const void *key1, const void *key2, void *arg)
 {
-	RangeType *r1 = * (RangeType **) key1;
-	RangeType *r2 = * (RangeType **) key2;
+	RangeType  *r1 = *(RangeType **) key1;
+	RangeType  *r2 = *(RangeType **) key2;
 	TypeCacheEntry *typcache = (TypeCacheEntry *) arg;
-	RangeBound lower1;
-	RangeBound upper1;
-	RangeBound lower2;
-	RangeBound upper2;
-	bool empty1;
-	bool empty2;
-	int cmp;
+	RangeBound	lower1;
+	RangeBound	upper1;
+	RangeBound	lower2;
+	RangeBound	upper2;
+	bool		empty1;
+	bool		empty2;
+	int			cmp;
 
 	range_deserialize(typcache, r1, &lower1, &upper1, &empty1);
 	range_deserialize(typcache, r2, &lower2, &upper2, &empty2);
@@ -2121,7 +2128,8 @@ range_compare(const void *key1, const void *key2, void *arg)
 		cmp = -1;
 	else if (empty2)
 		cmp = 1;
-	else {
+	else
+	{
 		cmp = range_cmp_bounds(typcache, &lower1, &lower2);
 		if (cmp == 0)
 			cmp = range_cmp_bounds(typcache, &upper1, &upper2);

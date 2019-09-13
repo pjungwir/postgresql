@@ -389,6 +389,6 @@ extern bool moveArrayTypeName(Oid typeOid, const char *typeName,
 							  Oid typeNamespace);
 
 extern char *makeMultirangeTypeName(const char *rangeTypeName,
-									 Oid typeNamespace);
+									Oid typeNamespace);
 
 #endif							/* PG_TYPE_H */
