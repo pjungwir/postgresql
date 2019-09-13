@@ -2287,7 +2287,7 @@ resolve_generic_type(Oid declared_type,
 		else
 		{
 			/* We can't infer a range from elem types */
-			return InvalidOid	// TODO: is this the right thing to do?
+			return InvalidOid;	// TODO: is this the right thing to do?
 		}
 	}
 	else if (declared_type == ANYMULTIRANGEOID)
