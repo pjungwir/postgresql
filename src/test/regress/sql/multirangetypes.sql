@@ -132,8 +132,6 @@ SELECT * FROM nummultirange_test WHERE numrange(4.0, 4.2) <@ nmr;
 SELECT * FROM nummultirange_test WHERE multirange_contained_by_multirange('{[4.0,4.2), [6.0, 8.0)}', nmr);
 SELECT * FROM nummultirange_test WHERE '{[4.0,4.2), [6.0, 8.0)}'::nummultirange <@ nmr;
 
--- TODO: more, see rangetypes.sql
-
 -- overlaps
 SELECT 'empty'::numrange && nummultirange();
 SELECT 'empty'::numrange && nummultirange(numrange(1,2));
@@ -150,7 +148,6 @@ SELECT nummultirange(numrange(1,2), numrange(3.5,8)) && nummultirange(numrange(3
 -- contains
 SELECT nummultirange() @> nummultirange();
 SELECT nummultirange() @> 'empty'::numrange;
-SELECT 'empty'::numrange <@ nummultirange();
 SELECT nummultirange(numrange(null,null)) @> numrange(1,2);
 SELECT nummultirange(numrange(null,null)) @> numrange(null,2);
 SELECT nummultirange(numrange(null,null)) @> numrange(2,null);
@@ -165,7 +162,22 @@ SELECT nummultirange(numrange(1,5)) @> numrange(1,5);
 SELECT nummultirange(numrange(-4,-2), numrange(1,5)) @> numrange(1,5);
 SELECT nummultirange(numrange(1,5), numrange(8,9)) @> numrange(1,5);
 
--- TODO: is contained by
+-- is contained by
+SELECT nummultirange() <@ nummultirange();
+SELECT 'empty'::numrange <@ nummultirange();
+SELECT numrange(1,2) <@ nummultirange(numrange(null,null));
+SELECT numrange(null,2) <@ nummultirange(numrange(null,null));
+SELECT numrange(2,null) <@ nummultirange(numrange(null,null));
+SELECT numrange(null,3) <@ nummultirange(numrange(null,5));
+SELECT numrange(null,8) <@ nummultirange(numrange(null,5));
+SELECT numrange(8,null) <@ nummultirange(numrange(5,null));
+SELECT numrange(3,null) <@ nummultirange(numrange(5,null));
+SELECT numrange(8,9) <@ nummultirange(numrange(1,5));
+SELECT numrange(3,9) <@ nummultirange(numrange(1,5));
+SELECT numrange(1,4) <@ nummultirange(numrange(1,5));
+SELECT numrange(1,5) <@ nummultirange(numrange(1,5));
+SELECT numrange(1,5) <@ nummultirange(numrange(-4,-2), numrange(1,5));
+SELECT numrange(1,5) <@ nummultirange(numrange(1,5), numrange(8,9));
 
 -- overleft
 SELECT 'empty'::numrange &< nummultirange();

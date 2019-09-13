@@ -676,7 +676,6 @@ SELECT * FROM nummultirange_test WHERE '{[4.0,4.2), [6.0, 8.0)}'::nummultirange 
  {(,)}
 (3 rows)
 
--- TODO: more, see rangetypes.sql
 -- overlaps
 SELECT 'empty'::numrange && nummultirange();
  ?column? 
@@ -752,12 +751,6 @@ SELECT nummultirange() @> nummultirange();
 (1 row)
 
 SELECT nummultirange() @> 'empty'::numrange;
- ?column? 
-----------
- t
-(1 row)
-
-SELECT 'empty'::numrange <@ nummultirange();
  ?column? 
 ----------
  t
@@ -841,7 +834,97 @@ SELECT nummultirange(numrange(1,5), numrange(8,9)) @> numrange(1,5);
  t
 (1 row)
 
--- TODO: is contained by
+-- is contained by
+SELECT nummultirange() <@ nummultirange();
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT 'empty'::numrange <@ nummultirange();
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT numrange(1,2) <@ nummultirange(numrange(null,null));
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT numrange(null,2) <@ nummultirange(numrange(null,null));
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT numrange(2,null) <@ nummultirange(numrange(null,null));
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT numrange(null,3) <@ nummultirange(numrange(null,5));
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT numrange(null,8) <@ nummultirange(numrange(null,5));
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT numrange(8,null) <@ nummultirange(numrange(5,null));
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT numrange(3,null) <@ nummultirange(numrange(5,null));
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT numrange(8,9) <@ nummultirange(numrange(1,5));
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT numrange(3,9) <@ nummultirange(numrange(1,5));
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT numrange(1,4) <@ nummultirange(numrange(1,5));
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT numrange(1,5) <@ nummultirange(numrange(1,5));
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT numrange(1,5) <@ nummultirange(numrange(-4,-2), numrange(1,5));
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT numrange(1,5) <@ nummultirange(numrange(1,5), numrange(8,9));
+ ?column? 
+----------
+ t
+(1 row)
+
 -- overleft
 SELECT 'empty'::numrange &< nummultirange();
  ?column? 
