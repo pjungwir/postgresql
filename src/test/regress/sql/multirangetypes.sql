@@ -85,6 +85,27 @@ INSERT INTO nummultirange_test VALUES(nummultirange(numrange(1.7, 1.7, '[]'), nu
 SELECT nmr, isempty(nmr), lower(nmr), upper(nmr) FROM nummultirange_test ORDER BY nmr;
 SELECT nmr, lower_inc(nmr), lower_inf(nmr), upper_inc(nmr), upper_inf(nmr) FROM nummultirange_test ORDER BY nmr;
 
+SELECT * FROM nummultirange_test WHERE nmr = '{}';
+SELECT * FROM nummultirange_test WHERE nmr = '{(,5)}';
+SELECT * FROM nummultirange_test WHERE nmr = '{[3,)}';
+SELECT * FROM nummultirange_test WHERE nmr = '{[1.7,1.7]}';
+SELECT * FROM nummultirange_test WHERE nmr = '{[1.7,1.7],[1.9,2.1)}';
+SELECT * FROM nummultirange_test WHERE nmr < '{}';
+SELECT * FROM nummultirange_test WHERE nmr < '{[-1000.0, -1000.0]}';
+SELECT * FROM nummultirange_test WHERE nmr < '{[0.0, 1.0]}';
+SELECT * FROM nummultirange_test WHERE nmr < '{[1000.0, 1001.0]}';
+SELECT * FROM nummultirange_test WHERE nmr <= '{}';
+SELECT * FROM nummultirange_test WHERE nmr <= '{[3,)}';
+SELECT * FROM nummultirange_test WHERE nmr >= '{}';
+SELECT * FROM nummultirange_test WHERE nmr >= '{[3,)}';
+SELECT * FROM nummultirange_test WHERE nmr > '{}';
+SELECT * FROM nummultirange_test WHERE nmr > '{[-1000.0, -1000.0]}';
+SELECT * FROM nummultirange_test WHERE nmr > '{[0.0, 1.0]}';
+SELECT * FROM nummultirange_test WHERE nmr > '{[1000.0, 1001.0]}';
+
+select nummultirange(numrange(2.0, 1.0));
+select nummultirange(numrange(5.0, 6.0), numrange(1.0, 2.0));
+
 -- overlaps
 SELECT * FROM nummultirange_test WHERE range_overlaps_multirange(numrange(4.0, 4.2), nmr);
 SELECT * FROM nummultirange_test WHERE numrange(4.0, 4.2) && nmr;
@@ -113,6 +134,7 @@ SELECT * FROM nummultirange_test WHERE '{[4.0,4.2), [6.0, 8.0)}'::nummultirange 
 
 -- TODO: more, see rangetypes.sql
 
+-- overlaps
 SELECT 'empty'::numrange && nummultirange();
 SELECT 'empty'::numrange && nummultirange(numrange(1,2));
 SELECT nummultirange() && 'empty'::numrange;
@@ -125,6 +147,7 @@ SELECT nummultirange(numrange(3,4)) && nummultirange(numrange(1,2), numrange(3.5
 SELECT nummultirange(numrange(1,2), numrange(3.5,8)) && numrange(3,4);
 SELECT nummultirange(numrange(1,2), numrange(3.5,8)) && nummultirange(numrange(3,4));
 
+-- contains
 SELECT nummultirange() @> nummultirange();
 SELECT nummultirange() @> 'empty'::numrange;
 SELECT 'empty'::numrange <@ nummultirange();
@@ -142,6 +165,9 @@ SELECT nummultirange(numrange(1,5)) @> numrange(1,5);
 SELECT nummultirange(numrange(-4,-2), numrange(1,5)) @> numrange(1,5);
 SELECT nummultirange(numrange(1,5), numrange(8,9)) @> numrange(1,5);
 
+-- TODO: is contained by
+
+-- overleft
 SELECT 'empty'::numrange &< nummultirange();
 SELECT 'empty'::numrange &< nummultirange(numrange(1,2));
 SELECT nummultirange() &< 'empty'::numrange;
@@ -165,6 +191,7 @@ SELECT nummultirange(numrange(1,4)) &< nummultirange(numrange(3,4));
 SELECT nummultirange(numrange(1,6)) &< nummultirange(numrange(3,4));
 SELECT nummultirange(numrange(3.5,6)) &< nummultirange(numrange(3,4));
 
+-- overright
 SELECT nummultirange() &> 'empty'::numrange;
 SELECT nummultirange(numrange(1,2)) &> 'empty'::numrange;
 SELECT 'empty'::numrange &> nummultirange();
@@ -188,6 +215,7 @@ SELECT nummultirange(numrange(3,4)) &> nummultirange(numrange(1,4));
 SELECT nummultirange(numrange(3,4)) &> nummultirange(numrange(1,6));
 SELECT nummultirange(numrange(3,4)) &> nummultirange(numrange(3.5,6));
 
+-- meets
 SELECT 'empty'::numrange -|- nummultirange();
 SELECT 'empty'::numrange -|- nummultirange(numrange(1,2));
 SELECT nummultirange() -|- 'empty'::numrange;
@@ -206,6 +234,7 @@ SELECT nummultirange(numrange(1,2), numrange(5,6)) -|- nummultirange(numrange(6,
 SELECT nummultirange(numrange(1,2), numrange(5,6)) -|- nummultirange(numrange(8,9));
 SELECT nummultirange(numrange(1,2)) -|- nummultirange(numrange(2,4), numrange(6,7));
 
+-- strictly left
 select 'empty'::numrange << nummultirange();
 select numrange(1,2) << nummultirange();
 select numrange(1,2) << nummultirange(numrange(3,4));
@@ -225,6 +254,7 @@ select nummultirange(numrange(1,2)) << nummultirange(numrange(3,4));
 select nummultirange(numrange(1,2)) << nummultirange(numrange(3,4), numrange(7,8));
 select nummultirange(numrange(1,2), numrange(4,5)) << nummultirange(numrange(3,4), numrange(7,8));
 
+-- strictly right
 select nummultirange() >> 'empty'::numrange;
 select nummultirange() >> numrange(1,2);
 select nummultirange(numrange(3,4)) >> numrange(1,2);
@@ -244,6 +274,7 @@ select nummultirange(numrange(3,4)) >> nummultirange(numrange(1,2));
 select nummultirange(numrange(3,4), numrange(7,8)) >> nummultirange(numrange(1,2));
 select nummultirange(numrange(3,4), numrange(7,8)) >> nummultirange(numrange(1,2), numrange(4,5));
 
+-- union
 SELECT 'empty'::numrange @+ 'empty'::numrange;
 SELECT 'empty'::numrange @+ nummultirange();
 SELECT nummultirange() @+ 'empty'::numrange;
@@ -266,10 +297,12 @@ SELECT nummultirange(numrange(1,2), numrange(4,5)) @+ nummultirange(numrange(2,4
 SELECT nummultirange(numrange(1,2), numrange(4,5)) @+ nummultirange(numrange(3,4));
 SELECT nummultirange(numrange(1,2), numrange(4,5)) @+ nummultirange(numrange(0,9));
 
+-- merge
 SELECT range_merge(nummultirange());
 SELECT range_merge(nummultirange(numrange(1,2)));
 SELECT range_merge(nummultirange(numrange(1,2), numrange(7,8)));
 
+-- minus
 SELECT 'empty'::numrange @- 'empty'::numrange;
 SELECT 'empty'::numrange @- nummultirange();
 SELECT nummultirange() @- 'empty'::numrange;
@@ -305,6 +338,7 @@ SELECT nummultirange(numrange(1,3), numrange(4,5)) @- nummultirange(numrange(2,9
 SELECT nummultirange(numrange(1,2), numrange(4,5)) @- nummultirange(numrange(8,9));
 SELECT nummultirange(numrange(1,2), numrange(4,5)) @- nummultirange(numrange(-2,0), numrange(8,9));
 
+-- intersection
 SELECT 'empty'::numrange @* 'empty'::numrange;
 SELECT 'empty'::numrange @* nummultirange();
 SELECT nummultirange() @* 'empty'::numrange;
