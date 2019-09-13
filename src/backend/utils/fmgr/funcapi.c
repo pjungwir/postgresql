@@ -838,7 +838,7 @@ resolve_polymorphic_argtypes(int numargs, Oid *argtypes, char *argmodes,
 					if (!OidIsValid(anymultirange_type))
 					{
 						anymultirange_type = get_call_expr_argtype(call_expr,
-															  inargno);
+																   inargno);
 						if (!OidIsValid(anymultirange_type))
 							return false;
 					}
