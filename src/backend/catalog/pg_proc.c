@@ -233,10 +233,10 @@ ProcedureCreate(const char *procedureName,
 
 	/*
 	 * Do not allow polymorphic return type unless at least one input argument
-	 * is polymorphic.  ANYRANGE and ANYMULTIRANGE return types are even stricter:
-	 * must have an ANYRANGE input (since we can't deduce the specific range type
-	 * from ANYELEMENT).  Also, do not allow return type INTERNAL unless at least
-	 * one input argument is INTERNAL.
+	 * is polymorphic.  ANYRANGE and ANYMULTIRANGE return types are even
+	 * stricter: must have an ANYRANGE input (since we can't deduce the
+	 * specific range type from ANYELEMENT).  Also, do not allow return type
+	 * INTERNAL unless at least one input argument is INTERNAL.
 	 */
 	if ((IsPolymorphicType(returnType) || genericOutParam)
 		&& !genericInParam)
@@ -246,7 +246,7 @@ ProcedureCreate(const char *procedureName,
 				 errdetail("A function returning a polymorphic type must have at least one polymorphic argument.")));
 
 	if ((returnType == ANYRANGEOID || returnType == ANYMULTIRANGEOID
-		|| anyrangeOutParam) && !anyrangeInParam)
+		 || anyrangeOutParam) && !anyrangeInParam)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_FUNCTION_DEFINITION),
 				 errmsg("cannot determine result data type"),
