@@ -1247,6 +1247,7 @@ range_agg_finalfn(PG_FUNCTION_ARGS)
 
 	state = PG_ARGISNULL(0) ? NULL : (ArrayBuildState *) PG_GETARG_POINTER(0);
 	if (state == NULL)
+		/* This shouldn't be possible, but just in case.... */
 		PG_RETURN_NULL();
 
 	/* Also return NULL if we had zero inputs, like other aggregates */
