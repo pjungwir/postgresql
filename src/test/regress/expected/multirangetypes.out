@@ -146,6 +146,12 @@ select '{["\\","\\"]}'::textmultirange;
  {["\\","\\"]}
 (1 row)
 
+select '{["""","\""]}'::textmultirange;
+ textmultirange 
+----------------
+ {["""",""""]}
+(1 row)
+
 select '{(\\,a)}'::textmultirange;
  textmultirange 
 ----------------
