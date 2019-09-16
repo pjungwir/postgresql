@@ -154,18 +154,8 @@ multirange_in(PG_FUNCTION_ARGS)
 				else if (pg_strncasecmp(ptr, RANGE_EMPTY_LITERAL,
 										strlen(RANGE_EMPTY_LITERAL)) == 0)
 				{
-					if (range_capacity == range_count)
-					{
-						range_capacity *= 2;
-						ranges = (RangeType **) repalloc(ranges,
-														 range_capacity * sizeof(RangeType *));
-					}
 					ranges_seen++;
-					range = DatumGetRangeTypeP(
-											   InputFunctionCall(&cache->proc, RANGE_EMPTY_LITERAL,
-																 cache->typioparam, typmod));
-					if (!RangeIsEmpty(range))
-						ranges[range_count++] = range;
+					/* nothing to do with an empty range */
 					ptr += strlen(RANGE_EMPTY_LITERAL) - 1;
 					parse_state = MULTIRANGE_AFTER_RANGE;
 				}
