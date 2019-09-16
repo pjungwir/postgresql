@@ -1953,6 +1953,7 @@ multirange_contains_multirange_internal(TypeCacheEntry *typcache,
 		{
 			if (++i1 >= range_count1)
 				return false;
+			r1 = ranges1[i1];
 		}
 
 		/*
