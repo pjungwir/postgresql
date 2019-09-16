@@ -41,6 +41,10 @@ begin
     if (select typtype from pg_catalog.pg_type where oid = $1) = 'r'
     then return true; end if;
   end if;
+  if $2 = 'pg_catalog.anymultirange'::pg_catalog.regtype then
+    if (select typtype from pg_catalog.pg_type where oid = $1) = 'm'
+    then return true; end if;
+  end if;
   return false;
 end
 $$ language plpgsql strict stable;
