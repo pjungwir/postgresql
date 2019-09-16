@@ -5,7 +5,10 @@
  *
  * The stored (serialized) format of a multirange value is:
  *
- * TODO!
+ *	4 bytes: varlena header
+ *	4 bytes: multirange type's OID
+ *	4 bytes: the number of ranges in the multirange
+ *	The range values, each maxaligned.
  *
  *
  * Portions Copyright (c) 1996-2019, PostgreSQL Global Development Group
@@ -151,7 +154,6 @@ multirange_in(PG_FUNCTION_ARGS)
 				else if (pg_strncasecmp(ptr, RANGE_EMPTY_LITERAL,
 										strlen(RANGE_EMPTY_LITERAL)) == 0)
 				{
-					/* TODO: DRY up with below: */
 					if (range_capacity == range_count)
 					{
 						range_capacity *= 2;
@@ -184,7 +186,6 @@ multirange_in(PG_FUNCTION_ARGS)
 					range_str_len = ptr - range_str + 2;
 					range_str_copy = palloc0(range_str_len);
 					strlcpy(range_str_copy, range_str, range_str_len);
-					/* TODO: DRY up with below: */
 					if (range_capacity == range_count)
 					{
 						range_capacity *= 2;
