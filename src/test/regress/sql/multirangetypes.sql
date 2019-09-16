@@ -33,6 +33,7 @@ select '{[ , ]}'::textmultirange;
 select '{["",""]}'::textmultirange;
 select '{[",",","]}'::textmultirange;
 select '{["\\","\\"]}'::textmultirange;
+select '{["""","\""]}'::textmultirange;
 select '{(\\,a)}'::textmultirange;
 select '{((,z)}'::textmultirange;
 select '{([,z)}'::textmultirange;
