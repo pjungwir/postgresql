@@ -2101,7 +2101,7 @@ range_cmp_bound_values(TypeCacheEntry *typcache, const RangeBound *b1,
 
 /*
  * Compares two ranges so we can qsort them.
- * This espects that you give qsort a RangeType **,
+ * This expects that you give qsort a RangeType **,
  * so the RangeTypes can be in diverse locations,
  * as long as you have a list of pointers to them all.
  */
