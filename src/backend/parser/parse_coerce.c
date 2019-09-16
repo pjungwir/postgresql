@@ -2287,7 +2287,10 @@ resolve_generic_type(Oid declared_type,
 		else
 		{
 			/* We can't infer a range from elem types */
-			return InvalidOid;	// TODO: is this the right thing to do?
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("could not find range type for data type %s",
+							format_type_be(context_actual_type))));
 		}
 	}
 	else if (declared_type == ANYMULTIRANGEOID)
@@ -2318,7 +2321,10 @@ resolve_generic_type(Oid declared_type,
 		else
 		{
 			/* We can't infer a multirange from elem types */
-			return InvalidOid;	// TODO: is this the right thing to do?
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("could not find multirange type for data type %s",
+							format_type_be(context_actual_type))));
 		}
 	}
 	else
