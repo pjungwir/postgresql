@@ -105,8 +105,6 @@ multirange_in(PG_FUNCTION_ARGS)
 	int32		range_str_len;
 	char	   *range_str_copy;
 
-	check_stack_depth();		/* recurses when subtype is a range type */
-
 	cache = get_multirange_io_data(fcinfo, mltrngtypoid, IOFunc_input);
 	rangetyp = cache->typcache->rngtype;
 	rngtypoid = rangetyp->type_id;
@@ -303,8 +301,6 @@ multirange_recv(PG_FUNCTION_ARGS)
 	MultirangeType *ret;
 	int			i;
 
-	check_stack_depth();		/* recurses when subtype is a range type */
-
 	cache = get_multirange_io_data(fcinfo, mltrngtypoid, IOFunc_receive);
 	rangetyp = cache->typcache->rngtype;
 
@@ -343,8 +339,6 @@ multirange_send(PG_FUNCTION_ARGS)
 	int32				range_count;
 	int32				i;
 	MultirangeIOData	*cache;
-
-	check_stack_depth();		/* recurses when subtype is a range type */
 
 	cache = get_multirange_io_data(fcinfo, mltrngtypoid, IOFunc_send);
 
@@ -1565,8 +1559,6 @@ multirange_eq_internal(TypeCacheEntry *typcache, MultirangeType * mr1, Multirang
 	RangeType  *r1;
 	RangeType  *r2;
 
-	check_stack_depth();		/* recurses when subtype is a range type */
-
 	/* Different types should be prevented by ANYMULTIRANGE matching rules */
 	if (MultirangeTypeGetOid(mr1) != MultirangeTypeGetOid(mr2))
 		elog(ERROR, "multirange types do not match");
@@ -1668,8 +1660,6 @@ range_overlaps_multirange_internal(TypeCacheEntry *typcache, RangeType *r, Multi
 	RangeType **ranges;
 	RangeType  *mrr;
 
-	check_stack_depth();		/* recurses when subtype is a range type */
-
 	/*
 	 * Empties never overlap, even with empties. (This seems strange since
 	 * they *do* contain each other, but we want to follow how ranges work.)
@@ -1710,8 +1700,6 @@ multirange_overlaps_multirange_internal(TypeCacheEntry *typcache, MultirangeType
 	RangeType **ranges2;
 	RangeType  *r1;
 	RangeType  *r2;
-
-	check_stack_depth();		/* recurses when subtype is a range type */
 
 	/*
 	 * Empties never overlap, even with empties. (This seems strange since
@@ -2176,8 +2164,6 @@ multirange_cmp(PG_FUNCTION_ARGS)
 	RangeType  *r2;
 	TypeCacheEntry *typcache;
 	int			cmp = 0;		/* If both are empty we'll use this. */
-
-	check_stack_depth();		/* recurses when subtype is a range type */
 
 	/* Different types should be prevented by ANYMULTIRANGE matching rules */
 	if (MultirangeTypeGetOid(mr1) != MultirangeTypeGetOid(mr2))
