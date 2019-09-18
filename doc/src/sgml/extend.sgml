@@ -378,10 +378,10 @@
      range whose subtype is the same type appearing in
      the <type>anyelement</type> positions and the same as the element type
      of the <type>anyarray</type> positions.
-     The type <type>anymultirange</type> accepts
-     a multirange or array of any range type, respectively.
-     If they appear along with an <type>anyrange</type> then they must be a
-     multirange/array of that range type.
+     If there are positions declared <type>anymultirange</type>,
+     their actual multirange type must contain ranges matching parameters declared
+     <type>anyrange</type> and base elements matching parameters declared
+     <type>anyelement</type> and <type>anyarray</type>.
     </para>
 
     <para>
