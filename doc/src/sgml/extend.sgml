@@ -354,7 +354,7 @@
      position declared as <type>anyarray</type> can have any array data type,
      but similarly they must all be the same type.  And similarly,
      positions declared as <type>anyrange</type> must all be the same range
-     type.  Likewise for <type>anymultirange</type> and <type>anyrangearray</type>.
+     type.  Likewise for <type>anymultirange</type>.
     </para>
 
     <para>
@@ -378,13 +378,10 @@
      range whose subtype is the same type appearing in
      the <type>anyelement</type> positions and the same as the element type
      of the <type>anyarray</type> positions.
-     The types <type>anymultirange</type> and <type>anyrangearray</type> accept
+     The type <type>anymultirange</type> accepts
      a multirange or array of any range type, respectively.
      If they appear along with an <type>anyrange</type> then they must be a
      multirange/array of that range type.
-     If a function has both <type>anymultirange</type> and
-     <type>anyrangearray</type>, they must contain ranges of the same type,
-     even if there is no <type>anyrange</type> parameter.
     </para>
 
     <para>
@@ -495,9 +492,6 @@ RETURNS anycompatible AS ...
      the same as if you had written the appropriate number of
      <type>anynonarray</type> or <type>anycompatiblenonarray</type>
      parameters.
-     You can also declare the last parameter as <literal>VARIADIC</literal>
-     <type>anyrangearray</type> for a similar effect, permitting any number of
-     <type>anyrange</type> parameters.
     </para>
    </sect2>
   </sect1>
