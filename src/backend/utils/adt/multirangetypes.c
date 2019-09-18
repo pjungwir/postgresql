@@ -336,12 +336,13 @@ multirange_recv(PG_FUNCTION_ARGS)
 Datum
 multirange_send(PG_FUNCTION_ARGS)
 {
-	MultirangeType *multirange = PG_GETARG_MULTIRANGE_P(0);
-	Oid			mltrngtypoid = MultirangeTypeGetOid(multirange);
-	StringInfo	buf = makeStringInfo();
-	MultirangeIOData *cache;
-	Pointer		ptr = (char *) multirange;
-	Pointer		end = ptr + VARSIZE(multirange);
+	MultirangeType	   *multirange = PG_GETARG_MULTIRANGE_P(0);
+	Oid					mltrngtypoid = MultirangeTypeGetOid(multirange);
+	StringInfo			buf = makeStringInfo();
+	RangeType		  **ranges;
+	int32				range_count;
+	int32				i;
+	MultirangeIOData	*cache;
 
 	check_stack_depth();		/* recurses when subtype is a range type */
 
@@ -352,18 +353,16 @@ multirange_send(PG_FUNCTION_ARGS)
 
 	pq_sendint32(buf, multirange->rangeCount);
 
-	ptr = (char *) MAXALIGN(multirange + 1);
-	while (ptr < end)
+	multirange_deserialize(multirange, &range_count, &ranges);
+	for (i = 0; i < range_count; i++)
 	{
-		Datum		range = RangeTypePGetDatum((RangeType *) ptr);
-
+		Datum		range = RangeTypePGetDatum(ranges[i]);
 		range = PointerGetDatum(SendFunctionCall(&cache->proc, range));
 		uint32		range_len = VARSIZE(range) - VARHDRSZ;
 		char	   *range_data = VARDATA(range);
 
 		pq_sendint32(buf, range_len);
 		pq_sendbytes(buf, range_data, range_len);
-		ptr += MAXALIGN(VARSIZE(range));
 	}
 
 	PG_RETURN_BYTEA_P(pq_endtypsend(buf));
