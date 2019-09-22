@@ -59,6 +59,40 @@ extern bool multirange_eq_internal(TypeCacheEntry *typcache, MultirangeType * mr
 								   MultirangeType * mr2);
 extern bool multirange_ne_internal(TypeCacheEntry *typcache, MultirangeType * mr1,
 								   MultirangeType * mr2);
+extern bool multirange_contains_elem_internal(TypeCacheEntry *typcache, MultirangeType * mr,
+											  Datum elem);
+extern bool multirange_contains_range_internal(TypeCacheEntry *typcache, MultirangeType * mr,
+											   RangeType *r);
+extern bool multirange_contains_multirange_internal(TypeCacheEntry *typcache,
+													MultirangeType * mr1,
+													MultirangeType * mr2);
+extern bool range_overlaps_multirange_internal(TypeCacheEntry *typcache, RangeType *r,
+											   MultirangeType * mr);
+extern bool multirange_overlaps_multirange_internal(TypeCacheEntry *typcache,
+													MultirangeType * mr1,
+													MultirangeType * mr2);
+extern bool range_before_multirange_internal(TypeCacheEntry *typcache, RangeType *r,
+											 MultirangeType * mr);
+extern bool range_after_multirange_internal(TypeCacheEntry *typcache, RangeType *r,
+											MultirangeType * mr);
+extern bool multirange_before_multirange_internal(TypeCacheEntry *typcache,
+												  MultirangeType * mr1,
+												  MultirangeType * mr2);
+extern MultirangeType * range_union_multirange_internal(TypeCacheEntry *typcache,
+														RangeType *r,
+														MultirangeType * mr);
+extern MultirangeType * multirange_minus_multirange_internal(Oid mltrngtypoid,
+															 TypeCacheEntry *rangetyp,
+															 int32 range_count1,
+															 RangeType **ranges1,
+															 int32 range_count2,
+															 RangeType **ranges2);
+extern MultirangeType * multirange_intersect_multirange_internal(Oid mltrngtypoid,
+																 TypeCacheEntry *rangetyp,
+																 int32 range_count1,
+																 RangeType **ranges1,
+																 int32 range_count2,
+																 RangeType **ranges2);
 
 /* assorted support functions */
 extern TypeCacheEntry *multirange_get_typcache(FunctionCallInfo fcinfo,

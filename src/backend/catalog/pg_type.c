@@ -876,7 +876,6 @@ makeMultirangeTypeName(const char *rangeTypeName, Oid typeNamespace)
 	char		mltrng[NAMEDATALEN];
 	char	   *mltrngunique = (char *) palloc(NAMEDATALEN);
 	int			namelen = strlen(rangeTypeName);
-	int			rangelen;
 	char	   *rangestr;
 	int			rangeoffset;
 	int			underscores;
@@ -892,7 +891,6 @@ makeMultirangeTypeName(const char *rangeTypeName, Oid typeNamespace)
 	if (rangestr)
 	{
 		rangeoffset = rangestr - rangeTypeName;
-		rangelen = strlen(rangestr);
 		strlcpy(mltrng + rangeoffset, "multi", NAMEDATALEN - rangeoffset);
 		strlcpy(mltrng + rangeoffset + 5, rangestr, NAMEDATALEN - rangeoffset - 5);
 		namelen += 5;

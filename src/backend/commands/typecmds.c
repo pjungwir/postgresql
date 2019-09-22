@@ -1783,12 +1783,10 @@ makeMultirangeConstructors(const char *name, Oid namespace,
 	"multirange_constructor1"};
 	static const int pronargs[2] = {0, 1};
 
-	Oid			constructorArgTypes[0];
+	Oid			constructorArgTypes = rangeArrayOid;
 	ObjectAddress myself,
 				referenced;
 	int			i;
-
-	constructorArgTypes[0] = rangeArrayOid;
 
 	Datum		allParamTypes[1] = {ObjectIdGetDatum(rangeArrayOid)};
 	ArrayType  *allParameterTypes = construct_array(allParamTypes, 1, OIDOID,
@@ -1808,7 +1806,7 @@ makeMultirangeConstructors(const char *name, Oid namespace,
 	{
 		oidvector  *constructorArgTypesVector;
 
-		constructorArgTypesVector = buildoidvector(constructorArgTypes,
+		constructorArgTypesVector = buildoidvector(&constructorArgTypes,
 												   pronargs[i]);
 
 		myself = ProcedureCreate(name,	/* name: same as multirange type */
