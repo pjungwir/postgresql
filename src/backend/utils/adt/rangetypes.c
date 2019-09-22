@@ -43,8 +43,6 @@
 #include "utils/timestamp.h"
 
 
-#define RANGE_EMPTY_LITERAL "empty"
-
 /* fn_extra cache entry for one of the range I/O functions */
 typedef struct RangeIOData
 {
@@ -1177,10 +1175,66 @@ range_cmp(PG_FUNCTION_ARGS)
 			cmp = range_cmp_bounds(typcache, &upper1, &upper2);
 	}
 
+	return cmp;
+}
+
+/* btree comparator */
+Datum
+range_cmp(PG_FUNCTION_ARGS)
+{
+	RangeType  *r1 = PG_GETARG_RANGE_P(0);
+	RangeType  *r2 = PG_GETARG_RANGE_P(1);
+	TypeCacheEntry *typcache;
+	int			cmp;
+
+	check_stack_depth();		/* recurses when subtype is a range type */
+
+	/* Different types should be prevented by ANYRANGE matching rules */
+	if (RangeTypeGetOid(r1) != RangeTypeGetOid(r2))
+		elog(ERROR, "range types do not match");
+
+	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
+
+	cmp = range_cmp_internal(typcache, r1, r2);
+
 	PG_FREE_IF_COPY(r1, 0);
 	PG_FREE_IF_COPY(r2, 1);
 
 	PG_RETURN_INT32(cmp);
+}
+
+/*
+ * Internal version of range_cmp
+ */
+int
+range_cmp_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2)
+{
+	RangeBound	lower1,
+				lower2;
+	RangeBound	upper1,
+				upper2;
+	bool		empty1,
+				empty2;
+	int			cmp;
+
+	range_deserialize(typcache, r1, &lower1, &upper1, &empty1);
+	range_deserialize(typcache, r2, &lower2, &upper2, &empty2);
+
+	/* For b-tree use, empty ranges sort before all else */
+	if (empty1 && empty2)
+		cmp = 0;
+	else if (empty1)
+		cmp = -1;
+	else if (empty2)
+		cmp = 1;
+	else
+	{
+		cmp = range_cmp_bounds(typcache, &lower1, &lower2);
+		if (cmp == 0)
+			cmp = range_cmp_bounds(typcache, &upper1, &upper2);
+	}
+
+	return cmp;
 }
 
 /* inequality operators using the range_cmp function */
@@ -1218,13 +1272,10 @@ range_gt(PG_FUNCTION_ARGS)
 
 /* Hash support */
 
-/* hash a range value */
-Datum
-hash_range(PG_FUNCTION_ARGS)
+uint32
+hash_range_internal(TypeCacheEntry *typcache, RangeType *r)
 {
-	RangeType  *r = PG_GETARG_RANGE_P(0);
 	uint32		result;
-	TypeCacheEntry *typcache;
 	TypeCacheEntry *scache;
 	RangeBound	lower;
 	RangeBound	upper;
@@ -1232,10 +1283,6 @@ hash_range(PG_FUNCTION_ARGS)
 	char		flags;
 	uint32		lower_hash;
 	uint32		upper_hash;
-
-	check_stack_depth();		/* recurses when subtype is a range type */
-
-	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r));
 
 	/* deserialize */
 	range_deserialize(typcache, r, &lower, &upper, &empty);
@@ -1278,20 +1325,27 @@ hash_range(PG_FUNCTION_ARGS)
 	result = (result << 1) | (result >> 31);
 	result ^= upper_hash;
 
-	PG_RETURN_INT32(result);
+	return result;
 }
 
-/*
- * Returns 64-bit value by hashing a value to a 64-bit value, with a seed.
- * Otherwise, similar to hash_range.
- */
+/* hash a range value */
 Datum
-hash_range_extended(PG_FUNCTION_ARGS)
+hash_range(PG_FUNCTION_ARGS)
 {
 	RangeType  *r = PG_GETARG_RANGE_P(0);
-	Datum		seed = PG_GETARG_DATUM(1);
-	uint64		result;
 	TypeCacheEntry *typcache;
+
+	check_stack_depth();		/* recurses when subtype is a range type */
+
+	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r));
+
+	PG_RETURN_INT32(hash_range_internal(typcache, r));
+}
+
+uint64
+hash_range_extended_internal(TypeCacheEntry *typcache, RangeType *r, Datum seed)
+{
+	uint64		result;
 	TypeCacheEntry *scache;
 	RangeBound	lower;
 	RangeBound	upper;
@@ -1299,10 +1353,6 @@ hash_range_extended(PG_FUNCTION_ARGS)
 	char		flags;
 	uint64		lower_hash;
 	uint64		upper_hash;
-
-	check_stack_depth();
-
-	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r));
 
 	range_deserialize(typcache, r, &lower, &upper, &empty);
 	flags = range_get_flags(r);
@@ -1342,7 +1392,25 @@ hash_range_extended(PG_FUNCTION_ARGS)
 	result = ROTATE_HIGH_AND_LOW_32BITS(result);
 	result ^= upper_hash;
 
-	PG_RETURN_UINT64(result);
+	return result;
+}
+
+/*
+ * Returns 64-bit value by hashing a value to a 64-bit value, with a seed.
+ * Otherwise, similar to hash_range.
+ */
+Datum
+hash_range_extended(PG_FUNCTION_ARGS)
+{
+	RangeType  *r = PG_GETARG_RANGE_P(0);
+	Datum		seed = PG_GETARG_DATUM(1);
+	TypeCacheEntry *typcache;
+
+	check_stack_depth();
+
+	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r));
+
+	PG_RETURN_UINT64(hash_range_extended_internal(typcache, r, seed));
 }
 
 /*
@@ -1935,6 +2003,45 @@ range_cmp_bound_values(TypeCacheEntry *typcache, const RangeBound *b1,
 	return DatumGetInt32(FunctionCall2Coll(&typcache->rng_cmp_proc_finfo,
 										   typcache->rng_collation,
 										   b1->val, b2->val));
+}
+
+/*
+ * Compares two ranges so we can qsort them.
+ * This expects that you give qsort a RangeType **,
+ * so the RangeTypes can be in diverse locations,
+ * as long as you have a list of pointers to them all.
+ */
+int
+range_compare(const void *key1, const void *key2, void *arg)
+{
+	RangeType  *r1 = *(RangeType **) key1;
+	RangeType  *r2 = *(RangeType **) key2;
+	TypeCacheEntry *typcache = (TypeCacheEntry *) arg;
+	RangeBound	lower1;
+	RangeBound	upper1;
+	RangeBound	lower2;
+	RangeBound	upper2;
+	bool		empty1;
+	bool		empty2;
+	int			cmp;
+
+	range_deserialize(typcache, r1, &lower1, &upper1, &empty1);
+	range_deserialize(typcache, r2, &lower2, &upper2, &empty2);
+
+	if (empty1 && empty2)
+		cmp = 0;
+	else if (empty1)
+		cmp = -1;
+	else if (empty2)
+		cmp = 1;
+	else
+	{
+		cmp = range_cmp_bounds(typcache, &lower1, &lower2);
+		if (cmp == 0)
+			cmp = range_cmp_bounds(typcache, &upper1, &upper2);
+	}
+
+	return cmp;
 }
 
 /*
