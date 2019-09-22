@@ -1210,12 +1210,13 @@
   amprocrighttype => 'anyrange', amprocnum => '4',
   amproc => 'brin_inclusion_union' },
 { amprocfamily => 'brin/range_inclusion_ops', amproclefttype => 'anyrange',
-  amprocrighttype => 'anyrange', amprocnum => '11', amproc => 'range_merge' },
+  amprocrighttype => 'anyrange', amprocnum => '11',
+  amproc => 'range_merge(anyrange,anyrange)' },
 { amprocfamily => 'brin/range_inclusion_ops', amproclefttype => 'anyrange',
   amprocrighttype => 'anyrange', amprocnum => '13',
   amproc => 'range_contains' },
 { amprocfamily => 'brin/range_inclusion_ops', amproclefttype => 'anyrange',
-  amprocrighttype => 'anyrange', amprocnum => '14', amproc => 'isempty' },
+  amprocrighttype => 'anyrange', amprocnum => '14', amproc => 'isempty(anyrange)' },
 
 # minmax pg_lsn
 { amprocfamily => 'brin/pg_lsn_minmax_ops', amproclefttype => 'pg_lsn',
