@@ -1,0 +1,292 @@
+-- Tests for multirange data types.
+--
+-- test input parser
+--
+-- negative tests; should fail
+select ''::textmultirange;
+ERROR:  malformed multirange literal: ""
+LINE 1: select ''::textmultirange;
+               ^
+DETAIL:  Missing left bracket.
+select '{,}'::textmultirange;
+ERROR:  malformed multirange literal: "{,}"
+LINE 1: select '{,}'::textmultirange;
+               ^
+DETAIL:  Expected range start.
+select '{[a,c),}'::textmultirange;
+ERROR:  malformed multirange literal: "{[a,c),}"
+LINE 1: select '{[a,c),}'::textmultirange;
+               ^
+DETAIL:  Expected range start.
+select '{,[a,c)}'::textmultirange;
+ERROR:  malformed multirange literal: "{,[a,c)}"
+LINE 1: select '{,[a,c)}'::textmultirange;
+               ^
+DETAIL:  Expected range start.
+select '{-[a,z)}'::textmultirange;
+ERROR:  malformed multirange literal: "{-[a,z)}"
+LINE 1: select '{-[a,z)}'::textmultirange;
+               ^
+DETAIL:  Expected range start.
+select '{[a,z) - }'::textmultirange;
+ERROR:  malformed multirange literal: "{[a,z) - }"
+LINE 1: select '{[a,z) - }'::textmultirange;
+               ^
+DETAIL:  Expected comma or end of multirange.
+select '{(",a)}'::textmultirange;
+ERROR:  malformed multirange literal: "{(",a)}"
+LINE 1: select '{(",a)}'::textmultirange;
+               ^
+DETAIL:  Unexpected end of input.
+select '{(,,a)}'::textmultirange;
+ERROR:  malformed range literal: "(,,a)"
+LINE 1: select '{(,,a)}'::textmultirange;
+               ^
+DETAIL:  Too many commas.
+select '{(),a)}'::textmultirange;
+ERROR:  malformed range literal: "()"
+LINE 1: select '{(),a)}'::textmultirange;
+               ^
+DETAIL:  Missing comma after lower bound.
+select '{(a,))}'::textmultirange;
+ERROR:  malformed multirange literal: "{(a,))}"
+LINE 1: select '{(a,))}'::textmultirange;
+               ^
+DETAIL:  Expected comma or end of multirange.
+select '{(],a)}'::textmultirange;
+ERROR:  malformed range literal: "(]"
+LINE 1: select '{(],a)}'::textmultirange;
+               ^
+DETAIL:  Missing comma after lower bound.
+select '{(a,])}'::textmultirange;
+ERROR:  malformed multirange literal: "{(a,])}"
+LINE 1: select '{(a,])}'::textmultirange;
+               ^
+DETAIL:  Expected comma or end of multirange.
+select '{[z,a]}'::textmultirange;
+ERROR:  range lower bound must be less than or equal to range upper bound
+LINE 1: select '{[z,a]}'::textmultirange;
+               ^
+-- should succeed
+select '{}'::textmultirange;
+ textmultirange 
+----------------
+ {}
+(1 row)
+
+select '  {}  '::textmultirange;
+ textmultirange 
+----------------
+ {}
+(1 row)
+
+select ' { empty, empty }  '::textmultirange;
+ textmultirange 
+----------------
+ {}
+(1 row)
+
+select ' {( " a " " a ", " z " " z " )  }'::textmultirange;
+       textmultirange       
+----------------------------
+ {("  a   a ","  z   z  ")}
+(1 row)
+
+select '{(,z)}'::textmultirange;
+ textmultirange 
+----------------
+ {(,z)}
+(1 row)
+
+select '{(a,)}'::textmultirange;
+ textmultirange 
+----------------
+ {(a,)}
+(1 row)
+
+select '{[,z]}'::textmultirange;
+ textmultirange 
+----------------
+ {(,z]}
+(1 row)
+
+select '{[a,]}'::textmultirange;
+ textmultirange 
+----------------
+ {[a,)}
+(1 row)
+
+select '{(,)}'::textmultirange;
+ textmultirange 
+----------------
+ {(,)}
+(1 row)
+
+select '{[ , ]}'::textmultirange;
+ textmultirange 
+----------------
+ {[" "," "]}
+(1 row)
+
+select '{["",""]}'::textmultirange;
+ textmultirange 
+----------------
+ {["",""]}
+(1 row)
+
+select '{[",",","]}'::textmultirange;
+ textmultirange 
+----------------
+ {[",",","]}
+(1 row)
+
+select '{["\\","\\"]}'::textmultirange;
+ textmultirange 
+----------------
+ {["\\","\\"]}
+(1 row)
+
+select '{["""","\""]}'::textmultirange;
+ textmultirange 
+----------------
+ {["""",""""]}
+(1 row)
+
+select '{(\\,a)}'::textmultirange;
+ textmultirange 
+----------------
+ {("\\",a)}
+(1 row)
+
+select '{((,z)}'::textmultirange;
+ textmultirange 
+----------------
+ {("(",z)}
+(1 row)
+
+select '{([,z)}'::textmultirange;
+ textmultirange 
+----------------
+ {("[",z)}
+(1 row)
+
+select '{(!,()}'::textmultirange;
+ textmultirange 
+----------------
+ {(!,"(")}
+(1 row)
+
+select '{(!,[)}'::textmultirange;
+ textmultirange 
+----------------
+ {(!,"[")}
+(1 row)
+
+select '{[a,a]}'::textmultirange;
+ textmultirange 
+----------------
+ {[a,a]}
+(1 row)
+
+select '{[a,a],[a,b]}'::textmultirange;
+ textmultirange 
+----------------
+ {[a,b]}
+(1 row)
+
+select '{[a,b), [b,e]}'::textmultirange;
+ textmultirange 
+----------------
+ {[a,e]}
+(1 row)
+
+select '{[a,d), [b,f]}'::textmultirange;
+ textmultirange 
+----------------
+ {[a,f]}
+(1 row)
+
+select '{[a,a],[b,b]}'::textmultirange;
+ textmultirange 
+----------------
+ {[a,a],[b,b]}
+(1 row)
+
+-- without canonicalization, we can't join these:
+select '{[a,a], [b,b]}'::textmultirange;
+ textmultirange 
+----------------
+ {[a,a],[b,b]}
+(1 row)
+
+-- with canonicalization, we can join these:
+select '{[1,2], [3,4]}'::int4multirange;
+ int4multirange 
+----------------
+ {[1,5)}
+(1 row)
+
+select '{[a,a], [b,b], [c,c]}'::textmultirange;
+   textmultirange    
+---------------------
+ {[a,a],[b,b],[c,c]}
+(1 row)
+
+select '{[a,d], [b,e]}'::textmultirange;
+ textmultirange 
+----------------
+ {[a,e]}
+(1 row)
+
+select '{[a,d), [d,e)}'::textmultirange;
+ textmultirange 
+----------------
+ {[a,e)}
+(1 row)
+
+-- these are allowed but normalize to empty:
+select '{[a,a)}'::textmultirange;
+ textmultirange 
+----------------
+ {}
+(1 row)
+
+select '{(a,a]}'::textmultirange;
+ textmultirange 
+----------------
+ {}
+(1 row)
+
+select '{(a,a)}'::textmultirange;
+ textmultirange 
+----------------
+ {}
+(1 row)
+
+--
+-- test the constructor
+---
+select textmultirange();
+ textmultirange 
+----------------
+ {}
+(1 row)
+
+select textmultirange(textrange('a', 'c'));
+ textmultirange 
+----------------
+ {[a,c)}
+(1 row)
+
+select textmultirange(textrange('a', 'c'), textrange('f', 'g'));
+ textmultirange 
+----------------
+ {[a,c),[f,g)}
+(1 row)
+
+select textmultirange(textrange('a', 'c'), textrange('b', 'd'));
+ textmultirange 
+----------------
+ {[a,d)}
+(1 row)
+
