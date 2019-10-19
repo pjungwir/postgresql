@@ -9536,8 +9536,8 @@ transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 
 		if (i == indexStruct->indnkeyatts - 1 && indexStruct->indisexclusion)
 		{
-			periodattnums[i] = pkattno;
-			periodatttypids[i] = attnumTypeId(pkrel, pkattno);
+			periodattnums[0] = pkattno;
+			periodatttypids[0] = attnumTypeId(pkrel, pkattno);
 			opclasses[i] = indclass->values[i];
 			*periodattname = (Node *)makeString(pstrdup(NameStr(*attnumAttName(pkrel, pkattno))));
 		}
