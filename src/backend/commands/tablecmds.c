@@ -7753,11 +7753,12 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 									 fkattnum, fktypoid);
 	if (is_temporal)
 	{
+	  List *fk_period;
 	  MemSet(pkperiodattnum, 0, sizeof(pkperiodattnum));
 	  MemSet(fkperiodattnum, 0, sizeof(fkperiodattnum));
 	  MemSet(pkperiodtypoid, 0, sizeof(pkperiodtypoid));
 	  MemSet(fkperiodtypoid, 0, sizeof(fkperiodtypoid));
-	  List *fk_period = list_make1(fkconstraint->fk_period);
+	  fk_period = list_make1(fkconstraint->fk_period);
 	  transformColumnNameList(RelationGetRelid(rel),
 							  fk_period,
 							  fkperiodattnum, fkperiodtypoid);
@@ -8020,7 +8021,7 @@ addFkRecurseReferenced(List **wqueue, Constraint *fkconstraint, Relation rel,
 									  fkconstraint->fk_upd_action,
 									  fkconstraint->fk_del_action,
 									  fkconstraint->fk_matchtype,
-									  NULL,
+									  NULL, /* no exclusion constraint */
 									  NULL, /* no check constraint */
 									  NULL,
 									  conislocal,	/* islocal */
