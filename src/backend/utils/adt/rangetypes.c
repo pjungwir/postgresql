@@ -44,8 +44,6 @@
 #include "utils/timestamp.h"
 
 
-#define RANGE_EMPTY_LITERAL "empty"
-
 /* fn_extra cache entry for one of the range I/O functions */
 typedef struct RangeIOData
 {
@@ -445,19 +443,37 @@ range_lower(PG_FUNCTION_ARGS)
 {
 	RangeType  *r1 = PG_GETARG_RANGE_P(0);
 	TypeCacheEntry *typcache;
+	bool		isnull;
+	Datum		result;
+
+	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
+
+	result = range_lower_internal(typcache, r1, &isnull);
+
+	if (isnull)
+		PG_RETURN_NULL();
+	else
+		PG_RETURN_DATUM(result);
+}
+
+Datum
+range_lower_internal(TypeCacheEntry *typcache, RangeType *r1, bool *isnull)
+{
 	RangeBound	lower;
 	RangeBound	upper;
 	bool		empty;
-
-	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
 
 	range_deserialize(typcache, r1, &lower, &upper, &empty);
 
 	/* Return NULL if there's no finite lower bound */
 	if (empty || lower.infinite)
-		PG_RETURN_NULL();
+	{
+		*isnull = true;
+		return 0;
+	}
 
-	PG_RETURN_DATUM(lower.val);
+	*isnull = false;
+	return lower.val;
 }
 
 /* extract upper bound value */
@@ -466,19 +482,37 @@ range_upper(PG_FUNCTION_ARGS)
 {
 	RangeType  *r1 = PG_GETARG_RANGE_P(0);
 	TypeCacheEntry *typcache;
+	bool		isnull;
+	Datum		result;
+
+	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
+
+	result = range_upper_internal(typcache, r1, &isnull);
+
+	if (isnull)
+		PG_RETURN_NULL();
+	else
+		PG_RETURN_DATUM(result);
+}
+
+Datum
+range_upper_internal(TypeCacheEntry *typcache, RangeType *r1, bool *isnull)
+{
 	RangeBound	lower;
 	RangeBound	upper;
 	bool		empty;
-
-	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
 
 	range_deserialize(typcache, r1, &lower, &upper, &empty);
 
 	/* Return NULL if there's no finite upper bound */
 	if (empty || upper.infinite)
-		PG_RETURN_NULL();
+	{
+		*isnull = true;
+		return 0;
+	}
 
-	PG_RETURN_DATUM(upper.val);
+	*isnull = false;
+	return upper.val;
 }
 
 
@@ -489,9 +523,8 @@ Datum
 range_empty(PG_FUNCTION_ARGS)
 {
 	RangeType  *r1 = PG_GETARG_RANGE_P(0);
-	char		flags = range_get_flags(r1);
 
-	PG_RETURN_BOOL(flags & RANGE_EMPTY);
+	PG_RETURN_BOOL(range_has_flag(r1, RANGE_EMPTY));
 }
 
 /* is lower bound inclusive? */
@@ -499,9 +532,8 @@ Datum
 range_lower_inc(PG_FUNCTION_ARGS)
 {
 	RangeType  *r1 = PG_GETARG_RANGE_P(0);
-	char		flags = range_get_flags(r1);
 
-	PG_RETURN_BOOL(flags & RANGE_LB_INC);
+	PG_RETURN_BOOL(range_has_flag(r1, RANGE_LB_INC));
 }
 
 /* is upper bound inclusive? */
@@ -509,9 +541,8 @@ Datum
 range_upper_inc(PG_FUNCTION_ARGS)
 {
 	RangeType  *r1 = PG_GETARG_RANGE_P(0);
-	char		flags = range_get_flags(r1);
 
-	PG_RETURN_BOOL(flags & RANGE_UB_INC);
+	PG_RETURN_BOOL(range_has_flag(r1, RANGE_UB_INC));
 }
 
 /* is lower bound infinite? */
@@ -519,9 +550,8 @@ Datum
 range_lower_inf(PG_FUNCTION_ARGS)
 {
 	RangeType  *r1 = PG_GETARG_RANGE_P(0);
-	char		flags = range_get_flags(r1);
 
-	PG_RETURN_BOOL(flags & RANGE_LB_INF);
+	PG_RETURN_BOOL(range_has_flag(r1, RANGE_LB_INF));
 }
 
 /* is upper bound infinite? */
@@ -529,9 +559,8 @@ Datum
 range_upper_inf(PG_FUNCTION_ARGS)
 {
 	RangeType  *r1 = PG_GETARG_RANGE_P(0);
-	char		flags = range_get_flags(r1);
 
-	PG_RETURN_BOOL(flags & RANGE_UB_INF);
+	PG_RETURN_BOOL(range_has_flag(r1, RANGE_UB_INF));
 }
 
 
@@ -971,7 +1000,25 @@ range_minus(PG_FUNCTION_ARGS)
 {
 	RangeType  *r1 = PG_GETARG_RANGE_P(0);
 	RangeType  *r2 = PG_GETARG_RANGE_P(1);
+	RangeType  *ret;
 	TypeCacheEntry *typcache;
+
+	/* Different types should be prevented by ANYRANGE matching rules */
+	if (RangeTypeGetOid(r1) != RangeTypeGetOid(r2))
+		elog(ERROR, "range types do not match");
+
+	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
+
+	ret = range_minus_internal(typcache, r1, r2);
+	if (ret)
+		PG_RETURN_RANGE_P(ret);
+	else
+		PG_RETURN_NULL();
+}
+
+RangeType *
+range_minus_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2)
+{
 	RangeBound	lower1,
 				lower2;
 	RangeBound	upper1,
@@ -983,18 +1030,12 @@ range_minus(PG_FUNCTION_ARGS)
 				cmp_u1l2,
 				cmp_u1u2;
 
-	/* Different types should be prevented by ANYRANGE matching rules */
-	if (RangeTypeGetOid(r1) != RangeTypeGetOid(r2))
-		elog(ERROR, "range types do not match");
-
-	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
-
 	range_deserialize(typcache, r1, &lower1, &upper1, &empty1);
 	range_deserialize(typcache, r2, &lower2, &upper2, &empty2);
 
 	/* if either is empty, r1 is the correct answer */
 	if (empty1 || empty2)
-		PG_RETURN_RANGE_P(r1);
+		return r1;
 
 	cmp_l1l2 = range_cmp_bounds(typcache, &lower1, &lower2);
 	cmp_l1u2 = range_cmp_bounds(typcache, &lower1, &upper2);
@@ -1007,34 +1048,34 @@ range_minus(PG_FUNCTION_ARGS)
 				 errmsg("result of range difference would not be contiguous")));
 
 	if (cmp_l1u2 > 0 || cmp_u1l2 < 0)
-		PG_RETURN_RANGE_P(r1);
+		return r1;
 
 	if (cmp_l1l2 >= 0 && cmp_u1u2 <= 0)
-		PG_RETURN_RANGE_P(make_empty_range(typcache));
+		return make_empty_range(typcache);
 
 	if (cmp_l1l2 <= 0 && cmp_u1l2 >= 0 && cmp_u1u2 <= 0)
 	{
 		lower2.inclusive = !lower2.inclusive;
 		lower2.lower = false;	/* it will become the upper bound */
-		PG_RETURN_RANGE_P(make_range(typcache, &lower1, &lower2, false));
+		return make_range(typcache, &lower1, &lower2, false);
 	}
 
 	if (cmp_l1l2 >= 0 && cmp_u1u2 >= 0 && cmp_l1u2 <= 0)
 	{
 		upper2.inclusive = !upper2.inclusive;
 		upper2.lower = true;	/* it will become the lower bound */
-		PG_RETURN_RANGE_P(make_range(typcache, &upper2, &upper1, false));
+		return make_range(typcache, &upper2, &upper1, false);
 	}
 
 	elog(ERROR, "unexpected case in range_minus");
-	PG_RETURN_NULL();
+	return NULL;
 }
 
 /*
  * Set union.  If strict is true, it is an error that the two input ranges
  * are not adjacent or overlapping.
  */
-static RangeType *
+RangeType *
 range_union_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2,
 					 bool strict)
 {
@@ -1115,6 +1156,19 @@ range_intersect(PG_FUNCTION_ARGS)
 	RangeType  *r1 = PG_GETARG_RANGE_P(0);
 	RangeType  *r2 = PG_GETARG_RANGE_P(1);
 	TypeCacheEntry *typcache;
+
+	/* Different types should be prevented by ANYRANGE matching rules */
+	if (RangeTypeGetOid(r1) != RangeTypeGetOid(r2))
+		elog(ERROR, "range types do not match");
+
+	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
+
+	PG_RETURN_RANGE_P(range_intersect_internal(typcache, r1, r2));
+}
+
+RangeType *
+range_intersect_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2)
+{
 	RangeBound	lower1,
 				lower2;
 	RangeBound	upper1,
@@ -1124,17 +1178,11 @@ range_intersect(PG_FUNCTION_ARGS)
 	RangeBound *result_lower;
 	RangeBound *result_upper;
 
-	/* Different types should be prevented by ANYRANGE matching rules */
-	if (RangeTypeGetOid(r1) != RangeTypeGetOid(r2))
-		elog(ERROR, "range types do not match");
-
-	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
-
 	range_deserialize(typcache, r1, &lower1, &upper1, &empty1);
 	range_deserialize(typcache, r2, &lower2, &upper2, &empty2);
 
-	if (empty1 || empty2 || !DatumGetBool(range_overlaps(fcinfo)))
-		PG_RETURN_RANGE_P(make_empty_range(typcache));
+	if (empty1 || empty2 || !range_overlaps_internal(typcache, r1, r2))
+		return make_empty_range(typcache);
 
 	if (range_cmp_bounds(typcache, &lower1, &lower2) >= 0)
 		result_lower = &lower1;
@@ -1146,191 +1194,80 @@ range_intersect(PG_FUNCTION_ARGS)
 	else
 		result_upper = &upper2;
 
-	PG_RETURN_RANGE_P(make_range(typcache, result_lower, result_upper, false));
+	return make_range(typcache, result_lower, result_upper, false);
 }
 
-/* Aggregate functions */
+/* range, range -> range, range functions */
 
 /*
- * range_agg_transfn: combine adjacent/overlapping ranges.
- *
- * All we do here is gather the input ranges into an array
- * so that the finalfn can sort and combine them.
- * We can't simply use array_append as the transfn
- * because we have to capture the second & third parameters
- * and put them in the aggregate's running state,
- * so that our finalfn can use them.
+ * range_split_internal - if r2 intersects the middle of r1, leaving non-empty
+ * ranges on both sides, then return true and set output1 and output2 to the
+ * results of r1 - r2 (in order). Otherwise return false and don't set output1
+ * or output2. Neither input range should be empty.
  */
-Datum
-range_agg_transfn(PG_FUNCTION_ARGS)
+bool
+range_split_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2,
+					 RangeType **output1, RangeType **output2)
 {
-	Oid rangeTypeId;
-	MemoryContext aggContext;
-	RangeAggState *state;
+	RangeBound	lower1,
+				lower2;
+	RangeBound	upper1,
+				upper2;
+	bool		empty1,
+				empty2;
 
-	if (!AggCheckCallContext(fcinfo, &aggContext))
+	range_deserialize(typcache, r1, &lower1, &upper1, &empty1);
+	range_deserialize(typcache, r2, &lower2, &upper2, &empty2);
+
+	if (range_cmp_bounds(typcache, &lower1, &lower2) < 0 &&
+		range_cmp_bounds(typcache, &upper1, &upper2) > 0)
 	{
-		elog(ERROR, "range_agg_transfn called in non-aggregate context");
-	}
-
-	rangeTypeId = get_fn_expr_argtype(fcinfo->flinfo, 1);
-	if (!type_is_range(rangeTypeId))
-	{
-		ereport(ERROR, (errmsg("range_agg must be called with a range")));
-	}
-	if (PG_ARGISNULL(0))
-	{
-		state = MemoryContextAlloc(aggContext, sizeof(RangeAggState));
-		state->inputs = initArrayResult(rangeTypeId, aggContext, false);
-
-		state->flags = 0x0;
-		switch (PG_NARGS())
-		{
-			case 2:
-				state->flags |= RANGE_AGG_GAPS_RAISE;
-				state->flags |= RANGE_AGG_OVERLAPS_RAISE;
-				break;
-			case 3:
-				if (PG_ARGISNULL(2))         state->flags |= RANGE_AGG_GAPS_SET_NULL;
-				else if (!PG_GETARG_BOOL(2)) state->flags |= RANGE_AGG_GAPS_RAISE;
-				state->flags |= RANGE_AGG_OVERLAPS_RAISE;
-				break;
-			case 4:
-				if (PG_ARGISNULL(2))         state->flags |= RANGE_AGG_GAPS_SET_NULL;
-				else if (!PG_GETARG_BOOL(2)) state->flags |= RANGE_AGG_GAPS_RAISE;
-				if (PG_ARGISNULL(3))         state->flags |= RANGE_AGG_OVERLAPS_SET_NULL;
-				else if (!PG_GETARG_BOOL(3)) state->flags |= RANGE_AGG_OVERLAPS_RAISE;
-				break;
-			default:
-				Assert(false);
-		}
-	}
-	else
-	{
-		state = (RangeAggState *)PG_GETARG_POINTER(0);
-	}
-
-	/* Might as well skip NULLs here so the finalfn doesn't have to: */
-	if (!PG_ARGISNULL(1))
-	{
-		accumArrayResult(state->inputs, PG_GETARG_DATUM(1), false,
-				rangeTypeId, aggContext);
-	}
-
-	PG_RETURN_POINTER(state);
-}
-
-/* range_agg_finalfn: combine adjacent/overlapping ranges */
-Datum
-range_agg_finalfn(PG_FUNCTION_ARGS)
-{
-	MemoryContext aggContext;
-	Oid rangeTypeId;
-	TypeCacheEntry *typcache;
-	RangeAggState *state;
-	ArrayBuildState *inputArray;
-	int inputLength;
-	Datum *inputVals;
-	bool *inputNulls;
-	int i;
-	RangeType *currentRange;
-	RangeType *lastRange;
-	char *r1Str, *r2Str;
-	ArrayBuildState *resultContent;
-	Datum result;
-
-	if (!AggCheckCallContext(fcinfo, &aggContext))
-	{
-		elog(ERROR, "range_agg_finalfn called in non-aggregate context");
-	}
-
-	state = PG_ARGISNULL(0) ? NULL : (RangeAggState *)PG_GETARG_POINTER(0);
-	if (state == NULL) PG_RETURN_NULL();
-	inputArray  = state->inputs;
-	inputVals   = inputArray->dvalues;
-	inputNulls  = inputArray->dnulls;
-	inputLength = inputArray->nelems;
-	rangeTypeId = inputArray->element_type;
-
-	typcache = range_get_typcache(fcinfo, rangeTypeId);
-	if (inputLength == 0) PG_RETURN_NULL();
-	qsort_arg(inputVals, inputLength, sizeof(Datum), element_compare, typcache);
-
-	resultContent = initArrayResult(rangeTypeId, aggContext, false);
-	lastRange = DatumGetRangeTypeP(inputVals[0]);
-	for (i = 1; i < inputLength; i++)
-	{
-		Assert(!inputNulls[i]);
-		currentRange = DatumGetRangeTypeP(inputVals[i]);
-		/* range_adjacent_interval gives true
-		 * if *either* A meets B or B meets A,
-		 * which is not quite what we want,
-		 * but we rely on the sorting above
-		 * to rule out B meets A ever happening.
+		/*
+		 * Need to invert inclusive/exclusive for the lower2 and upper2
+		 * points. They can't be infinite though. We're allowed to overwrite
+		 * these RangeBounds since they only exist locally.
 		 */
-		if (range_adjacent_internal(typcache, lastRange, currentRange))
-		{
-			/* The two ranges touch without overlap: */
-			lastRange = range_union_internal(typcache, lastRange, currentRange, false);
-		}
-		else if (range_before_internal(typcache, lastRange, currentRange))
-		{
-			/* There is a gap: */
-			if (state->flags & RANGE_AGG_GAPS_FLAGS)
-			{
-				if (state->flags & RANGE_AGG_GAPS_RAISE)
-				{
-					r1Str = "lastRange";
-					r2Str = "currentRange";
-					// TODO: Why is this segfaulting?:
-					// r1Str = DatumGetCString(DirectFunctionCall1(range_out, RangeTypePGetDatum(lastRange)));
-					// r2Str = DatumGetCString(DirectFunctionCall1(range_out, RangeTypePGetDatum(currentRange)));
-					ereport(ERROR, (errmsg("range_agg: gap detected between %s and %s", r1Str, r2Str)));
-				}
-				else
-				{
-					Assert(state->flags & RANGE_AGG_GAPS_SET_NULL);
-					PG_RETURN_NULL();
-				}
-			}
-			accumArrayResult(resultContent, RangeTypePGetDatum(lastRange), false, rangeTypeId, aggContext);
-			lastRange = currentRange;
+		lower2.inclusive = !lower2.inclusive;
+		lower2.lower = false;
+		upper2.inclusive = !upper2.inclusive;
+		upper2.lower = true;
 
-		}
-		else
-		{
-			/* They must overlap: */
-			if (state->flags & RANGE_AGG_OVERLAPS_FLAGS)
-			{
-				if (state->flags & RANGE_AGG_OVERLAPS_RAISE)
-				{
-					r1Str = "lastRange"; r2Str = "currentRange";
-					// TODO: Why is this segfaulting?:
-					// r1Str = DatumGetCString(DirectFunctionCall1(range_out, RangeTypePGetDatum(lastRange)));
-					// r2Str = DatumGetCString(DirectFunctionCall1(range_out, RangeTypePGetDatum(currentRange)));
-					ereport(ERROR, (errmsg("range_agg: overlap detected between %s and %s", r1Str, r2Str)));
-				}
-				else
-				{
-					Assert(state->flags & RANGE_AGG_OVERLAPS_SET_NULL);
-					PG_RETURN_NULL();
-				}
-			}
-			lastRange = range_union_internal(typcache, lastRange, currentRange, false);
-		}
+		*output1 = make_range(typcache, &lower1, &lower2, false);
+		*output2 = make_range(typcache, &upper2, &upper1, false);
+		return true;
 	}
-	accumArrayResult(resultContent, RangeTypePGetDatum(lastRange), false, rangeTypeId, aggContext);
 
-	if (type_is_array(get_fn_expr_rettype(fcinfo->flinfo)))
-	{
-		result = makeArrayResult(resultContent, CurrentMemoryContext);
-		PG_RETURN_DATUM(result);
-	}
-	else
-	{
-		PG_RETURN_DATUM(RangeTypePGetDatum(lastRange));
-	}
+	return false;
 }
+
+/* range -> range aggregate functions */
+
+Datum
+range_intersect_agg_transfn(PG_FUNCTION_ARGS)
+{
+	MemoryContext aggContext;
+	Oid			rngtypoid;
+	TypeCacheEntry *typcache;
+	RangeType  *result;
+	RangeType  *current;
+
+	if (!AggCheckCallContext(fcinfo, &aggContext))
+		elog(ERROR, "range_intersect_agg_transfn called in non-aggregate context");
+
+	rngtypoid = get_fn_expr_argtype(fcinfo->flinfo, 1);
+	if (!type_is_range(rngtypoid))
+		ereport(ERROR, (errmsg("range_intersect_agg must be called with a range")));
+
+	typcache = range_get_typcache(fcinfo, rngtypoid);
+
+	/* strictness ensures these are non-null */
+	result = PG_GETARG_RANGE_P(0);
+	current = PG_GETARG_RANGE_P(1);
+
+	result = range_intersect_internal(typcache, result, current);
+	PG_RETURN_RANGE_P(result);
+}
+
 
 /* Btree support */
 
@@ -1341,12 +1278,6 @@ range_cmp(PG_FUNCTION_ARGS)
 	RangeType  *r1 = PG_GETARG_RANGE_P(0);
 	RangeType  *r2 = PG_GETARG_RANGE_P(1);
 	TypeCacheEntry *typcache;
-	RangeBound	lower1,
-				lower2;
-	RangeBound	upper1,
-				upper2;
-	bool		empty1,
-				empty2;
 	int			cmp;
 
 	check_stack_depth();		/* recurses when subtype is a range type */
@@ -1356,6 +1287,28 @@ range_cmp(PG_FUNCTION_ARGS)
 		elog(ERROR, "range types do not match");
 
 	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
+
+	cmp = range_cmp_internal(typcache, r1, r2);
+
+	PG_FREE_IF_COPY(r1, 0);
+	PG_FREE_IF_COPY(r2, 1);
+
+	PG_RETURN_INT32(cmp);
+}
+
+/*
+ * Internal version of range_cmp
+ */
+int
+range_cmp_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2)
+{
+	RangeBound	lower1,
+				lower2;
+	RangeBound	upper1,
+				upper2;
+	bool		empty1,
+				empty2;
+	int			cmp;
 
 	range_deserialize(typcache, r1, &lower1, &upper1, &empty1);
 	range_deserialize(typcache, r2, &lower2, &upper2, &empty2);
@@ -1374,10 +1327,7 @@ range_cmp(PG_FUNCTION_ARGS)
 			cmp = range_cmp_bounds(typcache, &upper1, &upper2);
 	}
 
-	PG_FREE_IF_COPY(r1, 0);
-	PG_FREE_IF_COPY(r2, 1);
-
-	PG_RETURN_INT32(cmp);
+	return cmp;
 }
 
 /* inequality operators using the range_cmp function */
@@ -1415,13 +1365,10 @@ range_gt(PG_FUNCTION_ARGS)
 
 /* Hash support */
 
-/* hash a range value */
-Datum
-hash_range(PG_FUNCTION_ARGS)
+uint32
+hash_range_internal(TypeCacheEntry *typcache, RangeType *r)
 {
-	RangeType  *r = PG_GETARG_RANGE_P(0);
 	uint32		result;
-	TypeCacheEntry *typcache;
 	TypeCacheEntry *scache;
 	RangeBound	lower;
 	RangeBound	upper;
@@ -1429,10 +1376,6 @@ hash_range(PG_FUNCTION_ARGS)
 	char		flags;
 	uint32		lower_hash;
 	uint32		upper_hash;
-
-	check_stack_depth();		/* recurses when subtype is a range type */
-
-	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r));
 
 	/* deserialize */
 	range_deserialize(typcache, r, &lower, &upper, &empty);
@@ -1475,20 +1418,27 @@ hash_range(PG_FUNCTION_ARGS)
 	result = (result << 1) | (result >> 31);
 	result ^= upper_hash;
 
-	PG_RETURN_INT32(result);
+	return result;
 }
 
-/*
- * Returns 64-bit value by hashing a value to a 64-bit value, with a seed.
- * Otherwise, similar to hash_range.
- */
+/* hash a range value */
 Datum
-hash_range_extended(PG_FUNCTION_ARGS)
+hash_range(PG_FUNCTION_ARGS)
 {
 	RangeType  *r = PG_GETARG_RANGE_P(0);
-	Datum		seed = PG_GETARG_DATUM(1);
-	uint64		result;
 	TypeCacheEntry *typcache;
+
+	check_stack_depth();		/* recurses when subtype is a range type */
+
+	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r));
+
+	PG_RETURN_INT32(hash_range_internal(typcache, r));
+}
+
+uint64
+hash_range_extended_internal(TypeCacheEntry *typcache, RangeType *r, Datum seed)
+{
+	uint64		result;
 	TypeCacheEntry *scache;
 	RangeBound	lower;
 	RangeBound	upper;
@@ -1496,10 +1446,6 @@ hash_range_extended(PG_FUNCTION_ARGS)
 	char		flags;
 	uint64		lower_hash;
 	uint64		upper_hash;
-
-	check_stack_depth();
-
-	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r));
 
 	range_deserialize(typcache, r, &lower, &upper, &empty);
 	flags = range_get_flags(r);
@@ -1539,7 +1485,25 @@ hash_range_extended(PG_FUNCTION_ARGS)
 	result = ROTATE_HIGH_AND_LOW_32BITS(result);
 	result ^= upper_hash;
 
-	PG_RETURN_UINT64(result);
+	return result;
+}
+
+/*
+ * Returns 64-bit value by hashing a value to a 64-bit value, with a seed.
+ * Otherwise, similar to hash_range.
+ */
+Datum
+hash_range_extended(PG_FUNCTION_ARGS)
+{
+	RangeType  *r = PG_GETARG_RANGE_P(0);
+	Datum		seed = PG_GETARG_DATUM(1);
+	TypeCacheEntry *typcache;
+
+	check_stack_depth();
+
+	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r));
+
+	PG_RETURN_UINT64(hash_range_extended_internal(typcache, r, seed));
 }
 
 /*
@@ -1967,6 +1931,21 @@ range_get_flags(RangeType *range)
 }
 
 /*
+ * range_has_flag: set whether a range has a specific flag.
+ *
+ * This lets expose some of our functions that just check flags
+ * to the rest of the code base (like to multiranges)
+ * without writing full-fledged *_internal versions.
+ */
+bool
+range_has_flag(RangeType *r1, char flag)
+{
+	char		flags = range_get_flags(r1);
+
+	return flags & flag;
+}
+
+/*
  * range_set_contain_empty: set the RANGE_CONTAIN_EMPTY bit in the value.
  *
  * This is only needed in GiST operations, so we don't include a provision
@@ -2132,6 +2111,45 @@ range_cmp_bound_values(TypeCacheEntry *typcache, RangeBound *b1,
 	return DatumGetInt32(FunctionCall2Coll(&typcache->rng_cmp_proc_finfo,
 										   typcache->rng_collation,
 										   b1->val, b2->val));
+}
+
+/*
+ * Compares two ranges so we can qsort them.
+ * This expects that you give qsort a RangeType **,
+ * so the RangeTypes can be in diverse locations,
+ * as long as you have a list of pointers to them all.
+ */
+int
+range_compare(const void *key1, const void *key2, void *arg)
+{
+	RangeType  *r1 = *(RangeType **) key1;
+	RangeType  *r2 = *(RangeType **) key2;
+	TypeCacheEntry *typcache = (TypeCacheEntry *) arg;
+	RangeBound	lower1;
+	RangeBound	upper1;
+	RangeBound	lower2;
+	RangeBound	upper2;
+	bool		empty1;
+	bool		empty2;
+	int			cmp;
+
+	range_deserialize(typcache, r1, &lower1, &upper1, &empty1);
+	range_deserialize(typcache, r2, &lower2, &upper2, &empty2);
+
+	if (empty1 && empty2)
+		cmp = 0;
+	else if (empty1)
+		cmp = -1;
+	else if (empty2)
+		cmp = 1;
+	else
+	{
+		cmp = range_cmp_bounds(typcache, &lower1, &lower2);
+		if (cmp == 0)
+			cmp = range_cmp_bounds(typcache, &upper1, &upper2);
+	}
+
+	return cmp;
 }
 
 /*
