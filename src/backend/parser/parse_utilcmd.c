@@ -2423,7 +2423,6 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 				foreach(columns, cxt->columns)
 				{
 					column = castNode(ColumnDef, lfirst(columns));
-					// ereport(NOTICE, (errmsg("range %s vs column %s of type %d", without_overlaps_str, column->colname, column->typeName->typeOid)));
 					if (strcmp(column->colname, without_overlaps_str) == 0)
 					{
 						Oid colTypeOid = typenameTypeId(NULL, column->typeName);
@@ -2444,13 +2443,14 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 			}
 			if (found)
 			{
-				iparam->name = without_overlaps_str;	// TODO: pstrdup here?
+				AlterTableCmd *notnullcmd;
+				iparam->name = pstrdup(without_overlaps_str);
 				iparam->expr = NULL;
 
 				/*
 				 * Force the column to NOT NULL since it is part of the primary key.
 				 */
-				AlterTableCmd *notnullcmd = makeNode(AlterTableCmd);
+				notnullcmd = makeNode(AlterTableCmd);
 
 				notnullcmd->subtype = AT_SetNotNull;
 				notnullcmd->name = pstrdup(without_overlaps_str);
@@ -2484,18 +2484,20 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 									without_overlaps_str)));
 				}
 			}
+			{
+				List *opname;
+				iparam->indexcolname = NULL;
+				iparam->collation = NIL;
+				iparam->opclass = NIL;
+				iparam->ordering = SORTBY_DEFAULT;
+				iparam->nulls_ordering = SORTBY_NULLS_DEFAULT;
+				index->indexParams = lappend(index->indexParams, iparam);
 
-			iparam->indexcolname = NULL;
-			iparam->collation = NIL;
-			iparam->opclass = NIL;
-			iparam->ordering = SORTBY_DEFAULT;
-			iparam->nulls_ordering = SORTBY_NULLS_DEFAULT;
-			index->indexParams = lappend(index->indexParams, iparam);
-
-			List *opname = list_make1(makeString("&&"));
-			index->excludeOpNames = lappend(index->excludeOpNames, opname);
-			index->accessMethod = "gist";
-			constraint->access_method = "gist";
+				opname = list_make1(makeString("&&"));
+				index->excludeOpNames = lappend(index->excludeOpNames, opname);
+				index->accessMethod = "gist";
+				constraint->access_method = "gist";
+			}
 		}
 	}
 
