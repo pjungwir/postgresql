@@ -7645,10 +7645,10 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	Oid			ppeqoperators[INDEX_MAX_KEYS];
 	Oid			ffeqoperators[INDEX_MAX_KEYS];
 	bool		is_temporal = (fkconstraint->fk_period != NULL);
-	int16		pkperiodattnum[1];
-	int16		fkperiodattnum[1];
-	Oid			pkperiodtypoid[1];
-	Oid			fkperiodtypoid[1];
+	int16		pkperiodattnum = 0;
+	int16		fkperiodattnum = 0;
+	Oid			pkperiodtypoid = 0;
+	Oid			fkperiodtypoid = 0;
 	int			i;
 	int			numfks,
 				numpks;
@@ -7754,14 +7754,10 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	if (is_temporal)
 	{
 	  List *fk_period;
-	  MemSet(pkperiodattnum, 0, sizeof(pkperiodattnum));
-	  MemSet(fkperiodattnum, 0, sizeof(fkperiodattnum));
-	  MemSet(pkperiodtypoid, 0, sizeof(pkperiodtypoid));
-	  MemSet(fkperiodtypoid, 0, sizeof(fkperiodtypoid));
 	  fk_period = list_make1(fkconstraint->fk_period);
 	  transformColumnNameList(RelationGetRelid(rel),
 							  fk_period,
-							  fkperiodattnum, fkperiodtypoid);
+							  &fkperiodattnum, &fkperiodtypoid);
 	}
 
 	/*
@@ -7776,7 +7772,7 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 											&fkconstraint->pk_attrs,
 											pkattnum, pktypoid,
 											&fkconstraint->pk_period,
-											pkperiodattnum, pkperiodtypoid,
+											&pkperiodattnum, &pkperiodtypoid,
 											opclasses);
 	}
 	else
@@ -7788,11 +7784,11 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 			List *pk_period = list_make1(fkconstraint->pk_period);
 			transformColumnNameList(RelationGetRelid(pkrel),
 									pk_period,
-									pkperiodattnum, pkperiodtypoid);
+									&pkperiodattnum, &pkperiodtypoid);
 		}
 		/* Look for an index matching the column list */
 		indexOid = transformFkeyCheckAttrs(pkrel, numpks, pkattnum,
-										   is_temporal, pkperiodattnum,
+										   is_temporal, &pkperiodattnum,
 										   opclasses);
 	}
 
@@ -7861,15 +7857,15 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 				&pfeqoperators[i], &ppeqoperators[i], &ffeqoperators[i]);
 	}
 	if (is_temporal) {
-		pkattnum[numpks] = pkperiodattnum[0];
-		fkattnum[numpks] = fkperiodattnum[0];
-		pktypoid[numpks] = pkperiodtypoid[0];
-		fktypoid[numpks] = fkperiodtypoid[0];
+		pkattnum[numpks] = pkperiodattnum;
+		fkattnum[numpks] = fkperiodattnum;
+		pktypoid[numpks] = pkperiodtypoid;
+		fktypoid[numpks] = fkperiodtypoid;
 
 		FindFKComparisonOperators(
 				fkconstraint, tab, numpks, fkattnum,
 				&old_check_ok, &old_pfeqop_item,
-				pkperiodtypoid[0], fkperiodtypoid[0], opclasses[numpks],
+				pkperiodtypoid, fkperiodtypoid, opclasses[numpks],
 				is_temporal, true,
 				&pfeqoperators[numpks], &ppeqoperators[numpks], &ffeqoperators[numpks]);
 		numfks += 1;
