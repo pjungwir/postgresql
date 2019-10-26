@@ -1414,6 +1414,7 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 	index->oldNode = InvalidOid;
 	index->unique = idxrec->indisunique;
 	index->primary = idxrec->indisprimary;
+	index->istemporal = idxrec->indisprimary && idxrec->indisexclusion;
 	index->transformed = true;	/* don't need transformIndexStmt */
 	index->concurrent = false;
 	index->if_not_exists = false;
@@ -1991,6 +1992,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 		 */
 	}
 	index->isconstraint = true;
+	index->istemporal = constraint->without_overlaps != NULL;
 	index->deferrable = constraint->deferrable;
 	index->initdeferred = constraint->initdeferred;
 
