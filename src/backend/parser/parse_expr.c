@@ -3003,6 +3003,8 @@ ParseExprKindName(ParseExprKind exprKind)
 		case EXPR_KIND_UPDATE_SOURCE:
 		case EXPR_KIND_UPDATE_TARGET:
 			return "UPDATE";
+		case EXPR_KIND_UPDATE_PORTION:
+			return "FOR PORTION OF";
 		case EXPR_KIND_GROUP_BY:
 			return "GROUP BY";
 		case EXPR_KIND_ORDER_BY:
