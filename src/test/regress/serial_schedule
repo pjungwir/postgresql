@@ -22,6 +22,7 @@ test: money
 test: rangetypes
 test: multirangetypes
 test: without_overlaps
+test: for_portion_of
 test: pg_lsn
 test: regproc
 test: strings

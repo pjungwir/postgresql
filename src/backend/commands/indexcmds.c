@@ -1124,6 +1124,8 @@ DefineIndex(Oid relationId,
 		constr_flags |= INDEX_CONSTR_CREATE_DEFERRABLE;
 	if (stmt->initdeferred)
 		constr_flags |= INDEX_CONSTR_CREATE_INIT_DEFERRED;
+	if (stmt->istemporal)
+		constr_flags |= INDEX_CONSTR_CREATE_TEMPORAL;
 
 	indexRelationId =
 		index_create(rel, indexRelationName, indexRelationId, parentIndexId,
