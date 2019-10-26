@@ -244,6 +244,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 	RangeVar			*range;
 	IntoClause			*into;
 	WithClause			*with;
+	ForPortionOfClause	*forportionof;
 	InferClause			*infer;
 	OnConflictClause	*onconflict;
 	A_Indices			*aind;
@@ -521,6 +522,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 %type <jexpr>	joined_table
 %type <range>	relation_expr
 %type <range>	relation_expr_opt_alias
+%type <forportionof> for_portion_of_clause
 %type <node>	tablesample_clause opt_repeatable_clause
 %type <target>	target_el set_target insert_column_item
 
@@ -695,7 +697,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 	OVER OVERLAPS OVERLAY OVERRIDING OWNED OWNER
 
 	PARALLEL PARSER PARTIAL PARTITION PASSING PASSWORD PERIOD PLACING PLANS POLICY
-	POSITION PRECEDING PRECISION PRESERVE PREPARE PREPARED PRIMARY
+	PORTION POSITION PRECEDING PRECISION PRESERVE PREPARE PREPARED PRIMARY
 	PRIOR PRIVILEGES PROCEDURAL PROCEDURE PROCEDURES PROGRAM PUBLICATION
 
 	QUOTE
@@ -11195,13 +11197,15 @@ returning_clause:
  *****************************************************************************/
 
 DeleteStmt: opt_with_clause DELETE_P FROM relation_expr_opt_alias
+			for_portion_of_clause
 			using_clause where_or_current_clause returning_clause
 				{
 					DeleteStmt *n = makeNode(DeleteStmt);
 					n->relation = $4;
-					n->usingClause = $5;
-					n->whereClause = $6;
-					n->returningList = $7;
+					n->forPortionOf = $5;
+					n->usingClause = $6;
+					n->whereClause = $7;
+					n->returningList = $8;
 					n->withClause = $1;
 					$$ = (Node *)n;
 				}
@@ -11264,6 +11268,7 @@ opt_nowait_or_skip:
  *****************************************************************************/
 
 UpdateStmt: opt_with_clause UPDATE relation_expr_opt_alias
+			for_portion_of_clause
 			SET set_clause_list
 			from_clause
 			where_or_current_clause
@@ -11271,10 +11276,11 @@ UpdateStmt: opt_with_clause UPDATE relation_expr_opt_alias
 				{
 					UpdateStmt *n = makeNode(UpdateStmt);
 					n->relation = $3;
-					n->targetList = $5;
-					n->fromClause = $6;
-					n->whereClause = $7;
-					n->returningList = $8;
+					n->forPortionOf = $4;
+					n->targetList = $6;
+					n->fromClause = $7;
+					n->whereClause = $8;
+					n->returningList = $9;
 					n->withClause = $1;
 					$$ = (Node *)n;
 				}
@@ -12551,6 +12557,20 @@ relation_expr_opt_alias: relation_expr					%prec UMINUS
 					$$ = $1;
 				}
 		;
+
+for_portion_of_clause:
+			FOR PORTION OF ColId FROM Sconst TO Sconst
+				{
+					ForPortionOfClause *n = makeNode(ForPortionOfClause);
+					n->range_name = $4;
+					n->range_name_location = @4;
+					n->target_start = makeStringConst($6, @6);
+					n->target_end = makeStringConst($8, @8);
+					$$ = n;
+				}
+			| /*EMPTY*/					{ $$ = NULL; }
+		;
+
 
 /*
  * TABLESAMPLE decoration in a FROM item
@@ -15740,6 +15760,7 @@ unreserved_keyword:
 			| PASSWORD
 			| PLANS
 			| POLICY
+			| PORTION
 			| PRECEDING
 			| PREPARE
 			| PREPARED
@@ -16321,6 +16342,7 @@ bare_label_keyword:
 			| PLACING
 			| PLANS
 			| POLICY
+			| PORTION
 			| POSITION
 			| PRECEDING
 			| PREPARE
