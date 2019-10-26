@@ -1363,6 +1363,18 @@ typedef struct RowMarkClause
 } RowMarkClause;
 
 /*
+ * ForPortionOfClause
+ *		representation of FOR PORTION OF <period-name> FROM <t1> TO <t2>
+ */
+typedef struct ForPortionOfClause
+{
+	NodeTag		type;
+	char	   *period_name;
+	char	   *period_start;
+	char	   *period_end;
+} ForPortionOfClause;
+
+/*
  * WithClause -
  *	   representation of WITH clause
  *
@@ -1517,12 +1529,13 @@ typedef struct InsertStmt
  */
 typedef struct DeleteStmt
 {
-	NodeTag		type;
-	RangeVar   *relation;		/* relation to delete from */
-	List	   *usingClause;	/* optional using clause for more tables */
-	Node	   *whereClause;	/* qualifications */
-	List	   *returningList;	/* list of expressions to return */
-	WithClause *withClause;		/* WITH clause */
+	NodeTag				type;
+	RangeVar		   *relation;		/* relation to delete from */
+	ForPortionOfClause *forPortionOf;	/* FOR PORTION OF clause */
+	List			   *usingClause;	/* optional using clause for more tables */
+	Node			   *whereClause;	/* qualifications */
+	List			   *returningList;	/* list of expressions to return */
+	WithClause		   *withClause;		/* WITH clause */
 } DeleteStmt;
 
 /* ----------------------
@@ -1531,13 +1544,14 @@ typedef struct DeleteStmt
  */
 typedef struct UpdateStmt
 {
-	NodeTag		type;
-	RangeVar   *relation;		/* relation to update */
-	List	   *targetList;		/* the target list (of ResTarget) */
-	Node	   *whereClause;	/* qualifications */
-	List	   *fromClause;		/* optional from clause for more tables */
-	List	   *returningList;	/* list of expressions to return */
-	WithClause *withClause;		/* WITH clause */
+	NodeTag				type;
+	RangeVar		   *relation;		/* relation to update */
+	ForPortionOfClause *forPortionOf;	/* FOR PORTION OF clause */
+	List			   *targetList;		/* the target list (of ResTarget) */
+	Node			   *whereClause;	/* qualifications */
+	List			   *fromClause;		/* optional from clause for more tables */
+	List			   *returningList;	/* list of expressions to return */
+	WithClause		   *withClause;		/* WITH clause */
 } UpdateStmt;
 
 /* ----------------------
