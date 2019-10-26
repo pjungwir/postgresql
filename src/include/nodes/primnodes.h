@@ -1553,4 +1553,23 @@ typedef struct OnConflictExpr
 	List	   *exclRelTlist;	/* tlist of the EXCLUDED pseudo relation */
 } OnConflictExpr;
 
+/*----------
+ * ForPortionOfExpr - represents a FOR PORTION OF ... expression
+ *
+ * TODO: more notes as needed
+ *----------
+ */
+typedef struct ForPortionOfExpr
+{
+	NodeTag		type;
+	// TODO: either a Var or a FuncExpr:
+	Expr	   *range;			/* Range column or expression */
+	Node	   *startCol;		/* Start column if using a PERIOD */
+	Node	   *endCol;			/* End column if using a PERIOD */
+	Node	   *targetStart;	/* Same type as the range's elements */
+	Node	   *targetEnd;		/* Same type as the range's elements */
+	Node	   *targetRange;	/* A range from targetStart to targetEnd */
+	Node	   *overlapsExpr;	/* range && targetRange */
+} ForPortionOfExpr;
+
 #endif							/* PRIMNODES_H */

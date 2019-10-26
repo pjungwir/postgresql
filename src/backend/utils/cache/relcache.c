@@ -4568,9 +4568,15 @@ RelationGetIndexList(Relation relation)
 		 * interesting for either oid indexes or replication identity indexes,
 		 * so don't check them.
 		 */
-		if (!index->indisvalid || !index->indisunique ||
-			!index->indimmediate ||
+		if (!index->indisvalid || !index->indimmediate ||
 			!heap_attisnull(htup, Anum_pg_index_indpred, NULL))
+			continue;
+
+		/*
+		 * Non-unique indexes aren't interesting either,
+		 * except when they are temporal primary keys.
+		 */
+		if (!index->indisunique && !index->indisprimary)
 			continue;
 
 		/* remember primary key index if any */
