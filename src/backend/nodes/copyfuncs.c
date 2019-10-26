@@ -3677,6 +3677,7 @@ _copyIndexStmt(const IndexStmt *from)
 	COPY_SCALAR_FIELD(unique);
 	COPY_SCALAR_FIELD(primary);
 	COPY_SCALAR_FIELD(isconstraint);
+	COPY_SCALAR_FIELD(istemporal);
 	COPY_SCALAR_FIELD(deferrable);
 	COPY_SCALAR_FIELD(initdeferred);
 	COPY_SCALAR_FIELD(transformed);
