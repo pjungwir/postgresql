@@ -12232,14 +12232,14 @@ for_portion_of_clause:
 			FOR PORTION OF ColId FROM Sconst TO Sconst
 				{
 					ForPortionOfClause *n = makeNode(ForPortionOfClause);
-					n->period_name = $4;
-					n->period_start = $6;
-					n->period_end = $8;
+					n->range_name = $4;
+					n->range_name_location = @4;
+					n->target_start = makeStringConst($6, @6);
+					n->target_end = makeStringConst($8, @8);
 					$$ = n;
 				}
 			| /*EMPTY*/					{ $$ = NULL; }
 		;
-
 
 
 /*
@@ -15265,6 +15265,7 @@ unreserved_keyword:
 			| PASSWORD
 			| PLANS
 			| POLICY
+			| PORTION
 			| PRECEDING
 			| PREPARE
 			| PREPARED

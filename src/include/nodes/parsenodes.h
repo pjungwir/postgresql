@@ -122,6 +122,8 @@ typedef struct Query
 	int			resultRelation; /* rtable index of target relation for
 								 * INSERT/UPDATE/DELETE; 0 for SELECT */
 
+	ForPortionOfExpr *forPortionOf;	/* FOR PORTION OF clause for UPDATE/DELETE */
+
 	bool		hasAggs;		/* has aggregates in tlist or havingQual */
 	bool		hasWindowFuncs; /* has window functions in tlist */
 	bool		hasTargetSRFs;	/* has set-returning functions in tlist */
@@ -1369,9 +1371,10 @@ typedef struct RowMarkClause
 typedef struct ForPortionOfClause
 {
 	NodeTag		type;
-	char	   *period_name;
-	char	   *period_start;
-	char	   *period_end;
+	char	   *range_name;
+	int			range_name_location;
+	Node	   *target_start;
+	Node	   *target_end;
 } ForPortionOfClause;
 
 /*

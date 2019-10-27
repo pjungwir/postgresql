@@ -44,6 +44,7 @@
 #include "parser/parse_target.h"
 #include "parser/parsetree.h"
 #include "rewrite/rewriteManip.h"
+#include "utils/lsyscache.h"
 #include "utils/rel.h"
 
 
@@ -58,6 +59,9 @@ static List *transformInsertRow(ParseState *pstate, List *exprlist,
 								bool strip_indirection);
 static OnConflictExpr *transformOnConflictClause(ParseState *pstate,
 												 OnConflictClause *onConflictClause);
+static ForPortionOfExpr *transformForPortionOfClause(ParseState *pstate,
+													 int rtindex,
+													 ForPortionOfClause *forPortionOfClause);
 static int	count_rowexpr_columns(ParseState *pstate, Node *expr);
 static Query *transformSelectStmt(ParseState *pstate, SelectStmt *stmt);
 static Query *transformValuesClause(ParseState *pstate, SelectStmt *stmt);
@@ -1074,6 +1078,84 @@ transformOnConflictClause(ParseState *pstate,
 	return result;
 }
 
+/*
+ * transformForPortionOfClause
+ *	  transforms a ForPortionOfClause in an UPDATE/DELETE statement
+ */
+static ForPortionOfExpr *
+transformForPortionOfClause(ParseState *pstate,
+							int rtindex,
+							ForPortionOfClause *forPortionOf)
+{
+	Relation targetrel = pstate->p_target_relation;
+	RangeTblEntry *target_rte = pstate->p_target_rangetblentry;
+	char *range_name = forPortionOf->range_name;
+	int	range_attno;
+	ForPortionOfExpr *result;
+
+	result = makeNode(ForPortionOfExpr);
+
+	/*
+	 * First look for a range column, then look for a period.
+	 */
+	range_attno = attnameAttNum(targetrel, range_name, true);
+	if (range_attno != InvalidAttrNumber)
+	{
+		Form_pg_attribute attr = TupleDescAttr(targetrel->rd_att, range_attno - 1);
+
+		// TODO: check attr->attisdropped ?
+
+		/* Make sure it's a range column */
+		if (!type_is_range(attr->atttypid))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+					 errmsg("column \"%s\" of relation \"%s\" is not a range type",
+							range_name,
+							RelationGetRelationName(pstate->p_target_relation)),
+					 parser_errposition(pstate, forPortionOf->range_name_location)));
+
+		// TODO: Make sure the table has a temporal PK
+		// TODO: Make sure the range column is part of the PK
+
+		Var *v = makeVar(
+				rtindex,
+				range_attno,		// TODO: 0-indexed or 1-indexed?
+				attr->atttypid,
+				attr->atttypmod,
+				attr->attcollation,
+				0);
+		v->location = forPortionOf->range_name_location;
+		result->range = (Expr *) v;
+	} else {
+		// TODO: Try to find a period,
+		// and set result->range to an Expr like tsrange(period->start_col, period->end_col)
+		// Probably we can make an A_Expr and call transformExpr on it, right?
+	}
+
+	if (range_attno == InvalidAttrNumber)
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_COLUMN),
+				 errmsg("column or period \"%s\" of relation \"%s\" does not exist",
+						range_name,
+						RelationGetRelationName(pstate->p_target_relation)),
+				 parser_errposition(pstate, forPortionOf->range_name_location)));
+
+	/*
+	 * targetStart and End are literal strings
+	 * that we'll coerce to the range's element type later.
+	 */
+	result->targetStart = transformExpr(pstate, forPortionOf->target_start, EXPR_KIND_UPDATE_PORTION);
+	result->targetEnd = transformExpr(pstate, forPortionOf->target_end, EXPR_KIND_UPDATE_PORTION);
+
+	// TODO: add to the WHERE part too:
+
+	// TODO:
+	/* Mark the range column as requiring update permissions */
+	target_rte->updatedCols = bms_add_member(target_rte->updatedCols,
+											 range_attno - FirstLowInvalidHeapAttributeNumber);
+
+	return result;
+}
 
 /*
  * BuildOnConflictExcludedTargetlist
@@ -2237,6 +2319,9 @@ transformUpdateStmt(ParseState *pstate, UpdateStmt *stmt)
 										 true,
 										 ACL_UPDATE);
 
+	if (stmt->forPortionOf)
+		qry->forPortionOf = transformForPortionOfClause(pstate, qry->resultRelation, stmt->forPortionOf);
+
 	/* grab the namespace item made by setTargetTable */
 	nsitem = (ParseNamespaceItem *) llast(pstate->p_namespace);
 
@@ -2331,6 +2416,8 @@ transformUpdateTargetList(ParseState *pstate, List *origTlist)
 							origTarget->name,
 							RelationGetRelationName(pstate->p_target_relation)),
 					 parser_errposition(pstate, origTarget->location)));
+
+		// TODO: If the column is also used in FOR PORTION OF, forbid SETing it:
 
 		updateTargetListEntry(pstate, tle, origTarget->name,
 							  attrno,
