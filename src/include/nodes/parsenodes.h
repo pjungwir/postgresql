@@ -2787,6 +2787,7 @@ typedef struct IndexStmt
 	bool		unique;			/* is index unique? */
 	bool		primary;		/* is index a primary key? */
 	bool		isconstraint;	/* is it for a pkey/unique constraint? */
+	bool		istemporal;		/* is it for a temporal pkey? */
 	bool		deferrable;		/* is the constraint DEFERRABLE? */
 	bool		initdeferred;	/* is the constraint INITIALLY DEFERRED? */
 	bool		transformed;	/* true when transformIndexStmt is finished */
