@@ -195,8 +195,8 @@ typedef enum NodeTag
 	T_JoinExpr,
 	T_FromExpr,
 	T_OnConflictExpr,
+	T_ForPortionOfExpr,
 	T_IntoClause,
-	T_ForPortionOfClause,
 
 	/*
 	 * TAGS FOR EXPRESSION STATE NODES (execnodes.h)
@@ -469,6 +469,7 @@ typedef enum NodeTag
 	T_WithClause,
 	T_InferClause,
 	T_OnConflictClause,
+	T_ForPortionOfClause,
 	T_CommonTableExpr,
 	T_RoleSpec,
 	T_TriggerTransition,
