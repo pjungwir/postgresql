@@ -46,6 +46,7 @@
 #include "rewrite/rewriteManip.h"
 #include "utils/lsyscache.h"
 #include "utils/rel.h"
+#include "utils/syscache.h"
 
 
 /* Hook for plugins to get control at end of parse analysis */
@@ -1114,8 +1115,47 @@ transformForPortionOfClause(ParseState *pstate,
 							RelationGetRelationName(pstate->p_target_relation)),
 					 parser_errposition(pstate, forPortionOf->range_name_location)));
 
-		// TODO: Make sure the table has a temporal PK
-		// TODO: Make sure the range column is part of the PK
+		/* Make sure the table has a primary key */
+		Oid pkoid = RelationGetPrimaryKeyIndex(targetrel);
+		if (pkoid == InvalidOid)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+					 errmsg("relation \"%s\" does not have a temporal primary key",
+							RelationGetRelationName(pstate->p_target_relation)),
+					 parser_errposition(pstate, forPortionOf->range_name_location)));
+
+		/* Make sure the primary key is a temporal key */
+		// TODO: need a lock here?
+		HeapTuple indexTuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(pkoid));
+		if (!HeapTupleIsValid(indexTuple))	/* should not happen */
+			elog(ERROR, "cache lookup failed for index %u", pkoid);
+		Form_pg_index pk = (Form_pg_index) GETSTRUCT(indexTuple);
+		ReleaseSysCache(indexTuple);
+
+		/*
+		 * Only temporal pkey indexes have both isprimary and isexclusion.
+		 * Checking those saves us from scanning pg_constraint
+		 * like in RelationGetExclusionInfo.
+		 */
+		if (!(pk->indisprimary && pk->indisexclusion))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+					 errmsg("relation \"%s\" does not have a temporal primary key",
+							RelationGetRelationName(pstate->p_target_relation)),
+					 parser_errposition(pstate, forPortionOf->range_name_location)));
+		}
+
+		/* Make sure the range attribute is the last part of the pkey. */
+		if (range_attno != pk->indkey.values[pk->indnkeyatts - 1])
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+					 errmsg("column \"%s\" is not part of the temporal primary key for relation \"%s\"",
+							range_name,
+							RelationGetRelationName(pstate->p_target_relation)),
+					 parser_errposition(pstate, forPortionOf->range_name_location)));
+		}
 
 		Var *v = makeVar(
 				rtindex,
