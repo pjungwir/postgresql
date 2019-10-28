@@ -1151,7 +1151,7 @@ transformForPortionOfClause(ParseState *pstate,
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
-					 errmsg("column \"%s\" is not part of the temporal primary key for relation \"%s\"",
+					 errmsg("column \"%s\" is not the temporal part of the primary key for relation \"%s\"",
 							range_name,
 							RelationGetRelationName(pstate->p_target_relation)),
 					 parser_errposition(pstate, forPortionOf->range_name_location)));
