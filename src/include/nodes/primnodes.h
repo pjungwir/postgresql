@@ -1539,6 +1539,8 @@ typedef struct ForPortionOfExpr
 	Node	   *endCol;			/* End column if using a PERIOD */
 	Node	   *targetStart;	/* Same type as the range's elements */
 	Node	   *targetEnd;		/* Same type as the range's elements */
+	Node	   *targetRange;	/* A range from targetStart to targetEnd */
+	Node	   *overlapsExpr;	/* range && targetRange */
 } ForPortionOfExpr;
 
 #endif							/* PRIMNODES_H */

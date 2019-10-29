@@ -42,6 +42,7 @@
 #include "parser/parse_param.h"
 #include "parser/parse_relation.h"
 #include "parser/parse_target.h"
+#include "parser/parser.h"
 #include "parser/parsetree.h"
 #include "rewrite/rewriteManip.h"
 #include "utils/lsyscache.h"
@@ -1091,6 +1092,7 @@ transformForPortionOfClause(ParseState *pstate,
 	Relation targetrel = pstate->p_target_relation;
 	RangeTblEntry *target_rte = pstate->p_target_rangetblentry;
 	char *range_name = forPortionOf->range_name;
+	char *range_type_name;
 	int	range_attno;
 	ForPortionOfExpr *result;
 
@@ -1166,10 +1168,24 @@ transformForPortionOfClause(ParseState *pstate,
 				0);
 		v->location = forPortionOf->range_name_location;
 		result->range = (Expr *) v;
+		range_type_name = get_typname(attr->atttypid);
 	} else {
 		// TODO: Try to find a period,
 		// and set result->range to an Expr like tsrange(period->start_col, period->end_col)
 		// Probably we can make an A_Expr and call transformExpr on it, right?
+
+		/*
+		 * We need to choose a range type based on the period's columns' type.
+		 * Normally inferring a range type from an element type is not allowed,
+		 * because there might be more than one.
+		 * In this case SQL:2011 only has periods for timestamp, timestamptz, and date,
+		 * which all have built-in range types.
+		 * Let's just take the first range we have for that type,
+		 * ordering by oid, so that we get built-in range types first.
+		 */
+
+		// TODO: set result->range
+		// TODO: set range_type_name
 	}
 
 	if (range_attno == InvalidAttrNumber)
@@ -1184,12 +1200,24 @@ transformForPortionOfClause(ParseState *pstate,
 	 * targetStart and End are literal strings
 	 * that we'll coerce to the range's element type later.
 	 */
-	result->targetStart = transformExpr(pstate, forPortionOf->target_start, EXPR_KIND_UPDATE_PORTION);
-	result->targetEnd = transformExpr(pstate, forPortionOf->target_end, EXPR_KIND_UPDATE_PORTION);
+	result->targetStart = forPortionOf->target_start;
+	result->targetEnd = forPortionOf->target_end;
 
-	// TODO: add to the WHERE part too:
+	FuncCall *fc = makeFuncCall(SystemFuncName(range_type_name),
+								list_make2(forPortionOf->target_start,
+										   forPortionOf->target_end),
+								// TODO: FROM...TO... location instead?:
+								forPortionOf->range_name_location);
 
-	// TODO:
+	result->targetRange = (Node *) fc;
+
+	/* overlapsExpr is something we can add to the whereClause */
+	result->overlapsExpr = (Node *) makeSimpleA_Expr(AEXPR_OP, "&&",
+			// TODO: Maybe need a copy here?:
+			(Node *) result->range, result->targetRange,
+			forPortionOf->range_name_location);
+
+	// TODO: if it's a period, mark its start/end columns instead:
 	/* Mark the range column as requiring update permissions */
 	target_rte->updatedCols = bms_add_member(target_rte->updatedCols,
 											 range_attno - FirstLowInvalidHeapAttributeNumber);
@@ -2341,6 +2369,7 @@ transformUpdateStmt(ParseState *pstate, UpdateStmt *stmt)
 {
 	Query	   *qry = makeNode(Query);
 	ParseNamespaceItem *nsitem;
+	Node	   *whereClause;
 	Node	   *qual;
 
 	qry->commandType = CMD_UPDATE;
@@ -2360,7 +2389,13 @@ transformUpdateStmt(ParseState *pstate, UpdateStmt *stmt)
 										 ACL_UPDATE);
 
 	if (stmt->forPortionOf)
+	{
 		qry->forPortionOf = transformForPortionOfClause(pstate, qry->resultRelation, stmt->forPortionOf);
+		// TODO: Is this messing up cnf? Or does that come later?:
+		whereClause = (Node *) makeBoolExpr(AND_EXPR, list_make2(qry->forPortionOf->overlapsExpr, stmt->whereClause), -1);
+	}
+	else
+		whereClause = stmt->whereClause;
 
 	/* grab the namespace item made by setTargetTable */
 	nsitem = (ParseNamespaceItem *) llast(pstate->p_namespace);
@@ -2379,7 +2414,7 @@ transformUpdateStmt(ParseState *pstate, UpdateStmt *stmt)
 	nsitem->p_lateral_only = false;
 	nsitem->p_lateral_ok = true;
 
-	qual = transformWhereClause(pstate, stmt->whereClause,
+	qual = transformWhereClause(pstate, whereClause,
 								EXPR_KIND_WHERE, "WHERE");
 
 	qry->returningList = transformReturningList(pstate, stmt->returningList);
