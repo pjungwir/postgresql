@@ -1208,7 +1208,6 @@ transformForPortionOfClause(ParseState *pstate,
 										   forPortionOf->target_end),
 								// TODO: FROM...TO... location instead?:
 								forPortionOf->range_name_location);
-
 	result->targetRange = (Node *) fc;
 
 	/* overlapsExpr is something we can add to the whereClause */
@@ -2389,13 +2388,7 @@ transformUpdateStmt(ParseState *pstate, UpdateStmt *stmt)
 										 ACL_UPDATE);
 
 	if (stmt->forPortionOf)
-	{
 		qry->forPortionOf = transformForPortionOfClause(pstate, qry->resultRelation, stmt->forPortionOf);
-		// TODO: Is this messing up cnf? Or does that come later?:
-		whereClause = (Node *) makeBoolExpr(AND_EXPR, list_make2(qry->forPortionOf->overlapsExpr, stmt->whereClause), -1);
-	}
-	else
-		whereClause = stmt->whereClause;
 
 	/* grab the namespace item made by setTargetTable */
 	nsitem = (ParseNamespaceItem *) llast(pstate->p_namespace);
@@ -2414,6 +2407,11 @@ transformUpdateStmt(ParseState *pstate, UpdateStmt *stmt)
 	nsitem->p_lateral_only = false;
 	nsitem->p_lateral_ok = true;
 
+	if (stmt->forPortionOf)
+		// TODO: Is this messing up cnf? Or does that come later?:
+		whereClause = (Node *) makeBoolExpr(AND_EXPR, list_make2(qry->forPortionOf->overlapsExpr, stmt->whereClause), -1);
+	else
+		whereClause = stmt->whereClause;
 	qual = transformWhereClause(pstate, whereClause,
 								EXPR_KIND_WHERE, "WHERE");
 

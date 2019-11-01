@@ -1794,6 +1794,7 @@ inheritance_planner(PlannerInfo *root)
 									 returningLists,
 									 rowMarks,
 									 NULL,
+									 parse->forPortionOf,
 									 assign_special_exec_param(root)));
 }
 
@@ -2377,6 +2378,7 @@ grouping_planner(PlannerInfo *root, bool inheritance_update,
 										returningLists,
 										rowMarks,
 										parse->onConflict,
+										parse->forPortionOf,
 										assign_special_exec_param(root));
 		}
 
