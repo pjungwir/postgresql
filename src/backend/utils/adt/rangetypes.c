@@ -443,7 +443,7 @@ range_lower(PG_FUNCTION_ARGS)
 }
 
 Datum
-range_lower_internal(TypeCacheEntry *typcache, RangeType *r1, bool *isnull)
+range_lower_internal(TypeCacheEntry *typcache, const RangeType *r1, bool *isnull)
 {
 	RangeBound	lower;
 	RangeBound	upper;
@@ -482,7 +482,7 @@ range_upper(PG_FUNCTION_ARGS)
 }
 
 Datum
-range_upper_internal(TypeCacheEntry *typcache, RangeType *r1, bool *isnull)
+range_upper_internal(TypeCacheEntry *typcache, const RangeType *r1, bool *isnull)
 {
 	RangeBound	lower;
 	RangeBound	upper;
@@ -1003,7 +1003,7 @@ range_minus(PG_FUNCTION_ARGS)
 }
 
 RangeType *
-range_minus_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2)
+range_minus_internal(TypeCacheEntry *typcache, const RangeType *r1, const RangeType *r2)
 {
 	RangeBound	lower1,
 				lower2;
@@ -1062,7 +1062,7 @@ range_minus_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2)
  * are not adjacent or overlapping.
  */
 RangeType *
-range_union_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2,
+range_union_internal(TypeCacheEntry *typcache, const RangeType *r1, const RangeType *r2,
 					 bool strict)
 {
 	RangeBound	lower1,
@@ -1153,7 +1153,7 @@ range_intersect(PG_FUNCTION_ARGS)
 }
 
 RangeType *
-range_intersect_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2)
+range_intersect_internal(TypeCacheEntry *typcache, const RangeType *r1, const RangeType *r2)
 {
 	RangeBound	lower1,
 				lower2;
@@ -1192,7 +1192,7 @@ range_intersect_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2)
  * or output2. Neither input range should be empty.
  */
 bool
-range_split_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2,
+range_split_internal(TypeCacheEntry *typcache, const RangeType *r1, const RangeType *r2,
 					 RangeType **output1, RangeType **output2)
 {
 	RangeBound	lower1,
@@ -1286,7 +1286,7 @@ range_cmp(PG_FUNCTION_ARGS)
  * Internal version of range_cmp
  */
 int
-range_cmp_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2)
+range_cmp_internal(TypeCacheEntry *typcache, const RangeType *r1, const RangeType *r2)
 {
 	RangeBound	lower1,
 				lower2;
@@ -1352,7 +1352,7 @@ range_gt(PG_FUNCTION_ARGS)
 /* Hash support */
 
 uint32
-hash_range_internal(TypeCacheEntry *typcache, RangeType *r)
+hash_range_internal(TypeCacheEntry *typcache, const RangeType *r)
 {
 	uint32		result;
 	TypeCacheEntry *scache;
@@ -1422,7 +1422,7 @@ hash_range(PG_FUNCTION_ARGS)
 }
 
 uint64
-hash_range_extended_internal(TypeCacheEntry *typcache, RangeType *r, Datum seed)
+hash_range_extended_internal(TypeCacheEntry *typcache, const RangeType *r, Datum seed)
 {
 	uint64		result;
 	TypeCacheEntry *scache;
@@ -1924,7 +1924,7 @@ range_get_flags(const RangeType *range)
  * without writing full-fledged *_internal versions.
  */
 bool
-range_has_flag(RangeType *r1, char flag)
+range_has_flag(const RangeType *r1, char flag)
 {
 	char		flags = range_get_flags(r1);
 
