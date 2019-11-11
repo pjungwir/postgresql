@@ -77,6 +77,9 @@ static Query *transformUpdateStmt(ParseState *pstate, UpdateStmt *stmt);
 static List *transformReturningList(ParseState *pstate, List *returningList);
 static List *transformUpdateTargetList(ParseState *pstate,
 									   List *targetList);
+static List *transformForPortionOfTargetList(ParseState *pstate,
+											 ForPortionOfClause *forPortionOfClause,
+											 ForPortionOfExpr *forPortionOfExpr);
 static Query *transformPLAssignStmt(ParseState *pstate,
 									PLAssignStmt *stmt);
 static Query *transformDeclareCursorStmt(ParseState *pstate,
@@ -1162,7 +1165,7 @@ transformForPortionOfClause(ParseState *pstate,
 
 		Var *v = makeVar(
 				rtindex,
-				range_attno,		// TODO: 0-indexed or 1-indexed?
+				range_attno,
 				attr->atttypid,
 				attr->atttypmod,
 				attr->attcollation,
@@ -1170,6 +1173,7 @@ transformForPortionOfClause(ParseState *pstate,
 		v->location = forPortionOf->range_name_location;
 		result->range = (Expr *) v;
 		range_type_name = get_typname(attr->atttypid);
+
 	} else {
 		// TODO: Try to find a period,
 		// and set result->range to an Expr like tsrange(period->start_col, period->end_col)
@@ -1222,6 +1226,9 @@ transformForPortionOfClause(ParseState *pstate,
 	/* Mark the range column as requiring update permissions */
 	target_rte->updatedCols = bms_add_member(target_rte->updatedCols,
 											 range_attno - FirstLowInvalidHeapAttributeNumber);
+
+	result->range_attno = range_attno;
+	result->range_name = range_name;
 
 	return result;
 }
@@ -2413,7 +2420,6 @@ transformUpdateStmt(ParseState *pstate, UpdateStmt *stmt)
 	nsitem->p_lateral_ok = true;
 
 	if (stmt->forPortionOf)
-		// TODO: Is this messing up cnf? Or does that come later?:
 		whereClause = (Node *) makeBoolExpr(AND_EXPR, list_make2(qry->forPortionOf->overlapsExpr, stmt->whereClause), -1);
 	else
 		whereClause = stmt->whereClause;
@@ -2427,6 +2433,8 @@ transformUpdateStmt(ParseState *pstate, UpdateStmt *stmt)
 	 * transforming the target list to match the UPDATE target columns.
 	 */
 	qry->targetList = transformUpdateTargetList(pstate, stmt->targetList);
+	if (stmt->forPortionOf)
+		transformForPortionOfTargetList(pstate, stmt->forPortionOf, qry->forPortionOf);
 
 	qry->rtable = pstate->p_rtable;
 	qry->jointree = makeFromExpr(pstate->p_joinlist, qual);
@@ -2494,7 +2502,8 @@ transformUpdateTargetList(ParseState *pstate, List *origTlist)
 							RelationGetRelationName(pstate->p_target_relation)),
 					 parser_errposition(pstate, origTarget->location)));
 
-		// TODO: If the column is also used in FOR PORTION OF, forbid SETing it:
+		/* TODO: Make sure user isn't trying to SET the range attribute directly --- TODO or permit it?? */
+
 
 		updateTargetListEntry(pstate, tle, origTarget->name,
 							  attrno,
@@ -2511,6 +2520,36 @@ transformUpdateTargetList(ParseState *pstate, List *origTlist)
 		elog(ERROR, "UPDATE target count mismatch --- internal error");
 
 	return tlist;
+}
+
+/*
+ * transformForPortionOfTargetList -
+ *  add SETs for the temporal column(s) in a FOR PORTION OF clause
+ */
+// TODO: we don't use pstate, and it seems weird to pass both a ForPortionOfClause and a ForPortionOfExpr. Maybe do this somewhere else? If we don't need pstate I guess we could do it in the first ForPortionOf call....
+static List *
+transformForPortionOfTargetList(ParseState *pstate, ForPortionOfClause *forPortionOf, ForPortionOfExpr *forPortionOfExpr)
+{
+	List	*targetList = NIL;
+
+	/*
+	 * Make sure we update the start/end time of the record.
+	 * For a range col (r) this is `r = r * targetRange`.
+	 * For a PERIOD with cols (s, e) this is `s = lower(tsrange(s, r) * targetRange)`
+	 * and `e = upper(tsrange(e, r) * targetRange` (of course not necessarily with
+	 * tsrange, but with whatever range type is used there)).
+	 */
+	Expr *rangeSetExpr = (Expr *) makeSimpleA_Expr(AEXPR_OP, "*",
+			// TODO: Maybe need a copy here?:
+			(Node *) forPortionOfExpr->range, forPortionOfExpr->targetRange,
+			forPortionOf->range_name_location);
+	TargetEntry *tle = makeTargetEntry(rangeSetExpr,
+						  forPortionOfExpr->range_attno,
+						  forPortionOfExpr->range_name,
+						  false);
+	targetList = lappend(targetList, tle);
+
+	return targetList;
 }
 
 /*
