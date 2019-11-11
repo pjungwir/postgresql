@@ -3099,6 +3099,18 @@ rewriteTargetView(Query *parsetree, Relation view)
 			}
 		}
 
+		if (parsetree->forPortionOf)
+		{
+			foreach(lc, parsetree->forPortionOf->rangeSet)
+			{
+				TargetEntry *tle = (TargetEntry *) lfirst(lc);
+
+				if (!tle->resjunk)
+					modified_cols = bms_add_member(modified_cols,
+												   tle->resno - FirstLowInvalidHeapAttributeNumber);
+			}
+		}
+
 		auto_update_detail = view_cols_are_auto_updatable(viewquery,
 														  modified_cols,
 														  NULL,
