@@ -1547,7 +1547,8 @@ typedef struct OnConflictExpr
 typedef struct ForPortionOfExpr
 {
 	NodeTag		type;
-	// TODO: either a Var or a FuncExpr:
+	int			range_attno;	/* Range column number */
+	char	   *range_name;		/* Range name */
 	Expr	   *range;			/* Range column or expression */
 	Node	   *startCol;		/* Start column if using a PERIOD */
 	Node	   *endCol;			/* End column if using a PERIOD */
@@ -1555,6 +1556,7 @@ typedef struct ForPortionOfExpr
 	Node	   *targetEnd;		/* Same type as the range's elements */
 	Node	   *targetRange;	/* A range from targetStart to targetEnd */
 	Node	   *overlapsExpr;	/* range && targetRange */
+	List	   *rangeSet;		/* List of TargetEntrys to set the time column(s) */
 } ForPortionOfExpr;
 
 #endif							/* PRIMNODES_H */
