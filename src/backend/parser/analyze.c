@@ -77,9 +77,6 @@ static Query *transformUpdateStmt(ParseState *pstate, UpdateStmt *stmt);
 static List *transformReturningList(ParseState *pstate, List *returningList);
 static List *transformUpdateTargetList(ParseState *pstate,
 									   List *targetList);
-static List *transformForPortionOfTargetList(ParseState *pstate,
-											 ForPortionOfClause *forPortionOfClause,
-											 ForPortionOfExpr *forPortionOfExpr);
 static Query *transformPLAssignStmt(ParseState *pstate,
 									PLAssignStmt *stmt);
 static Query *transformDeclareCursorStmt(ParseState *pstate,
@@ -1099,6 +1096,7 @@ transformForPortionOfClause(ParseState *pstate,
 	char *range_type_name;
 	int	range_attno;
 	ForPortionOfExpr *result;
+	List *targetList;
 
 	result = makeNode(ForPortionOfExpr);
 
@@ -1222,7 +1220,32 @@ transformForPortionOfClause(ParseState *pstate,
 			(Node *) result->range, result->targetRange,
 			forPortionOf->range_name_location);
 
-	// TODO: if it's a period, mark its start/end columns instead:
+	/*
+	 * Now make sure we update the start/end time of the record.
+	 * For a range col (r) this is `r = r * targetRange`.
+	 * For a PERIOD with cols (s, e) this is `s = lower(tsrange(s, r) * targetRange)`
+	 * and `e = upper(tsrange(e, r) * targetRange` (of course not necessarily with
+	 * tsrange, but with whatever range type is used there)).
+	 */
+	targetList = NIL;
+	if (range_attno != InvalidAttrNumber)
+	{
+		Expr *rangeSetExpr = (Expr *) makeSimpleA_Expr(AEXPR_OP, "*",
+				// TODO: Maybe need a copy here?:
+				(Node *) result->range, result->targetRange,
+				forPortionOf->range_name_location);
+
+		TargetEntry *tle = makeTargetEntry(rangeSetExpr,
+							  range_attno,
+							  range_name,
+							  false);
+
+		targetList = lappend(targetList, tle);
+	} else {
+		/* TODO: Set up targetList for PERIODs */
+	}
+	result->rangeSet = targetList;
+
 	/* Mark the range column as requiring update permissions */
 	target_rte->updatedCols = bms_add_member(target_rte->updatedCols,
 											 range_attno - FirstLowInvalidHeapAttributeNumber);
@@ -2433,8 +2456,6 @@ transformUpdateStmt(ParseState *pstate, UpdateStmt *stmt)
 	 * transforming the target list to match the UPDATE target columns.
 	 */
 	qry->targetList = transformUpdateTargetList(pstate, stmt->targetList);
-	if (stmt->forPortionOf)
-		transformForPortionOfTargetList(pstate, stmt->forPortionOf, qry->forPortionOf);
 
 	qry->rtable = pstate->p_rtable;
 	qry->jointree = makeFromExpr(pstate->p_joinlist, qual);
@@ -2520,36 +2541,6 @@ transformUpdateTargetList(ParseState *pstate, List *origTlist)
 		elog(ERROR, "UPDATE target count mismatch --- internal error");
 
 	return tlist;
-}
-
-/*
- * transformForPortionOfTargetList -
- *  add SETs for the temporal column(s) in a FOR PORTION OF clause
- */
-// TODO: we don't use pstate, and it seems weird to pass both a ForPortionOfClause and a ForPortionOfExpr. Maybe do this somewhere else? If we don't need pstate I guess we could do it in the first ForPortionOf call....
-static List *
-transformForPortionOfTargetList(ParseState *pstate, ForPortionOfClause *forPortionOf, ForPortionOfExpr *forPortionOfExpr)
-{
-	List	*targetList = NIL;
-
-	/*
-	 * Make sure we update the start/end time of the record.
-	 * For a range col (r) this is `r = r * targetRange`.
-	 * For a PERIOD with cols (s, e) this is `s = lower(tsrange(s, r) * targetRange)`
-	 * and `e = upper(tsrange(e, r) * targetRange` (of course not necessarily with
-	 * tsrange, but with whatever range type is used there)).
-	 */
-	Expr *rangeSetExpr = (Expr *) makeSimpleA_Expr(AEXPR_OP, "*",
-			// TODO: Maybe need a copy here?:
-			(Node *) forPortionOfExpr->range, forPortionOfExpr->targetRange,
-			forPortionOf->range_name_location);
-	TargetEntry *tle = makeTargetEntry(rangeSetExpr,
-						  forPortionOfExpr->range_attno,
-						  forPortionOfExpr->range_name,
-						  false);
-	targetList = lappend(targetList, tle);
-
-	return targetList;
 }
 
 /*
