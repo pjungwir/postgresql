@@ -1235,6 +1235,7 @@ transformForPortionOfClause(ParseState *pstate,
 				(Node *) result->range, result->targetRange,
 				forPortionOf->range_name_location);
 
+		rangeSetExpr = (Expr *) transformExpr(pstate, (Node *) rangeSetExpr, EXPR_KIND_UPDATE_PORTION);
 		TargetEntry *tle = makeTargetEntry(rangeSetExpr,
 							  range_attno,
 							  range_name,
@@ -2456,6 +2457,15 @@ transformUpdateStmt(ParseState *pstate, UpdateStmt *stmt)
 	 * transforming the target list to match the UPDATE target columns.
 	 */
 	qry->targetList = transformUpdateTargetList(pstate, stmt->targetList);
+	if (stmt->forPortionOf)
+	{
+		ListCell *tl;
+		foreach(tl, qry->forPortionOf->rangeSet)
+		{
+			TargetEntry *tle = (TargetEntry *) lfirst(tl);
+			qry->targetList = lappend(qry->targetList, tle);
+		}
+	}
 
 	qry->rtable = pstate->p_rtable;
 	qry->jointree = makeFromExpr(pstate->p_joinlist, qual);
