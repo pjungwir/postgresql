@@ -1343,6 +1343,29 @@ _readOnConflictExpr(void)
 }
 
 /*
+ * _readForPortionOfExpr
+ */
+static ForPortionOfExpr *
+_readForPortionOfExpr(void)
+{
+	READ_LOCALS(ForPortionOfExpr);
+
+	READ_INT_FIELD(range_attno);
+	READ_STRING_FIELD(range_name);
+	READ_NODE_FIELD(range);
+	READ_NODE_FIELD(startCol);
+	READ_NODE_FIELD(endCol);
+	READ_NODE_FIELD(targetStart);
+	READ_NODE_FIELD(targetEnd);
+	READ_NODE_FIELD(targetRange);
+	READ_NODE_FIELD(overlapsExpr);
+	READ_NODE_FIELD(rangeSet);
+
+	READ_DONE();
+}
+
+
+/*
  *	Stuff from parsenodes.h.
  */
 
@@ -2687,6 +2710,8 @@ parseNodeString(void)
 		return_value = _readFromExpr();
 	else if (MATCH("ONCONFLICTEXPR", 14))
 		return_value = _readOnConflictExpr();
+	else if (MATCH("FORPORTIONOFEXPR", 16))
+		return_value = _readForPortionOfExpr();
 	else if (MATCH("RTE", 3))
 		return_value = _readRangeTblEntry();
 	else if (MATCH("RANGETBLFUNCTION", 16))
