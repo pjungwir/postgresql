@@ -1234,6 +1234,8 @@ ExecUpdate(ModifyTableState *mtstate,
 			return NULL;		/* "do nothing" */
 	}
 
+	// TODO: Is there an argument that we should set the temporal bounds
+	// before calling the INSTEAD OF trigger?? What do other dbs do?
 	/* INSTEAD OF ROW UPDATE Triggers */
 	if (resultRelInfo->ri_TrigDesc &&
 		resultRelInfo->ri_TrigDesc->trig_update_instead_row)
@@ -1245,12 +1247,18 @@ ExecUpdate(ModifyTableState *mtstate,
 	else if (resultRelInfo->ri_FdwRoutine)
 	{
 		/*
+		 * Compute bounds in FOR PORTION OF
+		 */
+		// TODO:
+
+		/*
 		 * Compute stored generated columns
 		 */
 		if (resultRelationDesc->rd_att->constr &&
 			resultRelationDesc->rd_att->constr->has_generated_stored)
 			ExecComputeStoredGenerated(resultRelInfo, estate, slot,
 									   CMD_UPDATE);
+		// TODO: ^ how do we get here from extraUpdatedCols in parser/analyze.c?
 
 		/*
 		 * update in foreign table: let the FDW do it
@@ -1281,6 +1289,11 @@ ExecUpdate(ModifyTableState *mtstate,
 		 * tts_tableOid before evaluating them.
 		 */
 		slot->tts_tableOid = RelationGetRelid(resultRelationDesc);
+
+		/*
+		 * Compute bounds in FOR PORTION OF
+		 */
+		// TODO:
 
 		/*
 		 * Compute stored generated columns
