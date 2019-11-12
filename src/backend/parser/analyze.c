@@ -76,7 +76,8 @@ static void determineRecursiveColTypes(ParseState *pstate,
 static Query *transformUpdateStmt(ParseState *pstate, UpdateStmt *stmt);
 static List *transformReturningList(ParseState *pstate, List *returningList);
 static List *transformUpdateTargetList(ParseState *pstate,
-									   List *targetList);
+									   List *targetList,
+									   ForPortionOfExpr *forPortionOf);
 static Query *transformPLAssignStmt(ParseState *pstate,
 									PLAssignStmt *stmt);
 static Query *transformDeclareCursorStmt(ParseState *pstate,
@@ -1059,7 +1060,7 @@ transformOnConflictClause(ParseState *pstate,
 		 * Now transform the UPDATE subexpressions.
 		 */
 		onConflictSet =
-			transformUpdateTargetList(pstate, onConflictClause->targetList);
+			transformUpdateTargetList(pstate, onConflictClause->targetList, NULL);
 
 		onConflictWhere = transformWhereClause(pstate,
 											   onConflictClause->whereClause,
@@ -2456,16 +2457,7 @@ transformUpdateStmt(ParseState *pstate, UpdateStmt *stmt)
 	 * Now we are done with SELECT-like processing, and can get on with
 	 * transforming the target list to match the UPDATE target columns.
 	 */
-	qry->targetList = transformUpdateTargetList(pstate, stmt->targetList);
-	if (stmt->forPortionOf)
-	{
-		ListCell *tl;
-		foreach(tl, qry->forPortionOf->rangeSet)
-		{
-			TargetEntry *tle = (TargetEntry *) lfirst(tl);
-			qry->targetList = lappend(qry->targetList, tle);
-		}
-	}
+	qry->targetList = transformUpdateTargetList(pstate, stmt->targetList, qry->forPortionOf);
 
 	qry->rtable = pstate->p_rtable;
 	qry->jointree = makeFromExpr(pstate->p_joinlist, qual);
@@ -2483,7 +2475,7 @@ transformUpdateStmt(ParseState *pstate, UpdateStmt *stmt)
  *	handle SET clause in UPDATE/INSERT ... ON CONFLICT UPDATE
  */
 static List *
-transformUpdateTargetList(ParseState *pstate, List *origTlist)
+transformUpdateTargetList(ParseState *pstate, List *origTlist, ForPortionOfExpr *forPortionOf)
 {
 	List	   *tlist = NIL;
 	RangeTblEntry *target_rte;
