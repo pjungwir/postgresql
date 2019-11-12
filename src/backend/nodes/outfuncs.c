@@ -420,6 +420,7 @@ _outModifyTable(StringInfo str, const ModifyTable *node)
 	WRITE_NODE_FIELD(onConflictSet);
 	WRITE_NODE_FIELD(onConflictCols);
 	WRITE_NODE_FIELD(onConflictWhere);
+	// TODO: add things for ForPortionOf
 	WRITE_UINT_FIELD(exclRelRTI);
 	WRITE_NODE_FIELD(exclRelTlist);
 }
@@ -1738,6 +1739,23 @@ _outOnConflictExpr(StringInfo str, const OnConflictExpr *node)
 	WRITE_NODE_FIELD(onConflictWhere);
 	WRITE_INT_FIELD(exclRelIndex);
 	WRITE_NODE_FIELD(exclRelTlist);
+}
+
+static void
+_outForPortionOfExpr(StringInfo str, const ForPortionOfExpr *node)
+{
+	WRITE_NODE_TYPE("FORPORTIONOFEXPR");
+
+	WRITE_INT_FIELD(range_attno);
+	WRITE_STRING_FIELD(range_name);
+	WRITE_NODE_FIELD(range);
+	WRITE_NODE_FIELD(startCol);
+	WRITE_NODE_FIELD(endCol);
+	WRITE_NODE_FIELD(targetStart);
+	WRITE_NODE_FIELD(targetEnd);
+	WRITE_NODE_FIELD(targetRange);
+	WRITE_NODE_FIELD(overlapsExpr);
+	WRITE_NODE_FIELD(rangeSet);
 }
 
 /*****************************************************************************
@@ -4182,6 +4200,9 @@ outNode(StringInfo str, const void *obj)
 				break;
 			case T_OnConflictExpr:
 				_outOnConflictExpr(str, obj);
+				break;
+			case T_ForPortionOfExpr:
+				_outForPortionOfExpr(str, obj);
 				break;
 			case T_Path:
 				_outPath(str, obj);
