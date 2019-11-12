@@ -821,6 +821,23 @@ _equalOnConflictExpr(const OnConflictExpr *a, const OnConflictExpr *b)
 	return true;
 }
 
+static bool
+_equalForPortionOfExpr(const ForPortionOfExpr *a, const ForPortionOfExpr *b)
+{
+	COMPARE_SCALAR_FIELD(range_attno);
+	COMPARE_STRING_FIELD(range_name);
+	COMPARE_NODE_FIELD(range);
+	COMPARE_NODE_FIELD(startCol);
+	COMPARE_NODE_FIELD(endCol);
+	COMPARE_NODE_FIELD(targetStart);
+	COMPARE_NODE_FIELD(targetEnd);
+	COMPARE_NODE_FIELD(targetRange);
+	COMPARE_NODE_FIELD(overlapsExpr);
+	COMPARE_NODE_FIELD(rangeSet);
+
+	return true;
+}
+
 /*
  * Stuff from pathnodes.h
  */
@@ -2855,6 +2872,17 @@ _equalOnConflictClause(const OnConflictClause *a, const OnConflictClause *b)
 }
 
 static bool
+_equalForPortionOfClause(const ForPortionOfClause *a, const ForPortionOfClause *b)
+{
+	COMPARE_STRING_FIELD(range_name);
+	COMPARE_SCALAR_FIELD(range_name_location);
+	COMPARE_NODE_FIELD(target_start);
+	COMPARE_NODE_FIELD(target_end);
+
+	return true;
+}
+
+static bool
 _equalCommonTableExpr(const CommonTableExpr *a, const CommonTableExpr *b)
 {
 	COMPARE_STRING_FIELD(ctename);
@@ -3229,6 +3257,9 @@ equal(const void *a, const void *b)
 			break;
 		case T_OnConflictExpr:
 			retval = _equalOnConflictExpr(a, b);
+			break;
+		case T_ForPortionOfExpr:
+			retval = _equalForPortionOfExpr(a, b);
 			break;
 		case T_JoinExpr:
 			retval = _equalJoinExpr(a, b);
@@ -3750,6 +3781,9 @@ equal(const void *a, const void *b)
 			break;
 		case T_OnConflictClause:
 			retval = _equalOnConflictClause(a, b);
+			break;
+		case T_ForPortionOfClause:
+			retval = _equalForPortionOfClause(a, b);
 			break;
 		case T_CommonTableExpr:
 			retval = _equalCommonTableExpr(a, b);
