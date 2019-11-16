@@ -155,3 +155,5 @@ FROM (VALUES (-2.5::numeric),
              (0.5::numeric),
              (1.5::numeric),
              (2.5::numeric)) t(x);
+
+SELECT int4send(f1) FROM INT4_TBL;

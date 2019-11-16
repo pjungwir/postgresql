@@ -438,3 +438,17 @@ select format('>>%2$*1$L<<', 0, 'Hello');
  >>'Hello'<<
 (1 row)
 
+SELECT cstring_send(f1::cstring) FROM TEXT_TBL;
+             cstring_send             
+--------------------------------------
+ \x646f6821
+ \x686920646520686f206e65696768626f72
+(2 rows)
+
+SELECT textsend(f1) FROM TEXT_TBL;
+               textsend               
+--------------------------------------
+ \x646f6821
+ \x686920646520686f206e65696768626f72
+(2 rows)
+

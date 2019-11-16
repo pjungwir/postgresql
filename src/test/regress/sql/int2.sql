@@ -26,7 +26,6 @@ INSERT INTO INT2_TBL(f1) VALUES ('4 444');
 INSERT INTO INT2_TBL(f1) VALUES ('123 dt');
 INSERT INTO INT2_TBL(f1) VALUES ('');
 
-
 SELECT '' AS five, * FROM INT2_TBL;
 
 SELECT '' AS four, i.* FROM INT2_TBL i WHERE i.f1 <> int2 '0';
@@ -112,3 +111,5 @@ FROM (VALUES (-2.5::numeric),
              (0.5::numeric),
              (1.5::numeric),
              (2.5::numeric)) t(x);
+
+SELECT int2send(f1) FROM INT2_TBL;

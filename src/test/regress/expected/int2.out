@@ -306,3 +306,13 @@ FROM (VALUES (-2.5::numeric),
   2.5 |          3
 (7 rows)
 
+SELECT int2send(f1) FROM INT2_TBL;
+ int2send 
+----------
+ \x0000
+ \x04d2
+ \xfb2e
+ \x7fff
+ \x8001
+(5 rows)
+

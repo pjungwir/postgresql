@@ -403,3 +403,13 @@ FROM (VALUES (-2.5::numeric),
   2.5 |          3
 (7 rows)
 
+SELECT int4send(f1) FROM INT4_TBL;
+  int4send  
+------------
+ \x00000000
+ \x0001e240
+ \xfffe1dc0
+ \x7fffffff
+ \x80000001
+(5 rows)
+

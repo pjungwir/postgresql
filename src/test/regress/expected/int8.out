@@ -886,3 +886,13 @@ FROM (VALUES (-2.5::numeric),
   2.5 |          3
 (7 rows)
 
+SELECT int8send(q2) FROM INT8_TBL;
+      int8send      
+--------------------
+ \x00000000000001c8
+ \x00103a78cc2e8115
+ \x000000000000007b
+ \x00103a78cc2e8115
+ \xffefc58733d17eeb
+(5 rows)
+
