@@ -322,3 +322,9 @@ NOTICE:  Got expected error for xid in the future
 (1 row)
 
 ROLLBACK;
+SELECT xidsend('5'::xid);
+  xidsend   
+------------
+ \x00000005
+(1 row)
+
