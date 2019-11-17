@@ -1412,3 +1412,8 @@ SELECT * FROM XMLTABLE('.' PASSING XMLELEMENT(NAME a) columns a varchar(20) PATH
 ERROR:  unsupported XML feature
 DETAIL:  This functionality requires the server to be built with libxml support.
 HINT:  You need to rebuild PostgreSQL using --with-libxml.
+SELECT xml_send(data) FROM xmltest;
+ xml_send 
+----------
+(0 rows)
+
