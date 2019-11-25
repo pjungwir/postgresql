@@ -911,7 +911,7 @@ resolve_polymorphic_argtypes(int numargs, Oid *argtypes, char *argmodes,
 		{
 			Oid			rngtype;
 			Oid			subtype;
-			
+
 			rngtype = resolve_generic_type(ANYRANGEOID,
 										   anymultirange_type,
 										   ANYMULTIRANGEOID);

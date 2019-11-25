@@ -146,9 +146,9 @@ extern void range_set_contain_empty(RangeType *range);
 extern RangeType *make_range(TypeCacheEntry *typcache, RangeBound *lower,
 							 RangeBound *upper, bool empty);
 extern int range_cmp_bounds(TypeCacheEntry *typcache, const RangeBound *b1,
-							 const RangeBound *b2);
+							const RangeBound *b2);
 extern int range_cmp_bound_values(TypeCacheEntry *typcache, const RangeBound *b1,
-								   const RangeBound *b2);
+								  const RangeBound *b2);
 extern int range_compare(const void *key1, const void *key2, void *arg);
 extern bool bounds_adjacent(TypeCacheEntry *typcache, const RangeBound bound1,
 							const RangeBound bound2);
