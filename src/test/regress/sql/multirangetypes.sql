@@ -65,6 +65,18 @@ select textmultirange(textrange('a', 'c'), textrange('f', 'g'));
 select textmultirange(textrange('a', 'c'), textrange('b', 'd'));
 
 --
+-- test casts, both a built-in range type and a user-defined one:
+--
+select 'empty'::int4range::int4multirange;
+select int4range(1, 3)::int4multirange;
+select int4range(1, null)::int4multirange;
+select int4range(null, null)::int4multirange;
+select 'empty'::textrange::textmultirange;
+select textrange('a', 'c')::textmultirange;
+select textrange('a', null)::textmultirange;
+select textrange(null, null)::textmultirange;
+
+--
 -- create some test data and test the operators
 --
 
