@@ -573,18 +573,20 @@ resolve_polymorphic_tupdesc(TupleDesc tupdesc, oidvector *declared_args,
 
 		if (OidIsValid(anymultirange_type))
 		{
-			Oid			rngtype = resolve_generic_type(ANYRANGEOID,
-													   anymultirange_type,
-													   ANYMULTIRANGEOID);
+			Oid			rngtype;
+			Oid			subtype;
+
+			rngtype = resolve_generic_type(ANYRANGEOID,
+										   anymultirange_type,
+										   ANYMULTIRANGEOID);
 
 			/* check for inconsistent range and multirange results */
 			if (OidIsValid(anyrange_type) && anyrange_type != rngtype)
 				return false;
 			anyrange_type = rngtype;
-
-			Oid			subtype = resolve_generic_type(ANYELEMENTOID,
-													   anyrange_type,
-													   ANYRANGEOID);
+			subtype = resolve_generic_type(ANYELEMENTOID,
+										   anyrange_type,
+										   ANYRANGEOID);
 
 			/* check for inconsistent array and multirange results */
 			if (OidIsValid(anyelement_type) && anyelement_type != subtype)
@@ -628,18 +630,21 @@ resolve_polymorphic_tupdesc(TupleDesc tupdesc, oidvector *declared_args,
 	{
 		if (OidIsValid(anymultirange_type))
 		{
-			Oid			rngtype = resolve_generic_type(ANYRANGEOID,
-													   anymultirange_type,
-													   ANYMULTIRANGEOID);
+			Oid		rngtype;
+			Oid		subtype;
+
+			rngtype = resolve_generic_type(ANYRANGEOID,
+										   anymultirange_type,
+										   ANYMULTIRANGEOID);
 
 			/* check for inconsistent range and multirange results */
 			if (OidIsValid(anyrange_type) && anyrange_type != rngtype)
 				return false;
 			anyrange_type = rngtype;
 
-			Oid			subtype = resolve_generic_type(ANYELEMENTOID,
-													   anyrange_type,
-													   ANYRANGEOID);
+			subtype = resolve_generic_type(ANYELEMENTOID,
+										   anyrange_type,
+										   ANYRANGEOID);
 
 			/* check for inconsistent array and multirange results */
 			if (OidIsValid(anyelement_type) && anyelement_type != subtype)
@@ -660,21 +665,25 @@ resolve_polymorphic_tupdesc(TupleDesc tupdesc, oidvector *declared_args,
 	{
 		if (OidIsValid(anyrange_type))
 		{
-			Oid			subtype = resolve_generic_type(ANYELEMENTOID,
-													   anyrange_type,
-													   ANYRANGEOID);
+			Oid		subtype;
+			Oid		mltrngtype;
+			Oid		rngtype;
+
+			subtype = resolve_generic_type(ANYELEMENTOID,
+										   anyrange_type,
+										   ANYRANGEOID);
 
 			/* check for inconsistent array and range results */
 			if (OidIsValid(anyelement_type) && anyelement_type != subtype)
 				return false;
 			anyelement_type = subtype;
 
-			Oid			mltrngtype = resolve_generic_type(ANYMULTIRANGEOID,
-														  anyrange_type,
-														  ANYRANGEOID);
+			mltrngtype = resolve_generic_type(ANYMULTIRANGEOID,
+											  anyrange_type,
+											  ANYRANGEOID);
 
 			/* check for inconsistent range and multirange results */
-			Oid			rngtype = get_multirange_subtype(mltrngtype);
+			rngtype = get_multirange_subtype(mltrngtype);
 
 			if (OidIsValid(anyrange_type) && anyrange_type != rngtype)
 				return false;
@@ -900,18 +909,21 @@ resolve_polymorphic_argtypes(int numargs, Oid *argtypes, char *argmodes,
 
 		if (OidIsValid(anymultirange_type))
 		{
-			Oid			rngtype = resolve_generic_type(ANYRANGEOID,
-													   anymultirange_type,
-													   ANYMULTIRANGEOID);
+			Oid			rngtype;
+			Oid			subtype;
+
+			rngtype = resolve_generic_type(ANYRANGEOID,
+										   anymultirange_type,
+										   ANYMULTIRANGEOID);
 
 			/* check for inconsistent range and multirange results */
 			if (OidIsValid(anyrange_type) && anyrange_type != rngtype)
 				return false;
 			anyrange_type = rngtype;
 
-			Oid			subtype = resolve_generic_type(ANYELEMENTOID,
-													   anyrange_type,
-													   ANYRANGEOID);
+			subtype = resolve_generic_type(ANYELEMENTOID,
+										   anyrange_type,
+										   ANYRANGEOID);
 
 			/* check for inconsistent array and multirange results */
 			if (OidIsValid(anyelement_type) && anyelement_type != subtype)
@@ -955,18 +967,21 @@ resolve_polymorphic_argtypes(int numargs, Oid *argtypes, char *argmodes,
 	{
 		if (OidIsValid(anymultirange_type))
 		{
-			Oid			rngtype = resolve_generic_type(ANYRANGEOID,
-													   anymultirange_type,
-													   ANYMULTIRANGEOID);
+			Oid			rngtype;
+			Oid			subtype;
+
+			rngtype = resolve_generic_type(ANYRANGEOID,
+										   anymultirange_type,
+										   ANYMULTIRANGEOID);
 
 			/* check for inconsistent range and multirange results */
 			if (OidIsValid(anyrange_type) && anyrange_type != rngtype)
 				return false;
 			anyrange_type = rngtype;
 
-			Oid			subtype = resolve_generic_type(ANYELEMENTOID,
-													   anyrange_type,
-													   ANYRANGEOID);
+			subtype = resolve_generic_type(ANYELEMENTOID,
+										   anyrange_type,
+										   ANYRANGEOID);
 
 			/* check for inconsistent array and multirange results */
 			if (OidIsValid(anyelement_type) && anyelement_type != subtype)
@@ -987,21 +1002,25 @@ resolve_polymorphic_argtypes(int numargs, Oid *argtypes, char *argmodes,
 	{
 		if (OidIsValid(anyrange_type))
 		{
-			Oid			subtype = resolve_generic_type(ANYELEMENTOID,
-													   anyrange_type,
-													   ANYRANGEOID);
+			Oid			subtype;
+			Oid			mltrngtype;
+			Oid			rngtype;
+
+			subtype = resolve_generic_type(ANYELEMENTOID,
+										   anyrange_type,
+										   ANYRANGEOID);
 
 			/* check for inconsistent array and range results */
 			if (OidIsValid(anyelement_type) && anyelement_type != subtype)
 				return false;
 			anyelement_type = subtype;
 
-			Oid			mltrngtype = resolve_generic_type(ANYMULTIRANGEOID,
-														  anyrange_type,
-														  ANYRANGEOID);
+			mltrngtype = resolve_generic_type(ANYMULTIRANGEOID,
+											  anyrange_type,
+											  ANYRANGEOID);
 
 			/* check for inconsistent range and multirange results */
-			Oid			rngtype = get_multirange_subtype(mltrngtype);
+			rngtype = get_multirange_subtype(mltrngtype);
 
 			if (OidIsValid(anyrange_type) && anyrange_type != rngtype)
 				return false;

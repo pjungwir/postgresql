@@ -278,7 +278,7 @@
      and base type elements matching <type>anyelement</type> (if either of
      those are present). If <type>anyarray</type> is present its elements
      must match the base type of the <type>anyrange</type> and/or the base
-     type of the ranges in an </type>anymultirange</type>.
+     type of the ranges in an <type>anymultirange</type>.
     </para>
 
     <para>

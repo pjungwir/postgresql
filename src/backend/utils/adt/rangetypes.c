@@ -1153,7 +1153,7 @@ range_intersect(PG_FUNCTION_ARGS)
 }
 
 RangeType *
-range_intersect_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2)
+range_intersect_internal(TypeCacheEntry *typcache, const RangeType *r1, const RangeType *r2)
 {
 	RangeBound	lower1,
 				lower2;
@@ -1192,7 +1192,7 @@ range_intersect_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2)
  * or output2. Neither input range should be empty.
  */
 bool
-range_split_internal(TypeCacheEntry *typcache, RangeType *r1, RangeType *r2,
+range_split_internal(TypeCacheEntry *typcache, const RangeType *r1, const RangeType *r2,
 					 RangeType **output1, RangeType **output2)
 {
 	RangeBound	lower1,
@@ -1257,6 +1257,31 @@ range_intersect_agg_transfn(PG_FUNCTION_ARGS)
 
 /* Btree support */
 
+/* btree comparator */
+Datum
+range_cmp(PG_FUNCTION_ARGS)
+{
+	RangeType  *r1 = PG_GETARG_RANGE_P(0);
+	RangeType  *r2 = PG_GETARG_RANGE_P(1);
+	TypeCacheEntry *typcache;
+	int			cmp;
+
+	check_stack_depth();		/* recurses when subtype is a range type */
+
+	/* Different types should be prevented by ANYRANGE matching rules */
+	if (RangeTypeGetOid(r1) != RangeTypeGetOid(r2))
+		elog(ERROR, "range types do not match");
+
+	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
+
+	cmp = range_cmp_internal(typcache, r1, r2);
+
+	PG_FREE_IF_COPY(r1, 0);
+	PG_FREE_IF_COPY(r2, 1);
+
+	PG_RETURN_INT32(cmp);
+}
+
 /*
  * Internal version of range_cmp
  */
@@ -1289,31 +1314,6 @@ range_cmp_internal(TypeCacheEntry *typcache, const RangeType *r1, const RangeTyp
 	}
 
 	return cmp;
-}
-
-/* btree comparator */
-Datum
-range_cmp(PG_FUNCTION_ARGS)
-{
-	RangeType  *r1 = PG_GETARG_RANGE_P(0);
-	RangeType  *r2 = PG_GETARG_RANGE_P(1);
-	TypeCacheEntry *typcache;
-	int			cmp;
-
-	check_stack_depth();		/* recurses when subtype is a range type */
-
-	/* Different types should be prevented by ANYRANGE matching rules */
-	if (RangeTypeGetOid(r1) != RangeTypeGetOid(r2))
-		elog(ERROR, "range types do not match");
-
-	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
-
-	cmp = range_cmp_internal(typcache, r1, r2);
-
-	PG_FREE_IF_COPY(r1, 0);
-	PG_FREE_IF_COPY(r2, 1);
-
-	PG_RETURN_INT32(cmp);
 }
 
 /* inequality operators using the range_cmp function */
@@ -1352,7 +1352,7 @@ range_gt(PG_FUNCTION_ARGS)
 /* Hash support */
 
 uint32
-hash_range_internal(TypeCacheEntry *typcache, RangeType *r)
+hash_range_internal(TypeCacheEntry *typcache, const RangeType *r)
 {
 	uint32		result;
 	TypeCacheEntry *scache;
@@ -1422,7 +1422,7 @@ hash_range(PG_FUNCTION_ARGS)
 }
 
 uint64
-hash_range_extended_internal(TypeCacheEntry *typcache, RangeType *r, Datum seed)
+hash_range_extended_internal(TypeCacheEntry *typcache, const RangeType *r, Datum seed)
 {
 	uint64		result;
 	TypeCacheEntry *scache;
