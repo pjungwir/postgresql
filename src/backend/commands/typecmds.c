@@ -111,7 +111,8 @@ Oid			binary_upgrade_next_multirange_array_pg_type_oid = InvalidOid;
 static void makeRangeConstructors(const char *name, Oid namespace,
 								  Oid rangeOid, Oid subtype);
 static void makeMultirangeConstructors(const char *name, Oid namespace,
-									   Oid multirangeOid, Oid rangeArrayOid);
+									   Oid multirangeOid, Oid rangeOid,
+									   Oid rangeArrayOid, Oid *castFuncOid);
 static Oid	findTypeInputFunction(List *procname, Oid typeOid);
 static Oid	findTypeOutputFunction(List *procname, Oid typeOid);
 static Oid	findTypeReceiveFunction(List *procname, Oid typeOid);
@@ -1314,6 +1315,7 @@ DefineRange(CreateRangeStmt *stmt)
 	ListCell   *lc;
 	ObjectAddress address;
 	ObjectAddress mltrngaddress;
+	Oid			castFuncOid;
 
 	/* Convert list of names to a name and namespace */
 	typeNamespace = QualifiedNameGetCreationNamespace(stmt->typeName,
@@ -1627,7 +1629,11 @@ DefineRange(CreateRangeStmt *stmt)
 	/* And create the constructor functions for this range type */
 	makeRangeConstructors(typeName, typeNamespace, typoid, rangeSubtype);
 	makeMultirangeConstructors(multirangeTypeName, typeNamespace,
-							   multirangeOid, rangeArrayOid);
+							   multirangeOid, typoid, rangeArrayOid,
+							   &castFuncOid);
+
+	/* Create cast from the range type to its multirange type */
+	CastCreate(typoid, multirangeOid, castFuncOid, 'i', 'f', DEPENDENCY_INTERNAL);
 
 	pfree(multirangeTypeName);
 	pfree(multirangeArrayName);
@@ -1713,16 +1719,21 @@ makeRangeConstructors(const char *name, Oid namespace,
  * so its name can include the base type, like range constructors do.
  * If we had an anyrangearray polymorphic type we could use it here,
  * but since each type has its own constructor name there's no need.
+ *
+ * Sets castFuncOid to the oid of the new constructor that can be used
+ * to cast from a range to a multirange.
  */
 static void
 makeMultirangeConstructors(const char *name, Oid namespace,
-						   Oid multirangeOid, Oid rangeArrayOid)
+						   Oid multirangeOid, Oid rangeOid, Oid rangeArrayOid,
+						   Oid *castFuncOid)
 {
-	static const char *const prosrc[2] = {"multirange_constructor0",
-	"multirange_constructor1"};
-	static const int pronargs[2] = {0, 1};
+	static const char *const prosrc[3] = {"multirange_constructor0",
+	"multirange_constructor1", "multirange_constructor2"};
+	static const int pronargs[3] = {0, 1, 1};
+	static const int prostrict[3] = {false, true, false};
 
-	Oid			constructorArgTypes = rangeArrayOid;
+	Oid			constructorArgTypes[3] = {InvalidOid, rangeOid, rangeArrayOid};
 	ObjectAddress myself,
 				referenced;
 	int			i;
@@ -1730,12 +1741,12 @@ makeMultirangeConstructors(const char *name, Oid namespace,
 	Datum		allParamTypes[1] = {ObjectIdGetDatum(rangeArrayOid)};
 	ArrayType  *allParameterTypes = construct_array(allParamTypes, 1, OIDOID,
 													sizeof(Oid), true, 'i');
-	Datum		constructorAllParamTypes[2] = {PointerGetDatum(NULL), PointerGetDatum(allParameterTypes)};
+	Datum		constructorAllParamTypes[3] = {PointerGetDatum(NULL), PointerGetDatum(NULL), PointerGetDatum(allParameterTypes)};
 
 	Datum		paramModes[1] = {CharGetDatum(FUNC_PARAM_VARIADIC)};
 	ArrayType  *parameterModes = construct_array(paramModes, 1, CHAROID,
 												 1, true, 'c');
-	Datum		constructorParamModes[2] = {PointerGetDatum(NULL), PointerGetDatum(parameterModes)};
+	Datum		constructorParamModes[3] = {PointerGetDatum(NULL), PointerGetDatum(NULL), PointerGetDatum(parameterModes)};
 
 	referenced.classId = TypeRelationId;
 	referenced.objectId = multirangeOid;
@@ -1745,7 +1756,7 @@ makeMultirangeConstructors(const char *name, Oid namespace,
 	{
 		oidvector  *constructorArgTypesVector;
 
-		constructorArgTypesVector = buildoidvector(&constructorArgTypes,
+		constructorArgTypesVector = buildoidvector(&constructorArgTypes[i],
 												   pronargs[i]);
 
 		myself = ProcedureCreate(name,	/* name: same as multirange type */
@@ -1761,7 +1772,7 @@ makeMultirangeConstructors(const char *name, Oid namespace,
 								 PROKIND_FUNCTION,
 								 false, /* security_definer */
 								 false, /* leakproof */
-								 false, /* isStrict */
+								 prostrict[i], /* isStrict */
 								 PROVOLATILE_IMMUTABLE, /* volatility */
 								 PROPARALLEL_SAFE,	/* parallel safety */
 								 constructorArgTypesVector, /* parameterTypes */
@@ -1781,6 +1792,9 @@ makeMultirangeConstructors(const char *name, Oid namespace,
 		 * pg_dump depends on this choice to avoid dumping the constructors.
 		 */
 		recordDependencyOn(&myself, &referenced, DEPENDENCY_INTERNAL);
+
+		if (i == 1)
+			*castFuncOid = myself.objectId;
 	}
 }
 
