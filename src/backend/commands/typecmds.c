@@ -104,6 +104,8 @@ typedef struct
 
 /* Potentially set by pg_upgrade_support functions */
 Oid			binary_upgrade_next_array_pg_type_oid = InvalidOid;
+Oid			binary_upgrade_next_multirange_pg_type_oid = InvalidOid;
+Oid			binary_upgrade_next_multirange_array_pg_type_oid = InvalidOid;
 
 static void makeRangeConstructors(const char *name, Oid namespace,
 								  Oid rangeOid, Oid subtype);
@@ -1288,11 +1290,11 @@ DefineRange(CreateRangeStmt *stmt)
 	char	   *typeName;
 	Oid			typeNamespace;
 	Oid			typoid;
-	Oid			mltrngtypoid;
 	char	   *rangeArrayName;
 	char	   *multirangeTypeName;
 	char	   *multirangeArrayName;
 	Oid			rangeArrayOid;
+	Oid			multirangeOid;
 	Oid			multirangeArrayOid;
 	Oid			rangeSubtype = InvalidOid;
 	List	   *rangeSubOpclassName = NIL;
@@ -1462,8 +1464,11 @@ DefineRange(CreateRangeStmt *stmt)
 	/* Allocate OID for array type */
 	rangeArrayOid = AssignTypeArrayOid();
 
+	/* Allocate OID for multirange type */
+	multirangeOid = AssignTypeMultirangeOid();
+
 	/* Allocate OID for multirange array type */
-	multirangeArrayOid = AssignTypeArrayOid();
+	multirangeArrayOid = AssignTypeMultirangeArrayOid();
 
 	/* Create the pg_type entry */
 	address =
@@ -1506,7 +1511,7 @@ DefineRange(CreateRangeStmt *stmt)
 	multirangeTypeName = makeMultirangeTypeName(typeName, typeNamespace);
 
 	mltrngaddress =
-		TypeCreate(InvalidOid,	/* no predetermined type OID */
+		TypeCreate(multirangeOid,	/* force assignment of this type OID */
 				   multirangeTypeName,	/* type name */
 				   typeNamespace,	/* namespace */
 				   InvalidOid,	/* relation oid (n/a here) */
@@ -1537,11 +1542,11 @@ DefineRange(CreateRangeStmt *stmt)
 				   0,			/* Array dimensions of typbasetype */
 				   false,		/* Type NOT NULL */
 				   InvalidOid); /* type's collation (ranges never have one) */
-	mltrngtypoid = mltrngaddress.objectId;
+	Assert(multirangeOid == mltrngaddress.objectId);
 
 	/* Create the entry in pg_range */
 	RangeCreate(typoid, rangeSubtype, rangeCollation, rangeSubOpclass,
-				rangeCanonical, rangeSubtypeDiff, mltrngtypoid);
+				rangeCanonical, rangeSubtypeDiff, multirangeOid);
 
 	/*
 	 * Create the array type that goes with it.
@@ -1604,7 +1609,7 @@ DefineRange(CreateRangeStmt *stmt)
 			   InvalidOid,		/* typmodin procedure - none */
 			   InvalidOid,		/* typmodout procedure - none */
 			   F_ARRAY_TYPANALYZE,	/* analyze procedure */
-			   mltrngtypoid,	/* element type ID */
+			   multirangeOid,	/* element type ID */
 			   true,			/* yes this is an array type */
 			   InvalidOid,		/* no further array type */
 			   InvalidOid,		/* base type ID */
@@ -1621,7 +1626,7 @@ DefineRange(CreateRangeStmt *stmt)
 	/* And create the constructor functions for this range type */
 	makeRangeConstructors(typeName, typeNamespace, typoid, rangeSubtype);
 	makeMultirangeConstructors(multirangeTypeName, typeNamespace,
-							   mltrngtypoid, rangeArrayOid);
+							   multirangeOid, rangeArrayOid);
 
 	pfree(multirangeTypeName);
 	pfree(multirangeArrayName);
@@ -1716,12 +1721,10 @@ makeMultirangeConstructors(const char *name, Oid namespace,
 	"multirange_constructor1"};
 	static const int pronargs[2] = {0, 1};
 
-	Oid			constructorArgTypes[0];
+	Oid			constructorArgTypes = rangeArrayOid;
 	ObjectAddress myself,
 				referenced;
 	int			i;
-
-	constructorArgTypes[0] = rangeArrayOid;
 
 	Datum		allParamTypes[1] = {ObjectIdGetDatum(rangeArrayOid)};
 	ArrayType  *allParameterTypes = construct_array(allParamTypes, 1, OIDOID,
@@ -1741,7 +1744,7 @@ makeMultirangeConstructors(const char *name, Oid namespace,
 	{
 		oidvector  *constructorArgTypesVector;
 
-		constructorArgTypesVector = buildoidvector(constructorArgTypes,
+		constructorArgTypesVector = buildoidvector(&constructorArgTypes,
 												   pronargs[i]);
 
 		myself = ProcedureCreate(name,	/* name: same as multirange type */
@@ -2209,6 +2212,72 @@ AssignTypeArrayOid(void)
 	}
 
 	return type_array_oid;
+}
+
+/*
+ *	AssignTypeMultirangeOid
+ *
+ *	Pre-assign the range type's multirange OID for use in pg_type.oid
+ */
+Oid
+AssignTypeMultirangeOid(void)
+{
+	Oid			type_multirange_oid;
+
+	/* Use binary-upgrade override for pg_type.oid? */
+	if (IsBinaryUpgrade)
+	{
+		if (!OidIsValid(binary_upgrade_next_multirange_pg_type_oid))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("pg_type multirange OID value not set when in binary upgrade mode")));
+
+		type_multirange_oid = binary_upgrade_next_multirange_pg_type_oid;
+		binary_upgrade_next_multirange_pg_type_oid = InvalidOid;
+	}
+	else
+	{
+		Relation	pg_type = table_open(TypeRelationId, AccessShareLock);
+
+		type_multirange_oid = GetNewOidWithIndex(pg_type, TypeOidIndexId,
+												 Anum_pg_type_oid);
+		table_close(pg_type, AccessShareLock);
+	}
+
+	return type_multirange_oid;
+}
+
+/*
+ *	AssignTypeMultirangeArrayOid
+ *
+ *	Pre-assign the range type's multirange array OID for use in pg_type.typarray
+ */
+Oid
+AssignTypeMultirangeArrayOid(void)
+{
+	Oid			type_multirange_array_oid;
+
+	/* Use binary-upgrade override for pg_type.oid? */
+	if (IsBinaryUpgrade)
+	{
+		if (!OidIsValid(binary_upgrade_next_multirange_array_pg_type_oid))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("pg_type multirange array OID value not set when in binary upgrade mode")));
+
+		type_multirange_array_oid = binary_upgrade_next_multirange_array_pg_type_oid;
+		binary_upgrade_next_multirange_array_pg_type_oid = InvalidOid;
+	}
+	else
+	{
+		Relation	pg_type = table_open(TypeRelationId, AccessShareLock);
+
+		type_multirange_array_oid = GetNewOidWithIndex(pg_type, TypeOidIndexId,
+													   Anum_pg_type_oid);
+		table_close(pg_type, AccessShareLock);
+	}
+
+	return type_multirange_array_oid;
 }
 
 

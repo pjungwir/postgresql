@@ -234,9 +234,9 @@ ProcedureCreate(const char *procedureName,
 	/*
 	 * Do not allow polymorphic return type unless at least one input argument
 	 * is polymorphic.  ANYRANGE and ANYMULTIRANGE return types are even
-	 * stricter: must have an ANYRANGE input (since we can't deduce the
-	 * specific range type from ANYELEMENT).  Also, do not allow return type
-	 * INTERNAL unless at least one input argument is INTERNAL.
+	 * stricter: must have an ANYRANGE or ANYMULTIRANGE input (since we can't
+	 * deduce the specific range type from ANYELEMENT).  Also, do not allow
+	 * return type INTERNAL unless at least one input argument is INTERNAL.
 	 */
 	if ((IsPolymorphicType(returnType) || genericOutParam)
 		&& !genericInParam)

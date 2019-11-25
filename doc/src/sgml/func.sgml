@@ -13546,7 +13546,7 @@ SELECT NULLIF(value, '(none)') ...
        <row>
         <entry>Operator</entry>
         <entry>Description</entry>
-        <entry>Example</entry>
+        <entry>Examples</entry>
         <entry>Result</entry>
        </row>
       </thead>
@@ -14034,7 +14034,7 @@ NULL baz</literallayout>(3 rows)</entry>
        <row>
         <entry>Operator</entry>
         <entry>Description</entry>
-        <entry>Examples</entry>
+        <entry>Example</entry>
         <entry>Result</entry>
        </row>
       </thead>

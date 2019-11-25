@@ -1726,7 +1726,7 @@ enforce_generic_type_consistency(const Oid *actual_arg_types,
 	Oid			range_typeid = InvalidOid;
 	Oid			multirange_typeid = InvalidOid;
 	Oid			array_typelem;
-	Oid			range_typelem;
+	Oid			range_typelem = InvalidOid;
 	Oid			multirange_typelem;
 	bool		have_anyelement = (rettype == ANYELEMENTOID ||
 								   rettype == ANYNONARRAYOID ||
@@ -1917,6 +1917,8 @@ enforce_generic_type_consistency(const Oid *actual_arg_types,
 							   format_type_be(range_typeid),
 							   format_type_be(elem_typeid))));
 		}
+		else
+			range_typelem = InvalidOid;
 	}
 
 	/* Get the range type based on the multirange type, if we have one */
