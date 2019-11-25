@@ -632,7 +632,7 @@ make_empty_multirange(Oid mltrngtypoid, TypeCacheEntry *rangetyp)
  * and there must be no NULLs.
  */
 Datum
-multirange_constructor1(PG_FUNCTION_ARGS)
+multirange_constructor2(PG_FUNCTION_ARGS)
 {
 	Oid			mltrngtypid = get_fn_expr_rettype(fcinfo->flinfo);
 	Oid			rngtypid;
@@ -701,6 +701,42 @@ multirange_constructor1(PG_FUNCTION_ARGS)
 	}
 
 	PG_RETURN_MULTIRANGE_P(make_multirange(mltrngtypid, rangetyp, range_count, ranges));
+}
+
+/*
+ * Construct multirange value from a single range.
+ * It'd be nice if we could just use multirange_constructor2
+ * for this case, but we need a non-variadic single-arg function
+ * to let us define a CAST from a range to its multirange.
+ */
+Datum
+multirange_constructor1(PG_FUNCTION_ARGS)
+{
+	Oid			mltrngtypid = get_fn_expr_rettype(fcinfo->flinfo);
+	Oid			rngtypid;
+	TypeCacheEntry *typcache;
+	TypeCacheEntry *rangetyp;
+	RangeType *range;
+
+	typcache = multirange_get_typcache(fcinfo, mltrngtypid);
+	rangetyp = typcache->rngtype;
+
+	/*
+	 * These checks should be guaranteed by our signature, but let's do them
+	 * just in case.
+	 */
+
+	if (PG_ARGISNULL(0))
+		ereport(ERROR, (errmsg("Can't construct multirange with a NULL input")));
+
+	range = PG_GETARG_RANGE_P(0);
+
+	/* Make sure the range type matches. */
+	rngtypid = RangeTypeGetOid(range);
+	if (rngtypid != rangetyp->type_id)
+		ereport(ERROR, (errmsg("type %u does not match constructor type", rngtypid)));
+
+	PG_RETURN_MULTIRANGE_P(make_multirange(mltrngtypid, rangetyp, 1, &range));
 }
 
 /*
