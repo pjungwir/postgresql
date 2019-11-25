@@ -291,6 +291,57 @@ select textmultirange(textrange('a', 'c'), textrange('b', 'd'));
 (1 row)
 
 --
+-- test casts, both a built-in range type and a user-defined one:
+--
+select 'empty'::int4range::int4multirange;
+ int4multirange 
+----------------
+ {}
+(1 row)
+
+select int4range(1, 3)::int4multirange;
+ int4range 
+-----------
+ {[1,3)}
+(1 row)
+
+select int4range(1, null)::int4multirange;
+ int4range 
+-----------
+ {[1,)}
+(1 row)
+
+select int4range(null, null)::int4multirange;
+ int4range 
+-----------
+ {(,)}
+(1 row)
+
+select 'empty'::textrange::textmultirange;
+ textmultirange 
+----------------
+ {}
+(1 row)
+
+select textrange('a', 'c')::textmultirange;
+ textrange 
+-----------
+ {[a,c)}
+(1 row)
+
+select textrange('a', null)::textmultirange;
+ textrange 
+-----------
+ {[a,)}
+(1 row)
+
+select textrange(null, null)::textmultirange;
+ textrange 
+-----------
+ {(,)}
+(1 row)
+
+--
 -- create some test data and test the operators
 --
 CREATE TABLE nummultirange_test (nmr NUMMULTIRANGE);
