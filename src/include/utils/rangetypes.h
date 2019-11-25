@@ -95,10 +95,10 @@ typedef struct
  */
 
 /* internal versions of the above */
-extern int range_cmp_internal(TypeCacheEntry *typcache, const RangeType *r1,
-							  const RangeType *r2);
-extern uint32 hash_range_internal(TypeCacheEntry *typcache, RangeType *r);
-extern uint64 hash_range_extended_internal(TypeCacheEntry *typcache, RangeType *r,
+extern int	range_cmp_internal(TypeCacheEntry *typcache, const RangeType *r1,
+							   const RangeType *r2);
+extern uint32 hash_range_internal(TypeCacheEntry *typcache, const RangeType *r);
+extern uint64 hash_range_extended_internal(TypeCacheEntry *typcache, const RangeType *r,
 										   Datum seed);
 extern Datum range_lower_internal(TypeCacheEntry *typcache, const RangeType *r1,
 								  bool *isnull);
@@ -108,10 +108,9 @@ extern bool range_eq_internal(TypeCacheEntry *typcache, const RangeType *r1,
 							  const RangeType *r2);
 extern bool range_ne_internal(TypeCacheEntry *typcache, const RangeType *r1,
 							  const RangeType *r2);
+extern bool range_contains_elem_internal(TypeCacheEntry *typcache, const RangeType *r, Datum val);
 extern bool range_contains_internal(TypeCacheEntry *typcache, const RangeType *r1,
 									const RangeType *r2);
-extern bool range_contains_elem_internal(TypeCacheEntry *typcache, const RangeType *r,
-										 Datum val);
 extern bool range_contained_by_internal(TypeCacheEntry *typcache, const RangeType *r1,
 										const RangeType *r2);
 extern bool range_before_internal(TypeCacheEntry *typcache, const RangeType *r1,
@@ -130,8 +129,8 @@ extern RangeType *range_union_internal(TypeCacheEntry *typcache, RangeType *r1,
 									   RangeType *r2, bool strict);
 extern RangeType *range_minus_internal(TypeCacheEntry *typcache, RangeType *r1,
 									   RangeType *r2);
-extern RangeType *range_intersect_internal(TypeCacheEntry *typcache, RangeType *r1,
-										   RangeType *r2);
+extern RangeType *range_intersect_internal(TypeCacheEntry *typcache, const RangeType *r1,
+										   const RangeType *r2);
 
 /* assorted support functions */
 extern TypeCacheEntry *range_get_typcache(FunctionCallInfo fcinfo,
@@ -154,8 +153,8 @@ extern int	range_compare(const void *key1, const void *key2, void *arg);
 extern bool bounds_adjacent(TypeCacheEntry *typcache, RangeBound bound1,
 							RangeBound bound2);
 extern RangeType *make_empty_range(TypeCacheEntry *typcache);
-extern bool range_split_internal(TypeCacheEntry *typcache, RangeType *r1,
-								 RangeType *r2, RangeType **output1,
+extern bool range_split_internal(TypeCacheEntry *typcache, const RangeType *r1,
+								 const RangeType *r2, RangeType **output1,
 								 RangeType **output2);
 
 #endif							/* RANGETYPES_H */

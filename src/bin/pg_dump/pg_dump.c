@@ -272,7 +272,8 @@ static void dumpSearchPath(Archive *AH);
 static void binary_upgrade_set_type_oids_by_type_oid(Archive *fout,
 													 PQExpBuffer upgrade_buffer,
 													 Oid pg_type_oid,
-													 bool force_array_type);
+													 bool force_array_type,
+													 bool include_multirange_type);
 static void binary_upgrade_set_type_oids_by_rel_oid(Archive *fout,
 													PQExpBuffer upgrade_buffer, Oid pg_rel_oid);
 static void binary_upgrade_set_pg_class_oids(Archive *fout,
@@ -4461,16 +4462,48 @@ append_depends_on_extension(Archive *fout,
 	}
 }
 
+static Oid get_next_possible_free_pg_type_oid(Archive *fout, PQExpBuffer upgrade_query)
+{
+	/*
+	 * If the old version didn't assign an array type, but the new version
+	 * does, we must select an unused type OID to assign.  This currently
+	 * only happens for domains, when upgrading pre-v11 to v11 and up.
+	 *
+	 * Note: local state here is kind of ugly, but we must have some,
+	 * since we mustn't choose the same unused OID more than once.
+	 */
+	static Oid	next_possible_free_oid = FirstNormalObjectId;
+	PGresult   *res;
+	bool		is_dup;
+
+	do
+	{
+		++next_possible_free_oid;
+		printfPQExpBuffer(upgrade_query,
+						  "SELECT EXISTS(SELECT 1 "
+						  "FROM pg_catalog.pg_type "
+						  "WHERE oid = '%u'::pg_catalog.oid);",
+						  next_possible_free_oid);
+		res = ExecuteSqlQueryForSingleRow(fout, upgrade_query->data);
+		is_dup = (PQgetvalue(res, 0, 0)[0] == 't');
+		PQclear(res);
+	} while (is_dup);
+
+	return next_possible_free_oid;
+}
 
 static void
 binary_upgrade_set_type_oids_by_type_oid(Archive *fout,
 										 PQExpBuffer upgrade_buffer,
 										 Oid pg_type_oid,
-										 bool force_array_type)
+										 bool force_array_type,
+										 bool include_multirange_type)
 {
 	PQExpBuffer upgrade_query = createPQExpBuffer();
 	PGresult   *res;
 	Oid			pg_type_array_oid;
+	Oid			pg_type_multirange_oid;
+	Oid			pg_type_multirange_array_oid;
 
 	appendPQExpBufferStr(upgrade_buffer, "\n-- For binary upgrade, must preserve pg_type oid\n");
 	appendPQExpBuffer(upgrade_buffer,
@@ -4491,33 +4524,7 @@ binary_upgrade_set_type_oids_by_type_oid(Archive *fout,
 	PQclear(res);
 
 	if (!OidIsValid(pg_type_array_oid) && force_array_type)
-	{
-		/*
-		 * If the old version didn't assign an array type, but the new version
-		 * does, we must select an unused type OID to assign.  This currently
-		 * only happens for domains, when upgrading pre-v11 to v11 and up.
-		 *
-		 * Note: local state here is kind of ugly, but we must have some,
-		 * since we mustn't choose the same unused OID more than once.
-		 */
-		static Oid	next_possible_free_oid = FirstNormalObjectId;
-		bool		is_dup;
-
-		do
-		{
-			++next_possible_free_oid;
-			printfPQExpBuffer(upgrade_query,
-							  "SELECT EXISTS(SELECT 1 "
-							  "FROM pg_catalog.pg_type "
-							  "WHERE oid = '%u'::pg_catalog.oid);",
-							  next_possible_free_oid);
-			res = ExecuteSqlQueryForSingleRow(fout, upgrade_query->data);
-			is_dup = (PQgetvalue(res, 0, 0)[0] == 't');
-			PQclear(res);
-		} while (is_dup);
-
-		pg_type_array_oid = next_possible_free_oid;
-	}
+		pg_type_array_oid = get_next_possible_free_pg_type_oid(fout, upgrade_query);
 
 	if (OidIsValid(pg_type_array_oid))
 	{
@@ -4526,6 +4533,46 @@ binary_upgrade_set_type_oids_by_type_oid(Archive *fout,
 		appendPQExpBuffer(upgrade_buffer,
 						  "SELECT pg_catalog.binary_upgrade_set_next_array_pg_type_oid('%u'::pg_catalog.oid);\n\n",
 						  pg_type_array_oid);
+	}
+
+	/*
+	 * Pre-set the multirange type oid and its own array type oid.
+	 */
+	if (include_multirange_type)
+	{
+		if (fout->remoteVersion >= 130000)
+		{
+			appendPQExpBuffer(upgrade_query,
+							  "SELECT t.oid, t.typarray "
+							  "FROM pg_catalog.pg_type t "
+							  "JOIN pg_catalog.pg_range r "
+							  "ON t.oid = r.mltrngtypid "
+							  "WHERE r.rngtypid = '%u'::pg_catalog.oid;",
+							  pg_type_oid);
+
+			res = ExecuteSqlQueryForSingleRow(fout, upgrade_query->data);
+
+			pg_type_multirange_oid = atooid(PQgetvalue(res, 0, PQfnumber(res, "oid")));
+			pg_type_multirange_array_oid = atooid(PQgetvalue(res, 0, PQfnumber(res, "typarray")));
+
+			PQclear(res);
+		}
+		else
+		{
+			pg_type_multirange_oid = get_next_possible_free_pg_type_oid(fout, upgrade_query);
+			pg_type_multirange_array_oid = get_next_possible_free_pg_type_oid(fout, upgrade_query);
+		}
+
+		appendPQExpBufferStr(upgrade_buffer,
+							 "\n-- For binary upgrade, must preserve multirange pg_type oid\n");
+		appendPQExpBuffer(upgrade_buffer,
+						  "SELECT pg_catalog.binary_upgrade_set_next_multirange_pg_type_oid('%u'::pg_catalog.oid);\n\n",
+						  pg_type_multirange_oid);
+		appendPQExpBufferStr(upgrade_buffer,
+							 "\n-- For binary upgrade, must preserve multirange pg_type array oid\n");
+		appendPQExpBuffer(upgrade_buffer,
+						  "SELECT pg_catalog.binary_upgrade_set_next_multirange_array_pg_type_oid('%u'::pg_catalog.oid);\n\n",
+						  pg_type_multirange_array_oid);
 	}
 
 	destroyPQExpBuffer(upgrade_query);
@@ -4550,9 +4597,28 @@ binary_upgrade_set_type_oids_by_rel_oid(Archive *fout,
 
 	pg_type_oid = atooid(PQgetvalue(upgrade_res, 0, PQfnumber(upgrade_res, "crel")));
 
+<<<<<<< HEAD
 	if (OidIsValid(pg_type_oid))
 		binary_upgrade_set_type_oids_by_type_oid(fout, upgrade_buffer,
 												 pg_type_oid, false);
+=======
+	binary_upgrade_set_type_oids_by_type_oid(fout, upgrade_buffer,
+											 pg_type_oid, false, false);
+
+	if (!PQgetisnull(upgrade_res, 0, PQfnumber(upgrade_res, "trel")))
+	{
+		/* Toast tables do not have pg_type array rows */
+		Oid			pg_type_toast_oid = atooid(PQgetvalue(upgrade_res, 0,
+														  PQfnumber(upgrade_res, "trel")));
+
+		appendPQExpBufferStr(upgrade_buffer, "\n-- For binary upgrade, must preserve pg_type toast oid\n");
+		appendPQExpBuffer(upgrade_buffer,
+						  "SELECT pg_catalog.binary_upgrade_set_next_toast_pg_type_oid('%u'::pg_catalog.oid);\n\n",
+						  pg_type_toast_oid);
+
+		toast_set = true;
+	}
+>>>>>>> 2842f07d0c... Merge in various fixes from reviewer feedback
 
 	PQclear(upgrade_res);
 	destroyPQExpBuffer(upgrade_query);
@@ -10501,7 +10567,7 @@ dumpEnumType(Archive *fout, TypeInfo *tyinfo)
 	if (dopt->binary_upgrade)
 		binary_upgrade_set_type_oids_by_type_oid(fout, q,
 												 tyinfo->dobj.catId.oid,
-												 false);
+												 false, false);
 
 	appendPQExpBuffer(q, "CREATE TYPE %s AS ENUM (",
 					  qualtypname);
@@ -10627,7 +10693,7 @@ dumpRangeType(Archive *fout, TypeInfo *tyinfo)
 	if (dopt->binary_upgrade)
 		binary_upgrade_set_type_oids_by_type_oid(fout, q,
 												 tyinfo->dobj.catId.oid,
-												 false);
+												 false, true);
 
 	appendPQExpBuffer(q, "CREATE TYPE %s AS RANGE (",
 					  qualtypname);
@@ -10733,7 +10799,7 @@ dumpUndefinedType(Archive *fout, TypeInfo *tyinfo)
 	if (dopt->binary_upgrade)
 		binary_upgrade_set_type_oids_by_type_oid(fout, q,
 												 tyinfo->dobj.catId.oid,
-												 false);
+												 false, false);
 
 	appendPQExpBuffer(q, "CREATE TYPE %s;\n",
 					  qualtypname);
@@ -10938,7 +11004,7 @@ dumpBaseType(Archive *fout, TypeInfo *tyinfo)
 	if (dopt->binary_upgrade)
 		binary_upgrade_set_type_oids_by_type_oid(fout, q,
 												 tyinfo->dobj.catId.oid,
-												 false);
+												 false, false);
 
 	appendPQExpBuffer(q,
 					  "CREATE TYPE %s (\n"
@@ -11125,7 +11191,8 @@ dumpDomain(Archive *fout, TypeInfo *tyinfo)
 	if (dopt->binary_upgrade)
 		binary_upgrade_set_type_oids_by_type_oid(fout, q,
 												 tyinfo->dobj.catId.oid,
-												 true); /* force array type */
+												 true,		/* force array type */
+												 false);	/* force multirange type */
 
 	qtypname = pg_strdup(fmtId(tyinfo->dobj.name));
 	qualtypname = pg_strdup(fmtQualifiedDumpable(tyinfo));
@@ -11313,7 +11380,7 @@ dumpCompositeType(Archive *fout, TypeInfo *tyinfo)
 	{
 		binary_upgrade_set_type_oids_by_type_oid(fout, q,
 												 tyinfo->dobj.catId.oid,
-												 false);
+												 false, false);
 		binary_upgrade_set_pg_class_oids(fout, q, tyinfo->typrelid, false);
 	}
 
@@ -11587,7 +11654,7 @@ dumpShellType(Archive *fout, ShellTypeInfo *stinfo)
 	if (dopt->binary_upgrade)
 		binary_upgrade_set_type_oids_by_type_oid(fout, q,
 												 stinfo->baseType->dobj.catId.oid,
-												 false);
+												 false, false);
 
 	appendPQExpBuffer(q, "CREATE TYPE %s;\n",
 					  fmtQualifiedDumpable(stinfo));
