@@ -1729,74 +1729,132 @@ makeMultirangeConstructors(const char *name, Oid namespace,
 						   Oid multirangeOid, Oid rangeOid, Oid rangeArrayOid,
 						   Oid *castFuncOid)
 {
-	static const char *const prosrc[3] = {"multirange_constructor0",
-	"multirange_constructor1", "multirange_constructor2"};
-	static const int pronargs[3] = {0, 1, 1};
-	static const int prostrict[3] = {false, true, false};
-
-	Oid			constructorArgTypes[3] = {InvalidOid, rangeOid, rangeArrayOid};
 	ObjectAddress myself,
 				referenced;
-	int			i;
-
-	Datum		allParamTypes[1] = {ObjectIdGetDatum(rangeArrayOid)};
-	ArrayType  *allParameterTypes = construct_array(allParamTypes, 1, OIDOID,
-													sizeof(Oid), true, 'i');
-	Datum		constructorAllParamTypes[3] = {PointerGetDatum(NULL), PointerGetDatum(NULL), PointerGetDatum(allParameterTypes)};
-
-	Datum		paramModes[1] = {CharGetDatum(FUNC_PARAM_VARIADIC)};
-	ArrayType  *parameterModes = construct_array(paramModes, 1, CHAROID,
-												 1, true, 'c');
-	Datum		constructorParamModes[3] = {PointerGetDatum(NULL), PointerGetDatum(NULL), PointerGetDatum(parameterModes)};
+	oidvector  *argtypes;
+	Datum		allParamTypes;
+	ArrayType  *allParameterTypes;
+	Datum		paramModes;
+	ArrayType  *parameterModes;
 
 	referenced.classId = TypeRelationId;
 	referenced.objectId = multirangeOid;
 	referenced.objectSubId = 0;
 
-	for (i = 0; i < lengthof(prosrc); i++)
-	{
-		oidvector  *constructorArgTypesVector;
+	/* 0-arg constructor - for empty multiranges */
+	argtypes = buildoidvector(NULL, 0);
+	myself = ProcedureCreate(name,	/* name: same as multirange type */
+							 namespace,
+							 false,	/* replace */
+							 false,	/* returns set */
+							 multirangeOid,	/* return type */
+							 BOOTSTRAP_SUPERUSERID,	/* proowner */
+							 INTERNALlanguageId,	/* language */
+							 F_FMGR_INTERNAL_VALIDATOR,
+							 "multirange_constructor0",	/* prosrc */
+							 NULL,	/* probin */
+							 PROKIND_FUNCTION,
+							 false,	/* security_definer */
+							 false,	/* leakproof */
+							 false, /* isStrict */
+							 PROVOLATILE_IMMUTABLE,	/* volatility */
+							 PROPARALLEL_SAFE,	/* parallel safety */
+							 argtypes,	/* parameterTypes */
+							 PointerGetDatum(NULL),	/* allParameterTypes */
+							 PointerGetDatum(NULL),	/* parameterModes */
+							 PointerGetDatum(NULL),	/* parameterNames */
+							 NIL,	/* parameterDefaults */
+							 PointerGetDatum(NULL),	/* trftypes */
+							 PointerGetDatum(NULL),	/* proconfig */
+							 InvalidOid,	/* prosupport */
+							 1.0,	/* procost */
+							 0.0);	/* prorows */
+	/*
+	 * Make the constructor internally-dependent on the multirange type so
+	 * that they go away silently when the type is dropped.  Note that pg_dump
+	 * depends on this choice to avoid dumping the constructors.
+	 */
+	recordDependencyOn(&myself, &referenced, DEPENDENCY_INTERNAL);
+	pfree(argtypes);
 
-		constructorArgTypesVector = buildoidvector(&constructorArgTypes[i],
-												   pronargs[i]);
+	/*
+	 * 1-arg constructor - for casts
+	 *
+	 * In theory we shouldn't need both this and the vararg (n-arg) constructor,
+	 * but having a separate 1-arg function lets us define casts against it.
+	 */
+	argtypes = buildoidvector(&rangeOid, 1);
+	myself = ProcedureCreate(name,	/* name: same as multirange type */
+							 namespace,
+							 false,	/* replace */
+							 false,	/* returns set */
+							 multirangeOid,	/* return type */
+							 BOOTSTRAP_SUPERUSERID,	/* proowner */
+							 INTERNALlanguageId,	/* language */
+							 F_FMGR_INTERNAL_VALIDATOR,
+							 "multirange_constructor1",	/* prosrc */
+							 NULL,	/* probin */
+							 PROKIND_FUNCTION,
+							 false,	/* security_definer */
+							 false,	/* leakproof */
+							 true, /* isStrict */
+							 PROVOLATILE_IMMUTABLE,	/* volatility */
+							 PROPARALLEL_SAFE,	/* parallel safety */
+							 argtypes,	/* parameterTypes */
+							 PointerGetDatum(NULL),	/* allParameterTypes */
+							 PointerGetDatum(NULL),	/* parameterModes */
+							 PointerGetDatum(NULL),	/* parameterNames */
+							 NIL,	/* parameterDefaults */
+							 PointerGetDatum(NULL),	/* trftypes */
+							 PointerGetDatum(NULL),	/* proconfig */
+							 InvalidOid,	/* prosupport */
+							 1.0,	/* procost */
+							 0.0);	/* prorows */
+	/* ditto */
+	recordDependencyOn(&myself, &referenced, DEPENDENCY_INTERNAL);
+	pfree(argtypes);
+	*castFuncOid = myself.objectId;
 
-		myself = ProcedureCreate(name,	/* name: same as multirange type */
-								 namespace, /* namespace */
-								 false, /* replace */
-								 false, /* returns set */
-								 multirangeOid, /* return type */
-								 BOOTSTRAP_SUPERUSERID, /* proowner */
-								 INTERNALlanguageId,	/* language */
-								 F_FMGR_INTERNAL_VALIDATOR, /* language validator */
-								 prosrc[i], /* prosrc */
-								 NULL,	/* probin */
-								 PROKIND_FUNCTION,
-								 false, /* security_definer */
-								 false, /* leakproof */
-								 prostrict[i], /* isStrict */
-								 PROVOLATILE_IMMUTABLE, /* volatility */
-								 PROPARALLEL_SAFE,	/* parallel safety */
-								 constructorArgTypesVector, /* parameterTypes */
-								 constructorAllParamTypes[i],	/* allParameterTypes */
-								 constructorParamModes[i],	/* parameterModes */
-								 PointerGetDatum(NULL), /* parameterNames */
-								 NIL,	/* parameterDefaults */
-								 PointerGetDatum(NULL), /* trftypes */
-								 PointerGetDatum(NULL), /* proconfig */
-								 InvalidOid,	/* prosupport */
-								 1.0,	/* procost */
-								 0.0);	/* prorows */
-
-		/*
-		 * Make the constructors internally-dependent on the multirange type
-		 * so that they go away silently when the type is dropped.  Note that
-		 * pg_dump depends on this choice to avoid dumping the constructors.
-		 */
-		recordDependencyOn(&myself, &referenced, DEPENDENCY_INTERNAL);
-
-		if (i == 1)
-			*castFuncOid = myself.objectId;
-	}
+	/* n-arg constructor - vararg */
+	argtypes = buildoidvector(&rangeArrayOid, 1);
+	allParamTypes = ObjectIdGetDatum(rangeArrayOid);
+	allParameterTypes = construct_array(&allParamTypes,
+										1, OIDOID,
+										sizeof(Oid), true, 'i');
+	paramModes = CharGetDatum(FUNC_PARAM_VARIADIC);
+	parameterModes = construct_array(&paramModes, 1, CHAROID,
+									 1, true, 'c');
+	myself = ProcedureCreate(name,	/* name: same as multirange type */
+							 namespace,
+							 false,	/* replace */
+							 false,	/* returns set */
+							 multirangeOid,	/* return type */
+							 BOOTSTRAP_SUPERUSERID,	/* proowner */
+							 INTERNALlanguageId,	/* language */
+							 F_FMGR_INTERNAL_VALIDATOR,
+							 "multirange_constructor2",	/* prosrc */
+							 NULL,	/* probin */
+							 PROKIND_FUNCTION,
+							 false,	/* security_definer */
+							 false,	/* leakproof */
+							 false, /* isStrict */
+							 PROVOLATILE_IMMUTABLE,	/* volatility */
+							 PROPARALLEL_SAFE,	/* parallel safety */
+							 argtypes,	/* parameterTypes */
+							 PointerGetDatum(allParameterTypes),	/* allParameterTypes */
+							 PointerGetDatum(parameterModes),	/* parameterModes */
+							 PointerGetDatum(NULL),	/* parameterNames */
+							 NIL,	/* parameterDefaults */
+							 PointerGetDatum(NULL),	/* trftypes */
+							 PointerGetDatum(NULL),	/* proconfig */
+							 InvalidOid,	/* prosupport */
+							 1.0,	/* procost */
+							 0.0);	/* prorows */
+	/* ditto */
+	recordDependencyOn(&myself, &referenced, DEPENDENCY_INTERNAL);
+	pfree(argtypes);
+	pfree(allParameterTypes);
+	pfree(parameterModes);
 }
 
 /*
