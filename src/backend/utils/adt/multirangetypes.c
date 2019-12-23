@@ -330,13 +330,13 @@ multirange_recv(PG_FUNCTION_ARGS)
 Datum
 multirange_send(PG_FUNCTION_ARGS)
 {
-	MultirangeType	   *multirange = PG_GETARG_MULTIRANGE_P(0);
-	Oid					mltrngtypoid = MultirangeTypeGetOid(multirange);
-	StringInfo			buf = makeStringInfo();
-	RangeType		  **ranges;
-	int32				range_count;
-	int32				i;
-	MultirangeIOData	*cache;
+	MultirangeType *multirange = PG_GETARG_MULTIRANGE_P(0);
+	Oid			mltrngtypoid = MultirangeTypeGetOid(multirange);
+	StringInfo	buf = makeStringInfo();
+	RangeType **ranges;
+	int32		range_count;
+	int32		i;
+	MultirangeIOData *cache;
 
 	cache = get_multirange_io_data(fcinfo, mltrngtypoid, IOFunc_send);
 
