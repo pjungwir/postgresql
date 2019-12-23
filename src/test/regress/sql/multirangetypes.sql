@@ -317,27 +317,15 @@ select nummultirange(numrange(3,4), numrange(7,8)) >> nummultirange(numrange(1,2
 select nummultirange(numrange(3,4), numrange(7,8)) >> nummultirange(numrange(1,2), numrange(4,5));
 
 -- union
-SELECT 'empty'::numrange @+ 'empty'::numrange;
-SELECT 'empty'::numrange @+ nummultirange();
-SELECT nummultirange() @+ 'empty'::numrange;
-SELECT nummultirange() @+ nummultirange();
-SELECT 'empty'::numrange @+ numrange(1,2);
-SELECT 'empty'::numrange @+ nummultirange(numrange(1,2));
-SELECT numrange(1,2) @+ nummultirange();
-SELECT nummultirange(numrange(1,2)) @+ 'empty'::numrange;
-SELECT numrange(1,2) @+ 'empty'::numrange;
-SELECT nummultirange() @+ numrange(1,2);
-SELECT nummultirange() @+ nummultirange(numrange(1,2));
-SELECT nummultirange(numrange(1,2)) @+ nummultirange();
-SELECT numrange(1,2) @+ numrange(1,2);
-SELECT numrange(1,2) @+ numrange(2,4);
-SELECT numrange(1,2) @+ numrange(3,4);
-SELECT nummultirange(numrange(1,2)) @+ nummultirange(numrange(1,2));
-SELECT nummultirange(numrange(1,2)) @+ nummultirange(numrange(2,4));
-SELECT nummultirange(numrange(1,2)) @+ nummultirange(numrange(3,4));
-SELECT nummultirange(numrange(1,2), numrange(4,5)) @+ nummultirange(numrange(2,4));
-SELECT nummultirange(numrange(1,2), numrange(4,5)) @+ nummultirange(numrange(3,4));
-SELECT nummultirange(numrange(1,2), numrange(4,5)) @+ nummultirange(numrange(0,9));
+SELECT nummultirange() + nummultirange();
+SELECT nummultirange() + nummultirange(numrange(1,2));
+SELECT nummultirange(numrange(1,2)) + nummultirange();
+SELECT nummultirange(numrange(1,2)) + nummultirange(numrange(1,2));
+SELECT nummultirange(numrange(1,2)) + nummultirange(numrange(2,4));
+SELECT nummultirange(numrange(1,2)) + nummultirange(numrange(3,4));
+SELECT nummultirange(numrange(1,2), numrange(4,5)) + nummultirange(numrange(2,4));
+SELECT nummultirange(numrange(1,2), numrange(4,5)) + nummultirange(numrange(3,4));
+SELECT nummultirange(numrange(1,2), numrange(4,5)) + nummultirange(numrange(0,9));
 
 -- merge
 SELECT range_merge(nummultirange());
@@ -655,7 +643,7 @@ select * from mr_outparam_succeed3(int4multirange(int4range(1,2)));
 
 -- infer anymultirange from anyrange
 create function mr_outparam_succeed4(i anyrange, out r anymultirange, out t text)
-  as $$ select $1 @+ $1, 'foo'::text $$ language sql;
+  as $$ select anymultirange($1), 'foo'::text $$ language sql;
 
 select * from mr_outparam_succeed4(int4range(1,2));
 
