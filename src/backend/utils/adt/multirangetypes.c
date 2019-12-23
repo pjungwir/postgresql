@@ -961,15 +961,16 @@ multirange_intersect_internal(Oid mltrngtypoid, TypeCacheEntry *rangetyp,
 	if (range_count1 == 0 || range_count2 == 0)
 		return make_multirange(mltrngtypoid, rangetyp, 0, NULL);
 
-	/*
+	/*-----------------------------------------------
 	 * Worst case is a stitching pattern like this:
 	 *
 	 * mr1: --- --- --- ---
 	 * mr2:   --- --- ---
 	 * mr3:   - - - - - -
 	 *
-	 * That seems to be range_count1 + range_count2 - 1, but one extra won't
-	 * hurt.
+	 * That seems to be range_count1 + range_count2 - 1,
+	 * but one extra won't hurt.
+	 *-----------------------------------------------
 	 */
 	ranges3 = palloc0((range_count1 + range_count2) * sizeof(RangeType *));
 	range_count3 = 0;
