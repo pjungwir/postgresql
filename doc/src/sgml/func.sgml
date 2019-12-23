@@ -14234,14 +14234,9 @@ numrange(1.1,2.2) -|- '{[2.2,3.3)}'::nummultirange
        </row>
 
        <row>
-        <entry> <literal>@+</literal> </entry>
-        <entry>safe union</entry>
-        <entry>
-          <literallayout class="monospaced">numrange(5,10) @+ numrange(15,20)
-numrange(5,10) @+ '{[15,20)}'::nummultirange
-'{[5,10)}'::nummultirange @+ numrange(15,20)
-'{[5,10)}'::nummultirange @+ '{[15,20)}'::nummultirange</literallayout>
-        </entry>
+        <entry> <literal>+</literal> </entry>
+        <entry>multirange union</entry>
+        <entry><literallayout class="monospaced">'{[5,10)}'::nummultirange @+ '{[15,20)}'::nummultirange</literallayout></entry>
         <entry><literal>{[5,10), [15,20)}</literal></entry>
        </row>
 
@@ -14253,14 +14248,9 @@ numrange(5,10) @+ '{[15,20)}'::nummultirange
        </row>
 
        <row>
-        <entry> <literal>@*</literal> </entry>
-        <entry>safe intersection</entry>
-        <entry>
-          <literallayout class="monospaced">int8range(5,15) @* int8range(10,20)
-int8range(5,15) @* '{[10,20)}'::int8multirange
-'{[5,15)}'::int8multirange @* int8range(10,20)
-'{[5,15)}'::int8multirange @* '{[10,20)}'::int8multirange</literallayout>
-        </entry>
+        <entry> <literal>*</literal> </entry>
+        <entry>multirange intersection</entry>
+        <entry><literallayout class="monospaced">'{[5,15)}'::int8multirange @* '{[10,20)}'::int8multirange</literallayout></entry>
         <entry><literal>{[10,15)}</literal></entry>
        </row>
 
@@ -14272,14 +14262,9 @@ int8range(5,15) @* '{[10,20)}'::int8multirange
        </row>
 
        <row>
-        <entry> <literal>@-</literal> </entry>
-        <entry>safe difference</entry>
-        <entry>
-          <literallayout class="monospaced">int8range(5,20) @- int8range(10,15)
-int8range(5,20) @- '{[10,15)}'::int8multirange
-'{[5,20)}'::int8multirange @- int8range(10,15)
-'{[5,20)}'::int8multirange @- '{[10,15)}'::int8multirange</literallayout>
-        </entry>
+        <entry> <literal>-</literal> </entry>
+        <entry>multirange difference</entry>
+        <entry><literallayout class="monospaced">'{[5,20)}'::int8multirange @- '{[10,15)}'::int8multirange</literallayout></entry>
         <entry><literal>{[5,10), [15,20)}</literal></entry>
        </row>
 
