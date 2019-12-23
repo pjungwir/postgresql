@@ -1588,6 +1588,8 @@ check_generic_type_consistency(const Oid *actual_arg_types,
 			/* otherwise, they better match */
 			return false;
 		}
+		else
+			range_typelem = InvalidOid;	/* keep compiler quiet */
 	}
 
 	/* Get the element type based on the multirange type, if we have one */
