@@ -943,7 +943,6 @@ makeMultirangeTypeName(const char *rangeTypeName, Oid typeNamespace)
 static char *
 makeUniqueTypeName(const char *typeName, Oid typeNamespace, bool tryOriginal)
 {
-	Relation	pg_type_desc;
 	int			i;
 	int			namelen;
 	char		dest[NAMEDATALEN];
