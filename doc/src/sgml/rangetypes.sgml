@@ -382,7 +382,7 @@ SELECT '[1.234, 5.678]'::floatrange;
   </para>
 
   <para>
-   When you define your own range your automatically get a corresponding
+   When you define your own range you automatically get a corresponding
    multirange type.
   </para>
 
