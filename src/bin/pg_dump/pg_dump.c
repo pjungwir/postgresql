@@ -4462,15 +4462,16 @@ append_depends_on_extension(Archive *fout,
 	}
 }
 
-static Oid get_next_possible_free_pg_type_oid(Archive *fout, PQExpBuffer upgrade_query)
+static Oid
+get_next_possible_free_pg_type_oid(Archive *fout, PQExpBuffer upgrade_query)
 {
 	/*
 	 * If the old version didn't assign an array type, but the new version
-	 * does, we must select an unused type OID to assign.  This currently
-	 * only happens for domains, when upgrading pre-v11 to v11 and up.
+	 * does, we must select an unused type OID to assign.  This currently only
+	 * happens for domains, when upgrading pre-v11 to v11 and up.
 	 *
-	 * Note: local state here is kind of ugly, but we must have some,
-	 * since we mustn't choose the same unused OID more than once.
+	 * Note: local state here is kind of ugly, but we must have some, since we
+	 * mustn't choose the same unused OID more than once.
 	 */
 	static Oid	next_possible_free_oid = FirstNormalObjectId;
 	PGresult   *res;
