@@ -1634,7 +1634,7 @@ DefineRange(CreateRangeStmt *stmt)
 							   &castFuncOid);
 
 	/* Create cast from the range type to its multirange type */
-	CastCreate(typoid, multirangeOid, castFuncOid, 'i', 'f', DEPENDENCY_INTERNAL);
+	CastCreate(typoid, multirangeOid, castFuncOid, 'e', 'f', DEPENDENCY_INTERNAL);
 
 	pfree(multirangeTypeName);
 	pfree(multirangeArrayName);
