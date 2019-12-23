@@ -630,8 +630,8 @@ resolve_polymorphic_tupdesc(TupleDesc tupdesc, oidvector *declared_args,
 	{
 		if (OidIsValid(anymultirange_type))
 		{
-			Oid		rngtype;
-			Oid		subtype;
+			Oid			rngtype;
+			Oid			subtype;
 
 			rngtype = resolve_generic_type(ANYRANGEOID,
 										   anymultirange_type,
@@ -665,9 +665,9 @@ resolve_polymorphic_tupdesc(TupleDesc tupdesc, oidvector *declared_args,
 	{
 		if (OidIsValid(anyrange_type))
 		{
-			Oid		subtype;
-			Oid		mltrngtype;
-			Oid		rngtype;
+			Oid			subtype;
+			Oid			mltrngtype;
+			Oid			rngtype;
 
 			subtype = resolve_generic_type(ANYELEMENTOID,
 										   anyrange_type,
