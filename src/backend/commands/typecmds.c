@@ -105,8 +105,8 @@ typedef struct
 
 /* Potentially set by pg_upgrade_support functions */
 Oid			binary_upgrade_next_array_pg_type_oid = InvalidOid;
-Oid			binary_upgrade_next_multirange_pg_type_oid = InvalidOid;
-Oid			binary_upgrade_next_multirange_array_pg_type_oid = InvalidOid;
+Oid			binary_upgrade_next_mrng_pg_type_oid = InvalidOid;
+Oid			binary_upgrade_next_mrng_array_pg_type_oid = InvalidOid;
 
 static void makeRangeConstructors(const char *name, Oid namespace,
 								  Oid rangeOid, Oid subtype);
@@ -1465,13 +1465,9 @@ DefineRange(CreateRangeStmt *stmt)
 	/* alignment must be TYPALIGN_INT or TYPALIGN_DOUBLE for ranges */
 	alignment = (subtypalign == TYPALIGN_DOUBLE) ? TYPALIGN_DOUBLE : TYPALIGN_INT;
 
-	/* Allocate OID for array type */
+	/* Allocate OID for array type, its multirange, and its multirange array */
 	rangeArrayOid = AssignTypeArrayOid();
-
-	/* Allocate OID for multirange type */
 	multirangeOid = AssignTypeMultirangeOid();
-
-	/* Allocate OID for multirange array type */
 	multirangeArrayOid = AssignTypeMultirangeArrayOid();
 
 	/* Create the pg_type entry */
@@ -1511,7 +1507,6 @@ DefineRange(CreateRangeStmt *stmt)
 	typoid = address.objectId;
 
 	/* Create the multirange that goes with it */
-
 	multirangeTypeName = makeMultirangeTypeName(typeName, typeNamespace);
 
 	mltrngaddress =
@@ -2323,13 +2318,13 @@ AssignTypeMultirangeOid(void)
 	/* Use binary-upgrade override for pg_type.oid? */
 	if (IsBinaryUpgrade)
 	{
-		if (!OidIsValid(binary_upgrade_next_multirange_pg_type_oid))
+		if (!OidIsValid(binary_upgrade_next_mrng_pg_type_oid))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("pg_type multirange OID value not set when in binary upgrade mode")));
 
-		type_multirange_oid = binary_upgrade_next_multirange_pg_type_oid;
-		binary_upgrade_next_multirange_pg_type_oid = InvalidOid;
+		type_multirange_oid = binary_upgrade_next_mrng_pg_type_oid;
+		binary_upgrade_next_mrng_pg_type_oid = InvalidOid;
 	}
 	else
 	{
@@ -2356,13 +2351,13 @@ AssignTypeMultirangeArrayOid(void)
 	/* Use binary-upgrade override for pg_type.oid? */
 	if (IsBinaryUpgrade)
 	{
-		if (!OidIsValid(binary_upgrade_next_multirange_array_pg_type_oid))
+		if (!OidIsValid(binary_upgrade_next_mrng_array_pg_type_oid))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("pg_type multirange array OID value not set when in binary upgrade mode")));
 
-		type_multirange_array_oid = binary_upgrade_next_multirange_array_pg_type_oid;
-		binary_upgrade_next_multirange_array_pg_type_oid = InvalidOid;
+		type_multirange_array_oid = binary_upgrade_next_mrng_array_pg_type_oid;
+		binary_upgrade_next_mrng_array_pg_type_oid = InvalidOid;
 	}
 	else
 	{
