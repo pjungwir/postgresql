@@ -797,108 +797,9 @@ multirange_union(PG_FUNCTION_ARGS)
 										   range_count3, ranges3));
 }
 
-MultirangeType *
-range_union_multirange_internal(TypeCacheEntry *typcache, RangeType *r,
-								MultirangeType * mr)
-{
-	int32		range_count;
-	RangeType **ranges1;
-	RangeType **ranges2;
-
-	if (RangeIsEmpty(r))
-		return mr;
-	if (MultirangeIsEmpty(mr))
-		return make_multirange(typcache->type_id, typcache->rngtype, 1, &r);
-
-	multirange_deserialize(mr, &range_count, &ranges1);
-
-	ranges2 = palloc0((range_count + 1) * sizeof(RangeType *));
-
-	memcpy(ranges2, ranges1, range_count * sizeof(RangeType *));
-	ranges2[range_count] = r;
-	return make_multirange(typcache->type_id, typcache->rngtype, range_count + 1, ranges2);
-}
-
 /* multirange minus */
 Datum
-range_minus_range(PG_FUNCTION_ARGS)
-{
-	RangeType  *r1 = PG_GETARG_RANGE_P(0);
-	RangeType  *r2 = PG_GETARG_RANGE_P(1);
-	Oid			mltrngtypoid = get_fn_expr_rettype(fcinfo->flinfo);
-	TypeCacheEntry *typcache;
-	TypeCacheEntry *rangetyp;
-
-	typcache = multirange_get_typcache(fcinfo, mltrngtypoid);
-	rangetyp = typcache->rngtype;
-
-	if (RangeIsEmpty(r1) || RangeIsEmpty(r2))
-		PG_RETURN_MULTIRANGE_P(make_multirange(mltrngtypoid, rangetyp, 1, &r1));
-
-	PG_RETURN_MULTIRANGE_P(multirange_minus_multirange_internal(mltrngtypoid,
-																rangetyp,
-																1,
-																&r1,
-																1,
-																&r2));
-}
-
-Datum
-range_minus_multirange(PG_FUNCTION_ARGS)
-{
-	RangeType  *r = PG_GETARG_RANGE_P(0);
-	MultirangeType *mr = PG_GETARG_MULTIRANGE_P(1);
-	Oid			mltrngtypoid = MultirangeTypeGetOid(mr);
-	TypeCacheEntry *typcache;
-	TypeCacheEntry *rangetyp;
-	int32		range_count;
-	RangeType **ranges;
-
-	typcache = multirange_get_typcache(fcinfo, mltrngtypoid);
-	rangetyp = typcache->rngtype;
-
-	if (RangeIsEmpty(r) || MultirangeIsEmpty(mr))
-		PG_RETURN_MULTIRANGE_P(make_multirange(mltrngtypoid, rangetyp, 1, &r));
-
-	multirange_deserialize(mr, &range_count, &ranges);
-
-	PG_RETURN_MULTIRANGE_P(multirange_minus_multirange_internal(mltrngtypoid,
-																rangetyp,
-																1,
-																&r,
-																range_count,
-																ranges));
-}
-
-Datum
-multirange_minus_range(PG_FUNCTION_ARGS)
-{
-	MultirangeType *mr = PG_GETARG_MULTIRANGE_P(0);
-	RangeType  *r = PG_GETARG_RANGE_P(1);
-	Oid			mltrngtypoid = MultirangeTypeGetOid(mr);
-	TypeCacheEntry *typcache;
-	TypeCacheEntry *rangetyp;
-	int32		range_count;
-	RangeType **ranges;
-
-	typcache = multirange_get_typcache(fcinfo, mltrngtypoid);
-	rangetyp = typcache->rngtype;
-
-	if (MultirangeIsEmpty(mr) || RangeIsEmpty(r))
-		PG_RETURN_MULTIRANGE_P(mr);
-
-	multirange_deserialize(mr, &range_count, &ranges);
-
-	PG_RETURN_MULTIRANGE_P(multirange_minus_multirange_internal(mltrngtypoid,
-																rangetyp,
-																range_count,
-																ranges,
-																1,
-																&r));
-}
-
-Datum
-multirange_minus_multirange(PG_FUNCTION_ARGS)
+multirange_minus(PG_FUNCTION_ARGS)
 {
 	MultirangeType *mr1 = PG_GETARG_MULTIRANGE_P(0);
 	MultirangeType *mr2 = PG_GETARG_MULTIRANGE_P(1);
@@ -919,17 +820,18 @@ multirange_minus_multirange(PG_FUNCTION_ARGS)
 	multirange_deserialize(mr1, &range_count1, &ranges1);
 	multirange_deserialize(mr2, &range_count2, &ranges2);
 
-	PG_RETURN_MULTIRANGE_P(multirange_minus_multirange_internal(mltrngtypoid,
-																rangetyp,
-																range_count1,
-																ranges1,
-																range_count2,
-																ranges2));
+	PG_RETURN_MULTIRANGE_P(multirange_minus_internal(mltrngtypoid,
+													 rangetyp,
+													 range_count1,
+													 ranges1,
+													 range_count2,
+													 ranges2));
 }
 
 MultirangeType *
-multirange_minus_multirange_internal(Oid mltrngtypoid, TypeCacheEntry *rangetyp,
-									 int32 range_count1, RangeType **ranges1, int32 range_count2, RangeType **ranges2)
+multirange_minus_internal(Oid mltrngtypoid, TypeCacheEntry *rangetyp,
+						 int32 range_count1, RangeType **ranges1,
+						 int32 range_count2, RangeType **ranges2)
 {
 	RangeType  *r1;
 	RangeType  *r2;
@@ -1015,84 +917,7 @@ multirange_minus_multirange_internal(Oid mltrngtypoid, TypeCacheEntry *rangetyp,
 
 /* multirange intersection */
 Datum
-range_intersect_range(PG_FUNCTION_ARGS)
-{
-	RangeType  *r1 = PG_GETARG_RANGE_P(0);
-	RangeType  *r2 = PG_GETARG_RANGE_P(1);
-	Oid			mltrngtypoid = get_fn_expr_rettype(fcinfo->flinfo);
-	TypeCacheEntry *typcache;
-	TypeCacheEntry *rangetyp;
-
-	typcache = multirange_get_typcache(fcinfo, mltrngtypoid);
-	rangetyp = typcache->rngtype;
-
-	if (RangeIsEmpty(r1) || RangeIsEmpty(r2))
-		PG_RETURN_MULTIRANGE_P(make_empty_multirange(mltrngtypoid, rangetyp));
-
-	PG_RETURN_MULTIRANGE_P(multirange_intersect_multirange_internal(mltrngtypoid,
-																	rangetyp,
-																	1,
-																	&r1,
-																	1,
-																	&r2));
-}
-
-Datum
-range_intersect_multirange(PG_FUNCTION_ARGS)
-{
-	RangeType  *r1 = PG_GETARG_RANGE_P(0);
-	MultirangeType *mr2 = PG_GETARG_MULTIRANGE_P(1);
-	Oid			mltrngtypoid = MultirangeTypeGetOid(mr2);
-	TypeCacheEntry *typcache;
-	TypeCacheEntry *rangetyp;
-	int32		range_count2;
-	RangeType **ranges2;
-
-	typcache = multirange_get_typcache(fcinfo, mltrngtypoid);
-	rangetyp = typcache->rngtype;
-
-	if (RangeIsEmpty(r1) || MultirangeIsEmpty(mr2))
-		PG_RETURN_MULTIRANGE_P(make_empty_multirange(mltrngtypoid, rangetyp));
-
-	multirange_deserialize(mr2, &range_count2, &ranges2);
-
-	PG_RETURN_MULTIRANGE_P(multirange_intersect_multirange_internal(mltrngtypoid,
-																	rangetyp,
-																	1,
-																	&r1,
-																	range_count2,
-																	ranges2));
-}
-
-Datum
-multirange_intersect_range(PG_FUNCTION_ARGS)
-{
-	MultirangeType *mr1 = PG_GETARG_MULTIRANGE_P(0);
-	RangeType  *r2 = PG_GETARG_RANGE_P(1);
-	Oid			mltrngtypoid = MultirangeTypeGetOid(mr1);
-	TypeCacheEntry *typcache;
-	TypeCacheEntry *rangetyp;
-	int32		range_count1;
-	RangeType **ranges1;
-
-	typcache = multirange_get_typcache(fcinfo, mltrngtypoid);
-	rangetyp = typcache->rngtype;
-
-	if (MultirangeIsEmpty(mr1) || RangeIsEmpty(r2))
-		PG_RETURN_MULTIRANGE_P(make_empty_multirange(mltrngtypoid, rangetyp));
-
-	multirange_deserialize(mr1, &range_count1, &ranges1);
-
-	PG_RETURN_MULTIRANGE_P(multirange_intersect_multirange_internal(mltrngtypoid,
-																	rangetyp,
-																	range_count1,
-																	ranges1,
-																	1,
-																	&r2));
-}
-
-Datum
-multirange_intersect_multirange(PG_FUNCTION_ARGS)
+multirange_intersect(PG_FUNCTION_ARGS)
 {
 	MultirangeType *mr1 = PG_GETARG_MULTIRANGE_P(0);
 	MultirangeType *mr2 = PG_GETARG_MULTIRANGE_P(1);
@@ -1113,18 +938,18 @@ multirange_intersect_multirange(PG_FUNCTION_ARGS)
 	multirange_deserialize(mr1, &range_count1, &ranges1);
 	multirange_deserialize(mr2, &range_count2, &ranges2);
 
-	PG_RETURN_MULTIRANGE_P(multirange_intersect_multirange_internal(mltrngtypoid,
-																	rangetyp,
-																	range_count1,
-																	ranges1,
-																	range_count2,
-																	ranges2));
+	PG_RETURN_MULTIRANGE_P(multirange_intersect_internal(mltrngtypoid,
+														 rangetyp,
+														 range_count1,
+														 ranges1,
+														 range_count2,
+														 ranges2));
 }
 
 MultirangeType *
-multirange_intersect_multirange_internal(Oid mltrngtypoid, TypeCacheEntry *rangetyp,
-										 int32 range_count1, RangeType **ranges1,
-										 int32 range_count2, RangeType **ranges2)
+multirange_intersect_internal(Oid mltrngtypoid, TypeCacheEntry *rangetyp,
+							  int32 range_count1, RangeType **ranges1,
+							  int32 range_count2, RangeType **ranges2)
 {
 	RangeType  *r1;
 	RangeType  *r2;
@@ -1292,12 +1117,12 @@ multirange_intersect_agg_transfn(PG_FUNCTION_ARGS)
 	multirange_deserialize(result, &range_count1, &ranges1);
 	multirange_deserialize(current, &range_count2, &ranges2);
 
-	result = multirange_intersect_multirange_internal(mltrngtypoid,
-													  typcache->rngtype,
-													  range_count1,
-													  ranges1,
-													  range_count2,
-													  ranges2);
+	result = multirange_intersect_internal(mltrngtypoid,
+										   typcache->rngtype,
+										   range_count1,
+										   ranges1,
+										   range_count2,
+										   ranges2);
 	PG_RETURN_RANGE_P(result);
 }
 
