@@ -103,7 +103,6 @@ RangeCreate(Oid rangeTypeOid, Oid rangeSubType, Oid rangeCollation,
 	}
 
 	/* record multirange type's dependency on the range type */
-
 	referencing.classId = TypeRelationId;
 	referencing.objectId = multirangeTypeOid;
 	referencing.objectSubId = 0;
