@@ -245,8 +245,9 @@ ProcedureCreate(const char *procedureName,
 				 errmsg("cannot determine result data type"),
 				 errdetail("A function returning a polymorphic type must have at least one polymorphic argument.")));
 
-	if ((returnType == ANYRANGEOID || returnType == ANYMULTIRANGEOID
-		 || anyrangeOutParam) && !anyrangeInParam)
+	if ((returnType == ANYRANGEOID ||
+		 returnType == ANYMULTIRANGEOID ||
+		 anyrangeOutParam) && !anyrangeInParam)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_FUNCTION_DEFINITION),
 				 errmsg("cannot determine result data type"),
