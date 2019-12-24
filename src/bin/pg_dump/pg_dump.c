@@ -8398,9 +8398,12 @@ getProcLangs(Archive *fout, int *numProcLangs)
 
 /*
  * getCasts
- *	  get basic information about every cast in the system
+ *	  get basic information about most casts in the system
  *
  * numCasts is set to the number of casts read in
+ *
+ * Skip casts from a range to its multirange, since we'll create those
+ * automatically.
  */
 CastInfo *
 getCasts(Archive *fout, int *numCasts)
@@ -8418,7 +8421,20 @@ getCasts(Archive *fout, int *numCasts)
 	int			i_castcontext;
 	int			i_castmethod;
 
-	if (fout->remoteVersion >= 80400)
+	if (fout->remoteVersion >= 130000)
+	{
+		appendPQExpBufferStr(query, "SELECT tableoid, oid, "
+							 "castsource, casttarget, castfunc, castcontext, "
+							 "castmethod "
+							 "FROM pg_cast c "
+							 "WHERE NOT EXISTS ( "
+							 "SELECT 1 FROM pg_range r "
+							 "WHERE c.castsource = r.rngtypid "
+							 "AND c.casttarget = r.mltrngtypid "
+							 ") "
+							 "ORDER BY 3,4");
+	}
+	else if (fout->remoteVersion >= 80400)
 	{
 		appendPQExpBufferStr(query, "SELECT tableoid, oid, "
 							 "castsource, casttarget, castfunc, castcontext, "
