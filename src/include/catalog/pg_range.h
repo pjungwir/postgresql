@@ -47,7 +47,7 @@ CATALOG(pg_range,3541,RangeRelationId)
 	regproc		rngsubdiff BKI_LOOKUP(pg_proc);
 
 	/* OID of the range's multirange type */
-	Oid			mltrngtypid BKI_LOOKUP(pg_type);
+	Oid			rngmultitypid BKI_LOOKUP(pg_type);
 } FormData_pg_range;
 
 /* ----------------
