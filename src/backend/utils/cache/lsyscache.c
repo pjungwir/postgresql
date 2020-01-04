@@ -3305,7 +3305,7 @@ get_range_multirange(Oid rangeOid)
 		Form_pg_range rngtup = (Form_pg_range) GETSTRUCT(tp);
 		Oid			result;
 
-		result = rngtup->mltrngtypid;
+		result = rngtup->rngmultitypid;
 		ReleaseSysCache(tp);
 		return result;
 	}

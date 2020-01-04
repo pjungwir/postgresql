@@ -56,7 +56,7 @@ RangeCreate(Oid rangeTypeOid, Oid rangeSubType, Oid rangeCollation,
 	values[Anum_pg_range_rngsubopc - 1] = ObjectIdGetDatum(rangeSubOpclass);
 	values[Anum_pg_range_rngcanonical - 1] = ObjectIdGetDatum(rangeCanonical);
 	values[Anum_pg_range_rngsubdiff - 1] = ObjectIdGetDatum(rangeSubDiff);
-	values[Anum_pg_range_mltrngtypid - 1] = ObjectIdGetDatum(multirangeTypeOid);
+	values[Anum_pg_range_rngmultitypid - 1] = ObjectIdGetDatum(multirangeTypeOid);
 
 	tup = heap_form_tuple(RelationGetDescr(pg_range), values, nulls);
 

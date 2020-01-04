@@ -470,6 +470,6 @@ WHERE pronargs != 2
 
 -- every range should have a valid multirange
 
-SELECT p1.rngtypid, p1.rngsubtype, p1.mltrngtypid
+SELECT p1.rngtypid, p1.rngsubtype, p1.rngmultitypid
 FROM pg_range p1
-WHERE p1.mltrngtypid IS NULL OR p1.mltrngtypid = 0;
+WHERE p1.rngmultitypid IS NULL OR p1.rngmultitypid = 0;

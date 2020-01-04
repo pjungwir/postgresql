@@ -4547,7 +4547,7 @@ binary_upgrade_set_type_oids_by_type_oid(Archive *fout,
 							  "SELECT t.oid, t.typarray "
 							  "FROM pg_catalog.pg_type t "
 							  "JOIN pg_catalog.pg_range r "
-							  "ON t.oid = r.mltrngtypid "
+							  "ON t.oid = r.rngmultitypid "
 							  "WHERE r.rngtypid = '%u'::pg_catalog.oid;",
 							  pg_type_oid);
 
@@ -8430,7 +8430,7 @@ getCasts(Archive *fout, int *numCasts)
 							 "WHERE NOT EXISTS ( "
 							 "SELECT 1 FROM pg_range r "
 							 "WHERE c.castsource = r.rngtypid "
-							 "AND c.casttarget = r.mltrngtypid "
+							 "AND c.casttarget = r.rngmultitypid "
 							 ") "
 							 "ORDER BY 3,4");
 	}
