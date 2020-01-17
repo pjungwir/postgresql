@@ -14017,7 +14017,7 @@ NULL baz</literallayout>(3 rows)</entry>
   <title>Range Functions and Operators</title>
 
   <para>
-   See <xref linkend="rangetypes"/> for an overview of range types.
+   See <xref linkend="rangetypes"/> for an overview of range and multirange types.
   </para>
 
   <para>
@@ -14236,7 +14236,7 @@ numrange(1.1,2.2) -|- '{[2.2,3.3)}'::nummultirange
        <row>
         <entry> <literal>+</literal> </entry>
         <entry>multirange union</entry>
-        <entry><literallayout class="monospaced">'{[5,10)}'::nummultirange @+ '{[15,20)}'::nummultirange</literallayout></entry>
+        <entry><literallayout class="monospaced">'{[5,10)}'::nummultirange + '{[15,20)}'::nummultirange</literallayout></entry>
         <entry><literal>{[5,10), [15,20)}</literal></entry>
        </row>
 
@@ -14250,7 +14250,7 @@ numrange(1.1,2.2) -|- '{[2.2,3.3)}'::nummultirange
        <row>
         <entry> <literal>*</literal> </entry>
         <entry>multirange intersection</entry>
-        <entry><literallayout class="monospaced">'{[5,15)}'::int8multirange @* '{[10,20)}'::int8multirange</literallayout></entry>
+        <entry><literallayout class="monospaced">'{[5,15)}'::int8multirange * '{[10,20)}'::int8multirange</literallayout></entry>
         <entry><literal>{[10,15)}</literal></entry>
        </row>
 
@@ -14264,7 +14264,7 @@ numrange(1.1,2.2) -|- '{[2.2,3.3)}'::nummultirange
        <row>
         <entry> <literal>-</literal> </entry>
         <entry>multirange difference</entry>
-        <entry><literallayout class="monospaced">'{[5,20)}'::int8multirange @- '{[10,15)}'::int8multirange</literallayout></entry>
+        <entry><literallayout class="monospaced">'{[5,20)}'::int8multirange - '{[10,15)}'::int8multirange</literallayout></entry>
         <entry><literal>{[5,10), [15,20)}</literal></entry>
        </row>
 
