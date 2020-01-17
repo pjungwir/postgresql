@@ -1286,6 +1286,11 @@ checkEnumOwner(HeapTuple tup)
 /*
  * DefineRange
  *		Registers a new range type.
+ *
+ * Perhaps it might be worthwhile to set pg_type.typelem to the base type,
+ * and likewise on multiranges to set it to the range type. But having a
+ * non-zero typelem is treated elsewhere as a synonym for being an array,
+ * and users might have queries with that same assumption.
  */
 ObjectAddress
 DefineRange(CreateRangeStmt *stmt)
