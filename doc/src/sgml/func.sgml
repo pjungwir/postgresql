@@ -18864,6 +18864,23 @@ SELECT NULLIF(value, '(none)') ...
         <returnvalue>[1,4)</returnvalue>
        </para></entry>
       </row>
+
+      <row>
+       <entry role="func_table_entry"><para role="func_signature">
+        <indexterm>
+         <primary>multirange</primary>
+        </indexterm>
+        <function>multirange</function> ( <type>anyrange</type> )
+        <returnvalue>anymultirange</returnvalue>
+       </para>
+       <para>
+        Returns a multirange containing just the given range.
+       </para>
+       <para>
+        <literal>multirange('[1,2)'::int4range)</literal>
+        <returnvalue>{[1,2)}</returnvalue>
+       </para></entry>
+      </row>
      </tbody>
     </tgroup>
    </table>
