@@ -612,6 +612,11 @@ create function mr_table_succeed(i anyelement, r anymultirange) returns table(i 
 
 select * from mr_table_succeed(123, int4multirange(int4range(1,11)));
 
+-- use anymultirange in plpgsql
+create function mr_polymorphic(i anyrange) returns anymultirange
+  as $$ begin return multirange($1); end; $$ language plpgsql;
+select mr_polymorphic(int4range(1, 4));
+
 -- should fail
 create function mr_outparam_fail(i anyelement, out r anymultirange, out t text)
   as $$ select '[1,10]', 'foo' $$ language sql;
