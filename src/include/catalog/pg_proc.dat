@@ -10231,7 +10231,7 @@
   proallargtypes => '{_int8range}', proargmodes => '{v}',
   prosrc => 'multirange_constructor2' },
 { oid => '8152', descr => 'anymultirange cast',
-  proname => 'anymultirange', proisstrict => 't',
+  proname => 'multirange', proisstrict => 't',
   prorettype => 'anymultirange', proargtypes => 'anyrange',
   prosrc => 'multirange_constructor1' },
 { oid => '8130', descr => 'aggregate transition function',
