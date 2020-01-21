@@ -14518,6 +14518,17 @@ numrange(1.1,2.2) -|- '{[2.2,3.3)}'::nummultirange
         <entry><literal>range_merge('{[1,2), [3,4)}'::int4multirange)</literal></entry>
         <entry><literal>[1,4)</literal></entry>
        </row>
+       <row>
+        <entry>
+         <literal>
+          <function>multirange</function>(<type>anyrange</type>)
+         </literal>
+        </entry>
+        <entry><type>anymultirange</type></entry>
+        <entry>a multirange containing just the given range</entry>
+        <entry><literal>multirange('[1,2)'::int4range)</literal></entry>
+        <entry><literal>{[1,2)}</literal></entry>
+       </row>
       </tbody>
      </tgroup>
     </table>
