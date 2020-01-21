@@ -18540,8 +18540,11 @@ SELECT NULLIF(value, '(none)') ...
   <para>
    The range union and difference operators will fail if the resulting range would
    need to contain two disjoint sub-ranges, as such a range cannot be
-   represented. The multirange versions of union, intersection, and difference
-   return multiranges, so they can handle gaps without failing.
+   represented. There are separate operators for union and difference that take
+   multirange parameters and return a multirange, and they do not fail even if
+   their arguments are disjoint. So if you need a union or difference operation
+   for ranges that may be disjoint, you can avoid errors by first casting your
+   ranges to multiranges.
   </para>
 
   <para>
