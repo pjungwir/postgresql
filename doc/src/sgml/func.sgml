@@ -14044,7 +14044,7 @@ NULL baz</literallayout>(3 rows)</entry>
         <entry>equal</entry>
         <entry><literallayout class="monospaced">int4range(1,5) = '[1,4]'::int4range
 '{[1,5)}'::int4multirange = '{[1,4]}'::int4multirange</literallayout></entry>
-        <entry><literal>t</literal></entry>
+        <entry><literallayout class="monospaced">t</literallayout></entry>
        </row>
 
        <row>
@@ -14052,7 +14052,7 @@ NULL baz</literallayout>(3 rows)</entry>
         <entry>not equal</entry>
         <entry><literallayout class="monospaced">numrange(1.1,2.2) &lt;&gt; numrange(1.1,2.3)
 '{[1.1,2.2)}'::nummultirange &lt;&gt; '{[1.1,2.3)}'::nummultirange</literallayout></entry>
-        <entry><literal>t</literal></entry>
+        <entry><literallayout class="monospaced">t</literallayout></entry>
        </row>
 
        <row>
@@ -14061,7 +14061,7 @@ NULL baz</literallayout>(3 rows)</entry>
         <entry><literallayout class="monospaced">int4range(1,10) &lt; int4range(2,3)
 '{[1,10)}'::int4multirange &lt; '{[2,3)}'::int4multirange</literallayout>
         </entry>
-        <entry><literal>t</literal></entry>
+        <entry><literallayout class="monospaced">t</literallayout></entry>
        </row>
 
        <row>
@@ -14071,7 +14071,7 @@ NULL baz</literallayout>(3 rows)</entry>
           <literallayout class="monospaced">int4range(1,10) &gt; int4range(1,5)
 '{[1,10)}'::int4multirange &gt; '{[1,5)}'::int4multirange</literallayout>
         </entry>
-        <entry><literal>t</literal></entry>
+        <entry><literallayout class="monospaced">t</literallayout></entry>
        </row>
 
        <row>
@@ -14081,7 +14081,7 @@ NULL baz</literallayout>(3 rows)</entry>
           <literallayout class="monospaced">numrange(1.1,2.2) &lt;= numrange(1.1,2.2)
 '{[1.1,2.2)}'::nummultirange &lt;= '{[1.1,2.2)}'::nummultirange</literallayout>
         </entry>
-        <entry><literal>t</literal></entry>
+        <entry><literallayout class="monospaced">t</literallayout></entry>
        </row>
 
        <row>
@@ -14091,7 +14091,7 @@ NULL baz</literallayout>(3 rows)</entry>
           <literallayout class="monospaced">numrange(1.1,2.2) &gt;= numrange(1.1,2.0)
 '{[1.1,2.2)}'::nummultirange &gt;= '{[1.1,2.0)}'::nummultirange</literallayout>
         </entry>
-        <entry><literal>t</literal></entry>
+        <entry><literallayout class="monospaced">t</literallayout></entry>
        </row>
 
        <row>
@@ -14101,7 +14101,7 @@ NULL baz</literallayout>(3 rows)</entry>
           <literallayout class="monospaced">int4range(2,4) @&gt; '{[2,3)}'::int4multirange
 '{[2,4)}'::int4multirange @&gt; '{[2,3)}'::int4multirange</literallayout>
         </entry>
-        <entry><literal>t</literal></entry>
+        <entry><literallayout class="monospaced">t</literallayout></entry>
        </row>
 
        <row>
@@ -14111,7 +14111,7 @@ NULL baz</literallayout>(3 rows)</entry>
           <literallayout class="monospaced">int4range(2,4) @&gt; int4range(2,3)
 '{[2,4)}'::int4multirange @&gt; int4range(2,3)</literallayout>
         </entry>
-        <entry><literal>t</literal></entry>
+        <entry><literallayout class="monospaced">t</literallayout></entry>
        </row>
 
        <row>
@@ -14121,7 +14121,7 @@ NULL baz</literallayout>(3 rows)</entry>
           <literallayout class="monospaced">'[2011-01-01,2011-03-01)'::tsrange @&gt; '2011-01-10'::timestamp
 '{[2011-01-01,2011-03-01)}'::tsmultirange @&gt; '2011-01-10'::timestamp</literallayout>
         </entry>
-        <entry><literal>t</literal></entry>
+        <entry><literallayout class="monospaced">t</literallayout></entry>
        </row>
 
        <row>
@@ -14131,7 +14131,7 @@ NULL baz</literallayout>(3 rows)</entry>
           <literallayout class="monospaced">'{[2,4)}'::int4multirange &lt;@ int4range(1,7)
 '{[2,4)}'::int4multirange &lt;@ '{[1,7)}'::int4multirange</literallayout>
         </entry>
-        <entry><literal>t</literal></entry>
+        <entry><literallayout class="monospaced">t</literallayout></entry>
        </row>
 
        <row>
@@ -14141,7 +14141,7 @@ NULL baz</literallayout>(3 rows)</entry>
           <literallayout class="monospaced">int4range(2,4) &lt;@ int4range(1,7)
 int4range(2,4) &lt;@ '{[1,7)}'::int4multirange</literallayout>
         </entry>
-        <entry><literal>t</literal></entry>
+        <entry><literallayout class="monospaced">t</literallayout></entry>
        </row>
 
        <row>
@@ -14151,7 +14151,7 @@ int4range(2,4) &lt;@ '{[1,7)}'::int4multirange</literallayout>
           <literallayout class="monospaced">42 &lt;@ int4range(1,7)
 42 &lt;@ '{[1,7)}'::int4multirange</literallayout>
         </entry>
-        <entry><literal>f</literal></entry>
+        <entry><literallayout class="monospaced">f</literallayout></entry>
        </row>
 
        <row>
@@ -14163,7 +14163,7 @@ int8range(3,7) &amp;&amp; '{[4,12)}'::int8multirange
 '{[3,7)}'::int8multirange &amp;&amp; int8range(4,12)
 '{[3,7)}'::int8multirange &amp;&amp; '{[4,12)}'::int8multirange</literallayout>
         </entry>
-        <entry><literal>t</literal></entry>
+        <entry><literallayout class="monospaced">t</literallayout></entry>
        </row>
 
        <row>
@@ -14175,7 +14175,7 @@ int8range(1,10) &lt;&lt; '{[100,110)}'::int8multirange
 '{[1,10)}'::int8multirange &lt;&lt; int8range(100,110)
 '{[1,10)}'::int8multirange &lt;&lt; '{[100,110)}'::int8multirange</literallayout>
         </entry>
-        <entry><literal>t</literal></entry>
+        <entry><literallayout class="monospaced">t</literallayout></entry>
        </row>
 
        <row>
@@ -14187,7 +14187,7 @@ int8range(50,60) &gt;&gt; '{[20,30)}'::int8multirange
 '{[50,60)}'::int8multirange &gt;&gt; int8range(20,30)
 '{[50,60)}'::int8multirange &gt;&gt; '{[20,30)}'::int8multirange</literallayout>
         </entry>
-        <entry><literal>t</literal></entry>
+        <entry><literallayout class="monospaced">t</literallayout></entry>
        </row>
 
        <row>
@@ -14199,7 +14199,7 @@ int8range(1,20) &amp;&lt; '{[18,20)}'::int8multirange
 '{[1,20)}'::int8multirange &amp;&lt; int8range(18,20)
 '{[1,20)}'::int8multirange &amp;&lt; '{[18,20)}'::int8multirange</literallayout>
         </entry>
-        <entry><literal>t</literal></entry>
+        <entry><literallayout class="monospaced">t</literallayout></entry>
        </row>
 
        <row>
@@ -14211,7 +14211,7 @@ int8range(7,20) &amp;&gt; '{[5,10)}'::int8multirange
 '{[7,20)}'::int8multirange &amp;&gt; int8range(5,10)
 '{[7,20)}'::int8multirange &amp;&gt; '{[5,10)}'::int8multirange</literallayout>
         </entry>
-        <entry><literal>t</literal></entry>
+        <entry><literallayout class="monospaced">t</literallayout></entry>
        </row>
 
        <row>
@@ -14223,49 +14223,34 @@ numrange(1.1,2.2) -|- '{[2.2,3.3)}'::nummultirange
 '{[1.1,2.2)}'::nummultirange -|- numrange(2.2,3.3)
 '{[1.1,2.2)}'::nummultirange -|- '{[2.2,3.3)}'::nummultirange</literallayout>
         </entry>
-        <entry><literal>t</literal></entry>
+        <entry><literallayout class="monospaced">t</literallayout></entry>
        </row>
 
        <row>
         <entry> <literal>+</literal> </entry>
         <entry>union</entry>
-        <entry><literallayout class="monospaced">numrange(5,15) + numrange(10,20)</literallayout></entry>
-        <entry><literal>[5,20)</literal></entry>
-       </row>
-
-       <row>
-        <entry> <literal>+</literal> </entry>
-        <entry>multirange union</entry>
-        <entry><literallayout class="monospaced">'{[5,10)}'::nummultirange + '{[15,20)}'::nummultirange</literallayout></entry>
-        <entry><literal>{[5,10), [15,20)}</literal></entry>
+        <entry><literallayout class="monospaced">numrange(5,15) + numrange(10,20)
+'{[5,10)}'::nummultirange + '{[15,20)}'::nummultirange</literallayout></entry>
+        <entry><literallayout class="monospaced">[5,20)
+{[5,10), [15,20)}</literallayout></entry>
        </row>
 
        <row>
         <entry> <literal>*</literal> </entry>
         <entry>intersection</entry>
-        <entry><literallayout class="monospaced">int8range(5,15) * int8range(10,20)</literallayout></entry>
-        <entry><literal>[10,15)</literal></entry>
-       </row>
-
-       <row>
-        <entry> <literal>*</literal> </entry>
-        <entry>multirange intersection</entry>
-        <entry><literallayout class="monospaced">'{[5,15)}'::int8multirange * '{[10,20)}'::int8multirange</literallayout></entry>
-        <entry><literal>{[10,15)}</literal></entry>
+        <entry><literallayout class="monospaced">int8range(5,15) * int8range(10,20)
+'{[5,15)}'::int8multirange * '{[10,20)}'::int8multirange</literallayout></entry>
+        <entry><literallayout class="monospaced">[10,15)
+{[10,15)}</literallayout></entry>
        </row>
 
        <row>
         <entry> <literal>-</literal> </entry>
         <entry>difference</entry>
-        <entry><literallayout class="monospaced">int8range(5,15) - int8range(10,20)</literallayout></entry>
-        <entry><literal>[5,10)</literal></entry>
-       </row>
-
-       <row>
-        <entry> <literal>-</literal> </entry>
-        <entry>multirange difference</entry>
-        <entry><literallayout class="monospaced">'{[5,20)}'::int8multirange - '{[10,15)}'::int8multirange</literallayout></entry>
-        <entry><literal>{[5,10), [15,20)}</literal></entry>
+        <entry><literallayout class="monospaced">int8range(5,15) - int8range(10,20)
+'{[5,20)}'::int8multirange - '{[10,15)}'::int8multirange</literallayout></entry>
+        <entry><literallayout class="monospaced">[5,10)
+{[5,10), [15,20)}</literallayout></entry>
        </row>
 
       </tbody>
@@ -14298,8 +14283,11 @@ numrange(1.1,2.2) -|- '{[2.2,3.3)}'::nummultirange
   <para>
    The union and difference operators will fail if the resulting range would
    need to contain two disjoint sub-ranges, as such a range cannot be
-   represented. The safe versions of union, intersection, and difference
-   return multiranges, so they can handle gaps without failing.
+   represented. There are separate operators for union and difference that take
+   multirange parameters and return a multirange, and they do not fail even if
+   their arguments are disjoint. So if you need a union or difference operation
+   for ranges that may be disjoint, you can avoid errors by first casting your
+   ranges to multiranges.
   </para>
 
   <para>
