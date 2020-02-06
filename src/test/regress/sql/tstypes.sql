@@ -241,3 +241,12 @@ SELECT setweight('a asd w:5,6,12B,13A zxc'::tsvector, 'c', ARRAY['a', 'zxc', NUL
 SELECT ts_filter('base:7A empir:17 evil:15 first:11 galact:16 hidden:6A rebel:1A spaceship:2A strike:3A victori:12 won:9'::tsvector, '{a}');
 SELECT ts_filter('base hidden rebel spaceship strike'::tsvector, '{a}');
 SELECT ts_filter('base hidden rebel spaceship strike'::tsvector, '{a,b,NULL}');
+
+-- binary IO
+SELECT tsvectorsend('1 2'::tsvector);
+SELECT tsvectorsend('base:7 hidden:6 rebel:1 spaceship:2,33A,34B,35C,36D strike:3'::tsvector);
+SELECT tsquerysend('1|2'::tsquery);
+SELECT tsquerysend('1&(2&(4&(5|!6)))'::tsquery);
+SELECT tsquerysend(E'1&(''2''&('' 4''&(\\|5 | ''6 \\'' !|&'')))'::tsquery);
+SELECT tsquerysend($$'\\as'$$::tsquery);
+SELECT tsquerysend('a:* & nbb:*ac | doo:a* | goo'::tsquery);
