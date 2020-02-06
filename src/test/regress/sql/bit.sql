@@ -53,6 +53,10 @@ SELECT v,
        SUBSTRING(v FROM 6) AS sub_6
        FROM VARBIT_TABLE;
 
+-- Binary IO
+SELECT bit_send(b) FROM BIT_TABLE;
+SELECT varbit_send(v) FROM VARBIT_TABLE;
+
 --- Bit operations
 DROP TABLE varbit_table;
 CREATE TABLE varbit_table (a BIT VARYING(16), b BIT VARYING(16));

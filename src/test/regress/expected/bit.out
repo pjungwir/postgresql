@@ -106,6 +106,24 @@ SELECT v,
  01010101010 | 1010    | 01010    | 101010
 (4 rows)
 
+-- Binary IO
+SELECT bit_send(b) FROM BIT_TABLE;
+    bit_send    
+----------------
+ \x0000000b0000
+ \x0000000bd800
+ \x0000000b5540
+(3 rows)
+
+SELECT varbit_send(v) FROM VARBIT_TABLE;
+  varbit_send   
+----------------
+ \x00000000
+ \x0000000100
+ \x0000000654
+ \x0000000b5540
+(4 rows)
+
 --- Bit operations
 DROP TABLE varbit_table;
 CREATE TABLE varbit_table (a BIT VARYING(16), b BIT VARYING(16));
