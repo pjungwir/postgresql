@@ -1606,3 +1606,74 @@ SELECT make_timestamp(2014,12,28,6,30,45.887);
  Sun Dec 28 06:30:45.887 2014
 (1 row)
 
+-- binary IO
+SELECT timestamp_send(d1) FROM TIMESTAMP_TBL;
+   timestamp_send   
+--------------------
+ \x8000000000000000
+ \x7fffffffffffffff
+ \xfffca2fec4c82000
+ \xffffad27b7b96640
+ \xffffad27b7b96640
+ \xffffad27b7c8a880
+ \xffffad27b7bf80c0
+ \xffffad27b7c10760
+ \xffffad27b7c28e00
+ \xffffaa08799bc000
+ \xffffaa0b0bf11340
+ \xffffad27b7b96640
+ \xffffad27b7b96640
+ \xffffad27b7b96640
+ \xffffad27b7b96640
+ \xffffb695b4ae6640
+ \x00003190cb8bfa00
+ \x000005d786ff8440
+ \x000005dbb7f0fa80
+ \x000005dae16c98c0
+ \x000005d3564b1700
+ \x000005d27fc6b540
+ \xffffad27b7b96640
+ \xffffad27b7b96640
+ \xffffad27b7aa2400
+ \xffffad27b7b96640
+ \xffffad27b7b96640
+ \xffffad27b7b96640
+ \xffffad27b7b96640
+ \xffffad27b7b96640
+ \xffffad27b7b96640
+ \xffffad27b7b96640
+ \xffffad27b7b96640
+ \xffffad27b7b96640
+ \xffffb6968b420a40
+ \xffffad27b7b96640
+ \xffffad3bd590c640
+ \xffffad4ff3682640
+ \xffffad64113f8640
+ \xffffad782f16e640
+ \xffffad8c4cee4640
+ \xffffada06ac5a640
+ \xff150691d70d6640
+ \xff2aaa032842a640
+ \xff62b86ed9e08640
+ \xff9ac6da8b7e6640
+ \xffde0b6bdee82640
+ \xffe9417d62dca640
+ \xfff4778ee6d12640
+ \xffffada06ac5a640
+ \x000ae3c60c918640
+ \xffff91cf26f2e640
+ \xffff91e344ca4640
+ \xffff91f762a1a640
+ \xffffa9dad263a640
+ \xffffa9eef03b0640
+ \xffffaa030e126640
+ \xffffae91d0de2640
+ \xffffaea5eeb58640
+ \xffffc6895e778640
+ \xffffc69d7c4ee640
+ \xfffffffa9476a640
+ \x0000000eb24e0640
+ \x00001cbd3e61e640
+ \x00001cd15c394640
+(65 rows)
+

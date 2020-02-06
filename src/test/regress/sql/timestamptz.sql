@@ -468,3 +468,6 @@ insert into tmptz values ('2017-01-18 00:00+00');
 explain (costs off)
 select * from tmptz where f1 at time zone 'utc' = '2017-01-18 00:00';
 select * from tmptz where f1 at time zone 'utc' = '2017-01-18 00:00';
+
+-- Binary IO
+SELECT timestamptz_send(d1) FROM TIMESTAMP_TBL;

@@ -234,3 +234,6 @@ SELECT '' AS to_char_12, to_char(d, 'FF1 FF2 FF3 FF4 FF5 FF6  ff1 ff2 ff3 ff4 ff
 
 -- timestamp numeric fields constructor
 SELECT make_timestamp(2014,12,28,6,30,45.887);
+
+-- binary IO
+SELECT timestamp_send(d1) FROM TIMESTAMP_TBL;

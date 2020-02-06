@@ -2546,3 +2546,74 @@ select * from tmptz where f1 at time zone 'utc' = '2017-01-18 00:00';
  Tue Jan 17 16:00:00 2017 PST
 (1 row)
 
+-- Binary IO
+SELECT timestamptz_send(d1) FROM TIMESTAMP_TBL;
+  timestamptz_send  
+--------------------
+ \x8000000000000000
+ \x7fffffffffffffff
+ \xfffca30579654000
+ \xffffad2e6c568640
+ \xffffad2e6c568640
+ \xffffad2e6c65c880
+ \xffffad2e6c5ca0c0
+ \xffffad2e6c5e2760
+ \xffffad2e6c5fae00
+ \xffffaa0f2e38e000
+ \xffffaa11c08e3340
+ \xffffad2e6c568640
+ \xffffad2e6c568640
+ \xffffad2e6c568640
+ \xffffad2e6c568640
+ \xffffb69b92b7e240
+ \x00003196a9957600
+ \x000005de3b9ca440
+ \x000005e26c8e1a80
+ \x000005e19609b8c0
+ \x000005da0ae83700
+ \x000005d93463d540
+ \xffffad2e6c568640
+ \xffffad2e6c568640
+ \xffffad2e6c474400
+ \xffffad2e6c568640
+ \xffffad2e6c568640
+ \xffffad2e6c568640
+ \xffffad2e6c568640
+ \xffffad2e6c568640
+ \xffffad2e6c568640
+ \xffffad2e6c568640
+ \xffffad2e6c568640
+ \xffffad2e6c568640
+ \xffffb69c694b8640
+ \xffffad2e6c568640
+ \xffffad428a2de640
+ \xffffad56a8054640
+ \xffffad6ac5dca640
+ \xffffad7ee3b40640
+ \xffffad93018b6640
+ \xffffada71f62c640
+ \xff1506988baa8640
+ \xff2aaa09dcdfc640
+ \xff62b8758e7da640
+ \xff9ac6e1401b8640
+ \xffde0b7293854640
+ \xffe941841779c640
+ \xfff477959b6e4640
+ \xffffada71f62c640
+ \x000ae3ccc12ea640
+ \xffff91d5db900640
+ \xffff91e9f9676640
+ \xffff91fe173ec640
+ \xffffa9e18700c640
+ \xffffa9f5a4d82640
+ \xffffaa09c2af8640
+ \xffffae98857b4640
+ \xffffaeaca352a640
+ \xffffc6901314a640
+ \xffffc6a430ec0640
+ \x000000014913c640
+ \x0000001566eb2640
+ \x00001cc3f2ff0640
+ \x00001cd810d66640
+(65 rows)
+
