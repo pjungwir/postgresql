@@ -99,3 +99,7 @@ SELECT test_future_xid_status(:inprogress + 10000);
 ROLLBACK;
 
 SELECT xidsend('5'::xid);
+SELECT txid_snapshot_send('12:13:'::txid_snapshot);
+SELECT txid_snapshot_send('12:18:14,16'::txid_snapshot);
+SELECT txid_snapshot_send('12:16:14,14'::txid_snapshot);
+SELECT txid_snapshot_send(txid_snapshot '1000100010001000:1000100010001100:1000100010001012,1000100010001013');
