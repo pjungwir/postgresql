@@ -86,3 +86,19 @@ ERROR:  operator is not unique: time without time zone + time without time zone
 LINE 1: SELECT f1 + time '00:01' AS "Illegal" FROM TIME_TBL;
                   ^
 HINT:  Could not choose a best candidate operator. You might need to add explicit type casts.
+-- binary IO
+SELECT time_send(f1) FROM TIME_TBL;
+     time_send      
+--------------------
+ \x0000000000000000
+ \x00000000d693a400
+ \x00000001b7e1dd00
+ \x0000000a0b582900
+ \x0000000a0eebb000
+ \x0000000a127f3700
+ \x000000141a43d900
+ \x000000141dd738f0
+ \x0000000d15b8afc0
+ \x0000000d15b8afc0
+(10 rows)
+

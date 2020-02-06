@@ -103,3 +103,21 @@ ERROR:  operator does not exist: time with time zone + time with time zone
 LINE 1: SELECT f1 + time with time zone '00:01' AS "Illegal" FROM TI...
                   ^
 HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+-- binary IO
+SELECT timetz_send(f1) FROM TIMETZ_TBL;
+        timetz_send         
+----------------------------
+ \x000000000393870000006270
+ \x00000000d693a40000006270
+ \x00000001b7e1dd0000006270
+ \x00000005f7122d0000007080
+ \x00000006d139580000003840
+ \x0000000a0b58290000006270
+ \x0000000a0eebb00000006270
+ \x0000000a127f370000006270
+ \x000000141a43d90000006270
+ \x000000141dd738f000006270
+ \x0000000d15b8afc000004650
+ \x0000000d15b8afc000003840
+(12 rows)
+

@@ -40,3 +40,6 @@ SELECT f1 AS "Eight" FROM TIME_TBL WHERE f1 >= '00:00';
 -- where we do mixed-type arithmetic. - thomas 2000-12-02
 
 SELECT f1 + time '00:01' AS "Illegal" FROM TIME_TBL;
+
+-- binary IO
+SELECT time_send(f1) FROM TIME_TBL;
