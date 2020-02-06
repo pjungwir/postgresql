@@ -52,6 +52,14 @@ SELECT guid_field FROM guid1;
  3f3e3c3b-3a30-3938-3736-353433a2313e
 (3 rows)
 
+SELECT uuid_send(guid_field) FROM guid1;
+             uuid_send              
+------------------------------------
+ \x11111111111111111111111111111111
+ \x22222222222222222222222222222222
+ \x3f3e3c3b3a3039383736353433a2313e
+(3 rows)
+
 -- ordering test
 SELECT guid_field FROM guid1 ORDER BY guid_field ASC;
               guid_field              
