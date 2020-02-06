@@ -94,4 +94,7 @@ SELECT count(*) FROM tenk1 t1 JOIN tenk1 t2 ON t1.ctid = t2.ctid;
 SELECT count(*) FROM tenk1 t1 JOIN tenk1 t2 ON t1.ctid = t2.ctid;
 RESET enable_hashjoin;
 
+-- binary IO
+SELECT tidsend(ctid) FROM tidscan;
+
 DROP TABLE tidscan;
