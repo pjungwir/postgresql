@@ -67,3 +67,4 @@ SELECT '' AS four, * FROM VARCHAR_TBL;
 
 -- Test binary IO
 SELECT varcharsend('foo');
+SELECT unknownsend('foo');

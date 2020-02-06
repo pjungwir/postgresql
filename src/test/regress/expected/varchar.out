@@ -116,3 +116,9 @@ SELECT varcharsend('foo');
  \x666f6f
 (1 row)
 
+SELECT unknownsend('foo');
+ unknownsend 
+-------------
+ \x666f6f
+(1 row)
+
