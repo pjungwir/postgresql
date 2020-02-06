@@ -1,0 +1,6 @@
+select void_send('foo');
+ void_send 
+-----------
+ \x
+(1 row)
+

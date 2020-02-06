@@ -81,6 +81,7 @@ test: roleattributes
 test: create_am
 test: hash_func
 test: errors
+test: void
 test: sanity_check
 test: select_into
 test: select_distinct
