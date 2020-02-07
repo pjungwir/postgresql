@@ -1287,3 +1287,15 @@ SELECT tsquerysend('a:* & nbb:*ac | doo:a* | goo'::tsquery);
  \x000000070203010000676f6f000203010801646f6f000202010a016e6262000100016100
 (1 row)
 
+SELECT regdictionarysend('simple'::regdictionary);
+ regdictionarysend 
+-------------------
+ \x00000eb5
+(1 row)
+
+SELECT regconfigsend('simple'::regconfig);
+ regconfigsend 
+---------------
+ \x00000ea4
+(1 row)
+

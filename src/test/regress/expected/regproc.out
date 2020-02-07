@@ -277,6 +277,53 @@ SELECT regnamespace('foo.bar');
 ERROR:  invalid name syntax
 LINE 1: SELECT regnamespace('foo.bar');
                             ^
+-- Binary IO
+SELECT regopersend(regoper('||/'));
+ regopersend 
+-------------
+ \x00000255
+(1 row)
+
+SELECT regoperatorsend(regoperator('+(int4,int4)'));
+ regoperatorsend 
+-----------------
+ \x00000227
+(1 row)
+
+SELECT regprocsend(regproc('now'));
+ regprocsend 
+-------------
+ \x00000513
+(1 row)
+
+SELECT regproceduresend(regprocedure('abs(numeric)'));
+ regproceduresend 
+------------------
+ \x000006a9
+(1 row)
+
+SELECT regclasssend(regclass('pg_class'));
+ regclasssend 
+--------------
+ \x000004eb
+(1 row)
+
+SELECT regtypesend(regtype('int4'));
+ regtypesend 
+-------------
+ \x00000017
+(1 row)
+
+SELECT regrolesend(regrole('regress_regrole_test'));
+ERROR:  role "regress_regrole_test" does not exist
+LINE 1: SELECT regrolesend(regrole('regress_regrole_test'));
+                                   ^
+SELECT regnamespacesend(regnamespace('pg_catalog'));
+ regnamespacesend 
+------------------
+ \x0000000b
+(1 row)
+
 /* If objects don't exist, return NULL with no error. */
 -- without schemaname
 SELECT to_regoper('||//');

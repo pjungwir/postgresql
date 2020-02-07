@@ -82,6 +82,17 @@ SELECT regnamespace('Nonexistent');
 SELECT regnamespace('"Nonexistent"');
 SELECT regnamespace('foo.bar');
 
+-- Binary IO
+
+SELECT regopersend(regoper('||/'));
+SELECT regoperatorsend(regoperator('+(int4,int4)'));
+SELECT regprocsend(regproc('now'));
+SELECT regproceduresend(regprocedure('abs(numeric)'));
+SELECT regclasssend(regclass('pg_class'));
+SELECT regtypesend(regtype('int4'));
+SELECT regrolesend(regrole('regress_regrole_test'));
+SELECT regnamespacesend(regnamespace('pg_catalog'));
+
 /* If objects don't exist, return NULL with no error. */
 
 -- without schemaname

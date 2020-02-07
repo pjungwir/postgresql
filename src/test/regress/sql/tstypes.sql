@@ -250,3 +250,5 @@ SELECT tsquerysend('1&(2&(4&(5|!6)))'::tsquery);
 SELECT tsquerysend(E'1&(''2''&('' 4''&(\\|5 | ''6 \\'' !|&'')))'::tsquery);
 SELECT tsquerysend($$'\\as'$$::tsquery);
 SELECT tsquerysend('a:* & nbb:*ac | doo:a* | goo'::tsquery);
+SELECT regdictionarysend('simple'::regdictionary);
+SELECT regconfigsend('simple'::regconfig);
