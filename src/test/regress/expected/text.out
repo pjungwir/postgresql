@@ -452,3 +452,9 @@ SELECT textsend(f1) FROM TEXT_TBL;
  \x686920646520686f206e65696768626f72
 (2 rows)
 
+SELECT byteasend('foo');
+ byteasend 
+-----------
+ \x666f6f
+(1 row)
+

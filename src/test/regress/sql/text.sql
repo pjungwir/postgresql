@@ -119,3 +119,4 @@ select format('>>%2$*1$L<<', 0, 'Hello');
 
 SELECT cstring_send(f1::cstring) FROM TEXT_TBL;
 SELECT textsend(f1) FROM TEXT_TBL;
+SELECT byteasend('foo');
