@@ -41,3 +41,7 @@ SELECT '' AS four, o.* FROM OID_TBL o WHERE o.f1 >= '1234';
 SELECT '' AS three, o.* FROM OID_TBL o WHERE o.f1 > '1234';
 
 DROP TABLE OID_TBL;
+
+-- binary IO
+SELECT oidsend(54);
+SELECT oidvectorsend('54 55');

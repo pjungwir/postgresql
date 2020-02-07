@@ -120,3 +120,16 @@ SELECT '' AS three, o.* FROM OID_TBL o WHERE o.f1 > '1234';
 (3 rows)
 
 DROP TABLE OID_TBL;
+-- binary IO
+SELECT oidsend(54);
+  oidsend   
+------------
+ \x00000036
+(1 row)
+
+SELECT oidvectorsend('54 55');
+                               oidvectorsend                                
+----------------------------------------------------------------------------
+ \x00000001000000000000001a000000020000000000000004000000360000000400000037
+(1 row)
+
