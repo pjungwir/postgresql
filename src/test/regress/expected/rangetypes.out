@@ -582,6 +582,18 @@ select * from numrange_test natural join numrange_test2 order by nr;
 set enable_nestloop to default;
 set enable_hashjoin to default;
 set enable_mergejoin to default;
+-- binary IO
+SELECT range_send(nr) FROM numrange_test;
+                              range_send                              
+----------------------------------------------------------------------
+ \x18
+ \x120000000a00010000000000000003
+ \x080000000a00010000000000000005
+ \x020000000c0002000000000001000103e80000000c0002000000000001000207d0
+ \x01
+ \x060000000c000200000000000100011b580000000c000200000000000100011b58
+(6 rows)
+
 DROP TABLE numrange_test;
 DROP TABLE numrange_test2;
 -- test canonical form for int4range

@@ -148,6 +148,9 @@ set enable_nestloop to default;
 set enable_hashjoin to default;
 set enable_mergejoin to default;
 
+-- binary IO
+SELECT range_send(nr) FROM numrange_test;
+
 DROP TABLE numrange_test;
 DROP TABLE numrange_test2;
 
