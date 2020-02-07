@@ -1043,3 +1043,6 @@ select scale(-13.000000000000000);
 -- cases that need carry propagation
 SELECT SUM(9999::numeric) FROM generate_series(1, 100000);
 SELECT SUM((-9999)::numeric) FROM generate_series(1, 100000);
+
+-- binary IO
+SELECT numeric_send(val) FROM num_data;
