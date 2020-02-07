@@ -40,3 +40,5 @@ select * from LINE_TBL;
 
 select '{nan, 1, nan}'::line = '{nan, 1, nan}'::line as true,
 	   '{nan, 1, nan}'::line = '{nan, 2, nan}'::line as false;
+
+SELECT line_send(s) FROM LINE_TBL;

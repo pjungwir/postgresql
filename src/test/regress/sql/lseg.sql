@@ -22,3 +22,5 @@ INSERT INTO LSEG_TBL VALUES ('[(,2),(3,4)]');
 INSERT INTO LSEG_TBL VALUES ('[(1,2),(3,4)');
 
 select * from LSEG_TBL;
+
+SELECT lseg_send(s) FROM LSEG_TBL;
