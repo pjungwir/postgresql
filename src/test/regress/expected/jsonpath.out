@@ -962,3 +962,16 @@ select '(1.).e3'::jsonpath;
 ERROR:  syntax error, unexpected ')' at or near ")" of jsonpath input
 LINE 1: select '(1.).e3'::jsonpath;
                ^
+-- binary IO
+select jsonpath_send('$'::jsonpath);
+ jsonpath_send 
+---------------
+ \x0124
+(1 row)
+
+select jsonpath_send('1 * 2 + 4 % -3 != false'::jsonpath);
+                     jsonpath_send                      
+--------------------------------------------------------
+ \x012831202a2032202b20342025202d3320213d2066616c736529
+(1 row)
+

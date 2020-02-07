@@ -179,3 +179,7 @@ select '1..e'::jsonpath;
 select '1..e3'::jsonpath;
 select '(1.).e'::jsonpath;
 select '(1.).e3'::jsonpath;
+
+-- binary IO
+select jsonpath_send('$'::jsonpath);
+select jsonpath_send('1 * 2 + 4 % -3 != false'::jsonpath);
