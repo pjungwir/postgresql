@@ -1260,3 +1260,11 @@ select '12345.0000000000000000000000000000000000000000000005'::jsonb::float8;
 select '12345.0000000000000000000000000000000000000000000005'::jsonb::int2;
 select '12345.0000000000000000000000000000000000000000000005'::jsonb::int4;
 select '12345.0000000000000000000000000000000000000000000005'::jsonb::int8;
+
+-- binary IO
+SELECT jsonb_send('null'::jsonb);
+SELECT jsonb_send('9223372036854775808'::jsonb);
+SELECT jsonb_send('"abc"'::jsonb);
+SELECT jsonb_send('["abc", 123]'::jsonb);
+SELECT jsonb_send('{}'::jsonb);
+SELECT jsonb_send('{"a": 5}'::jsonb);

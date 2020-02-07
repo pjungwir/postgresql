@@ -833,3 +833,11 @@ select ts_headline('english', '{"a": "aaa bbb", "b": {"c": "ccc ddd fff", "c1": 
 select ts_headline('null'::json, tsquery('aaa & bbb'));
 select ts_headline('{}'::json, tsquery('aaa & bbb'));
 select ts_headline('[]'::json, tsquery('aaa & bbb'));
+
+-- binary IO
+SELECT json_send('null'::json);
+SELECT json_send('9223372036854775808'::json);
+SELECT json_send('"abc"'::json);
+SELECT json_send('["abc", 123]'::json);
+SELECT json_send('{}'::json);
+SELECT json_send('{"a": 5}'::json);

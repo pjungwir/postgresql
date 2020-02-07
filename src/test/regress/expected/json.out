@@ -2601,3 +2601,40 @@ select ts_headline('[]'::json, tsquery('aaa & bbb'));
  []
 (1 row)
 
+-- binary IO
+SELECT json_send('null'::json);
+ json_send  
+------------
+ \x6e756c6c
+(1 row)
+
+SELECT json_send('9223372036854775808'::json);
+                json_send                 
+------------------------------------------
+ \x39323233333732303336383534373735383038
+(1 row)
+
+SELECT json_send('"abc"'::json);
+  json_send   
+--------------
+ \x2261626322
+(1 row)
+
+SELECT json_send('["abc", 123]'::json);
+         json_send          
+----------------------------
+ \x5b22616263222c203132335d
+(1 row)
+
+SELECT json_send('{}'::json);
+ json_send 
+-----------
+ \x7b7d
+(1 row)
+
+SELECT json_send('{"a": 5}'::json);
+     json_send      
+--------------------
+ \x7b2261223a20357d
+(1 row)
+

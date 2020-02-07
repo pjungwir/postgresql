@@ -4957,3 +4957,40 @@ select '12345.0000000000000000000000000000000000000000000005'::jsonb::int8;
  12345
 (1 row)
 
+-- binary IO
+SELECT jsonb_send('null'::jsonb);
+  jsonb_send  
+--------------
+ \x016e756c6c
+(1 row)
+
+SELECT jsonb_send('9223372036854775808'::jsonb);
+                 jsonb_send                 
+--------------------------------------------
+ \x0139323233333732303336383534373735383038
+(1 row)
+
+SELECT jsonb_send('"abc"'::jsonb);
+   jsonb_send   
+----------------
+ \x012261626322
+(1 row)
+
+SELECT jsonb_send('["abc", 123]'::jsonb);
+          jsonb_send          
+------------------------------
+ \x015b22616263222c203132335d
+(1 row)
+
+SELECT jsonb_send('{}'::jsonb);
+ jsonb_send 
+------------
+ \x017b7d
+(1 row)
+
+SELECT jsonb_send('{"a": 5}'::jsonb);
+      jsonb_send      
+----------------------
+ \x017b2261223a20357d
+(1 row)
+
