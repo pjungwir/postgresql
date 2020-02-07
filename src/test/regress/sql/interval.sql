@@ -311,3 +311,6 @@ select make_interval(months := 'NaN'::float::int);
 select make_interval(secs := 'inf');
 select make_interval(secs := 'NaN');
 select make_interval(secs := 7e12);
+
+-- binary IO
+SELECT interval_send(f1) FROM INTERVAL_TBL;
