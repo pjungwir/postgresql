@@ -251,3 +251,7 @@ SELECT a FROM (VALUES
   ('ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/0'::inet),
   ('ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/128'::inet)
 ) AS i(a) ORDER BY a;
+
+-- binary IO
+SELECT inet_send(c) FROM INET_TBL;
+SELECT inet_send(i) FROM INET_TBL;
