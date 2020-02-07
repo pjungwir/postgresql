@@ -51,6 +51,8 @@ SELECT '' AS three, c.f1 FROM NAME_TBL c WHERE c.f1 ~ '[0-9]';
 
 SELECT '' AS two, c.f1 FROM NAME_TBL c WHERE c.f1 ~ '.*asdf.*';
 
+SELECT namesend(f1) FROM NAME_TBL;
+
 DROP TABLE NAME_TBL;
 
 DO $$
