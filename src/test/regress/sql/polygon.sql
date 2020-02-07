@@ -140,3 +140,6 @@ WHERE seq.id IS NULL OR idx.id IS NULL;
 RESET enable_seqscan;
 RESET enable_indexscan;
 RESET enable_bitmapscan;
+
+-- binary IO
+SELECT poly_send(f1) FROM POLYGON_TBL;
