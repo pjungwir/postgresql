@@ -33,6 +33,20 @@ SELECT MIN(f1), MAX(f1) FROM PG_LSN_TBL;
  0/0 | FFFFFFFF/FFFFFFFF
 (1 row)
 
+-- binary IO
+SELECT pg_lsn_send(f1) FROM PG_LSN_TBL;
+    pg_lsn_send     
+--------------------
+ \x0000000000000000
+ \xffffffffffffffff
+(2 rows)
+
+SELECT pg_lsn_send('0/16AE7F8');
+    pg_lsn_send     
+--------------------
+ \x00000000016ae7f8
+(1 row)
+
 DROP TABLE PG_LSN_TBL;
 -- Operators
 SELECT '0/16AE7F8' = '0/16AE7F8'::pg_lsn;

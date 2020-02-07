@@ -18,6 +18,10 @@ INSERT INTO PG_LSN_TBL VALUES ('/ABCD');
 -- Min/Max aggregation
 SELECT MIN(f1), MAX(f1) FROM PG_LSN_TBL;
 
+-- binary IO
+SELECT pg_lsn_send(f1) FROM PG_LSN_TBL;
+SELECT pg_lsn_send('0/16AE7F8');
+
 DROP TABLE PG_LSN_TBL;
 
 -- Operators
