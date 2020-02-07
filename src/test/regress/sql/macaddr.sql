@@ -40,4 +40,6 @@ SELECT ~b                       FROM macaddr_data;
 SELECT  b & '00:00:00:ff:ff:ff' FROM macaddr_data;
 SELECT  b | '01:02:03:04:05:06' FROM macaddr_data;
 
+SELECT macaddr_send(b) FROM macaddr_data;
+
 DROP TABLE macaddr_data;

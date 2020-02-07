@@ -351,4 +351,29 @@ SELECT  b | '01:02:03:04:05:06' FROM macaddr8_data;
  09:02:2b:ff:fe:07:05:07
 (20 rows)
 
+SELECT macaddr8_send(b) FROM macaddr8_data;
+   macaddr8_send    
+--------------------
+ \x08002bfffe010203
+ \x08002bfffe010203
+ \x08002bfffe010203
+ \x08002bfffe010203
+ \x08002bfffe010203
+ \x08002bfffe010203
+ \x08002bfffe010203
+ \x08002bfffe010203
+ \x08002bfffe010204
+ \x08002bfffe010202
+ \x08002afffe010203
+ \x08002cfffe010203
+ \x08002afffe010204
+ \x08002b0102030405
+ \x08002b0102030405
+ \x08002b0102030405
+ \x08002b0102030405
+ \x08002b0102030405
+ \x08002b0102030405
+ \x08002b0102030405
+(20 rows)
+
 DROP TABLE macaddr8_data;

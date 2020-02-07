@@ -157,4 +157,21 @@ SELECT  b | '01:02:03:04:05:06' FROM macaddr_data;
  09:02:2b:05:07:06
 (12 rows)
 
+SELECT macaddr_send(b) FROM macaddr_data;
+  macaddr_send  
+----------------
+ \x08002b010203
+ \x08002b010203
+ \x08002b010203
+ \x08002b010203
+ \x08002b010203
+ \x08002b010203
+ \x08002b010203
+ \x08002b010204
+ \x08002b010202
+ \x08002a010203
+ \x08002c010203
+ \x08002a010204
+(12 rows)
+
 DROP TABLE macaddr_data;
