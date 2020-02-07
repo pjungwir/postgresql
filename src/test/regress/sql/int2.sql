@@ -113,3 +113,7 @@ FROM (VALUES (-2.5::numeric),
              (2.5::numeric)) t(x);
 
 SELECT int2send(f1) FROM INT2_TBL;
+
+SELECT int2vectorsend(''::int2vector);
+SELECT int2vectorsend('40'::int2vector);
+SELECT int2vectorsend('40 41'::int2vector);

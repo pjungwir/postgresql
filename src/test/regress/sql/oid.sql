@@ -44,4 +44,5 @@ DROP TABLE OID_TBL;
 
 -- binary IO
 SELECT oidsend(54);
+SELECT oidvectorsend('');
 SELECT oidvectorsend('54 55');
