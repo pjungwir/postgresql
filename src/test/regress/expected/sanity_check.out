@@ -92,8 +92,8 @@ num_exp_sqrt|t
 num_exp_sub|t
 num_input_test|f
 num_result|f
+nummultirange_test|t
 numrange_test|t
-nummultirange_test|f
 onek|t
 onek2|t
 path_tbl|f
