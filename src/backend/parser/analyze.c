@@ -1083,7 +1083,7 @@ transformForPortionOfClause(ParseState *pstate,
 							ForPortionOfClause *forPortionOf)
 {
 	Relation targetrel = pstate->p_target_relation;
-	RangeTblEntry *target_rte = pstate->p_target_rangetblentry;
+	RangeTblEntry *target_rte = pstate->p_target_nsitem->p_rte;
 	char *range_name = forPortionOf->range_name;
 	char *range_type_name;
 	int	range_attno;
