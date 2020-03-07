@@ -3231,7 +3231,6 @@ get_multirange_subtype(Oid multirangeOid)
 		Oid			result;
 
 		result = rngtup->rngtypid;
->>>>>>> 38eeeee378... multirange type basics
 		ReleaseSysCache(tp);
 		return result;
 	}
