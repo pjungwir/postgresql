@@ -28,7 +28,6 @@
 #include "miscadmin.h"
 #include "utils/builtins.h"
 #include "utils/date.h"
-#include "utils/hashutils.h"
 #include "utils/int8.h"
 #include "utils/lsyscache.h"
 #include "utils/rangetypes.h"
