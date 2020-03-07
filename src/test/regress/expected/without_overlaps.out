@@ -103,10 +103,10 @@ INSERT INTO without_overlaps_test VALUES ('[1,1]', tsrange('2018-01-01', '2018-0
 ERROR:  conflicting key value violates exclusion constraint "without_overlaps_pk"
 DETAIL:  Key (id, valid_at)=([1,2), ["Mon Jan 01 00:00:00 2018","Fri Jan 05 00:00:00 2018")) conflicts with existing key (id, valid_at)=([1,2), ["Tue Jan 02 00:00:00 2018","Sat Feb 03 00:00:00 2018")).
 INSERT INTO without_overlaps_test VALUES (NULL, tsrange('2018-01-01', '2018-01-05'));
-ERROR:  null value in column "id" violates not-null constraint
+ERROR:  null value in column "id" of relation "without_overlaps_test" violates not-null constraint
 DETAIL:  Failing row contains (null, ["Mon Jan 01 00:00:00 2018","Fri Jan 05 00:00:00 2018")).
 INSERT INTO without_overlaps_test VALUES ('[3,3]', NULL);
-ERROR:  null value in column "valid_at" violates not-null constraint
+ERROR:  null value in column "valid_at" of relation "without_overlaps_test" violates not-null constraint
 DETAIL:  Failing row contains ([3,4), null).
 --
 -- test changing the PK's dependencies
