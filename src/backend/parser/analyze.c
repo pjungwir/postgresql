@@ -414,6 +414,7 @@ transformDeleteStmt(ParseState *pstate, DeleteStmt *stmt)
 {
 	Query	   *qry = makeNode(Query);
 	ParseNamespaceItem *nsitem;
+	Node	   *whereClause;
 	Node	   *qual;
 
 	qry->commandType = CMD_DELETE;
@@ -452,7 +453,20 @@ transformDeleteStmt(ParseState *pstate, DeleteStmt *stmt)
 	nsitem->p_lateral_only = false;
 	nsitem->p_lateral_ok = true;
 
-	qual = transformWhereClause(pstate, stmt->whereClause,
+	if (stmt->forPortionOf)
+		qry->forPortionOf = transformForPortionOfClause(pstate, qry->resultRelation, stmt->forPortionOf);
+
+	// TODO: DRY with UPDATE
+	if (stmt->forPortionOf)
+	{
+		if (stmt->whereClause)
+			whereClause = (Node *) makeBoolExpr(AND_EXPR, list_make2(qry->forPortionOf->overlapsExpr, stmt->whereClause), -1);
+		else
+			whereClause = qry->forPortionOf->overlapsExpr;
+	}
+	else
+		whereClause = stmt->whereClause;
+	qual = transformWhereClause(pstate, whereClause,
 								EXPR_KIND_WHERE, "WHERE");
 
 	qry->returningList = transformReturningList(pstate, stmt->returningList);
@@ -1203,22 +1217,43 @@ transformForPortionOfClause(ParseState *pstate,
 	/*
 	 * targetStart and End are literal strings
 	 * that we'll coerce to the range's element type later.
+	 * But if they are "Infinity" or "-Infinity" we should set them to NULL,
+	 * because ranges treat NULL as "further" than +/-Infinity.
 	 */
-	result->targetStart = forPortionOf->target_start;
-	result->targetEnd = forPortionOf->target_end;
+	if (pg_strcasecmp(((A_Const *) forPortionOf->target_start)->val.val.str,
+					  "-Infinity") == 0)
+	{
+		A_Const *n = makeNode(A_Const);
+		n->val.type = T_Null;
+		n->location = ((A_Const*)forPortionOf->target_start)->location;
+		result->targetStart = (Node *) n;
+	}
+	else
+		result->targetStart = forPortionOf->target_start;
+
+	if (pg_strcasecmp(((A_Const *) forPortionOf->target_end)->val.val.str,
+					  "Infinity") == 0)
+	{
+		A_Const *n = makeNode(A_Const);
+		n->val.type = T_Null;
+		n->location = ((A_Const*)forPortionOf->target_end)->location;
+		result->targetEnd = (Node *) n;
+	}
+	else
+		result->targetEnd = forPortionOf->target_end;
 
 	FuncCall *fc = makeFuncCall(SystemFuncName(range_type_name),
-								list_make2(forPortionOf->target_start,
-										   forPortionOf->target_end),
+								list_make2(result->targetStart,
+										   result->targetEnd),
 								COERCE_EXPLICIT_CALL,
 								// TODO: FROM...TO... location instead?:
 								forPortionOf->range_name_location);
-	result->targetRange = (Node *) fc;
+	result->targetRange = transformExpr(pstate, (Node *) fc, EXPR_KIND_UPDATE_PORTION);
 
 	/* overlapsExpr is something we can add to the whereClause */
 	result->overlapsExpr = (Node *) makeSimpleA_Expr(AEXPR_OP, "&&",
 			// TODO: Maybe need a copy here?:
-			(Node *) result->range, result->targetRange,
+			(Node *) result->range, (Node *) fc,
 			forPortionOf->range_name_location);
 
 	/*
@@ -1227,13 +1262,16 @@ transformForPortionOfClause(ParseState *pstate,
 	 * For a PERIOD with cols (s, e) this is `s = lower(tsrange(s, r) * targetRange)`
 	 * and `e = upper(tsrange(e, r) * targetRange` (of course not necessarily with
 	 * tsrange, but with whatever range type is used there)).
+	 *
+	 * We also compute the possible left-behind bits at the start and end of the tuple,
+	 * so that we can INSERT them if necessary.
 	 */
 	targetList = NIL;
 	if (range_attno != InvalidAttrNumber)
 	{
 		Expr *rangeSetExpr = (Expr *) makeSimpleA_Expr(AEXPR_OP, "*",
 				// TODO: Maybe need a copy here?:
-				(Node *) result->range, result->targetRange,
+				(Node *) result->range, (Node *) fc,
 				forPortionOf->range_name_location);
 
 		rangeSetExpr = (Expr *) transformExpr(pstate, (Node *) rangeSetExpr, EXPR_KIND_UPDATE_PORTION);
@@ -2445,7 +2483,12 @@ transformUpdateStmt(ParseState *pstate, UpdateStmt *stmt)
 	nsitem->p_lateral_ok = true;
 
 	if (stmt->forPortionOf)
-		whereClause = (Node *) makeBoolExpr(AND_EXPR, list_make2(qry->forPortionOf->overlapsExpr, stmt->whereClause), -1);
+	{
+		if (stmt->whereClause)
+			whereClause = (Node *) makeBoolExpr(AND_EXPR, list_make2(qry->forPortionOf->overlapsExpr, stmt->whereClause), -1);
+		else
+			whereClause = qry->forPortionOf->overlapsExpr;
+	}
 	else
 		whereClause = stmt->whereClause;
 	qual = transformWhereClause(pstate, whereClause,

@@ -35,6 +35,7 @@ typedef enum NodeTag
 	T_ProjectionInfo,
 	T_JunkFilter,
 	T_OnConflictSetState,
+	T_ForPortionOfState,
 	T_ResultRelInfo,
 	T_EState,
 	T_TupleTableSlot,
