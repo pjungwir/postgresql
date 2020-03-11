@@ -416,6 +416,7 @@ _outModifyTable(StringInfo str, const ModifyTable *node)
 	WRITE_NODE_FIELD(rowMarks);
 	WRITE_INT_FIELD(epqParam);
 	WRITE_ENUM_FIELD(onConflictAction, OnConflictAction);
+	WRITE_NODE_FIELD(forPortionOf);
 	WRITE_NODE_FIELD(arbiterIndexes);
 	WRITE_NODE_FIELD(onConflictSet);
 	WRITE_NODE_FIELD(onConflictCols);

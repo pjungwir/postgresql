@@ -215,6 +215,7 @@ _copyModifyTable(const ModifyTable *from)
 	COPY_NODE_FIELD(rowMarks);
 	COPY_SCALAR_FIELD(epqParam);
 	COPY_SCALAR_FIELD(onConflictAction);
+	COPY_NODE_FIELD(forPortionOf);
 	COPY_NODE_FIELD(arbiterIndexes);
 	COPY_NODE_FIELD(onConflictSet);
 	COPY_NODE_FIELD(onConflictCols);
