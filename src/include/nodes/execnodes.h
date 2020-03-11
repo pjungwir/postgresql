@@ -25,12 +25,14 @@
 #include "storage/condition_variable.h"
 #include "utils/hsearch.h"
 #include "utils/queryenvironment.h"
+#include "utils/rangetypes.h"
 #include "utils/reltrigger.h"
 #include "utils/sharedtuplestore.h"
 #include "utils/snapshot.h"
 #include "utils/sortsupport.h"
 #include "utils/tuplesort.h"
 #include "utils/tuplestore.h"
+#include "utils/typcache.h"
 
 struct PlanState;				/* forward references in this file */
 struct ParallelHashJoinState;
@@ -388,6 +390,22 @@ typedef struct OnConflictSetState
 } OnConflictSetState;
 
 /*
+ * ForPortionOfState
+ *
+ * Executor state of a FOR PORTION OF operation.
+ */
+typedef struct ForPortionOfState
+{
+	NodeTag		type;
+
+	TypeCacheEntry	*fp_rangetypcache;	/* type cache entry of the range */
+	RangeType		*fp_targetRange;	/* the range from FOR PORTION OF */
+	TupleTableSlot	*fp_Existing;	/* slot to store existing target tuple in */
+	TupleTableSlot	*fp_Leftover1;	/* slot to store leftover below the target range */
+	TupleTableSlot	*fp_Leftover2;	/* slot to store leftover above the target range */
+} ForPortionOfState;
+
+/*
  * ResultRelInfo
  *
  * Whenever we update an existing relation, we have to update indexes on the
@@ -475,6 +493,9 @@ typedef struct ResultRelInfo
 
 	/* ON CONFLICT evaluation state */
 	OnConflictSetState *ri_onConflict;
+
+	/* FOR PORTION OF evaluation state */
+	ForPortionOfState *ri_forPortionOf;
 
 	/* partition check expression state (NULL if not set up yet) */
 	ExprState  *ri_PartitionCheckExpr;
