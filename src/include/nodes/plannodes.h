@@ -227,7 +227,7 @@ typedef struct ModifyTable
 	int			epqParam;		/* ID of Param for EvalPlanQual re-eval */
 	OnConflictAction onConflictAction;	/* ON CONFLICT action */
 	// TODO: Instead of re-using Expr here, break it into pieces like onConflict{Action,Set,Where}?
-	ForPortionOfExpr *forPortionOf;	/* FOR PORTION OF clause for UPDATE/DELETE */
+	Node	   *forPortionOf;	/* FOR PORTION OF clause for UPDATE/DELETE */
 	List	   *arbiterIndexes; /* List of ON CONFLICT arbiter index OIDs  */
 	List	   *onConflictSet;	/* SET for INSERT ON CONFLICT DO UPDATE */
 	Node	   *onConflictWhere;	/* WHERE for ON CONFLICT UPDATE */
