@@ -576,7 +576,7 @@ multirange_canonicalize(TypeCacheEntry *rangetyp, int32 input_range_count,
  * short varlena header.
  */
 void
-multirange_deserialize(MultirangeType * multirange,
+multirange_deserialize(MultirangeType *multirange,
 					   int32 *range_count, RangeType ***ranges)
 {
 	RangeType  *r;
@@ -717,7 +717,7 @@ multirange_constructor1(PG_FUNCTION_ARGS)
 	Oid			rngtypid;
 	TypeCacheEntry *typcache;
 	TypeCacheEntry *rangetyp;
-	RangeType *range;
+	RangeType  *range;
 
 	typcache = multirange_get_typcache(fcinfo, mltrngtypid);
 	rangetyp = typcache->rngtype;
@@ -836,8 +836,8 @@ multirange_minus(PG_FUNCTION_ARGS)
 
 MultirangeType *
 multirange_minus_internal(Oid mltrngtypoid, TypeCacheEntry *rangetyp,
-						 int32 range_count1, RangeType **ranges1,
-						 int32 range_count2, RangeType **ranges2)
+						  int32 range_count1, RangeType **ranges1,
+						  int32 range_count2, RangeType **ranges2)
 {
 	RangeType  *r1;
 	RangeType  *r2;
@@ -1302,7 +1302,7 @@ elem_contained_by_multirange(PG_FUNCTION_ARGS)
  * Test whether multirange mr contains a specific element value.
  */
 bool
-multirange_contains_elem_internal(TypeCacheEntry *typcache, MultirangeType * mr, Datum val)
+multirange_contains_elem_internal(TypeCacheEntry *typcache, MultirangeType *mr, Datum val)
 {
 	TypeCacheEntry *rangetyp;
 	int32		range_count;
@@ -1356,7 +1356,7 @@ range_contained_by_multirange(PG_FUNCTION_ARGS)
  * Test whether multirange mr contains a specific range r.
  */
 bool
-multirange_contains_range_internal(TypeCacheEntry *typcache, MultirangeType * mr, RangeType *r)
+multirange_contains_range_internal(TypeCacheEntry *typcache, MultirangeType *mr, RangeType *r)
 {
 	TypeCacheEntry *rangetyp;
 	int32		range_count;
@@ -1390,7 +1390,7 @@ multirange_contains_range_internal(TypeCacheEntry *typcache, MultirangeType * mr
 
 /* equality (internal version) */
 bool
-multirange_eq_internal(TypeCacheEntry *typcache, MultirangeType * mr1, MultirangeType * mr2)
+multirange_eq_internal(TypeCacheEntry *typcache, MultirangeType *mr1, MultirangeType *mr2)
 {
 	int32		range_count_1;
 	int32		range_count_2;
@@ -1437,7 +1437,7 @@ multirange_eq(PG_FUNCTION_ARGS)
 
 /* inequality (internal version) */
 bool
-multirange_ne_internal(TypeCacheEntry *typcache, MultirangeType * mr1, MultirangeType * mr2)
+multirange_ne_internal(TypeCacheEntry *typcache, MultirangeType *mr1, MultirangeType *mr2)
 {
 	return (!multirange_eq_internal(typcache, mr1, mr2));
 }
@@ -1493,7 +1493,7 @@ multirange_overlaps_multirange(PG_FUNCTION_ARGS)
 }
 
 bool
-range_overlaps_multirange_internal(TypeCacheEntry *typcache, RangeType *r, MultirangeType * mr)
+range_overlaps_multirange_internal(TypeCacheEntry *typcache, RangeType *r, MultirangeType *mr)
 {
 	TypeCacheEntry *rangetyp;
 	int32		range_count;
@@ -1529,8 +1529,8 @@ range_overlaps_multirange_internal(TypeCacheEntry *typcache, RangeType *r, Multi
 }
 
 bool
-multirange_overlaps_multirange_internal(TypeCacheEntry *typcache, MultirangeType * mr1,
-										MultirangeType * mr2)
+multirange_overlaps_multirange_internal(TypeCacheEntry *typcache, MultirangeType *mr1,
+										MultirangeType *mr2)
 {
 	TypeCacheEntry *rangetyp;
 	int32		range_count1;
@@ -1744,7 +1744,7 @@ multirange_contained_by_multirange(PG_FUNCTION_ARGS)
  */
 bool
 multirange_contains_multirange_internal(TypeCacheEntry *typcache,
-										MultirangeType * mr1, MultirangeType * mr2)
+										MultirangeType *mr1, MultirangeType *mr2)
 {
 	TypeCacheEntry *rangetyp;
 	int32		range_count1;
@@ -1883,7 +1883,7 @@ multirange_after_multirange(PG_FUNCTION_ARGS)
 /* strictly left of? (internal version) */
 bool
 range_before_multirange_internal(TypeCacheEntry *typcache, RangeType *r,
-								 MultirangeType * mr)
+								 MultirangeType *mr)
 {
 	int32		range_count;
 	RangeType **ranges;
@@ -1897,8 +1897,8 @@ range_before_multirange_internal(TypeCacheEntry *typcache, RangeType *r,
 }
 
 bool
-multirange_before_multirange_internal(TypeCacheEntry *typcache, MultirangeType * mr1,
-									  MultirangeType * mr2)
+multirange_before_multirange_internal(TypeCacheEntry *typcache, MultirangeType *mr1,
+									  MultirangeType *mr2)
 {
 	int32		range_count1;
 	int32		range_count2;
@@ -1918,7 +1918,7 @@ multirange_before_multirange_internal(TypeCacheEntry *typcache, MultirangeType *
 /* strictly right of? (internal version) */
 bool
 range_after_multirange_internal(TypeCacheEntry *typcache, RangeType *r,
-								MultirangeType * mr)
+								MultirangeType *mr)
 {
 	int32		range_count;
 	RangeType **ranges;
