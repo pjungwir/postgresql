@@ -700,3 +700,7 @@ SELECT width_bucket(5, '{}');
 SELECT width_bucket('5'::text, ARRAY[3, 4]::integer[]);
 SELECT width_bucket(5, ARRAY[3, 4, NULL]);
 SELECT width_bucket(5, ARRAY[ARRAY[1, 2], ARRAY[3, 4]]);
+
+SELECT anyarray_send(a), anyarray_send(b), anyarray_send(c), anyarray_send(d),
+anyarray_send(e), anyarray_send(f), anyarray_send(g) FROM arrtest;
+
