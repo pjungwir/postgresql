@@ -167,3 +167,10 @@ SELECT * FROM testcase WHERE id = 1 FOR UPDATE;
 
 ROLLBACK;
 DROP TABLE testcase;
+-- binary io
+SELECT cidsend('9'::cid);
+  cidsend   
+------------
+ \x00000009
+(1 row)
+

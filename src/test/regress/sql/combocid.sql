@@ -109,3 +109,6 @@ ROLLBACK TO SAVEPOINT subxact;
 SELECT * FROM testcase WHERE id = 1 FOR UPDATE;
 ROLLBACK;
 DROP TABLE testcase;
+
+-- binary io
+SELECT cidsend('9'::cid);
