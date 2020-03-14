@@ -2102,10 +2102,9 @@ range_cmp_bound_values(TypeCacheEntry *typcache, const RangeBound *b1,
 /*
  * qsort callback for sorting ranges.
  *
- * Compares two ranges so we can qsort them.
- * This expects that you give qsort a RangeType **,
- * so the RangeTypes can be in diverse locations,
- * as long as you have a list of pointers to them all.
+ * Two empty ranges compare equal; an empty range sorts to the left of any
+ * non-empty range.  Two non-empty ranges are sorted by lower bound first
+ * and by upper bound next.
  */
 int
 range_compare(const void *key1, const void *key2, void *arg)

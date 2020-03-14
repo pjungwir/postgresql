@@ -24,7 +24,7 @@
  */
 typedef struct
 {
-	char		vl_len_[4];		/* varlena header (do not touch directly!) */
+	int32		vl_len_;		/* varlena header (do not touch directly!) */
 	Oid			multirangetypid;	/* multirange type's own OID */
 	uint32		rangeCount;		/* the number of ranges */
 
