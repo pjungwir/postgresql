@@ -24,8 +24,6 @@
 #include "catalog/genbki.h"
 #include "catalog/pg_cast_d.h"
 
-#include "catalog/dependency.h"
-
 /* ----------------
  *		pg_cast definition.  cpp turns this into
  *		typedef struct FormData_pg_cast

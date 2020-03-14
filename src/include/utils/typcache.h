@@ -103,7 +103,7 @@ typedef struct TypeCacheEntry
 	/*
 	 * Fields computed when TYPCACHE_MULTIRANGE_INFO is required.
 	 */
-	struct TypeCacheEntry *rngtype;
+	struct TypeCacheEntry *rngtype;		/* underlying range type */
 
 	/*
 	 * Domain's base type and typmod if it's a domain type.  Zeroes if not

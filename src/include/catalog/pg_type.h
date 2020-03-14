@@ -275,7 +275,6 @@ typedef FormData_pg_type *Form_pg_type;
 #define  TYPCATEGORY_ENUM		'E'
 #define  TYPCATEGORY_GEOMETRIC	'G'
 #define  TYPCATEGORY_NETWORK	'I' /* think INET */
-#define  TYPCATEGORY_MULTIRANGE	'M'
 #define  TYPCATEGORY_NUMERIC	'N'
 #define  TYPCATEGORY_PSEUDOTYPE 'P'
 #define  TYPCATEGORY_RANGE		'R'

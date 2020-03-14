@@ -56,7 +56,7 @@ typedef enum
 	MULTIRANGE_FINISHED,
 }			MultirangeParseState;
 
-static MultirangeIOData * get_multirange_io_data(FunctionCallInfo fcinfo, Oid rngtypid,
+static MultirangeIOData * get_multirange_io_data(FunctionCallInfo fcinfo, Oid mltrngtypid,
 												 IOFuncSelector func);
 static int32 multirange_canonicalize(TypeCacheEntry *rangetyp, int32 input_range_count,
 									 RangeType **ranges);
@@ -174,12 +174,11 @@ multirange_in(PG_FUNCTION_ARGS)
 					if (range_capacity == range_count)
 					{
 						range_capacity *= 2;
-						ranges = (RangeType **) repalloc(ranges,
-														 range_capacity * sizeof(RangeType *));
+						ranges = (RangeType **)
+							repalloc(ranges, range_capacity * sizeof(RangeType *));
 					}
 					ranges_seen++;
-					range = DatumGetRangeTypeP(
-											   InputFunctionCall(&cache->proc, range_str_copy,
+					range = DatumGetRangeTypeP(InputFunctionCall(&cache->proc, range_str_copy,
 																 cache->typioparam, typmod));
 					if (!RangeIsEmpty(range))
 						ranges[range_count++] = range;
