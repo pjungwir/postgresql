@@ -704,3 +704,5 @@ SELECT width_bucket(5, ARRAY[ARRAY[1, 2], ARRAY[3, 4]]);
 SELECT anyarray_send(a), anyarray_send(b), anyarray_send(c), anyarray_send(d),
 anyarray_send(e), anyarray_send(f), anyarray_send(g) FROM arrtest;
 
+SELECT array_send(a), array_send(b), array_send(c), array_send(d),
+array_send(e), array_send(f), array_send(g) FROM arrtest;
