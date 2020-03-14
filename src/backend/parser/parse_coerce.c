@@ -1792,13 +1792,15 @@ check_generic_type_consistency(const Oid *actual_arg_types,
 		else
 			range_typelem = InvalidOid;	/* keep compiler quiet */
 	}
+	else
+		range_typelem = InvalidOid; /* keep compiler quiet */
 
 	/* Get the element type based on the multirange type, if we have one */
 	if (OidIsValid(multirange_typeid))
 	{
 		Oid			multirange_typelem;
 
-		multirange_typelem = get_multirange_subtype(multirange_typeid);
+		multirange_typelem = get_range_multirange_subtype(multirange_typeid);
 		if (!OidIsValid(multirange_typelem))
 			return false;		/* should be a multirange, but isn't */
 
@@ -2261,7 +2263,7 @@ enforce_generic_type_consistency(const Oid *actual_arg_types,
 		/* Get the element type based on the multirange type, if we have one */
 		if (OidIsValid(multirange_typeid))
 		{
-			multirange_typelem = get_multirange_subtype(multirange_typeid);
+			multirange_typelem = get_range_multirange_subtype(multirange_typeid);
 			if (!OidIsValid(multirange_typelem))
 				ereport(ERROR,
 						(errcode(ERRCODE_DATATYPE_MISMATCH),

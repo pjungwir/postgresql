@@ -954,7 +954,6 @@ load_rangetype_info(TypeCacheEntry *typentry)
 	typentry->rngelemtype = lookup_type_cache(subtypeOid, 0);
 }
 
-
 /*
  * load_multirangetype_info --- helper routine to set up multirange type
  * information
@@ -962,25 +961,15 @@ load_rangetype_info(TypeCacheEntry *typentry)
 static void
 load_multirangetype_info(TypeCacheEntry *typentry)
 {
-	Form_pg_range pg_range;
-	HeapTuple	tup;
 	Oid			rangetypeOid;
 
-	/* get information from pg_range */
-	tup = SearchSysCache1(MULTIRANGETYPE, ObjectIdGetDatum(typentry->type_id));
-	/* should not fail, since we already checked typtype ... */
-	if (!HeapTupleIsValid(tup))
+	rangetypeOid = get_range_multirange_subtype(typentry->type_id);
+	if (!OidIsValid(rangetypeOid))
 		elog(ERROR, "cache lookup failed for multirange type %u",
 			 typentry->type_id);
-	pg_range = (Form_pg_range) GETSTRUCT(tup);
-
-	rangetypeOid = pg_range->rngtypid;
-
-	ReleaseSysCache(tup);
 
 	typentry->rngtype = lookup_type_cache(rangetypeOid, TYPECACHE_RANGE_INFO);
 }
-
 
 /*
  * load_domaintype_info --- helper routine to set up domain constraint info

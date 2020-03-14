@@ -1523,7 +1523,7 @@ DefineRange(CreateRangeStmt *stmt)
 				   GetUserId(), /* owner's ID */
 				   -1,			/* internal size (always varlena) */
 				   TYPTYPE_MULTIRANGE,	/* type-type (multirange type) */
-				   TYPCATEGORY_MULTIRANGE,	/* type-category (multirange type) */
+				   TYPCATEGORY_RANGE,	/* type-category (range type) */
 				   false,		/* multirange types are never preferred */
 				   DEFAULT_TYPDELIM,	/* array element delimiter */
 				   F_MULTIRANGE_IN, /* input procedure */

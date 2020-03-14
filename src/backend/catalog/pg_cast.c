@@ -23,7 +23,6 @@
 #include "catalog/pg_cast.h"
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
-#include "tcop/tcopprot.h"
 #include "utils/builtins.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"

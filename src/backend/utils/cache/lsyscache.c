@@ -3235,7 +3235,7 @@ get_namespace_name_or_temp(Oid nspid)
 		return get_namespace_name(nspid);
 }
 
-/*				---------- PG_RANGE CACHE ----------				 */
+/*				---------- PG_RANGE CACHES ----------				 */
 
 /*
  * get_range_subtype
@@ -3313,20 +3313,18 @@ get_range_multirange(Oid rangeOid)
 		return InvalidOid;
 }
 
-/*				---------- PG_MULTIRANGE CACHE ----------				 */
-
 /*
- * get_multirange_subtype
+ * get_range_multirange_subtype
  *		Returns the subtype of a given multirange type
  *
  * Returns InvalidOid if the type is not a multirange type.
  */
 Oid
-get_multirange_subtype(Oid multirangeOid)
+get_range_multirange_subtype(Oid multirangeOid)
 {
 	HeapTuple	tp;
 
-	tp = SearchSysCache1(MULTIRANGETYPE, ObjectIdGetDatum(multirangeOid));
+	tp = SearchSysCache1(RANGEMULTIRANGE, ObjectIdGetDatum(multirangeOid));
 	if (HeapTupleIsValid(tp))
 	{
 		Form_pg_range rngtup = (Form_pg_range) GETSTRUCT(tp);
