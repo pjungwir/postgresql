@@ -1565,3 +1565,8 @@ SELECT * FROM XMLTABLE('.' PASSING XMLELEMENT(NAME a) columns a varchar(20) PATH
  <foo/> | &lt;foo/&gt;
 (1 row)
 
+SELECT xml_send(data) FROM xmltest;
+ xml_send 
+----------
+(0 rows)
+
