@@ -129,3 +129,6 @@ SELECT '12345678901234567'::money::numeric;
 SELECT '-12345678901234567'::money::numeric;
 SELECT '92233720368547758.07'::money::numeric;
 SELECT '-92233720368547758.08'::money::numeric;
+
+-- binary io
+SELECT cash_send(m) FROM money_data;

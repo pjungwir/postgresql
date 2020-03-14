@@ -503,3 +503,10 @@ SELECT '-92233720368547758.08'::money::numeric;
  -92233720368547758.08
 (1 row)
 
+-- binary io
+SELECT cash_send(m) FROM money_data;
+     cash_send      
+--------------------
+ \x000000000000303a
+(1 row)
+
