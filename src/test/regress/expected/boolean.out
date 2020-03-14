@@ -547,6 +547,16 @@ SELECT isnul OR istrue OR isfalse FROM booltbl4;
  t
 (1 row)
 
+-- binary io
+SELECT boolsend(f1) FROM BOOLTBL1;
+ boolsend 
+----------
+ \x01
+ \x01
+ \x01
+ \x00
+(4 rows)
+
 --
 -- Clean up
 -- Many tables are retained by the regression test, but these do not seem
