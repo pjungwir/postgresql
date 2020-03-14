@@ -1474,3 +1474,24 @@ select make_time(10, 55, 100.1);
 ERROR:  time field value out of range: 10:55:100.1
 select make_time(24, 0, 2.1);
 ERROR:  time field value out of range: 24:00:2.1
+-- binary io
+SELECT date_send(f1) from DATE_TBL;
+ date_send  
+------------
+ \xffffc309
+ \xffffc34a
+ \xfffffa85
+ \xfffffa86
+ \xfffffa87
+ \xfffffa88
+ \xfffffbf3
+ \xfffffbf4
+ \xfffffbf5
+ \x0000005b
+ \x0000005c
+ \x0000005d
+ \x00003699
+ \x00003807
+ \x00003976
+(15 rows)
+

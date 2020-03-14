@@ -345,3 +345,6 @@ select make_date(2013, 13, 1);
 select make_date(2013, 11, -1);
 select make_time(10, 55, 100.1);
 select make_time(24, 0, 2.1);
+
+-- binary io
+SELECT date_send(f1) from DATE_TBL;
