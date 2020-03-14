@@ -1395,6 +1395,9 @@ MultiXactMember
 MultiXactOffset
 MultiXactStateData
 MultiXactStatus
+MultirangeIOData
+MultirangeParseState
+MultirangeType
 NDBOX
 NODE
 NUMCacheEntry
