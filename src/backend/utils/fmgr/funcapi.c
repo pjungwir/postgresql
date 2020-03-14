@@ -683,7 +683,7 @@ resolve_polymorphic_tupdesc(TupleDesc tupdesc, oidvector *declared_args,
 											  ANYRANGEOID);
 
 			/* check for inconsistent range and multirange results */
-			rngtype = get_multirange_subtype(mltrngtype);
+			rngtype = get_range_multirange_subtype(mltrngtype);
 
 			if (OidIsValid(anyrange_type) && anyrange_type != rngtype)
 				return false;
@@ -1020,7 +1020,7 @@ resolve_polymorphic_argtypes(int numargs, Oid *argtypes, char *argmodes,
 											  ANYRANGEOID);
 
 			/* check for inconsistent range and multirange results */
-			rngtype = get_multirange_subtype(mltrngtype);
+			rngtype = get_range_multirange_subtype(mltrngtype);
 
 			if (OidIsValid(anyrange_type) && anyrange_type != rngtype)
 				return false;

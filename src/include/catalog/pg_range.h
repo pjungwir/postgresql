@@ -34,6 +34,9 @@ CATALOG(pg_range,3541,RangeRelationId)
 	/* OID of range's element type (subtype) */
 	Oid			rngsubtype BKI_LOOKUP(pg_type);
 
+	/* OID of the range's multirange type */
+	Oid			rngmultitypid BKI_LOOKUP(pg_type);
+
 	/* collation for this range type, or 0 */
 	Oid			rngcollation BKI_DEFAULT(0);
 
@@ -45,9 +48,6 @@ CATALOG(pg_range,3541,RangeRelationId)
 
 	/* subtype difference as a float8, or 0 */
 	regproc		rngsubdiff BKI_LOOKUP(pg_proc);
-
-	/* OID of the range's multirange type */
-	Oid			rngmultitypid BKI_LOOKUP(pg_type);
 } FormData_pg_range;
 
 /* ----------------

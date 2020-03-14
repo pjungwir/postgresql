@@ -1593,11 +1593,13 @@ check_generic_type_consistency(const Oid *actual_arg_types,
 		else
 			range_typelem = InvalidOid;	/* keep compiler quiet */
 	}
+	else
+		range_typelem = InvalidOid; /* keep compiler quiet */
 
 	/* Get the element type based on the multirange type, if we have one */
 	if (OidIsValid(multirange_typeid))
 	{
-		multirange_typelem = get_multirange_subtype(multirange_typeid);
+		multirange_typelem = get_range_multirange_subtype(multirange_typeid);
 		if (!OidIsValid(multirange_typelem))
 			return false;		/* should be a multirange, but isn't */
 
@@ -1936,7 +1938,7 @@ enforce_generic_type_consistency(const Oid *actual_arg_types,
 		}
 		else
 		{
-			multirange_typelem = get_multirange_subtype(multirange_typeid);
+			multirange_typelem = get_range_multirange_subtype(multirange_typeid);
 			if (!OidIsValid(multirange_typelem))
 				ereport(ERROR,
 						(errcode(ERRCODE_DATATYPE_MISMATCH),
@@ -2200,7 +2202,7 @@ resolve_generic_type(Oid declared_type,
 		else if (context_declared_type == ANYMULTIRANGEOID)
 		{
 			Oid			context_base_type = getBaseType(context_actual_type);
-			Oid			multirange_typelem = get_multirange_subtype(context_base_type);
+			Oid			multirange_typelem = get_range_multirange_subtype(context_base_type);
 			Oid			range_typelem = get_range_subtype(multirange_typelem);
 			Oid			array_typeid = get_array_type(range_typelem);
 
@@ -2246,7 +2248,7 @@ resolve_generic_type(Oid declared_type,
 		{
 			/* Use the element type corresponding to actual type */
 			Oid			context_base_type = getBaseType(context_actual_type);
-			Oid			multirange_typelem = get_multirange_subtype(context_base_type);
+			Oid			multirange_typelem = get_range_multirange_subtype(context_base_type);
 
 			if (!OidIsValid(multirange_typelem))
 				ereport(ERROR,
@@ -2279,7 +2281,7 @@ resolve_generic_type(Oid declared_type,
 		else if (context_declared_type == ANYMULTIRANGEOID)
 		{
 			Oid			context_base_type = getBaseType(context_actual_type);
-			Oid			multirange_typelem = get_multirange_subtype(context_base_type);
+			Oid			multirange_typelem = get_range_multirange_subtype(context_base_type);
 
 			if (!OidIsValid(multirange_typelem))
 				ereport(ERROR,

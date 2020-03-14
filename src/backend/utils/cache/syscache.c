@@ -508,17 +508,6 @@ static const struct cachedesc cacheinfo[] = {
 		},
 		4
 	},
-	{RangeRelationId,			/* MULTIRANGE */
-		RangeMultirangeTypidIndexId,
-		1,
-		{
-			Anum_pg_range_rngmultitypid,
-			0,
-			0,
-			0
-		},
-		4
-	},
 	{NamespaceRelationId,		/* NAMESPACENAME */
 		NamespaceNameIndexId,
 		1,
@@ -662,6 +651,18 @@ static const struct cachedesc cacheinfo[] = {
 		},
 		64
 	},
+	{RangeRelationId,			/* RANGEMULTIRANGE */
+		RangeMultirangeTypidIndexId,
+		1,
+		{
+			Anum_pg_range_rngmultitypid,
+			0,
+			0,
+			0
+		},
+		4
+	},
+
 	{RangeRelationId,			/* RANGETYPE */
 		RangeTypidIndexId,
 		1,
