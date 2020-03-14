@@ -120,3 +120,13 @@ SELECT '' AS four, * FROM CHAR_TBL;
       | abcd
 (4 rows)
 
+-- binary io
+SELECT bpcharsend(f1) FROM CHAR_TBL;
+ bpcharsend 
+------------
+ \x61202020
+ \x61622020
+ \x61626364
+ \x61626364
+(4 rows)
+

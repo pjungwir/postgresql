@@ -73,3 +73,6 @@ INSERT INTO CHAR_TBL (f1) VALUES ('abcde');
 INSERT INTO CHAR_TBL (f1) VALUES ('abcd    ');
 
 SELECT '' AS four, * FROM CHAR_TBL;
+
+-- binary io
+SELECT bpcharsend(f1) FROM CHAR_TBL;
