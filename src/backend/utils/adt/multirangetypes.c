@@ -40,10 +40,9 @@
 typedef struct MultirangeIOData
 {
 	TypeCacheEntry *typcache;	/* multirange type's typcache entry */
-	Oid			typiofunc;		/* range type's I/O function */
+	FmgrInfo	typioproc;		/* range type's I/O proc */
 	Oid			typioparam;		/* range type's I/O parameter */
-	FmgrInfo	proc;			/* lookup result for typiofunc */
-}			MultirangeIOData;
+} MultirangeIOData;
 
 typedef enum
 {
@@ -54,10 +53,10 @@ typedef enum
 	MULTIRANGE_IN_RANGE_QUOTED_ESCAPED,
 	MULTIRANGE_AFTER_RANGE,
 	MULTIRANGE_FINISHED,
-}			MultirangeParseState;
+} MultirangeParseState;
 
-static MultirangeIOData * get_multirange_io_data(FunctionCallInfo fcinfo, Oid mltrngtypid,
-												 IOFuncSelector func);
+static MultirangeIOData *get_multirange_io_data(FunctionCallInfo fcinfo, Oid mltrngtypid,
+												IOFuncSelector func);
 static int32 multirange_canonicalize(TypeCacheEntry *rangetyp, int32 input_range_count,
 									 RangeType **ranges);
 
@@ -178,8 +177,10 @@ multirange_in(PG_FUNCTION_ARGS)
 							repalloc(ranges, range_capacity * sizeof(RangeType *));
 					}
 					ranges_seen++;
-					range = DatumGetRangeTypeP(InputFunctionCall(&cache->proc, range_str_copy,
-																 cache->typioparam, typmod));
+					range = DatumGetRangeTypeP(InputFunctionCall(&cache->typioproc,
+																 range_str_copy,
+																 cache->typioparam,
+																 typmod));
 					if (!RangeIsEmpty(range))
 						ranges[range_count++] = range;
 					parse_state = MULTIRANGE_AFTER_RANGE;
@@ -266,7 +267,7 @@ multirange_out(PG_FUNCTION_ARGS)
 		if (range_count > 0)
 			appendStringInfoChar(&buf, ',');
 		range = (RangeType *) ptr;
-		rangeStr = OutputFunctionCall(&cache->proc, RangeTypePGetDatum(range));
+		rangeStr = OutputFunctionCall(&cache->typioproc, RangeTypePGetDatum(range));
 		appendStringInfoString(&buf, rangeStr);
 		ptr += MAXALIGN(VARSIZE(range));
 		range_count++;
@@ -311,8 +312,7 @@ multirange_recv(PG_FUNCTION_ARGS)
 		initStringInfo(&range_buf);
 		appendBinaryStringInfo(&range_buf, range_data, range_len);
 
-		ranges[i] = DatumGetRangeTypeP(
-									   ReceiveFunctionCall(&cache->proc,
+		ranges[i] = DatumGetRangeTypeP(ReceiveFunctionCall(&cache->typioproc,
 														   &range_buf,
 														   cache->typioparam,
 														   typmod));
@@ -346,16 +346,13 @@ multirange_send(PG_FUNCTION_ARGS)
 	multirange_deserialize(multirange, &range_count, &ranges);
 	for (i = 0; i < range_count; i++)
 	{
-		Datum		range = RangeTypePGetDatum(ranges[i]);
-		uint32		range_len;
-		char	   *range_data;
+		Datum		range;
 
-		range = PointerGetDatum(SendFunctionCall(&cache->proc, range));
-		range_len = VARSIZE(range) - VARHDRSZ;
-		range_data = VARDATA(range);
+		range = RangeTypePGetDatum(ranges[i]);
+		range = PointerGetDatum(SendFunctionCall(&cache->typioproc, range));
 
-		pq_sendint32(buf, range_len);
-		pq_sendbytes(buf, range_data, range_len);
+		pq_sendint32(buf, VARSIZE(range) - VARHDRSZ);
+		pq_sendbytes(buf, VARDATA(range), VARSIZE(range) - VARHDRSZ);
 	}
 
 	PG_RETURN_BYTEA_P(pq_endtypsend(buf));
@@ -381,6 +378,7 @@ get_multirange_io_data(FunctionCallInfo fcinfo, Oid mltrngtypid, IOFuncSelector 
 
 	if (cache == NULL || cache->typcache->type_id != mltrngtypid)
 	{
+		Oid			typiofunc;
 		int16		typlen;
 		bool		typbyval;
 		char		typalign;
@@ -400,9 +398,9 @@ get_multirange_io_data(FunctionCallInfo fcinfo, Oid mltrngtypid, IOFuncSelector 
 						 &typalign,
 						 &typdelim,
 						 &cache->typioparam,
-						 &cache->typiofunc);
+						 &typiofunc);
 
-		if (!OidIsValid(cache->typiofunc))
+		if (!OidIsValid(typiofunc))
 		{
 			/* this could only happen for receive or send */
 			if (func == IOFunc_receive)
@@ -416,7 +414,7 @@ get_multirange_io_data(FunctionCallInfo fcinfo, Oid mltrngtypid, IOFuncSelector 
 						 errmsg("no binary output function available for type %s",
 								format_type_be(cache->typcache->rngtype->type_id))));
 		}
-		fmgr_info_cxt(cache->typiofunc, &cache->proc,
+		fmgr_info_cxt(typiofunc, &cache->typioproc,
 					  fcinfo->flinfo->fn_mcxt);
 
 		fcinfo->flinfo->fn_extra = (void *) cache;
@@ -473,7 +471,6 @@ make_multirange(Oid mltrngtypoid, TypeCacheEntry *rangetyp, int32 range_count,
 				RangeType **ranges)
 {
 	MultirangeType *multirange;
-	RangeType  *range;
 	int			i;
 	int32		bytelen;
 	Pointer		ptr;
@@ -489,10 +486,7 @@ make_multirange(Oid mltrngtypoid, TypeCacheEntry *rangetyp, int32 range_count,
 
 	/* Count space for all ranges */
 	for (i = 0; i < range_count; i++)
-	{
-		range = ranges[i];
-		bytelen += MAXALIGN(VARSIZE(range));
-	}
+		bytelen += MAXALIGN(VARSIZE(ranges[i]));
 
 	/* Note: zero-fill is required here, just as in heap tuples */
 	multirange = palloc0(bytelen);
@@ -505,19 +499,20 @@ make_multirange(Oid mltrngtypoid, TypeCacheEntry *rangetyp, int32 range_count,
 	ptr = (char *) MAXALIGN(multirange + 1);
 	for (i = 0; i < range_count; i++)
 	{
-		range = ranges[i];
-		memcpy(ptr, range, VARSIZE(range));
-		ptr += MAXALIGN(VARSIZE(range));
+		memcpy(ptr, ranges[i], VARSIZE(ranges[i]));
+		ptr += MAXALIGN(VARSIZE(ranges[i]));
 	}
 
 	return multirange;
 }
 
 /*
- * Converts a list of any ranges you like into a list that is sorted and merged.
+ * Converts a list of arbitrary ranges into a list that is sorted and merged.
  * Changes the contents of `ranges`.
- * Returns the number of slots actually used,
- * which may be less than input_range_count but never more.
+ *
+ * Returns the number of slots actually used, which may be less than
+ * input_range_count but never more.
+ *
  * We assume that no input ranges are null, but empties are okay.
  */
 static int32

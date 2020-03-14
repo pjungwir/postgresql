@@ -2100,6 +2100,8 @@ range_cmp_bound_values(TypeCacheEntry *typcache, const RangeBound *b1,
 }
 
 /*
+ * qsort callback for sorting ranges.
+ *
  * Compares two ranges so we can qsort them.
  * This expects that you give qsort a RangeType **,
  * so the RangeTypes can be in diverse locations,
