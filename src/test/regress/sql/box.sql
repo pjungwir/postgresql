@@ -281,3 +281,6 @@ WHERE seq.id IS NULL OR idx.id IS NULL;
 RESET enable_seqscan;
 RESET enable_indexscan;
 RESET enable_bitmapscan;
+
+-- binary io
+SELECT box_send(f1) FROM BOX_TBL;
