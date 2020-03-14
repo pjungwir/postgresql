@@ -1605,7 +1605,8 @@ multirange_overleft_range(PG_FUNCTION_ARGS)
 
 	multirange_deserialize(mr, &range_count, &ranges);
 
-	PG_RETURN_BOOL(range_overleft_internal(typcache->rngtype, ranges[range_count - 1], r));
+	PG_RETURN_BOOL(range_overleft_internal(typcache->rngtype,
+										   ranges[range_count - 1], r));
 }
 
 Datum
@@ -1627,7 +1628,9 @@ multirange_overleft_multirange(PG_FUNCTION_ARGS)
 	multirange_deserialize(mr1, &range_count1, &ranges1);
 	multirange_deserialize(mr2, &range_count2, &ranges2);
 
-	PG_RETURN_BOOL(range_overleft_internal(typcache->rngtype, ranges1[range_count1 - 1], ranges2[range_count2 - 1]));
+	PG_RETURN_BOOL(range_overleft_internal(typcache->rngtype,
+										   ranges1[range_count1 - 1],
+										   ranges2[range_count2 - 1]));
 }
 
 /* does not extend to left of? */
@@ -1688,7 +1691,9 @@ multirange_overright_multirange(PG_FUNCTION_ARGS)
 	multirange_deserialize(mr1, &range_count1, &ranges1);
 	multirange_deserialize(mr2, &range_count2, &ranges2);
 
-	PG_RETURN_BOOL(range_overright_internal(typcache->rngtype, ranges1[0], ranges2[0]));
+	PG_RETURN_BOOL(range_overright_internal(typcache->rngtype,
+											ranges1[0],
+											ranges2[0]));
 }
 
 /* contains? */
