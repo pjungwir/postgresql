@@ -109,3 +109,16 @@ SELECT '' AS four, * FROM VARCHAR_TBL;
       | abcd
 (4 rows)
 
+-- Test binary IO
+SELECT varcharsend('foo');
+ varcharsend 
+-------------
+ \x666f6f
+(1 row)
+
+SELECT unknownsend('foo');
+ unknownsend 
+-------------
+ \x666f6f
+(1 row)
+
