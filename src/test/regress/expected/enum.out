@@ -667,6 +667,18 @@ select enum_range(null::bogon);  -- fails
 ERROR:  unsafe use of new value "bad" of enum type bogon
 HINT:  New enum values must be committed before they can be used.
 ROLLBACK;
+-- binary io
+SELECT enum_send(col) FROM enumtest;
+    enum_send     
+------------------
+ \x6372696d736f6e
+ \x6f72616e6765
+ \x79656c6c6f77
+ \x677265656e
+ \x626c7565
+ \x707572706c65
+(6 rows)
+
 --
 -- Cleanup
 --

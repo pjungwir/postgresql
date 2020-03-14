@@ -325,6 +325,9 @@ ALTER TYPE bogon ADD VALUE 'ugly';
 select enum_range(null::bogon);  -- fails
 ROLLBACK;
 
+-- binary io
+SELECT enum_send(col) FROM enumtest;
+
 --
 -- Cleanup
 --
