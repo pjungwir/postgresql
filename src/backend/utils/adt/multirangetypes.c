@@ -223,7 +223,7 @@ multirange_in(PG_FUNCTION_ARGS)
 				parse_state = MULTIRANGE_IN_RANGE_QUOTED;
 				break;
 			default:
-				elog(ERROR, "Unknown parse state: %d", parse_state);
+				elog(ERROR, "unknown parse state: %d", parse_state);
 		}
 	}
 
@@ -656,17 +656,23 @@ multirange_constructor2(PG_FUNCTION_ARGS)
 	 */
 
 	if (PG_ARGISNULL(0))
-		ereport(ERROR, (errmsg("Can't construct multirange with a NULL input")));
+		ereport(ERROR,
+				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
+				 errmsg("multirange values cannot contain NULL members")));
 
 	rangeArray = PG_GETARG_ARRAYTYPE_P(0);
 
 	dims = ARR_NDIM(rangeArray);
 	if (dims > 1)
-		ereport(ERROR, (errmsg("Can't construct multirange with a multi-dimensional array")));
+		ereport(ERROR,
+				(errcode(ERRCODE_CARDINALITY_VIOLATION),
+				 errmsg("multiranges cannot be constructed from multi-dimensional arrays")));
 
 	rngtypid = ARR_ELEMTYPE(rangeArray);
 	if (rngtypid != rangetyp->type_id)
-		ereport(ERROR, (errmsg("type %u does not match constructor type", rngtypid)));
+		ereport(ERROR,
+				(errcode(ERRCODE_DATATYPE_MISMATCH),
+				 errmsg("type %u does not match constructor type", rngtypid)));
 
 	/*
 	 * Be careful: we can still be called with zero ranges, like this:
@@ -686,7 +692,9 @@ multirange_constructor2(PG_FUNCTION_ARGS)
 		for (i = 0; i < range_count; i++)
 		{
 			if (nulls[i])
-				ereport(ERROR, (errmsg("Can't construct multirange with a NULL element")));
+				ereport(ERROR,
+						(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
+						 errmsg("multirange values cannot contain NULL members")));
 
 			/* make_multirange will do its own copy */
 			ranges[i] = DatumGetRangeTypeP(elements[i]);
@@ -720,14 +728,18 @@ multirange_constructor1(PG_FUNCTION_ARGS)
 	 */
 
 	if (PG_ARGISNULL(0))
-		ereport(ERROR, (errmsg("Can't construct multirange with a NULL input")));
+				ereport(ERROR,
+						(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
+						 errmsg("multirange values cannot contain NULL members")));
 
 	range = PG_GETARG_RANGE_P(0);
 
 	/* Make sure the range type matches. */
 	rngtypid = RangeTypeGetOid(range);
 	if (rngtypid != rangetyp->type_id)
-		ereport(ERROR, (errmsg("type %u does not match constructor type", rngtypid)));
+		ereport(ERROR,
+				(errcode(ERRCODE_DATATYPE_MISMATCH),
+				 errmsg("type %u does not match constructor type", rngtypid)));
 
 	PG_RETURN_MULTIRANGE_P(make_multirange(mltrngtypid, rangetyp, 1, &range));
 }
@@ -752,7 +764,8 @@ multirange_constructor0(PG_FUNCTION_ARGS)
 	if (PG_NARGS() == 0)
 		PG_RETURN_MULTIRANGE_P(make_multirange(mltrngtypid, rangetyp, 0, NULL));
 	else
-		ereport(ERROR, (errmsg("Zero-param multirange constructor shouldn't have arguments")));
+		elog(ERROR,		/* can't happen */
+			 "niladic multirange constructor must not receive arguments");
 }
 
 
@@ -1031,7 +1044,9 @@ range_agg_transfn(PG_FUNCTION_ARGS)
 
 	rngtypoid = get_fn_expr_argtype(fcinfo->flinfo, 1);
 	if (!type_is_range(rngtypoid))
-		ereport(ERROR, (errmsg("range_agg must be called with a range")));
+		ereport(ERROR,
+				(errcode(ERRCODE_DATATYPE_MISMATCH),
+				 errmsg("range_agg must be called with a range")));
 
 	if (PG_ARGISNULL(0))
 		state = initArrayResult(rngtypoid, aggContext, false);
@@ -1100,7 +1115,9 @@ multirange_intersect_agg_transfn(PG_FUNCTION_ARGS)
 
 	mltrngtypoid = get_fn_expr_argtype(fcinfo->flinfo, 1);
 	if (!type_is_multirange(mltrngtypoid))
-		ereport(ERROR, (errmsg("range_intersect_agg must be called with a multirange")));
+		ereport(ERROR,
+				(errcode(ERRCODE_DATATYPE_MISMATCH),
+				 errmsg("range_intersect_agg must be called with a multirange")));
 
 	typcache = multirange_get_typcache(fcinfo, mltrngtypoid);
 
