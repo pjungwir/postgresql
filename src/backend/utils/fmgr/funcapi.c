@@ -35,6 +35,7 @@ typedef struct polymorphic_actuals
 	Oid			anyelement_type;	/* anyelement mapping, if known */
 	Oid			anyarray_type;	/* anyarray mapping, if known */
 	Oid			anyrange_type;	/* anyrange mapping, if known */
+	Oid			anymultirange_type;	/* anymultirange mapping, if known */
 } polymorphic_actuals;
 
 static void shutdown_MultiFuncCall(Datum arg);
@@ -46,6 +47,7 @@ static TypeFuncClass internal_get_result_type(Oid funcid,
 static void resolve_anyelement_from_others(polymorphic_actuals *actuals);
 static void resolve_anyarray_from_others(polymorphic_actuals *actuals);
 static void resolve_anyrange_from_others(polymorphic_actuals *actuals);
+static void resolve_anymultirange_from_others(polymorphic_actuals *actuals);
 static bool resolve_polymorphic_tupdesc(TupleDesc tupdesc,
 										oidvector *declared_args,
 										Node *call_expr);
@@ -503,6 +505,31 @@ resolve_anyelement_from_others(polymorphic_actuals *actuals)
 							format_type_be(range_base_type))));
 		actuals->anyelement_type = range_typelem;
 	}
+	else if (OidIsValid(actuals->anymultirange_type))
+	{
+		/* Use the element type based on the multirange type */
+		Oid			multirange_base_type = getBaseType(actuals->anymultirange_type);
+		Oid			multirange_typelem =
+			get_range_multirange_subtype(multirange_base_type);
+
+		if (!OidIsValid(multirange_typelem))
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("argument declared %s is not a multirange type but type %s",
+							"anymultirange",
+							format_type_be(multirange_base_type))));
+
+		Oid			range_base_type = getBaseType(multirange_typelem);
+		Oid			range_typelem = get_range_subtype(range_base_type);
+
+		if (!OidIsValid(range_typelem))
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("argument declared %s does not contain a range type but type %s",
+							"anymultirange",
+							format_type_be(range_base_type))));
+		actuals->anyelement_type = range_typelem;
+	}
 	else
 		elog(ERROR, "could not determine polymorphic type");
 }
@@ -540,10 +567,54 @@ static void
 resolve_anyrange_from_others(polymorphic_actuals *actuals)
 {
 	/*
-	 * We can't deduce a range type from other polymorphic inputs, because
-	 * there may be multiple range types with the same subtype.
+	 * We can't deduce a range type from other polymorphic array or base types,
+	 * because there may be multiple range types with the same subtype, but we
+	 * can deduce it from a polymorphic multirange type.
 	 */
-	elog(ERROR, "could not determine polymorphic type");
+	if (OidIsValid(actuals->anymultirange_type))
+	{
+		/* Use the element type based on the multirange type */
+		Oid			multirange_base_type = getBaseType(actuals->anymultirange_type);
+		Oid			multirange_typelem =
+			get_range_multirange_subtype(multirange_base_type);
+
+		if (!OidIsValid(multirange_typelem))
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("argument declared %s is not a multirange type but type %s",
+							"anymultirange",
+							format_type_be(multirange_base_type))));
+		actuals->anyrange_type = multirange_typelem;
+	}
+	else
+		elog(ERROR, "could not determine polymorphic type");
+}
+
+/*
+ * Resolve actual type of ANYMULTIRANGE from other polymorphic inputs
+ */
+static void
+resolve_anymultirange_from_others(polymorphic_actuals *actuals)
+{
+	/*
+	 * We can't deduce a multirange type from polymorphic array or base types,
+	 * because there may be multiple range types with the same subtype, but we
+	 * can deduce it from a polymorphic range type.
+	 */
+	if (OidIsValid(actuals->anyrange_type))
+	{
+		Oid			range_base_type = getBaseType(actuals->anyrange_type);
+		Oid			multirange_typeid = get_range_multirange(range_base_type);
+
+		if (!OidIsValid(multirange_typeid))
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("could not find multirange type for data type %s",
+							format_type_be(actuals->anyrange_type))));
+		actuals->anymultirange_type = multirange_typeid;
+	}
+	else
+		elog(ERROR, "could not determine polymorphic type");
 }
 
 /*
@@ -667,7 +738,7 @@ resolve_polymorphic_tupdesc(TupleDesc tupdesc, oidvector *declared_args,
 				}
 				break;
 			case ANYMULTIRANGEOID:
-				if (!OidIsValid(anymultirange_type))
+				if (!OidIsValid(poly_actuals.anymultirange_type))
 				{
 					poly_actuals.anymultirange_type =
 						get_call_expr_argtype(call_expr, i);
@@ -702,6 +773,8 @@ resolve_polymorphic_tupdesc(TupleDesc tupdesc, oidvector *declared_args,
 					if (!OidIsValid(anyc_actuals.anyrange_type))
 						return false;
 				}
+=======
+>>>>>>> Fix post-rebase anymultirange code to work with the refactored approach in parse_coerce.c and funcapi.c
 				break;
 			default:
 				break;
