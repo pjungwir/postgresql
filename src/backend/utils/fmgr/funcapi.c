@@ -638,8 +638,6 @@ resolve_polymorphic_tupdesc(TupleDesc tupdesc, oidvector *declared_args,
 	bool		have_anyarray_result = false;
 	bool		have_anyrange_result = false;
 	bool		have_anymultirange_result = false;
-	bool		have_anynonarray = false;
-	bool		have_anyenum = false;
 	bool		have_anycompatible_result = false;
 	bool		have_anycompatible_array_result = false;
 	bool		have_anycompatible_range_result = false;
@@ -671,6 +669,7 @@ resolve_polymorphic_tupdesc(TupleDesc tupdesc, oidvector *declared_args,
 			case ANYMULTIRANGEOID:
 				have_polymorphic_result = true;
 				have_anymultirange_result = true;
+				break;
 			case ANYCOMPATIBLEOID:
 			case ANYCOMPATIBLENONARRAYOID:
 				have_polymorphic_result = true;
@@ -773,8 +772,6 @@ resolve_polymorphic_tupdesc(TupleDesc tupdesc, oidvector *declared_args,
 					if (!OidIsValid(anyc_actuals.anyrange_type))
 						return false;
 				}
-=======
->>>>>>> Fix post-rebase anymultirange code to work with the refactored approach in parse_coerce.c and funcapi.c
 				break;
 			default:
 				break;
@@ -1014,8 +1011,10 @@ resolve_polymorphic_argtypes(int numargs, Oid *argtypes, char *argmodes,
 				break;
 			case ANYMULTIRANGEOID:
 				if (argmode == PROARGMODE_OUT || argmode == PROARGMODE_TABLE)
+				{
 					have_polymorphic_result = true;
 					have_anymultirange_result = true;
+				}
 				else
 				{
 					if (!OidIsValid(poly_actuals.anymultirange_type))
@@ -1134,6 +1133,7 @@ resolve_polymorphic_argtypes(int numargs, Oid *argtypes, char *argmodes,
 				break;
 			case ANYMULTIRANGEOID:
 				argtypes[i] = poly_actuals.anymultirange_type;
+				break;
 			case ANYCOMPATIBLEOID:
 			case ANYCOMPATIBLENONARRAYOID:
 				argtypes[i] = anyc_actuals.anyelement_type;

@@ -1624,7 +1624,6 @@ check_generic_type_consistency(const Oid *actual_arg_types,
 	Oid			multirange_typeid = InvalidOid;
 	Oid			anycompatible_range_typeid = InvalidOid;
 	Oid			anycompatible_range_typelem = InvalidOid;
-	bool		have_anyelement = false;
 	Oid			range_typelem = InvalidOid;
 	bool		have_anynonarray = false;
 	bool		have_anyenum = false;
@@ -1682,6 +1681,7 @@ check_generic_type_consistency(const Oid *actual_arg_types,
 			if (OidIsValid(multirange_typeid) && actual_type != multirange_typeid)
 				return false;
 			multirange_typeid = actual_type;
+		}
 		else if (decl_type == ANYCOMPATIBLEOID ||
 				 decl_type == ANYCOMPATIBLENONARRAYOID)
 		{
@@ -1987,12 +1987,9 @@ enforce_generic_type_consistency(const Oid *actual_arg_types,
 	Oid			anycompatible_range_typeid = InvalidOid;
 	Oid			anycompatible_range_typelem = InvalidOid;
 	Oid			range_typelem;
-	Oid			array_typelem;
 	Oid			multirange_typelem;
 	bool		have_anynonarray = (rettype == ANYNONARRAYOID);
 	bool		have_anyenum = (rettype == ANYENUMOID);
-	bool		have_anyrange = (rettype == ANYRANGEOID);
-	bool		have_anymultirange = (rettype == ANYMULTIRANGEOID);
 	bool		have_anycompatible_nonarray = (rettype == ANYCOMPATIBLENONARRAYOID);
 	bool		have_anycompatible_array = (rettype == ANYCOMPATIBLEARRAYOID);
 	bool		have_anycompatible_range = (rettype == ANYCOMPATIBLERANGEOID);
@@ -2617,13 +2614,12 @@ check_valid_polymorphic_signature(Oid ret_type,
 								  const Oid *declared_arg_types,
 								  int nargs)
 {
-	if (ret_type == ANYRANGEOID || ret_type == ANYMULTIRANGEOID ||
-		ret_type == ANYCOMPATIBLERANGEOID)
+	if (ret_type == ANYRANGEOID || ret_type == ANYMULTIRANGEOID)
 	{
 		/*
 		 * ANYRANGE and ANYMULTIRANGE require an ANYRANGE or ANYMULTIRANGE input,
 		 * else we can't tell which of several range types with the same element
-		 * type to use. Likewise for ANYCOMPATIBLERANGE.
+		 * type to use.
 		 */
 		for (int i = 0; i < nargs; i++)
 		{
@@ -2632,6 +2628,21 @@ check_valid_polymorphic_signature(Oid ret_type,
 				return NULL;	/* OK */
 		}
 		return psprintf(_("A result of type %s requires at least one input of type anyrange or anymultirange."),
+						format_type_be(ret_type));
+	}
+	else if (ret_type == ANYCOMPATIBLERANGEOID)
+	{
+		/*
+		 * ANYCOMPATIBLERANGE requires an ANYCOMPATIBLERANGE input,
+		 * else we can't tell which of several range types with the same element
+		 * type to use.
+		 */
+		for (int i = 0; i < nargs; i++)
+		{
+			if (declared_arg_types[i] == ret_type)
+				return NULL;	/* OK */
+		}
+		return psprintf(_("A result of type %s requires at least one input of type anycompatiblerange."),
 						format_type_be(ret_type));
 	}
 	else if (IsPolymorphicTypeFamily1(ret_type))
@@ -2643,7 +2654,7 @@ check_valid_polymorphic_signature(Oid ret_type,
 				return NULL;	/* OK */
 		}
 		/* Keep this list in sync with IsPolymorphicTypeFamily1! */
-		return psprintf(_("A result of type %s requires at least one input of type anyelement, anyarray, anynonarray, anyenum, or anyrange."),
+		return psprintf(_("A result of type %s requires at least one input of type anyelement, anyarray, anynonarray, anyenum, anyrange, or anymultirange."),
 						format_type_be(ret_type));
 	}
 	else if (IsPolymorphicTypeFamily2(ret_type))
