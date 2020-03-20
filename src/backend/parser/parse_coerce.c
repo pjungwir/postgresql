@@ -1570,8 +1570,8 @@ select_common_typmod(ParseState *pstate, List *exprs, Oid common_type)
  * 1) All arguments declared ANYELEMENT must have the same datatype.
  * 2) All arguments declared ANYARRAY must have the same datatype,
  *	  which must be a varlena array type.
- * 3) All arguments declared ANYRANGE must have the same datatype,
- *	  which must be a range type.
+ * 3) All arguments declared ANYRANGE or ANYMULTIRANGE must be a range or
+ *	  multirange type, all derived from the same base datatype.
  * 4) If there are arguments of more than one of these polymorphic types,
  *	  the array element type and/or range subtype must be the same as each
  *	  other and the same as the ANYELEMENT type.
@@ -1625,6 +1625,7 @@ check_generic_type_consistency(const Oid *actual_arg_types,
 	Oid			anycompatible_range_typeid = InvalidOid;
 	Oid			anycompatible_range_typelem = InvalidOid;
 	bool		have_anyelement = false;
+	Oid			range_typelem = InvalidOid;
 	bool		have_anynonarray = false;
 	bool		have_anyenum = false;
 	bool		have_anycompatible_nonarray = false;
@@ -1771,8 +1772,6 @@ check_generic_type_consistency(const Oid *actual_arg_types,
 	/* Get the element type based on the range type, if we have one */
 	if (OidIsValid(range_typeid))
 	{
-		Oid			range_typelem;
-
 		range_typelem = get_range_subtype(range_typeid);
 		if (!OidIsValid(range_typelem))
 			return false;		/* should be a range, but isn't */
@@ -1789,11 +1788,7 @@ check_generic_type_consistency(const Oid *actual_arg_types,
 			/* otherwise, they better match */
 			return false;
 		}
-		else
-			range_typelem = InvalidOid;	/* keep compiler quiet */
 	}
-	else
-		range_typelem = InvalidOid; /* keep compiler quiet */
 
 	/* Get the element type based on the multirange type, if we have one */
 	if (OidIsValid(multirange_typeid))
@@ -1814,6 +1809,12 @@ check_generic_type_consistency(const Oid *actual_arg_types,
 			if (!OidIsValid(range_typelem))
 				return false;	/* should be a range, but isn't */
 		}
+		else if (multirange_typelem != range_typeid)
+		{
+			/* otherwise, they better match */
+			return false;
+		}
+
 		if (!OidIsValid(elem_typeid))
 		{
 			/*
@@ -1985,13 +1986,9 @@ enforce_generic_type_consistency(const Oid *actual_arg_types,
 	Oid			anycompatible_array_typeid = InvalidOid;
 	Oid			anycompatible_range_typeid = InvalidOid;
 	Oid			anycompatible_range_typelem = InvalidOid;
-	int			n_poly_args = 0;
 	Oid			range_typelem;
 	Oid			array_typelem;
 	Oid			multirange_typelem;
-	bool		have_anyelement = (rettype == ANYELEMENTOID ||
-								   rettype == ANYNONARRAYOID ||
-								   rettype == ANYENUMOID);
 	bool		have_anynonarray = (rettype == ANYNONARRAYOID);
 	bool		have_anyenum = (rettype == ANYENUMOID);
 	bool		have_anyrange = (rettype == ANYRANGEOID);
@@ -2083,7 +2080,7 @@ enforce_generic_type_consistency(const Oid *actual_arg_types,
 			n_poly_args++;
 			if (actual_type == UNKNOWNOID)
 			{
-				have_unknowns = true;
+				have_poly_unknowns = true;
 				continue;
 			}
 			if (allow_poly && decl_type == actual_type)
@@ -2264,7 +2261,6 @@ enforce_generic_type_consistency(const Oid *actual_arg_types,
 		}
 		else
 			range_typelem = InvalidOid;
-	}
 
 		/* Get the element type based on the multirange type, if we have one */
 		if (OidIsValid(multirange_typeid))
@@ -2277,14 +2273,34 @@ enforce_generic_type_consistency(const Oid *actual_arg_types,
 								"anymultirange",
 								format_type_be(multirange_typeid))));
 
+			if (!OidIsValid(range_typeid))
+			{
+				/*
+				 * If we don't have a range type yet, use the one we just got
+				 */
+				range_typeid = multirange_typelem;
+				range_typelem = get_range_subtype(range_typeid);
+			}
+			else if (multirange_typelem != range_typeid)
+			{
+				/* otherwise, they better match */
+				ereport(ERROR,
+						(errcode(ERRCODE_DATATYPE_MISMATCH),
+						 errmsg("argument declared %s is not consistent with argument declared %s",
+								"anymultirange", "anyrange"),
+						 errdetail("%s versus %s",
+								   format_type_be(multirange_typeid),
+								   format_type_be(range_typeid))));
+			}
+
 			if (!OidIsValid(elem_typeid))
 			{
 				/*
 				 * if we don't have an element type yet, use the one we just got
 				 */
-				elem_typeid = multirange_typelem;
+				elem_typeid = range_typelem;
 			}
-			else if (multirange_typelem != elem_typeid)
+			else if (range_typelem != elem_typeid)
 			{
 				/* otherwise, they better match */
 				ereport(ERROR,
@@ -2296,6 +2312,8 @@ enforce_generic_type_consistency(const Oid *actual_arg_types,
 								   format_type_be(elem_typeid))));
 			}
 		}
+		else
+			multirange_typelem = InvalidOid;
 
 		if (!OidIsValid(elem_typeid))
 		{
@@ -2317,46 +2335,6 @@ enforce_generic_type_consistency(const Oid *actual_arg_types,
 						 errmsg("could not determine polymorphic type because input has type %s",
 								"unknown")));
 			}
-		}
-
-		if (!OidIsValid(range_typeid))
-		{
-			/*
-			 * If we don't have a range type yet, use the one we just got
-			 */
-			range_typeid = multirange_typelem;
-			range_typelem = get_range_subtype(range_typeid);
-		}
-		else if (multirange_typelem != range_typeid)
-		{
-			/* otherwise, they better match */
-			ereport(ERROR,
-					(errcode(ERRCODE_DATATYPE_MISMATCH),
-					 errmsg("argument declared %s is not consistent with argument declared %s",
-							"anymultirange", "anyrange"),
-					 errdetail("%s versus %s",
-							   format_type_be(multirange_typeid),
-							   format_type_be(range_typeid))));
-		}
-
-		/*
-		 * Infer the element type too if needed (if there is an ANYMULTIRANGE
-		 * and ANYELEMENT, with no ANYRANGE).
-		 */
-		if (!OidIsValid(elem_typeid))
-		{
-			elem_typeid = get_range_subtype(range_typeid);
-		}
-		else if (range_typelem != elem_typeid)
-		{
-			/* otherwise, they better match */
-			ereport(ERROR,
-					(errcode(ERRCODE_DATATYPE_MISMATCH),
-					 errmsg("argument declared %s is not consistent with argument declared %s",
-							"anymultirange", "anyelement"),
-					 errdetail("%s versus %s",
-							   format_type_be(multirange_typeid),
-							   format_type_be(elem_typeid))));
 		}
 
 		if (have_anynonarray && elem_typeid != ANYELEMENTOID)

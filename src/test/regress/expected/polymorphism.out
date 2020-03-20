@@ -61,7 +61,7 @@ create function polyf(x anyelement) returns anyrange as $$
   select array[x + 1, x + 2]
 $$ language sql;
 ERROR:  cannot determine result data type
-DETAIL:  A result of type anyrange requires at least one input of type anyrange.
+DETAIL:  A result of type anyrange requires at least one input of type anyrange or anymultirange.
 create function polyf(x anyrange) returns anyarray as $$
   select array[lower(x), upper(x)]
 $$ language sql;

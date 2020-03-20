@@ -98,12 +98,6 @@ ProcedureCreate(const char *procedureName,
 	int			allParamCount;
 	Oid		   *allParams;
 	char	   *paramModes = NULL;
-	bool		genericInParam = false;
-	bool		genericOutParam = false;
-	bool		anyrangeInParam = false;
-	bool		anyrangeOutParam = false;
-	bool		internalInParam = false;
-	bool		internalOutParam = false;
 	Oid			variadicType = InvalidOid;
 	Acl		   *proacl = NULL;
 	Relation	rel;

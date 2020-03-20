@@ -2209,12 +2209,12 @@ drop function anyarray_anymultirange_func(anyarray, anymultirange);
 create function bogus_func(anyelement)
   returns anymultirange as 'select int4multirange(int4range(1,10))' language sql;
 ERROR:  cannot determine result data type
-DETAIL:  A function returning "anyrange" or "anymultirange" must have at least one "anyrange" or "anymultirange" argument.
+DETAIL:  A result of type anymultirange requires at least one input of type anyrange or anymultirange.
 -- should fail
 create function bogus_func(int)
   returns anymultirange as 'select int4multirange(int4range(1,10))' language sql;
 ERROR:  cannot determine result data type
-DETAIL:  A function returning a polymorphic type must have at least one polymorphic argument.
+DETAIL:  A result of type anymultirange requires at least one input of type anyrange or anymultirange.
 create function range_add_bounds(anymultirange)
   returns anyelement as 'select lower($1) + upper($1)' language sql;
 select range_add_bounds(int4multirange(int4range(1, 17)));
@@ -2382,14 +2382,14 @@ select mr_polymorphic(int4range(1, 4));
 create function mr_outparam_fail(i anyelement, out r anymultirange, out t text)
   as $$ select '[1,10]', 'foo' $$ language sql;
 ERROR:  cannot determine result data type
-DETAIL:  A function returning "anyrange" or "anymultirange" must have at least one "anyrange" or "anymultirange" argument.
+DETAIL:  A result of type anymultirange requires at least one input of type anyrange or anymultirange.
 --should fail
 create function mr_inoutparam_fail(inout i anyelement, out r anymultirange)
   as $$ select $1, '[1,10]' $$ language sql;
 ERROR:  cannot determine result data type
-DETAIL:  A function returning "anyrange" or "anymultirange" must have at least one "anyrange" or "anymultirange" argument.
+DETAIL:  A result of type anymultirange requires at least one input of type anyrange or anymultirange.
 --should fail
 create function mr_table_fail(i anyelement) returns table(i anyelement, r anymultirange)
   as $$ select $1, '[1,10]' $$ language sql;
 ERROR:  cannot determine result data type
-DETAIL:  A function returning "anyrange" or "anymultirange" must have at least one "anyrange" or "anymultirange" argument.
+DETAIL:  A result of type anymultirange requires at least one input of type anyrange or anymultirange.
