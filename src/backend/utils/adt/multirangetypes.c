@@ -443,7 +443,7 @@ shortrange_serialize(ShortRangeType *range, TypeCacheEntry *typcache,
  * to range_in, but we have to detect quoting and backslash-escaping
  * which can happen for range bounds.
  * Backslashes can escape something inside or outside a quoted string,
- * and a quoted string can escape quote marks either either backslashes
+ * and a quoted string can escape quote marks with either backslashes
  * or double double-quotes.
  */
 Datum
