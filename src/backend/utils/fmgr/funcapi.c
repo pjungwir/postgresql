@@ -514,7 +514,7 @@ resolve_anyelement_from_others(polymorphic_actuals *actuals)
 		Oid			range_typelem;
 
 		multirange_base_type = getBaseType(actuals->anymultirange_type);
-		multirange_typelem = get_range_multirange_subtype(multirange_base_type);
+		multirange_typelem = get_multirange_range(multirange_base_type);
 		if (!OidIsValid(multirange_typelem))
 			ereport(ERROR,
 					(errcode(ERRCODE_DATATYPE_MISMATCH),
@@ -579,7 +579,7 @@ resolve_anyrange_from_others(polymorphic_actuals *actuals)
 		/* Use the element type based on the multirange type */
 		Oid			multirange_base_type = getBaseType(actuals->anymultirange_type);
 		Oid			multirange_typelem =
-			get_range_multirange_subtype(multirange_base_type);
+			get_multirange_range(multirange_base_type);
 
 		if (!OidIsValid(multirange_typelem))
 			ereport(ERROR,

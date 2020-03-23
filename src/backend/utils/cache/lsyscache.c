@@ -3314,13 +3314,13 @@ get_range_multirange(Oid rangeOid)
 }
 
 /*
- * get_range_multirange_subtype
- *		Returns the subtype of a given multirange type
+ * get_multirange_range
+ *		Returns the range type of a given multirange
  *
- * Returns InvalidOid if the type is not a multirange type.
+ * Returns InvalidOid if the type is not a multirange.
  */
 Oid
-get_range_multirange_subtype(Oid multirangeOid)
+get_multirange_range(Oid multirangeOid)
 {
 	HeapTuple	tp;
 

@@ -963,7 +963,7 @@ load_multirangetype_info(TypeCacheEntry *typentry)
 {
 	Oid			rangetypeOid;
 
-	rangetypeOid = get_range_multirange_subtype(typentry->type_id);
+	rangetypeOid = get_multirange_range(typentry->type_id);
 	if (!OidIsValid(rangetypeOid))
 		elog(ERROR, "cache lookup failed for multirange type %u",
 			 typentry->type_id);
