@@ -495,7 +495,7 @@ multirange_in(PG_FUNCTION_ARGS)
 							input_str),
 					 errdetail("Unexpected end of input.")));
 
-		 /* skip whitespace */ ;
+		/* skip whitespace */
 		if (isspace((unsigned char) ch))
 			continue;
 
