@@ -531,9 +531,8 @@ multirange_in(PG_FUNCTION_ARGS)
 					parse_state = MULTIRANGE_IN_RANGE_ESCAPED;
 				else if (ch == ']' || ch == ')')
 				{
-					range_str_len = ptr - range_str + 2;
-					range_str_copy = palloc0(range_str_len);
-					strlcpy(range_str_copy, range_str, range_str_len);
+					range_str_len = ptr - range_str + 1;
+					range_str_copy = pnstrdup(range_str, range_str_len);
 					if (range_capacity == range_count)
 					{
 						range_capacity *= 2;
