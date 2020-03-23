@@ -508,10 +508,13 @@ resolve_anyelement_from_others(polymorphic_actuals *actuals)
 	else if (OidIsValid(actuals->anymultirange_type))
 	{
 		/* Use the element type based on the multirange type */
-		Oid			multirange_base_type = getBaseType(actuals->anymultirange_type);
-		Oid			multirange_typelem =
-			get_range_multirange_subtype(multirange_base_type);
+		Oid			multirange_base_type;
+		Oid			multirange_typelem;
+		Oid			range_base_type;
+		Oid			range_typelem;
 
+		multirange_base_type = getBaseType(actuals->anymultirange_type);
+		multirange_typelem = get_range_multirange_subtype(multirange_base_type);
 		if (!OidIsValid(multirange_typelem))
 			ereport(ERROR,
 					(errcode(ERRCODE_DATATYPE_MISMATCH),
@@ -519,8 +522,8 @@ resolve_anyelement_from_others(polymorphic_actuals *actuals)
 							"anymultirange",
 							format_type_be(multirange_base_type))));
 
-		Oid			range_base_type = getBaseType(multirange_typelem);
-		Oid			range_typelem = get_range_subtype(range_base_type);
+		range_base_type = getBaseType(multirange_typelem);
+		range_typelem = get_range_subtype(range_base_type);
 
 		if (!OidIsValid(range_typelem))
 			ereport(ERROR,
