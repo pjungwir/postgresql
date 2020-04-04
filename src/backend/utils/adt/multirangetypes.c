@@ -691,7 +691,6 @@ multirange_send(PG_FUNCTION_ARGS)
 	StringInfo	buf = makeStringInfo();
 	RangeType **ranges;
 	int32		range_count;
-	int32		i;
 	MultirangeIOData *cache;
 
 	cache = get_multirange_io_data(fcinfo, mltrngtypoid, IOFunc_send);
@@ -702,7 +701,7 @@ multirange_send(PG_FUNCTION_ARGS)
 	pq_sendint32(buf, multirange->rangeCount);
 
 	multirange_deserialize(cache->typcache->rngtype, multirange, &range_count, &ranges);
-	for (i = 0; i < range_count; i++)
+	for (int i = 0; i < range_count; i++)
 	{
 		Datum		range;
 
