@@ -30,7 +30,7 @@ typedef struct
 	uint32		rangeCount;		/* the number of ranges */
 
 	/*
-	 * Following the OID are the range objects themselves, as ShortRangeType
+	 * Following the count are the range objects themselves, as ShortRangeType
 	 * structs. Note that ranges are varlena too, depending on whether they
 	 * have lower/upper bounds and because even their base types can be varlena.
 	 * So we can't really index into this list.
