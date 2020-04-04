@@ -640,12 +640,9 @@ multirange_out(PG_FUNCTION_ARGS)
 }
 
 /*
- * Binary representation: The first byte is the flags, then the lower bound
- * (if present), then the upper bound (if present).  Each bound is represented
- * by a 4-byte length header and the binary representation of that bound (as
- * returned by a call to the send function for the subtype).
+ * Binary representation: First a int32-sized count of ranges, followed by
+ * ranges in their native binary representation.
  */
-
 Datum
 multirange_recv(PG_FUNCTION_ARGS)
 {
@@ -653,36 +650,36 @@ multirange_recv(PG_FUNCTION_ARGS)
 	Oid			mltrngtypoid = PG_GETARG_OID(1);
 	int32		typmod = PG_GETARG_INT32(2);
 	MultirangeIOData *cache;
-	TypeCacheEntry *rangetyp;
 	uint32		range_count;
 	RangeType **ranges;
 	MultirangeType *ret;
-	int			i;
+	StringInfoData tmpbuf;
 
 	cache = get_multirange_io_data(fcinfo, mltrngtypoid, IOFunc_receive);
-	rangetyp = cache->typcache->rngtype;
 
 	range_count = pq_getmsgint(buf, 4);
-	ranges = palloc0(range_count * sizeof(RangeType *));
-	for (i = 0; i < range_count; i++)
+	ranges = palloc(range_count * sizeof(RangeType *));
+
+	initStringInfo(&tmpbuf);
+	for (int i = 0; i < range_count; i++)
 	{
 		uint32		range_len = pq_getmsgint(buf, 4);
 		const char *range_data = pq_getmsgbytes(buf, range_len);
-		StringInfoData range_buf;
 
-		initStringInfo(&range_buf);
-		appendBinaryStringInfo(&range_buf, range_data, range_len);
+		resetStringInfo(&tmpbuf);
+		appendBinaryStringInfo(&tmpbuf, range_data, range_len);
 
 		ranges[i] = DatumGetRangeTypeP(ReceiveFunctionCall(&cache->typioproc,
-														   &range_buf,
+														   &tmpbuf,
 														   cache->typioparam,
 														   typmod));
-		pfree(range_buf.data);
 	}
+	pfree(tmpbuf.data);
 
 	pq_getmsgend(buf);
 
-	ret = make_multirange(mltrngtypoid, rangetyp, range_count, ranges);
+	ret = make_multirange(mltrngtypoid, cache->typcache->rngtype,
+						  range_count, ranges);
 	PG_RETURN_MULTIRANGE_P(ret);
 }
 
