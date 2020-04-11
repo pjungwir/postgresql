@@ -358,12 +358,6 @@ multirange_send(PG_FUNCTION_ARGS)
 	PG_RETURN_BYTEA_P(pq_endtypsend(buf));
 }
 
-Datum
-multirange_typanalyze(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_BOOL(true);
-}
-
 /*
  * get_multirange_io_data: get cached information needed for multirange type I/O
  *

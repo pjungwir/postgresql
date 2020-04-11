@@ -122,6 +122,8 @@ select range_intersect_agg(nr) from numrange_test;
 select range_intersect_agg(nr) from numrange_test where false;
 select range_intersect_agg(nr) from numrange_test where nr @> 4.0;
 
+analyze numrange_test;
+
 create table numrange_test2(nr numrange);
 create index numrange_test2_hash_idx on numrange_test2 using hash (nr);
 

@@ -121,6 +121,8 @@ SELECT * FROM nummultirange_test WHERE nmr <> '{(,5)}';
 select nummultirange(numrange(2.0, 1.0));
 select nummultirange(numrange(5.0, 6.0), numrange(1.0, 2.0));
 
+analyze nummultirange_test;
+
 -- overlaps
 SELECT * FROM nummultirange_test WHERE range_overlaps_multirange(numrange(4.0, 4.2), nmr);
 SELECT * FROM nummultirange_test WHERE numrange(4.0, 4.2) && nmr;
