@@ -641,6 +641,7 @@ resolve_polymorphic_tupdesc(TupleDesc tupdesc, oidvector *declared_args,
 	bool		have_anycompatible_result = false;
 	bool		have_anycompatible_array_result = false;
 	bool		have_anycompatible_range_result = false;
+	bool		have_anycompatible_multirange_result = false;
 	polymorphic_actuals poly_actuals;
 	polymorphic_actuals anyc_actuals;
 	Oid			anycollation = InvalidOid;
@@ -682,6 +683,10 @@ resolve_polymorphic_tupdesc(TupleDesc tupdesc, oidvector *declared_args,
 			case ANYCOMPATIBLERANGEOID:
 				have_polymorphic_result = true;
 				have_anycompatible_range_result = true;
+				break;
+			case ANYCOMPATIBLEMULTIRANGEOID:
+				have_polymorphic_result = true;
+				have_anycompatible_multirange_result = true;
 				break;
 			default:
 				break;
@@ -773,6 +778,15 @@ resolve_polymorphic_tupdesc(TupleDesc tupdesc, oidvector *declared_args,
 						return false;
 				}
 				break;
+			case ANYCOMPATIBLEMULTIRANGEOID:
+				if (!OidIsValid(anyc_actuals.anymultirange_type))
+				{
+					anyc_actuals.anymultirange_type =
+						get_call_expr_argtype(call_expr, i);
+					if (!OidIsValid(anyc_actuals.anymultirange_type))
+						return false;
+				}
+				break;
 			default:
 				break;
 		}
@@ -799,6 +813,9 @@ resolve_polymorphic_tupdesc(TupleDesc tupdesc, oidvector *declared_args,
 
 	if (have_anycompatible_range_result && !OidIsValid(anyc_actuals.anyrange_type))
 		resolve_anyrange_from_others(&anyc_actuals);
+
+	if (have_anycompatible_multirange_result && !OidIsValid(anyc_actuals.anymultirange_type))
+		resolve_anymultirange_from_others(&anyc_actuals);
 
 	/*
 	 * Identify the collation to use for polymorphic OUT parameters. (It'll
@@ -901,6 +918,14 @@ resolve_polymorphic_tupdesc(TupleDesc tupdesc, oidvector *declared_args,
 								   0);
 				/* no collation should be attached to a range type */
 				break;
+			case ANYCOMPATIBLEMULTIRANGEOID:
+				TupleDescInitEntry(tupdesc, i + 1,
+								   NameStr(att->attname),
+								   anyc_actuals.anymultirange_type,
+								   -1,
+								   0);
+				/* no collation should be attached to a multirange type */
+				break;
 			default:
 				break;
 		}
@@ -934,6 +959,7 @@ resolve_polymorphic_argtypes(int numargs, Oid *argtypes, char *argmodes,
 	bool		have_anycompatible_result = false;
 	bool		have_anycompatible_array_result = false;
 	bool		have_anycompatible_range_result = false;
+	bool		have_anycompatible_multirange_result = false;
 	polymorphic_actuals poly_actuals;
 	polymorphic_actuals anyc_actuals;
 	int			inargno;
@@ -1082,6 +1108,24 @@ resolve_polymorphic_argtypes(int numargs, Oid *argtypes, char *argmodes,
 					argtypes[i] = anyc_actuals.anyrange_type;
 				}
 				break;
+			case ANYCOMPATIBLEMULTIRANGEOID:
+				if (argmode == PROARGMODE_OUT || argmode == PROARGMODE_TABLE)
+				{
+					have_polymorphic_result = true;
+					have_anycompatible_multirange_result = true;
+				}
+				else
+				{
+					if (!OidIsValid(anyc_actuals.anymultirange_type))
+					{
+						anyc_actuals.anymultirange_type =
+							get_call_expr_argtype(call_expr, inargno);
+						if (!OidIsValid(anyc_actuals.anymultirange_type))
+							return false;
+					}
+					argtypes[i] = anyc_actuals.anymultirange_type;
+				}
+				break;
 			default:
 				break;
 		}
@@ -1115,6 +1159,9 @@ resolve_polymorphic_argtypes(int numargs, Oid *argtypes, char *argmodes,
 	if (have_anycompatible_range_result && !OidIsValid(anyc_actuals.anyrange_type))
 		resolve_anyrange_from_others(&anyc_actuals);
 
+	if (have_anycompatible_multirange_result && !OidIsValid(anyc_actuals.anymultirange_type))
+		resolve_anymultirange_from_others(&anyc_actuals);
+
 	/* And finally replace the output column types as needed */
 	for (i = 0; i < numargs; i++)
 	{
@@ -1143,6 +1190,9 @@ resolve_polymorphic_argtypes(int numargs, Oid *argtypes, char *argmodes,
 				break;
 			case ANYCOMPATIBLERANGEOID:
 				argtypes[i] = anyc_actuals.anyrange_type;
+				break;
+			case ANYCOMPATIBLEMULTIRANGEOID:
+				argtypes[i] = anyc_actuals.anymultirange_type;
 				break;
 			default:
 				break;
@@ -1173,6 +1223,7 @@ get_type_func_class(Oid typid, Oid *base_typeid)
 		case TYPTYPE_BASE:
 		case TYPTYPE_ENUM:
 		case TYPTYPE_RANGE:
+		case TYPTYPE_MULTIRANGE:
 			return TYPEFUNC_SCALAR;
 		case TYPTYPE_DOMAIN:
 			*base_typeid = typid = getBaseType(typid);

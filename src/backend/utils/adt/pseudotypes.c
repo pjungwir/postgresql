@@ -229,6 +229,19 @@ anycompatiblerange_out(PG_FUNCTION_ARGS)
 }
 
 /*
+ * anycompatiblemultirange
+ *
+ * We may as well allow output, since multirange_out will in fact work.
+ */
+PSEUDOTYPE_DUMMY_INPUT_FUNC(anycompatiblemultirange);
+
+Datum
+anycompatiblemultirange_out(PG_FUNCTION_ARGS)
+{
+	return multirange_out(fcinfo);
+}
+
+/*
  * anymultirange_in		- input routine for pseudo-type ANYMULTIRANGE.
  */
 Datum

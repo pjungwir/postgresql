@@ -327,6 +327,14 @@
         with automatic promotion of multiple arguments to a common data type
         </entry>
        </row>
+
+       <row>
+        <entry><type>anycompatiblemultirange</type></entry>
+        <entry>Common</entry>
+        <entry>Indicates that a function accepts any multirange data type,
+        with automatic promotion of multiple arguments to a common data type
+        </entry>
+       </row>
       </tbody>
      </tgroup>
     </table>
@@ -439,7 +447,8 @@
      Selection of the common type considers the actual types
      of <type>anycompatible</type> and <type>anycompatiblenonarray</type>
      inputs, the array element types of <type>anycompatiblearray</type>
-     inputs, and the range subtypes of <type>anycompatiblerange</type>
+     inputs, the range subtypes of <type>anycompatiblerange</type> inputs,
+     and the multirange subtypes of <type>anycompatiablemultirange</type>
      inputs.  If <type>anycompatiblenonarray</type> is present then the
      common type is required to be a non-array type.  Once a common type is
      identified, arguments in <type>anycompatible</type>
@@ -450,12 +459,15 @@
 
     <para>
      Since there is no way to select a range type knowing only its subtype,
-     use of <type>anycompatiblerange</type> requires that all arguments
-     declared with that type have the same actual range type, and that that
-     type's subtype agree with the selected common type, so that no casting
-     of the range values is required.  As with <type>anyrange</type>, use
-     of <type>anycompatiblerange</type> as a function result type requires
-     that there be an <type>anycompatiblerange</type> argument.
+     use of <type>anycompatiblerange</type> and/or
+     <type>anycompatiblemultirange</type> requires that all arguments declared
+     with that type have the same actual range and/or multirange type, and that
+     that type's subtype agree with the selected common type, so that no casting
+     of the range values is required.  As with <type>anyrange</type> and
+     <type>anymultirange</type>, use of <type>anycompatiblerange</type> and
+     <type>anymultirange</type> as a function result type requires that there be
+     an <type>anycompatiblerange</type> or <type>anycompatiblemultirange</type>
+     argument.
     </para>
 
     <para>

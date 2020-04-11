@@ -1448,7 +1448,7 @@ drop function anycompatiblearray_anycompatiblerange_func(anycompatiblearray, any
 create function bogus_func(anycompatible)
   returns anycompatiblerange as 'select int4range(1,10)' language sql;
 ERROR:  cannot determine result data type
-DETAIL:  A result of type anycompatiblerange requires at least one input of type anycompatiblerange.
+DETAIL:  A result of type anycompatiblerange requires at least one input of type anycompatiblerange or anycompatiblemultirange.
 --
 -- Arrays of ranges
 --

@@ -319,7 +319,8 @@ DECLARE_UNIQUE_INDEX(pg_type_typname_nsp_index, 2704, on pg_type using btree(typ
 	((typid) == ANYCOMPATIBLEOID || \
 	 (typid) == ANYCOMPATIBLEARRAYOID || \
 	 (typid) == ANYCOMPATIBLENONARRAYOID || \
-	 (typid) == ANYCOMPATIBLERANGEOID)
+	 (typid) == ANYCOMPATIBLERANGEOID || \
+	 (typid) == ANYCOMPATIBLEMULTIRANGEOID)
 
 /*
  * Backwards compatibility for ancient random spellings of pg_type OID macros.

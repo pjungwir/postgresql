@@ -528,6 +528,32 @@ create function multirangetypes_sql(q anymultirange, b anyarray, out c anyelemen
 select multirangetypes_sql(int4multirange(int4range(1,10)), ARRAY[2,20]);
 select multirangetypes_sql(nummultirange(numrange(1,10)), ARRAY[2,20]);  -- match failure
 
+create function anycompatiblearray_anycompatiblemultirange_func(a anycompatiblearray, mr anycompatiblemultirange)
+  returns anycompatible as 'select $1[1] + lower($2);' language sql;
+
+select anycompatiblearray_anycompatiblemultirange_func(ARRAY[1,2], multirange(int4range(10,20)));
+
+select anycompatiblearray_anycompatiblemultirange_func(ARRAY[1,2], multirange(numrange(10,20)));
+
+-- should fail
+select anycompatiblearray_anycompatiblemultirange_func(ARRAY[1.1,2], multirange(int4range(10,20)));
+
+drop function anycompatiblearray_anycompatiblemultirange_func(anycompatiblearray, anycompatiblemultirange);
+
+create function anycompatiblerange_anycompatiblemultirange_func(r anycompatiblerange, mr anycompatiblemultirange)
+  returns anycompatible as 'select lower($1) + lower($2);' language sql;
+
+select anycompatiblerange_anycompatiblemultirange_func(int4range(1,2), multirange(int4range(10,20)));
+
+-- should fail
+select anycompatiblerange_anycompatiblemultirange_func(numrange(1,2), multirange(int4range(10,20)));
+
+drop function anycompatiblerange_anycompatiblemultirange_func(anycompatiblerange, anycompatiblemultirange);
+
+-- should fail
+create function bogus_func(anycompatible)
+  returns anycompatiblerange as 'select int4range(1,10)' language sql;
+
 --
 -- Arrays of multiranges
 --

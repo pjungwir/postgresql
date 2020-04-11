@@ -2243,6 +2243,47 @@ ERROR:  function multirangetypes_sql(nummultirange, integer[]) does not exist
 LINE 1: select multirangetypes_sql(nummultirange(numrange(1,10)), AR...
                ^
 HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+create function anycompatiblearray_anycompatiblemultirange_func(a anycompatiblearray, mr anycompatiblemultirange)
+  returns anycompatible as 'select $1[1] + lower($2);' language sql;
+select anycompatiblearray_anycompatiblemultirange_func(ARRAY[1,2], multirange(int4range(10,20)));
+ anycompatiblearray_anycompatiblemultirange_func 
+-------------------------------------------------
+                                              11
+(1 row)
+
+select anycompatiblearray_anycompatiblemultirange_func(ARRAY[1,2], multirange(numrange(10,20)));
+ anycompatiblearray_anycompatiblemultirange_func 
+-------------------------------------------------
+                                              11
+(1 row)
+
+-- should fail
+select anycompatiblearray_anycompatiblemultirange_func(ARRAY[1.1,2], multirange(int4range(10,20)));
+ERROR:  function anycompatiblearray_anycompatiblemultirange_func(numeric[], int4multirange) does not exist
+LINE 1: select anycompatiblearray_anycompatiblemultirange_func(ARRAY...
+               ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+drop function anycompatiblearray_anycompatiblemultirange_func(anycompatiblearray, anycompatiblemultirange);
+create function anycompatiblerange_anycompatiblemultirange_func(r anycompatiblerange, mr anycompatiblemultirange)
+  returns anycompatible as 'select lower($1) + lower($2);' language sql;
+select anycompatiblerange_anycompatiblemultirange_func(int4range(1,2), multirange(int4range(10,20)));
+ anycompatiblerange_anycompatiblemultirange_func 
+-------------------------------------------------
+                                              11
+(1 row)
+
+-- should fail
+select anycompatiblerange_anycompatiblemultirange_func(numrange(1,2), multirange(int4range(10,20)));
+ERROR:  function anycompatiblerange_anycompatiblemultirange_func(numrange, int4multirange) does not exist
+LINE 1: select anycompatiblerange_anycompatiblemultirange_func(numra...
+               ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+drop function anycompatiblerange_anycompatiblemultirange_func(anycompatiblerange, anycompatiblemultirange);
+-- should fail
+create function bogus_func(anycompatible)
+  returns anycompatiblerange as 'select int4range(1,10)' language sql;
+ERROR:  cannot determine result data type
+DETAIL:  A result of type anycompatiblerange requires at least one input of type anycompatiblerange or anycompatiblemultirange.
 --
 -- Arrays of multiranges
 --

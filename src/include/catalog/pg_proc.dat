@@ -7252,6 +7252,14 @@
   proname => 'anycompatiblerange_out', provolatile => 's',
   prorettype => 'cstring', proargtypes => 'anycompatiblerange',
   prosrc => 'anycompatiblerange_out' },
+{ oid => '8154', descr => 'I/O',
+  proname => 'anycompatiblemultirange_in', provolatile => 's',
+  prorettype => 'anycompatiblemultirange', proargtypes => 'cstring oid int4',
+  prosrc => 'anycompatiblemultirange_in' },
+{ oid => '8155', descr => 'I/O',
+  proname => 'anycompatiblemultirange_out', provolatile => 's',
+  prorettype => 'cstring', proargtypes => 'anycompatiblemultirange',
+  prosrc => 'anycompatiblemultirange_out' },
 
 # tablesample method handlers
 { oid => '3313', descr => 'BERNOULLI tablesample method handler',
