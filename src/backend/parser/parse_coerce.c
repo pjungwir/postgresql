@@ -1954,10 +1954,10 @@ check_generic_type_consistency(const Oid *actual_arg_types,
  *	  argument's actual type as the function's return type.
  * 2) If return type is ANYARRAY, and any argument is ANYARRAY, use the
  *	  argument's actual type as the function's return type.
- * 3) Similarly, if return type is ANYRANGE, and any argument is ANYRANGE,
- *	  use the argument's actual type as the function's return type. Or
- *	  if any argument is ANYMULTIRANGE, use its range type as the function's
- *	  return type.
+ * 3) Similarly, if return type is ANYRANGE or ANYMULTIRANGE, and any
+ *	  argument is ANYRANGE or ANYMULTIRANGE, use that argument's
+ *	  actual type, range type or multirange type as the function's return
+ *	  type.
  * 4) Otherwise, if return type is ANYMULTIRANGE, and any argument is
  *	  ANYMULTIRANGE, use the argument's actual type as the function's return
  *	  type. Or if any argument is ANYRANGE, use its multirange type as the
@@ -1974,7 +1974,7 @@ check_generic_type_consistency(const Oid *actual_arg_types,
  *	  we add the extra condition that the ANYELEMENT type must not be an array.
  *	  (This is a no-op if used in combination with ANYARRAY or ANYENUM, but
  *	  is an extra restriction if not.)
- * 8) ANYCOMPATIBLE, ANYCOMPATIBLEARRAY, ANYCOMPATIBLENONARRAY, and
+ * 9) ANYCOMPATIBLE, ANYCOMPATIBLEARRAY, ANYCOMPATIBLENONARRAY, and
  *	  ANYCOMPATIBLERANGE are handled by resolving the common supertype
  *	  of those arguments (or their element types/subtypes, for array and range
  *	  inputs), and then coercing all those arguments to the common supertype,
