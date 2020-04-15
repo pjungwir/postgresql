@@ -366,17 +366,14 @@ RI_FKey_check(TriggerData *trigdata)
 		 * the FK's range is completely covered.
 		 * So we use this query instead:
 		 *  SELECT 1
-		 *  FROM (
-		 *	    SELECT	range_agg(r) AS r
-		 *	    FROM	(
-		 *			SELECT pkperiodatt AS r
-		 *			FROM   [ONLY] pktable x
-		 *			WHERE  pkatt1 = $1 [AND ...]
-		 *			FOR KEY SHARE OF x
-		 *		) x1
-		 *  ) x2
-		 *  WHERE $n <@ x2.r
-		 * Note if FOR KEY SHARE ever allows aggregate functions
+		 *	FROM	(
+		 *		SELECT pkperiodatt AS r
+		 *		FROM   [ONLY] pktable x
+		 *		WHERE  pkatt1 = $1 [AND ...]
+		 *		FOR KEY SHARE OF x
+		 *	) x1
+		 *  HAVING $n <@ range_agg(x1.r)
+		 * Note if FOR KEY SHARE ever allows GROUP BY and HAVING
 		 * we can make this a bit simpler.
 		 * ----------
 		 */
@@ -389,7 +386,7 @@ RI_FKey_check(TriggerData *trigdata)
 			quoteOneName(attname,
 					RIAttName(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]));
 			appendStringInfo(&querybuf,
-					"SELECT 1 FROM (SELECT range_agg(r) AS r FROM (SELECT %s AS r FROM %s%s x",
+					"SELECT 1 FROM (SELECT %s AS r FROM %s%s x",
 					attname, pk_only, pkrelname);
 		}
 		else {
@@ -414,7 +411,7 @@ RI_FKey_check(TriggerData *trigdata)
 		}
 		appendStringInfoString(&querybuf, " FOR KEY SHARE OF x");
 		if (riinfo->temporal)
-			appendStringInfo(&querybuf, ") x1) x2 WHERE $%d <@ x2.r", riinfo->nkeys);
+			appendStringInfo(&querybuf, ") x1 HAVING $%d <@ range_agg(x1.r)", riinfo->nkeys);
 
 		/* Prepare and save the plan */
 		qplan = ri_PlanCheck(querybuf.data, riinfo->nkeys, queryoids,
