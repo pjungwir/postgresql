@@ -721,7 +721,6 @@ ExecForPortionOfLeftovers(ModifyTableState *mtstate, EState *estate, ResultRelIn
 	TupleTableSlot *oldtupleSlot = resultRelInfo->ri_forPortionOf->fp_Existing;
 	TupleTableSlot *leftoverTuple1 = resultRelInfo->ri_forPortionOf->fp_Leftover1;
 	TupleTableSlot *leftoverTuple2 = resultRelInfo->ri_forPortionOf->fp_Leftover2;
-	char *rangestr;
 
 	/* Get the range of the existing pre-UPDATE/DELETE tuple */
 
