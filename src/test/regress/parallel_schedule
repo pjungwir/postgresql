@@ -29,7 +29,7 @@ test: strings numerology point lseg line box path polygon circle date time timet
 # geometry depends on point, lseg, box, path, polygon and circle
 # horology depends on interval, timetz, timestamp, timestamptz
 # ----------
-test: geometry horology regex oidjoins type_sanity opr_sanity misc_sanity comments expressions unicode xid
+test: geometry horology regex oidjoins type_sanity opr_sanity misc_sanity comments expressions unicode xid without_overlaps
 
 # ----------
 # These four each depend on the previous one
@@ -57,7 +57,7 @@ test: create_index create_index_spgist create_view index_including index_includi
 # ----------
 # Another group of parallel tests
 # ----------
-test: create_aggregate create_function_3 create_cast constraints triggers select inherit typed_table periods vacuum drop_if_exists updatable_views roleattributes create_am hash_func errors infinite_recurse
+test: create_aggregate create_function_3 create_cast constraints triggers select inherit typed_table periods vacuum drop_if_exists updatable_views roleattributes create_am hash_func errors infinite_recurse for_portion_of
 
 # ----------
 # sanity_check does a vacuum, affecting the sort order of SELECT *
@@ -109,12 +109,12 @@ test: json jsonb json_encoding jsonpath jsonpath_encoding jsonb_jsonpath
 # NB: temp.sql does a reconnect which transiently uses 2 connections,
 # so keep this parallel group to at most 19 tests
 # ----------
-test: plancache limit plpgsql copy2 temp domain rangefuncs prepare conversion truncate alter_table sequence polymorphism rowtypes returning largeobject with xml without_overlaps
+test: plancache limit plpgsql copy2 temp domain rangefuncs prepare conversion truncate alter_table sequence polymorphism rowtypes returning largeobject with xml
 
 # ----------
 # Another group of parallel tests
 # ----------
-test: partition_join partition_prune reloptions hash_part indexing partition_aggregate partition_info tuplesort explain without_overlaps for_portion_of
+test: partition_join partition_prune reloptions hash_part indexing partition_aggregate partition_info tuplesort explain
 
 # event triggers cannot run concurrently with any test that runs DDL
 test: event_trigger
