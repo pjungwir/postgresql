@@ -1206,37 +1206,13 @@ transformForPortionOfClause(ParseState *pstate,
 				 parser_errposition(pstate, forPortionOf->range_name_location)));
 
 	/*
-	 * targetStart and End are literal strings
-	 * that we'll coerce to the range's element type later.
-	 * But if they are "Infinity" or "-Infinity" we should set them to NULL,
-	 * because ranges treat NULL as "further" than +/-Infinity.
+	 * Build a range from the FROM ... TO .... bounds.
+	 * This should give a constant result, so we accept functions like NOW()
+	 * but not column references, subqueries, etc.
 	 */
-	if (pg_strcasecmp(((A_Const *) forPortionOf->target_start)->val.val.str,
-					  "-Infinity") == 0)
-	{
-		A_Const *n = makeNode(A_Const);
-		n->val.type = T_Null;
-		n->location = ((A_Const*)forPortionOf->target_start)->location;
-		result->targetStart = (Node *) n;
-	}
-	else
-		result->targetStart = forPortionOf->target_start;
-
-	if (pg_strcasecmp(((A_Const *) forPortionOf->target_end)->val.val.str,
-					  "Infinity") == 0)
-	{
-		A_Const *n = makeNode(A_Const);
-		n->val.type = T_Null;
-		n->location = ((A_Const*)forPortionOf->target_end)->location;
-		result->targetEnd = (Node *) n;
-	}
-	else
-		result->targetEnd = forPortionOf->target_end;
-
 	FuncCall *fc = makeFuncCall(SystemFuncName(range_type_name),
-								list_make2(result->targetStart,
-										   result->targetEnd),
-								// TODO: FROM...TO... location instead?:
+								list_make2(forPortionOf->target_start,
+										   forPortionOf->target_end),
 								forPortionOf->range_name_location);
 	result->targetRange = transformExpr(pstate, (Node *) fc, EXPR_KIND_UPDATE_PORTION);
 
@@ -1256,6 +1232,7 @@ transformForPortionOfClause(ParseState *pstate,
 	 * We also compute the possible left-behind bits at the start and end of the tuple,
 	 * so that we can INSERT them if necessary.
 	 */
+	// TODO: Only do this for UPDATE, not DELETE:
 	targetList = NIL;
 	if (range_attno != InvalidAttrNumber)
 	{
