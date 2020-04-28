@@ -771,6 +771,16 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 %nonassoc	BETWEEN IN_P LIKE ILIKE SIMILAR NOT_LA
 %nonassoc	ESCAPE			/* ESCAPE must be just above LIKE/ILIKE/SIMILAR */
 /*
+ * We need to handle this shift/reduce conflict:
+ * FOR PORTION OF valid_at FROM INTERVAL YEAR TO MONTH TO foo.
+ * This is basically the classic "dangling else" problem, and we want a
+ * similar resolution: treat the TO as part of the INTERVAL, not as part of
+ * the FROM ... TO .... Users can add parentheses if that's a problem.
+ * TO just needs to be higher precedence than YEAR_P etc.
+ */
+%nonassoc YEAR_P MONTH_P DAY_P HOUR_P MINUTE_P
+%nonassoc TO
+/*
  * To support target_el without AS, it used to be necessary to assign IDENT an
  * explicit precedence just less than Op.  While that's not really necessary
  * since we removed postfix operators, it's still helpful to do so because
@@ -12559,18 +12569,17 @@ relation_expr_opt_alias: relation_expr					%prec UMINUS
 		;
 
 for_portion_of_clause:
-			FOR PORTION OF ColId FROM Sconst TO Sconst
+			FOR PORTION OF ColId FROM a_expr TO a_expr
 				{
 					ForPortionOfClause *n = makeNode(ForPortionOfClause);
 					n->range_name = $4;
 					n->range_name_location = @4;
-					n->target_start = makeStringConst($6, @6);
-					n->target_end = makeStringConst($8, @8);
+					n->target_start = $6;
+					n->target_end = $8;
 					$$ = n;
 				}
 			| /*EMPTY*/					{ $$ = NULL; }
 		;
-
 
 /*
  * TABLESAMPLE decoration in a FROM item
