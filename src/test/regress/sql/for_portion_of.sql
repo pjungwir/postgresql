@@ -8,11 +8,11 @@ CREATE TABLE for_portion_of_test (
 );
 
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-01-15' TO 'Infinity'
+FOR PORTION OF valid_at FROM '2018-01-15' TO NULL
 SET name = 'foo';
 
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-01-15' TO 'Infinity';
+FOR PORTION OF valid_at FROM '2018-01-15' TO NULL;
 
 DROP TABLE for_portion_of_test;
 CREATE TABLE for_portion_of_test (
@@ -38,24 +38,19 @@ VALUES
 
 -- Setting with a missing column fails
 UPDATE for_portion_of_test
-FOR PORTION OF invalid_at FROM '2018-06-01' TO 'Infinity'
+FOR PORTION OF invalid_at FROM '2018-06-01' TO NULL
 SET name = 'foo'
 WHERE id = '[5,6)';
 
 -- Setting the range fails
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-06-01' TO 'Infinity'
+FOR PORTION OF valid_at FROM '2018-06-01' TO NULL
 SET valid_at = '[1990-01-01,1999-01-01)'
 WHERE id = '[5,6)';
 
 -- Setting with timestamps reversed fails
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM '2018-06-01' TO '2018-01-01'
-SET name = 'three^1'
-WHERE id = '[3,4)';
-
-UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM 'Infinity' TO '-Infinity'
 SET name = 'three^1'
 WHERE id = '[3,4)';
 
@@ -67,25 +62,25 @@ WHERE id = '[3,4)';
 
 -- Updating a finite/open portion with a finite/open target
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-06-01' TO 'Infinity'
+FOR PORTION OF valid_at FROM '2018-06-01' TO NULL
 SET name = 'three^1'
 WHERE id = '[3,4)';
 
 -- Updating a finite/open portion with an open/finite target
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '-Infinity' TO '2018-03-01'
+FOR PORTION OF valid_at FROM NULL TO '2018-03-01'
 SET name = 'three^2'
 WHERE id = '[3,4)';
 
 -- Updating an open/finite portion with an open/finite target
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '-Infinity' TO '2018-02-01'
+FOR PORTION OF valid_at FROM NULL TO '2018-02-01'
 SET name = 'four^1'
 WHERE id = '[4,5)';
 
 -- Updating an open/finite portion with a finite/open target
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2017-01-01' TO 'Infinity'
+FOR PORTION OF valid_at FROM '2017-01-01' TO NULL
 SET name = 'four^2'
 WHERE id = '[4,5)';
 
@@ -97,7 +92,7 @@ WHERE id = '[4,5)';
 
 -- Updating an enclosed span
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '-Infinity' TO 'Infinity'
+FOR PORTION OF valid_at FROM NULL TO NULL
 SET name = 'two^2'
 WHERE id = '[2,3)';
 
@@ -115,19 +110,27 @@ WHERE id = '[5,6)';
 
 -- Updating multiple enclosed spans
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '-Infinity' TO 'Infinity'
+FOR PORTION OF valid_at FROM NULL TO NULL
 SET name = 'one^2'
+WHERE id = '[1,2)';
+
+-- Updating with a shift/reduce conflict
+UPDATE for_portion_of_test
+FOR PORTION OF valid_at
+  FROM '2018-03-01' AT TIME ZONE INTERVAL '1' HOUR TO MINUTE
+  TO '2019-01-01'
+SET name = 'one^3'
 WHERE id = '[1,2)';
 
 -- Updating the non-range part of the PK:
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-02-15' TO 'Infinity'
+FOR PORTION OF valid_at FROM '2018-02-15' TO NULL
 SET id = '[6,7)'
 WHERE id = '[1,2)';
 
 -- UPDATE with no WHERE clause
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2030-01-01' TO 'Infinity'
+FOR PORTION OF valid_at FROM '2030-01-01' TO NULL
 SET name = name || '*';
 
 -- TODO: UPDATE with generated columns too
@@ -139,16 +142,12 @@ SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
 
 -- Deleting with a missing column fails
 DELETE FROM for_portion_of_test
-FOR PORTION OF invalid_at FROM '2018-06-01' TO 'Infinity'
+FOR PORTION OF invalid_at FROM '2018-06-01' TO NULL
 WHERE id = '[5,6)';
 
 -- Deleting with timestamps reversed fails
 DELETE FROM for_portion_of_test
 FOR PORTION OF valid_at FROM '2018-06-01' TO '2018-01-01'
-WHERE id = '[3,4)';
-
-DELETE FROM for_portion_of_test
-FOR PORTION OF valid_at FROM 'Infinity' TO '-Infinity'
 WHERE id = '[3,4)';
 
 -- Deleting with timestamps equal does nothing
@@ -163,22 +162,22 @@ WHERE id = '[5,6)';
 
 -- Deleting with a closed/open target
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-04-01' TO 'Infinity'
+FOR PORTION OF valid_at FROM '2018-04-01' TO NULL
 WHERE id = '[3,4)';
 
 -- Deleting with an open/closed target
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid_at FROM '-Infinity' TO '2018-02-08'
+FOR PORTION OF valid_at FROM NULL TO '2018-02-08'
 WHERE id = '[1,2)';
 
 -- Deleting with an open/open target
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid_at FROM '-Infinity' TO 'Infinity'
+FOR PORTION OF valid_at FROM NULL TO NULL
 WHERE id = '[6,7)';
 
 -- DELETE with no WHERE clause
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid_at FROM '2025-01-01' TO 'Infinity';
+FOR PORTION OF valid_at FROM '2025-01-01' TO NULL;
 
 SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
 
