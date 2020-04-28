@@ -370,6 +370,7 @@ RI_FKey_check(TriggerData *trigdata)
 		 *		SELECT pkperiodatt AS r
 		 *		FROM   [ONLY] pktable x
 		 *		WHERE  pkatt1 = $1 [AND ...]
+		 *		AND    pkperiodatt && $n
 		 *		FOR KEY SHARE OF x
 		 *	) x1
 		 *  HAVING $n <@ range_agg(x1.r)
@@ -411,7 +412,7 @@ RI_FKey_check(TriggerData *trigdata)
 		}
 		appendStringInfoString(&querybuf, " FOR KEY SHARE OF x");
 		if (riinfo->temporal)
-			appendStringInfo(&querybuf, ") x1 HAVING $%d <@ range_agg(x1.r)", riinfo->nkeys);
+			appendStringInfo(&querybuf, ") x1 HAVING $%d <@ pg_catalog.range_agg(x1.r)", riinfo->nkeys);
 
 		/* Prepare and save the plan */
 		qplan = ri_PlanCheck(querybuf.data, riinfo->nkeys, queryoids,
