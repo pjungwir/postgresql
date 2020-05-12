@@ -122,6 +122,20 @@ FOR PORTION OF valid_at
 SET name = 'one^3'
 WHERE id = '[1,2)';
 
+UPDATE for_portion_of_test
+FOR PORTION OF valid_at
+  FROM '2018-03-01' AT TIME ZONE INTERVAL '2' HOUR
+  TO '2019-01-01'
+SET name = 'one^4'
+WHERE id = '[1,2)';
+
+UPDATE for_portion_of_test
+FOR PORTION OF valid_at
+  FROM ('2018-03-01' AT TIME ZONE INTERVAL '2' HOUR)
+  TO '2019-01-01'
+SET name = 'one^4'
+WHERE id = '[1,2)';
+
 -- Updating the non-range part of the PK:
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM '2018-02-15' TO NULL
