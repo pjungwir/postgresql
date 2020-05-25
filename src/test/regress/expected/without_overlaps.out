@@ -73,23 +73,6 @@ SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'without_ove
  PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 (1 row)
 
-DROP TABLE without_overlaps_test;
-CREATE TABLE without_overlaps_test (
-	id int4range,
-	valid_at tsrange
-);
-ALTER TABLE without_overlaps_test
-	ADD CONSTRAINT without_overlaps_pk
-	PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
---
--- test pg_get_constraintdef
---
-SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'without_overlaps_pk';
-            pg_get_constraintdef             
----------------------------------------------
- PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
-(1 row)
-
 --
 -- test PK inserts
 --
