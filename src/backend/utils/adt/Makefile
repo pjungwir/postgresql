@@ -35,6 +35,7 @@ OBJS = \
 	float.o \
 	format_type.o \
 	formatting.o \
+	fp_triggers.o \
 	genfile.o \
 	geo_ops.o \
 	geo_selfuncs.o \

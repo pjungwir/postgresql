@@ -2165,6 +2165,7 @@ ExecBSInsertTriggers(EState *estate, ResultRelInfo *relinfo)
 	LocTriggerData.tg_newslot = NULL;
 	LocTriggerData.tg_oldtable = NULL;
 	LocTriggerData.tg_newtable = NULL;
+	LocTriggerData.tg_temporal = NULL;
 	for (i = 0; i < trigdesc->numtriggers; i++)
 	{
 		Trigger    *trigger = &trigdesc->triggers[i];
@@ -2225,6 +2226,7 @@ ExecBRInsertTriggers(EState *estate, ResultRelInfo *relinfo,
 	LocTriggerData.tg_newslot = NULL;
 	LocTriggerData.tg_oldtable = NULL;
 	LocTriggerData.tg_newtable = NULL;
+	LocTriggerData.tg_temporal = NULL;
 	for (i = 0; i < trigdesc->numtriggers; i++)
 	{
 		Trigger    *trigger = &trigdesc->triggers[i];
@@ -2307,6 +2309,7 @@ ExecIRInsertTriggers(EState *estate, ResultRelInfo *relinfo,
 	LocTriggerData.tg_newslot = NULL;
 	LocTriggerData.tg_oldtable = NULL;
 	LocTriggerData.tg_newtable = NULL;
+	LocTriggerData.tg_temporal = NULL;
 	for (i = 0; i < trigdesc->numtriggers; i++)
 	{
 		Trigger    *trigger = &trigdesc->triggers[i];
@@ -2382,6 +2385,7 @@ ExecBSDeleteTriggers(EState *estate, ResultRelInfo *relinfo)
 	LocTriggerData.tg_newslot = NULL;
 	LocTriggerData.tg_oldtable = NULL;
 	LocTriggerData.tg_newtable = NULL;
+	LocTriggerData.tg_temporal = relinfo->ri_forPortionOf;
 	for (i = 0; i < trigdesc->numtriggers; i++)
 	{
 		Trigger    *trigger = &trigdesc->triggers[i];
@@ -2483,6 +2487,7 @@ ExecBRDeleteTriggers(EState *estate, EPQState *epqstate,
 	LocTriggerData.tg_newslot = NULL;
 	LocTriggerData.tg_oldtable = NULL;
 	LocTriggerData.tg_newtable = NULL;
+	LocTriggerData.tg_temporal = relinfo->ri_forPortionOf;
 	for (i = 0; i < trigdesc->numtriggers; i++)
 	{
 		HeapTuple	newtuple;
@@ -2569,6 +2574,7 @@ ExecIRDeleteTriggers(EState *estate, ResultRelInfo *relinfo,
 	LocTriggerData.tg_newslot = NULL;
 	LocTriggerData.tg_oldtable = NULL;
 	LocTriggerData.tg_newtable = NULL;
+	LocTriggerData.tg_temporal = relinfo->ri_forPortionOf;
 
 	ExecForceStoreHeapTuple(trigtuple, slot, false);
 
@@ -2634,6 +2640,7 @@ ExecBSUpdateTriggers(EState *estate, ResultRelInfo *relinfo)
 	LocTriggerData.tg_newslot = NULL;
 	LocTriggerData.tg_oldtable = NULL;
 	LocTriggerData.tg_newtable = NULL;
+	LocTriggerData.tg_temporal = relinfo->ri_forPortionOf;
 	for (i = 0; i < trigdesc->numtriggers; i++)
 	{
 		Trigger    *trigger = &trigdesc->triggers[i];
@@ -2743,6 +2750,8 @@ ExecBRUpdateTriggers(EState *estate, EPQState *epqstate,
 	LocTriggerData.tg_relation = relinfo->ri_RelationDesc;
 	LocTriggerData.tg_oldtable = NULL;
 	LocTriggerData.tg_newtable = NULL;
+	LocTriggerData.tg_temporal = relinfo->ri_forPortionOf;
+
 	updatedCols = GetAllUpdatedColumns(relinfo, estate);
 	for (i = 0; i < trigdesc->numtriggers; i++)
 	{
@@ -2866,6 +2875,7 @@ ExecIRUpdateTriggers(EState *estate, ResultRelInfo *relinfo,
 	LocTriggerData.tg_relation = relinfo->ri_RelationDesc;
 	LocTriggerData.tg_oldtable = NULL;
 	LocTriggerData.tg_newtable = NULL;
+	LocTriggerData.tg_temporal = relinfo->ri_forPortionOf;
 
 	ExecForceStoreHeapTuple(trigtuple, oldslot, false);
 
@@ -2940,6 +2950,7 @@ ExecBSTruncateTriggers(EState *estate, ResultRelInfo *relinfo)
 	LocTriggerData.tg_newslot = NULL;
 	LocTriggerData.tg_oldtable = NULL;
 	LocTriggerData.tg_newtable = NULL;
+	LocTriggerData.tg_temporal = NULL;
 
 	for (i = 0; i < trigdesc->numtriggers; i++)
 	{
@@ -4011,6 +4022,7 @@ AfterTriggerExecute(EState *estate,
 	LocTriggerData.tg_event =
 		evtshared->ats_event & (TRIGGER_EVENT_OPMASK | TRIGGER_EVENT_ROW);
 	LocTriggerData.tg_relation = rel;
+	LocTriggerData.tg_temporal = relInfo->ri_forPortionOf;
 
 	MemoryContextReset(per_tuple_context);
 
