@@ -1155,7 +1155,7 @@ transformForPortionOfClause(ParseState *pstate,
 	/*
 	 * First look for a range column, then look for a period.
 	 */
-	range_attno = attnameAttNum(targetrel, range_name, true);
+	range_attno = attnameAttNum(targetrel, range_name, false);
 	if (range_attno != InvalidAttrNumber)
 	{
 		Form_pg_attribute attr = TupleDescAttr(targetrel->rd_att, range_attno - 1);

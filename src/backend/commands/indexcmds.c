@@ -1171,6 +1171,12 @@ DefineIndex(Oid relationId,
 	ObjectAddressSet(address, RelationRelationId, indexRelationId);
 
 	/*
+	 * If we created a temporal PK, create triggers for FOR PORTION OF queries.
+	 */
+	if (stmt->primary && stmt->istemporal)
+		CreateTemporalPrimaryKeyTriggers(rel, createdConstraintId, indexRelationId);
+
+	/*
 	 * Revert to original default_tablespace.  Must do this before any return
 	 * from this function, but after index_create, so this is a good time.
 	 */
