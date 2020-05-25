@@ -2418,6 +2418,7 @@ ExecBSDeleteTriggers(EState *estate, ResultRelInfo *relinfo)
 	LocTriggerData.tg_event = TRIGGER_EVENT_DELETE |
 		TRIGGER_EVENT_BEFORE;
 	LocTriggerData.tg_relation = relinfo->ri_RelationDesc;
+	LocTriggerData.tg_temporal = relinfo->ri_forPortionOf;
 	for (i = 0; i < trigdesc->numtriggers; i++)
 	{
 		Trigger    *trigger = &trigdesc->triggers[i];
@@ -2513,6 +2514,7 @@ ExecBRDeleteTriggers(EState *estate, EPQState *epqstate,
 		TRIGGER_EVENT_ROW |
 		TRIGGER_EVENT_BEFORE;
 	LocTriggerData.tg_relation = relinfo->ri_RelationDesc;
+	LocTriggerData.tg_temporal = relinfo->ri_forPortionOf;
 	for (i = 0; i < trigdesc->numtriggers; i++)
 	{
 		HeapTuple	newtuple;
@@ -2593,6 +2595,7 @@ ExecIRDeleteTriggers(EState *estate, ResultRelInfo *relinfo,
 		TRIGGER_EVENT_ROW |
 		TRIGGER_EVENT_INSTEAD;
 	LocTriggerData.tg_relation = relinfo->ri_RelationDesc;
+	LocTriggerData.tg_temporal = relinfo->ri_forPortionOf;
 
 	ExecForceStoreHeapTuple(trigtuple, slot, false);
 
@@ -2653,6 +2656,7 @@ ExecBSUpdateTriggers(EState *estate, ResultRelInfo *relinfo)
 		TRIGGER_EVENT_BEFORE;
 	LocTriggerData.tg_relation = relinfo->ri_RelationDesc;
 	LocTriggerData.tg_updatedcols = updatedCols;
+	LocTriggerData.tg_temporal = relinfo->ri_forPortionOf;
 	for (i = 0; i < trigdesc->numtriggers; i++)
 	{
 		Trigger    *trigger = &trigdesc->triggers[i];
@@ -2760,6 +2764,8 @@ ExecBRUpdateTriggers(EState *estate, EPQState *epqstate,
 		TRIGGER_EVENT_ROW |
 		TRIGGER_EVENT_BEFORE;
 	LocTriggerData.tg_relation = relinfo->ri_RelationDesc;
+	LocTriggerData.tg_temporal = relinfo->ri_forPortionOf;
+
 	updatedCols = GetAllUpdatedColumns(relinfo, estate);
 	LocTriggerData.tg_updatedcols = updatedCols;
 	for (i = 0; i < trigdesc->numtriggers; i++)
@@ -2892,6 +2898,7 @@ ExecIRUpdateTriggers(EState *estate, ResultRelInfo *relinfo,
 		TRIGGER_EVENT_ROW |
 		TRIGGER_EVENT_INSTEAD;
 	LocTriggerData.tg_relation = relinfo->ri_RelationDesc;
+	LocTriggerData.tg_temporal = relinfo->ri_forPortionOf;
 
 	ExecForceStoreHeapTuple(trigtuple, oldslot, false);
 
@@ -4033,6 +4040,7 @@ AfterTriggerExecute(EState *estate,
 	LocTriggerData.tg_relation = rel;
 	if (TRIGGER_FOR_UPDATE(LocTriggerData.tg_trigger->tgtype))
 		LocTriggerData.tg_updatedcols = evtshared->ats_modifiedcols;
+	LocTriggerData.tg_temporal = relInfo->ri_forPortionOf;
 
 	MemoryContextReset(per_tuple_context);
 
