@@ -398,11 +398,8 @@ typedef struct ForPortionOfState
 {
 	NodeTag		type;
 
-	TypeCacheEntry	*fp_rangetypcache;	/* type cache entry of the range */
-	RangeType		*fp_targetRange;	/* the range from FOR PORTION OF */
-	TupleTableSlot	*fp_Existing;	/* slot to store existing target tuple in */
-	TupleTableSlot	*fp_Leftover1;	/* slot to store leftover below the target range */
-	TupleTableSlot	*fp_Leftover2;	/* slot to store leftover above the target range */
+	char   *fp_rangeName;		/* the column/PERIOD named in FOR PORTION OF */
+	Datum	fp_targetRange;		/* the range from FOR PORTION OF */
 } ForPortionOfState;
 
 /*
