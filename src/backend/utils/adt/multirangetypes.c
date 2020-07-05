@@ -570,7 +570,7 @@ multirange_canonicalize(TypeCacheEntry *rangetyp, int32 input_range_count,
  * short varlena header.
  */
 void
-multirange_deserialize(MultirangeType *multirange,
+multirange_deserialize(const MultirangeType *multirange,
 					   int32 *range_count, RangeType ***ranges)
 {
 	RangeType  *r;
