@@ -581,7 +581,7 @@ multirange_deserialize(const MultirangeType *multirange,
 	*range_count = multirange->rangeCount;
 	if (*range_count == 0)
 	{
-		ranges = NULL;
+		*ranges = NULL;
 		return;
 	}
 
