@@ -34,7 +34,7 @@
 #include "utils/multirangetypes.h"
 #include "utils/timestamp.h"
 #include "utils/array.h"
-
+#include "utils/memutils.h"
 
 /* fn_extra cache entry for one of the range I/O functions */
 typedef struct MultirangeIOData
@@ -60,6 +60,370 @@ static MultirangeIOData *get_multirange_io_data(FunctionCallInfo fcinfo, Oid mlt
 static int32 multirange_canonicalize(TypeCacheEntry *rangetyp, int32 input_range_count,
 									 RangeType **ranges);
 
+
+/*
+ *----------------------------------------------------------
+ * EXPANDED TOAST FUNCTIONS
+ *----------------------------------------------------------
+ */
+
+/* "Methods" required for an expanded object */
+static Size EMR_get_flat_size(ExpandedObjectHeader *eohptr);
+static void EMR_flatten_into(ExpandedObjectHeader *eohptr,
+							void *result, Size allocated_size);
+
+static const ExpandedObjectMethods EMR_methods =
+{
+	EMR_get_flat_size,
+	EMR_flatten_into
+};
+
+/* Other local functions */
+
+static void shortrange_deserialize(TypeCacheEntry *typcache, const ShortRangeType *range,
+		RangeBound *lower, RangeBound *upper, bool *empty);
+static void shortrange_serialize(ShortRangeType *range, TypeCacheEntry *typcache, RangeBound *lower,
+		RangeBound *upper, bool empty);
+
+/*
+ * expand_multirange: convert a multirange Datum into an expanded multirange
+ *
+ * The expanded object will be a child of parentcontext.
+ */
+Datum
+expand_multirange(Datum multirangedatum, MemoryContext parentcontext, TypeCacheEntry *rangetyp)
+{
+	MultirangeType  *multirange;
+	ExpandedMultirangeHeader *emrh;
+	MemoryContext objcxt;
+	MemoryContext oldcxt;
+
+	/*
+	 * Allocate private context for expanded object.  We start by assuming
+	 * that the multirange won't be very large; but if it does grow a lot, don't
+	 * constrain aset.c's large-context behavior.
+	 */
+	objcxt = AllocSetContextCreate(parentcontext,
+								   "expanded multirange",
+								   ALLOCSET_START_SMALL_SIZES);
+
+	/* Set up expanded multirange header */
+	emrh = (ExpandedMultirangeHeader *)
+		MemoryContextAlloc(objcxt, sizeof(ExpandedMultirangeHeader));
+
+	EOH_init_header(&emrh->hdr, &EMR_methods, objcxt);
+	emrh->emr_magic = EMR_MAGIC;
+
+	/*
+	 * Detoast and copy source multirange into private context. We need to do
+	 * this so that we get our own copies of the upper/lower bounds.
+	 *
+	 * Note that this coding risks leaking some memory in the private context
+	 * if we have to fetch data from a TOAST table; however, experimentation
+	 * says that the leak is minimal.  Doing it this way saves a copy step,
+	 * which seems worthwhile, especially if the multirange is large enough to
+	 * need external storage.
+	 */
+	oldcxt = MemoryContextSwitchTo(objcxt);
+	multirange = DatumGetMultirangeTypePCopy(multirangedatum);
+
+	emrh->multirangetypid = multirange->multirangetypid;
+	emrh->rangeCount = multirange->rangeCount;
+
+	/* Convert each ShortRangeType into a RangeType */
+
+	ShortRangeType	*shortrange;
+	Pointer		ptr;
+	Pointer		end;
+	int32		i;
+	RangeBound	lower;
+	RangeBound	upper;
+	bool		empty;
+
+	if (emrh->rangeCount > 0)
+	{
+		emrh->ranges = palloc(emrh->rangeCount * sizeof(RangeType *));
+
+		ptr = (char *) multirange;
+		end = ptr + VARSIZE(multirange);
+		ptr = (char *) MAXALIGN(multirange + 1);
+		i = 0;
+		while (ptr < end)
+		{
+			shortrange = (ShortRangeType *) ptr;
+			shortrange_deserialize(rangetyp, shortrange, &lower, &upper, &empty);
+			emrh->ranges[i++] = make_range(rangetyp, &lower, &upper, empty);
+
+			ptr += MAXALIGN(VARSIZE(shortrange));
+		}
+	}
+	else
+	{
+		emrh->ranges = NULL;
+	}
+	MemoryContextSwitchTo(oldcxt);
+
+	/* return a R/W pointer to the expanded multirange */
+	return EOHPGetRWDatum(&emrh->hdr);
+}
+
+/*
+ * shortrange_deserialize: Extract bounds and empty flag from a ShortRangeType
+ */
+void shortrange_deserialize(TypeCacheEntry *typcache, const ShortRangeType *range,
+							RangeBound *lower, RangeBound *upper, bool *empty)
+{
+	char		flags;
+	int16		typlen;
+	bool		typbyval;
+	char		typalign;
+	Pointer		ptr;
+	Datum		lbound;
+	Datum		ubound;
+
+	/* fetch the flag byte */
+	flags = range->flags;
+
+	/* fetch information about range's element type */
+	typlen = typcache->rngelemtype->typlen;
+	typbyval = typcache->rngelemtype->typbyval;
+	typalign = typcache->rngelemtype->typalign;
+
+	/* initialize data pointer just after the range struct fields */
+	ptr = (Pointer) MAXALIGN(range + 1);
+
+	/* fetch lower bound, if any */
+	if (RANGE_HAS_LBOUND(flags))
+	{
+		/* att_align_pointer cannot be necessary here */
+		lbound = fetch_att(ptr, typbyval, typlen);
+		ptr = (Pointer) att_addlength_pointer(ptr, typlen, ptr);
+	}
+	else
+		lbound = (Datum) 0;
+
+	/* fetch upper bound, if any */
+	if (RANGE_HAS_UBOUND(flags))
+	{
+		ptr = (Pointer) att_align_pointer(ptr, typalign, typlen, ptr);
+		ubound = fetch_att(ptr, typbyval, typlen);
+		/* no need for att_addlength_pointer */
+	}
+	else
+		ubound = (Datum) 0;
+
+	/* emit results */
+
+	*empty = (flags & RANGE_EMPTY) != 0;
+
+	lower->val = lbound;
+	lower->infinite = (flags & RANGE_LB_INF) != 0;
+	lower->inclusive = (flags & RANGE_LB_INC) != 0;
+	lower->lower = true;
+
+	upper->val = ubound;
+	upper->infinite = (flags & RANGE_UB_INF) != 0;
+	upper->inclusive = (flags & RANGE_UB_INC) != 0;
+	upper->lower = false;
+}
+
+/*
+ * get_flat_size method for expanded multirange
+ */
+static Size
+EMR_get_flat_size(ExpandedObjectHeader *eohptr)
+{
+	ExpandedMultirangeHeader *emrh = (ExpandedMultirangeHeader *) eohptr;
+	RangeType  *range;
+	Size		nbytes;
+	int			i;
+
+	Assert(emrh->emr_magic == EMR_MAGIC);
+
+	/* If we have a cached size value, believe that */
+	if (emrh->flat_size)
+		return emrh->flat_size;
+
+	/*
+	 * Compute space needed by examining ranges.
+	 */
+	nbytes = MAXALIGN(sizeof(MultirangeType));
+	for (i = 0; i < emrh->rangeCount; i++)
+	{
+		range = emrh->ranges[i];
+		nbytes += MAXALIGN(VARSIZE(range) - sizeof(char));
+		/* check for overflow of total request */
+		if (!AllocSizeIsValid(nbytes))
+			ereport(ERROR,
+					(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+					 errmsg("multirange size exceeds the maximum allowed (%d)",
+							(int) MaxAllocSize)));
+	}
+
+	/* cache for next time */
+	emrh->flat_size = nbytes;
+
+	return nbytes;
+}
+
+/*
+ * flatten_into method for expanded multiranges
+ */
+static void
+EMR_flatten_into(ExpandedObjectHeader *eohptr,
+				 void *result, Size allocated_size)
+{
+	ExpandedMultirangeHeader *emrh = (ExpandedMultirangeHeader *) eohptr;
+	MultirangeType  *mrresult = (MultirangeType *) result;
+	TypeCacheEntry	*typcache;
+	int			rangeCount;
+	RangeType	**ranges;
+	RangeBound	lower;
+	RangeBound	upper;
+	bool		empty;
+	Pointer		ptr;
+	int			i;
+
+	Assert(emrh->emr_magic == EMR_MAGIC);
+
+	typcache = lookup_type_cache(emrh->multirangetypid, TYPECACHE_MULTIRANGE_INFO);
+	if (typcache->rngtype == NULL)
+		elog(ERROR, "type %u is not a multirange type", emrh->multirangetypid);
+
+	/* Fill result multirange from RangeTypes */
+	rangeCount = emrh->rangeCount;
+	ranges	= emrh->ranges;
+
+	/* We must ensure that any pad space is zero-filled */
+	memset(mrresult, 0, allocated_size);
+
+	SET_VARSIZE(mrresult, allocated_size);
+
+	/* Now fill in the datum with ShortRangeTypes */
+	mrresult->multirangetypid = emrh->multirangetypid;
+	mrresult->rangeCount = rangeCount;
+
+	ptr = (char *) MAXALIGN(mrresult + 1);
+	for (i = 0; i < rangeCount; i++)
+	{
+		range_deserialize(typcache->rngtype, ranges[i], &lower, &upper, &empty);
+		shortrange_serialize((ShortRangeType *) ptr, typcache->rngtype, &lower, &upper, empty);
+		ptr += MAXALIGN(VARSIZE(ptr));
+	}
+}
+
+/*
+ * shortrange_serialize: fill in pre-allocationed range param based on the
+ * given bounds and flags.
+ */
+static void
+shortrange_serialize(ShortRangeType *range, TypeCacheEntry *typcache,
+					 RangeBound *lower, RangeBound *upper, bool empty)
+{
+	int			cmp;
+	Size		msize;
+	Pointer		ptr;
+	int16		typlen;
+	bool		typbyval;
+	char		typalign;
+	char		typstorage;
+	char		flags = 0;
+
+	/*
+	 * Verify range is not invalid on its face, and construct flags value,
+	 * preventing any non-canonical combinations such as infinite+inclusive.
+	 */
+	Assert(lower->lower);
+	Assert(!upper->lower);
+
+	if (empty)
+		flags |= RANGE_EMPTY;
+	else
+	{
+		cmp = range_cmp_bound_values(typcache, lower, upper);
+
+		/* error check: if lower bound value is above upper, it's wrong */
+		if (cmp > 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_DATA_EXCEPTION),
+					 errmsg("range lower bound must be less than or equal to range upper bound")));
+
+		/* if bounds are equal, and not both inclusive, range is empty */
+		if (cmp == 0 && !(lower->inclusive && upper->inclusive))
+			flags |= RANGE_EMPTY;
+		else
+		{
+			/* infinite boundaries are never inclusive */
+			if (lower->infinite)
+				flags |= RANGE_LB_INF;
+			else if (lower->inclusive)
+				flags |= RANGE_LB_INC;
+			if (upper->infinite)
+				flags |= RANGE_UB_INF;
+			else if (upper->inclusive)
+				flags |= RANGE_UB_INC;
+		}
+	}
+
+	/* Fetch information about range's element type */
+	typlen = typcache->rngelemtype->typlen;
+	typbyval = typcache->rngelemtype->typbyval;
+	typalign = typcache->rngelemtype->typalign;
+	typstorage = typcache->rngelemtype->typstorage;
+
+	/* Count space for varlena header */
+	msize = sizeof(ShortRangeType);
+	Assert(msize == MAXALIGN(msize));
+
+	/* Count space for bounds */
+	if (RANGE_HAS_LBOUND(flags))
+	{
+		/*
+		 * Make sure item to be inserted is not toasted.  It is essential that
+		 * we not insert an out-of-line toast value pointer into a range
+		 * object, for the same reasons that arrays and records can't contain
+		 * them.  It would work to store a compressed-in-line value, but we
+		 * prefer to decompress and then let compression be applied to the
+		 * whole range object if necessary.  But, unlike arrays, we do allow
+		 * short-header varlena objects to stay as-is.
+		 */
+		if (typlen == -1)
+			lower->val = PointerGetDatum(PG_DETOAST_DATUM_PACKED(lower->val));
+
+		msize = datum_compute_size(msize, lower->val, typbyval, typalign,
+								   typlen, typstorage);
+	}
+
+	if (RANGE_HAS_UBOUND(flags))
+	{
+		/* Make sure item to be inserted is not toasted */
+		if (typlen == -1)
+			upper->val = PointerGetDatum(PG_DETOAST_DATUM_PACKED(upper->val));
+
+		msize = datum_compute_size(msize, upper->val, typbyval, typalign,
+								   typlen, typstorage);
+	}
+
+	SET_VARSIZE(range, msize);
+
+	ptr = (char *) (range + 1);
+
+	if (RANGE_HAS_LBOUND(flags))
+	{
+		Assert(lower->lower);
+		ptr = datum_write(ptr, lower->val, typbyval, typalign, typlen,
+						  typstorage);
+	}
+
+	if (RANGE_HAS_UBOUND(flags))
+	{
+		Assert(!upper->lower);
+		ptr = datum_write(ptr, upper->val, typbyval, typalign, typlen,
+						  typstorage);
+	}
+
+	range->flags = flags;
+}
 
 /*
  *----------------------------------------------------------
@@ -251,9 +615,9 @@ multirange_out(PG_FUNCTION_ARGS)
 	StringInfoData buf;
 	RangeType  *range;
 	char	   *rangeStr;
-	Pointer		ptr = (char *) multirange;
-	Pointer		end = ptr + VARSIZE(multirange);
-	int32		range_count = 0;
+	int32		range_count;
+	int32		i;
+	RangeType **ranges;
 
 	cache = get_multirange_io_data(fcinfo, mltrngtypoid, IOFunc_output);
 
@@ -261,16 +625,14 @@ multirange_out(PG_FUNCTION_ARGS)
 
 	appendStringInfoChar(&buf, '{');
 
-	ptr = (char *) MAXALIGN(multirange + 1);
-	while (ptr < end)
+	multirange_deserialize(cache->typcache->rngtype, multirange, &range_count, &ranges);
+	for (i = 0; i < range_count; i++)
 	{
-		if (range_count > 0)
+		if (i > 0)
 			appendStringInfoChar(&buf, ',');
-		range = (RangeType *) ptr;
+		range = ranges[i];
 		rangeStr = OutputFunctionCall(&cache->typioproc, RangeTypePGetDatum(range));
 		appendStringInfoString(&buf, rangeStr);
-		ptr += MAXALIGN(VARSIZE(range));
-		range_count++;
 	}
 
 	appendStringInfoChar(&buf, '}');
@@ -343,7 +705,7 @@ multirange_send(PG_FUNCTION_ARGS)
 
 	pq_sendint32(buf, multirange->rangeCount);
 
-	multirange_deserialize(multirange, &range_count, &ranges);
+	multirange_deserialize(cache->typcache->rngtype, multirange, &range_count, &ranges);
 	for (i = 0; i < range_count; i++)
 	{
 		Datum		range;
@@ -468,19 +830,22 @@ make_multirange(Oid mltrngtypoid, TypeCacheEntry *rangetyp, int32 range_count,
 	int			i;
 	int32		bytelen;
 	Pointer		ptr;
+	RangeBound	lower;
+	RangeBound	upper;
+	bool		empty;
 
 	/* Sort and merge input ranges. */
 	range_count = multirange_canonicalize(rangetyp, range_count, ranges);
 
 	/*
 	 * Count space for varlena header, multirange type's OID, other fields,
-	 * and padding so that RangeTypes start aligned.
+	 * and padding so that ShortRangeTypes start aligned.
 	 */
 	bytelen = MAXALIGN(sizeof(MultirangeType));
 
 	/* Count space for all ranges */
 	for (i = 0; i < range_count; i++)
-		bytelen += MAXALIGN(VARSIZE(ranges[i]));
+		bytelen += MAXALIGN(VARSIZE(ranges[i]) - sizeof(char));
 
 	/* Note: zero-fill is required here, just as in heap tuples */
 	multirange = palloc0(bytelen);
@@ -493,8 +858,9 @@ make_multirange(Oid mltrngtypoid, TypeCacheEntry *rangetyp, int32 range_count,
 	ptr = (char *) MAXALIGN(multirange + 1);
 	for (i = 0; i < range_count; i++)
 	{
-		memcpy(ptr, ranges[i], VARSIZE(ranges[i]));
-		ptr += MAXALIGN(VARSIZE(ranges[i]));
+		range_deserialize(rangetyp, ranges[i], &lower, &upper, &empty);
+		shortrange_serialize((ShortRangeType *) ptr, rangetyp, &lower, &upper, empty);
+		ptr += MAXALIGN(VARSIZE(ptr));
 	}
 
 	return multirange;
@@ -570,34 +936,22 @@ multirange_canonicalize(TypeCacheEntry *rangetyp, int32 input_range_count,
  * short varlena header.
  */
 void
-multirange_deserialize(const MultirangeType *multirange,
-					   int32 *range_count, RangeType ***ranges)
+multirange_deserialize(TypeCacheEntry *rangetyp,
+					   const MultirangeType *multirange, int32 *range_count,
+					   RangeType ***ranges)
 {
-	RangeType  *r;
-	Pointer		ptr;
-	Pointer		end;
-	int32		i;
+	ExpandedMultirangeHeader *emrh = (ExpandedMultirangeHeader *)
+		DatumGetEOHP(expand_multirange(MultirangeTypePGetDatum(multirange),
+									   CurrentMemoryContext, rangetyp));
 
-	*range_count = multirange->rangeCount;
+	*range_count = emrh->rangeCount;
 	if (*range_count == 0)
 	{
 		*ranges = NULL;
 		return;
 	}
 
-	*ranges = palloc0(*range_count * sizeof(RangeType *));
-
-	ptr = (char *) multirange;
-	end = ptr + VARSIZE(multirange);
-	ptr = (char *) MAXALIGN(multirange + 1);
-	i = 0;
-	while (ptr < end)
-	{
-		r = (RangeType *) ptr;
-		(*ranges)[i++] = r;
-
-		ptr += MAXALIGN(VARSIZE(r));
-	}
+	*ranges = emrh->ranges;
 }
 
 MultirangeType *
@@ -786,8 +1140,8 @@ multirange_union(PG_FUNCTION_ARGS)
 
 	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr1));
 
-	multirange_deserialize(mr1, &range_count1, &ranges1);
-	multirange_deserialize(mr2, &range_count2, &ranges2);
+	multirange_deserialize(typcache->rngtype, mr1, &range_count1, &ranges1);
+	multirange_deserialize(typcache->rngtype, mr2, &range_count2, &ranges2);
 
 	range_count3 = range_count1 + range_count2;
 	ranges3 = palloc0(range_count3 * sizeof(RangeType *));
@@ -817,8 +1171,8 @@ multirange_minus(PG_FUNCTION_ARGS)
 	if (MultirangeIsEmpty(mr1) || MultirangeIsEmpty(mr2))
 		PG_RETURN_MULTIRANGE_P(mr1);
 
-	multirange_deserialize(mr1, &range_count1, &ranges1);
-	multirange_deserialize(mr2, &range_count2, &ranges2);
+	multirange_deserialize(typcache->rngtype, mr1, &range_count1, &ranges1);
+	multirange_deserialize(typcache->rngtype, mr2, &range_count2, &ranges2);
 
 	PG_RETURN_MULTIRANGE_P(multirange_minus_internal(mltrngtypoid,
 													 rangetyp,
@@ -935,8 +1289,8 @@ multirange_intersect(PG_FUNCTION_ARGS)
 	if (MultirangeIsEmpty(mr1) || MultirangeIsEmpty(mr2))
 		PG_RETURN_MULTIRANGE_P(make_empty_multirange(mltrngtypoid, rangetyp));
 
-	multirange_deserialize(mr1, &range_count1, &ranges1);
-	multirange_deserialize(mr2, &range_count2, &ranges2);
+	multirange_deserialize(rangetyp, mr1, &range_count1, &ranges1);
+	multirange_deserialize(rangetyp, mr2, &range_count2, &ranges2);
 
 	PG_RETURN_MULTIRANGE_P(multirange_intersect_internal(mltrngtypoid,
 														 rangetyp,
@@ -1119,8 +1473,8 @@ multirange_intersect_agg_transfn(PG_FUNCTION_ARGS)
 	result = PG_GETARG_MULTIRANGE_P(0);
 	current = PG_GETARG_MULTIRANGE_P(1);
 
-	multirange_deserialize(result, &range_count1, &ranges1);
-	multirange_deserialize(current, &range_count2, &ranges2);
+	multirange_deserialize(typcache->rngtype, result, &range_count1, &ranges1);
+	multirange_deserialize(typcache->rngtype, current, &range_count2, &ranges2);
 
 	result = multirange_intersect_internal(mltrngtypoid,
 										   typcache->rngtype,
@@ -1150,7 +1504,7 @@ multirange_lower(PG_FUNCTION_ARGS)
 
 	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
 
-	multirange_deserialize(mr, &range_count, &ranges);
+	multirange_deserialize(typcache->rngtype, mr, &range_count, &ranges);
 
 	result = range_lower_internal(typcache->rngtype, ranges[0], &isnull);
 
@@ -1176,7 +1530,7 @@ multirange_upper(PG_FUNCTION_ARGS)
 
 	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
 
-	multirange_deserialize(mr, &range_count, &ranges);
+	multirange_deserialize(typcache->rngtype, mr, &range_count, &ranges);
 
 	result = range_upper_internal(typcache->rngtype, ranges[range_count - 1], &isnull);
 
@@ -1203,13 +1557,15 @@ Datum
 multirange_lower_inc(PG_FUNCTION_ARGS)
 {
 	MultirangeType *mr = PG_GETARG_MULTIRANGE_P(0);
+	TypeCacheEntry *typcache;
 	int32		range_count;
 	RangeType **ranges;
 
 	if (MultirangeIsEmpty(mr))
 		PG_RETURN_BOOL(false);
 
-	multirange_deserialize(mr, &range_count, &ranges);
+	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
+	multirange_deserialize(typcache->rngtype, mr, &range_count, &ranges);
 
 	PG_RETURN_BOOL(range_has_flag(ranges[0], RANGE_LB_INC));
 }
@@ -1219,13 +1575,15 @@ Datum
 multirange_upper_inc(PG_FUNCTION_ARGS)
 {
 	MultirangeType *mr = PG_GETARG_MULTIRANGE_P(0);
+	TypeCacheEntry *typcache;
 	int32		range_count;
 	RangeType **ranges;
 
 	if (MultirangeIsEmpty(mr))
 		PG_RETURN_BOOL(false);
 
-	multirange_deserialize(mr, &range_count, &ranges);
+	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
+	multirange_deserialize(typcache->rngtype, mr, &range_count, &ranges);
 
 	PG_RETURN_BOOL(range_has_flag(ranges[range_count - 1], RANGE_UB_INC));
 }
@@ -1235,13 +1593,15 @@ Datum
 multirange_lower_inf(PG_FUNCTION_ARGS)
 {
 	MultirangeType *mr = PG_GETARG_MULTIRANGE_P(0);
+	TypeCacheEntry *typcache;
 	int32		range_count;
 	RangeType **ranges;
 
 	if (MultirangeIsEmpty(mr))
 		PG_RETURN_BOOL(false);
 
-	multirange_deserialize(mr, &range_count, &ranges);
+	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
+	multirange_deserialize(typcache->rngtype, mr, &range_count, &ranges);
 
 	PG_RETURN_BOOL(range_has_flag(ranges[0], RANGE_LB_INF));
 }
@@ -1251,13 +1611,15 @@ Datum
 multirange_upper_inf(PG_FUNCTION_ARGS)
 {
 	MultirangeType *mr = PG_GETARG_MULTIRANGE_P(0);
+	TypeCacheEntry *typcache;
 	int32		range_count;
 	RangeType **ranges;
 
 	if (MultirangeIsEmpty(mr))
 		PG_RETURN_BOOL(false);
 
-	multirange_deserialize(mr, &range_count, &ranges);
+	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
+	multirange_deserialize(typcache->rngtype, mr, &range_count, &ranges);
 
 	PG_RETURN_BOOL(range_has_flag(ranges[range_count - 1], RANGE_UB_INF));
 }
@@ -1306,7 +1668,7 @@ multirange_contains_elem_internal(TypeCacheEntry *typcache, MultirangeType *mr, 
 
 	rangetyp = typcache->rngtype;
 
-	multirange_deserialize(mr, &range_count, &ranges);
+	multirange_deserialize(rangetyp, mr, &range_count, &ranges);
 
 	for (i = 0; i < range_count; i++)
 	{
@@ -1367,7 +1729,7 @@ multirange_contains_range_internal(TypeCacheEntry *typcache, MultirangeType *mr,
 	if (RangeIsEmpty(r))
 		return true;
 
-	multirange_deserialize(mr, &range_count, &ranges);
+	multirange_deserialize(rangetyp, mr, &range_count, &ranges);
 
 	for (i = 0; i < range_count; i++)
 	{
@@ -1398,8 +1760,8 @@ multirange_eq_internal(TypeCacheEntry *typcache, MultirangeType *mr1, Multirange
 	if (MultirangeTypeGetOid(mr1) != MultirangeTypeGetOid(mr2))
 		elog(ERROR, "multirange types do not match");
 
-	multirange_deserialize(mr1, &range_count_1, &ranges1);
-	multirange_deserialize(mr2, &range_count_2, &ranges2);
+	multirange_deserialize(typcache->rngtype, mr1, &range_count_1, &ranges1);
+	multirange_deserialize(typcache->rngtype, mr2, &range_count_2, &ranges2);
 
 	if (range_count_1 != range_count_2)
 		return false;
@@ -1504,7 +1866,7 @@ range_overlaps_multirange_internal(TypeCacheEntry *typcache, RangeType *r, Multi
 
 	rangetyp = typcache->rngtype;
 
-	multirange_deserialize(mr, &range_count, &ranges);
+	multirange_deserialize(rangetyp, mr, &range_count, &ranges);
 
 	/* Scan through mrr and once it gets to r they either overlap or not */
 	mrr = ranges[0];
@@ -1545,8 +1907,8 @@ multirange_overlaps_multirange_internal(TypeCacheEntry *typcache, MultirangeType
 
 	rangetyp = typcache->rngtype;
 
-	multirange_deserialize(mr1, &range_count1, &ranges1);
-	multirange_deserialize(mr2, &range_count2, &ranges2);
+	multirange_deserialize(rangetyp, mr1, &range_count1, &ranges1);
+	multirange_deserialize(rangetyp, mr2, &range_count2, &ranges2);
 
 	/*
 	 * Every range in mr1 gets a chance to overlap with the ranges in mr2, but
@@ -1595,7 +1957,7 @@ range_overleft_multirange(PG_FUNCTION_ARGS)
 
 	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
 
-	multirange_deserialize(mr, &range_count, &ranges);
+	multirange_deserialize(typcache->rngtype, mr, &range_count, &ranges);
 
 	PG_RETURN_BOOL(range_overleft_internal(typcache->rngtype, r, ranges[range_count - 1]));
 }
@@ -1614,7 +1976,7 @@ multirange_overleft_range(PG_FUNCTION_ARGS)
 
 	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
 
-	multirange_deserialize(mr, &range_count, &ranges);
+	multirange_deserialize(typcache->rngtype, mr, &range_count, &ranges);
 
 	PG_RETURN_BOOL(range_overleft_internal(typcache->rngtype,
 										   ranges[range_count - 1], r));
@@ -1636,8 +1998,8 @@ multirange_overleft_multirange(PG_FUNCTION_ARGS)
 
 	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr1));
 
-	multirange_deserialize(mr1, &range_count1, &ranges1);
-	multirange_deserialize(mr2, &range_count2, &ranges2);
+	multirange_deserialize(typcache->rngtype, mr1, &range_count1, &ranges1);
+	multirange_deserialize(typcache->rngtype, mr2, &range_count2, &ranges2);
 
 	PG_RETURN_BOOL(range_overleft_internal(typcache->rngtype,
 										   ranges1[range_count1 - 1],
@@ -1659,7 +2021,7 @@ range_overright_multirange(PG_FUNCTION_ARGS)
 
 	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
 
-	multirange_deserialize(mr, &range_count, &ranges);
+	multirange_deserialize(typcache->rngtype, mr, &range_count, &ranges);
 
 	PG_RETURN_BOOL(range_overright_internal(typcache->rngtype, r, ranges[0]));
 }
@@ -1678,7 +2040,7 @@ multirange_overright_range(PG_FUNCTION_ARGS)
 
 	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
 
-	multirange_deserialize(mr, &range_count, &ranges);
+	multirange_deserialize(typcache->rngtype, mr, &range_count, &ranges);
 
 	PG_RETURN_BOOL(range_overright_internal(typcache->rngtype, ranges[0], r));
 }
@@ -1699,8 +2061,8 @@ multirange_overright_multirange(PG_FUNCTION_ARGS)
 
 	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr1));
 
-	multirange_deserialize(mr1, &range_count1, &ranges1);
-	multirange_deserialize(mr2, &range_count2, &ranges2);
+	multirange_deserialize(typcache->rngtype, mr1, &range_count1, &ranges1);
+	multirange_deserialize(typcache->rngtype, mr2, &range_count2, &ranges2);
 
 	PG_RETURN_BOOL(range_overright_internal(typcache->rngtype,
 											ranges1[0],
@@ -1752,8 +2114,8 @@ multirange_contains_multirange_internal(TypeCacheEntry *typcache,
 
 	rangetyp = typcache->rngtype;
 
-	multirange_deserialize(mr1, &range_count1, &ranges1);
-	multirange_deserialize(mr2, &range_count2, &ranges2);
+	multirange_deserialize(typcache->rngtype, mr1, &range_count1, &ranges1);
+	multirange_deserialize(typcache->rngtype, mr2, &range_count2, &ranges2);
 
 	/*
 	 * We follow the same logic for empties as ranges: - an empty multirange
@@ -1885,7 +2247,7 @@ range_before_multirange_internal(TypeCacheEntry *typcache, RangeType *r,
 	if (RangeIsEmpty(r) || MultirangeIsEmpty(mr))
 		return false;
 
-	multirange_deserialize(mr, &range_count, &ranges);
+	multirange_deserialize(typcache->rngtype, mr, &range_count, &ranges);
 
 	return range_before_internal(typcache->rngtype, r, ranges[0]);
 }
@@ -1902,8 +2264,8 @@ multirange_before_multirange_internal(TypeCacheEntry *typcache, MultirangeType *
 	if (MultirangeIsEmpty(mr1) || MultirangeIsEmpty(mr2))
 		return false;
 
-	multirange_deserialize(mr1, &range_count1, &ranges1);
-	multirange_deserialize(mr2, &range_count2, &ranges2);
+	multirange_deserialize(typcache->rngtype, mr1, &range_count1, &ranges1);
+	multirange_deserialize(typcache->rngtype, mr2, &range_count2, &ranges2);
 
 	return range_before_internal(typcache->rngtype, ranges1[range_count1 - 1],
 								 ranges2[0]);
@@ -1920,7 +2282,7 @@ range_after_multirange_internal(TypeCacheEntry *typcache, RangeType *r,
 	if (RangeIsEmpty(r) || MultirangeIsEmpty(mr))
 		return false;
 
-	multirange_deserialize(mr, &range_count, &ranges);
+	multirange_deserialize(typcache->rngtype, mr, &range_count, &ranges);
 
 	return range_after_internal(typcache->rngtype, r, ranges[range_count - 1]);
 }
@@ -1940,7 +2302,7 @@ range_adjacent_multirange(PG_FUNCTION_ARGS)
 
 	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
 
-	multirange_deserialize(mr, &range_count, &ranges);
+	multirange_deserialize(typcache->rngtype, mr, &range_count, &ranges);
 
 	PG_RETURN_BOOL(range_adjacent_internal(typcache->rngtype, r, ranges[0]));
 }
@@ -1959,7 +2321,7 @@ multirange_adjacent_range(PG_FUNCTION_ARGS)
 
 	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
 
-	multirange_deserialize(mr, &range_count, &ranges);
+	multirange_deserialize(typcache->rngtype, mr, &range_count, &ranges);
 
 	PG_RETURN_BOOL(range_adjacent_internal(typcache->rngtype, ranges[range_count - 1], r));
 }
@@ -1980,8 +2342,8 @@ multirange_adjacent_multirange(PG_FUNCTION_ARGS)
 
 	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr1));
 
-	multirange_deserialize(mr1, &range_count1, &ranges1);
-	multirange_deserialize(mr2, &range_count2, &ranges2);
+	multirange_deserialize(typcache->rngtype, mr1, &range_count1, &ranges1);
+	multirange_deserialize(typcache->rngtype, mr2, &range_count2, &ranges2);
 
 	PG_RETURN_BOOL(range_adjacent_internal(typcache->rngtype, ranges1[range_count1 - 1], ranges2[0]));
 }
@@ -2011,8 +2373,8 @@ multirange_cmp(PG_FUNCTION_ARGS)
 
 	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr1));
 
-	multirange_deserialize(mr1, &range_count_1, &ranges1);
-	multirange_deserialize(mr2, &range_count_2, &ranges2);
+	multirange_deserialize(typcache->rngtype, mr1, &range_count_1, &ranges1);
+	multirange_deserialize(typcache->rngtype, mr2, &range_count_2, &ranges2);
 
 	/* Loop over source data */
 	range_count_max = Max(range_count_1, range_count_2);
@@ -2099,7 +2461,7 @@ range_merge_from_multirange(PG_FUNCTION_ARGS)
 	if (MultirangeIsEmpty(mr))
 		PG_RETURN_RANGE_P(make_empty_range(typcache->rngtype));
 
-	multirange_deserialize(mr, &range_count, &ranges);
+	multirange_deserialize(typcache->rngtype, mr, &range_count, &ranges);
 
 	PG_RETURN_RANGE_P(range_union_internal(typcache->rngtype, ranges[0],
 										   ranges[range_count - 1], false));
@@ -2121,7 +2483,7 @@ hash_multirange(PG_FUNCTION_ARGS)
 
 	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
 
-	multirange_deserialize(mr, &range_count, &ranges);
+	multirange_deserialize(typcache->rngtype, mr, &range_count, &ranges);
 	for (i = 0; i < range_count; i++)
 	{
 		uint32		elthash;
@@ -2159,7 +2521,7 @@ hash_multirange_extended(PG_FUNCTION_ARGS)
 
 	typcache = multirange_get_typcache(fcinfo, MultirangeTypeGetOid(mr));
 
-	multirange_deserialize(mr, &range_count, &ranges);
+	multirange_deserialize(typcache->rngtype, mr, &range_count, &ranges);
 	for (i = 0; i < range_count; i++)
 	{
 		uint64		elthash;

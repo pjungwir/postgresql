@@ -133,6 +133,10 @@ extern RangeType *range_intersect_internal(TypeCacheEntry *typcache, const Range
 										   const RangeType *r2);
 
 /* assorted support functions */
+extern Size datum_compute_size(Size sz, Datum datum, bool typbyval,
+							   char typalign, int16 typlen, char typstorage);
+extern Pointer datum_write(Pointer ptr, Datum datum, bool typbyval,
+						   char typalign, int16 typlen, char typstorage);
 extern TypeCacheEntry *range_get_typcache(FunctionCallInfo fcinfo,
 										  Oid rngtypid);
 extern RangeType *range_serialize(TypeCacheEntry *typcache, RangeBound *lower,

@@ -508,7 +508,7 @@ calc_hist_selectivity(TypeCacheEntry *typcache, VariableStatData *vardata,
 		memset(&lslot, 0, sizeof(lslot));
 
 	/* Extract the bounds of the constant value. */
-	multirange_deserialize(constval, &range_count, &ranges);
+	multirange_deserialize(rng_typcache, constval, &range_count, &ranges);
 	Assert(range_count > 0);
 	constrange = range_union_internal(rng_typcache, ranges[0],
 			ranges[range_count - 1], false);

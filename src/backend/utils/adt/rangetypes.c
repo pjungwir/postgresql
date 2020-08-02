@@ -62,10 +62,6 @@ static const char *range_parse_bound(const char *string, const char *ptr,
 static char *range_deparse(char flags, const char *lbound_str,
 						   const char *ubound_str);
 static char *range_bound_escape(const char *value);
-static Size datum_compute_size(Size sz, Datum datum, bool typbyval,
-							   char typalign, int16 typlen, char typstorage);
-static Pointer datum_write(Pointer ptr, Datum datum, bool typbyval,
-						   char typalign, int16 typlen, char typstorage);
 
 
 /*
@@ -2597,7 +2593,7 @@ range_contains_elem_internal(TypeCacheEntry *typcache, const RangeType *r, Datum
  * Increment data_length by the space needed by the datum, including any
  * preceding alignment padding.
  */
-static Size
+Size
 datum_compute_size(Size data_length, Datum val, bool typbyval, char typalign,
 				   int16 typlen, char typstorage)
 {
@@ -2623,7 +2619,7 @@ datum_compute_size(Size data_length, Datum val, bool typbyval, char typalign,
  * Write the given datum beginning at ptr (after advancing to correct
  * alignment, if needed).  Return the pointer incremented by space used.
  */
-static Pointer
+Pointer
 datum_write(Pointer ptr, Datum datum, bool typbyval, char typalign,
 			int16 typlen, char typstorage)
 {

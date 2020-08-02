@@ -194,7 +194,7 @@ compute_range_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 			{
 				int	range_count;
 				RangeType **ranges;
-				multirange_deserialize(multirange, &range_count, &ranges);
+				multirange_deserialize(typcache, multirange, &range_count, &ranges);
 				range = range_union_internal(typcache, ranges[0],
 						ranges[range_count - 1], false);
 			}
