@@ -2042,7 +2042,6 @@ enforce_generic_type_consistency(const Oid *actual_arg_types,
 	bool		have_anycompatible_nonarray = (rettype == ANYCOMPATIBLENONARRAYOID);
 	bool		have_anycompatible_array = (rettype == ANYCOMPATIBLEARRAYOID);
 	bool		have_anycompatible_range = (rettype == ANYCOMPATIBLERANGEOID);
-	bool		have_anycompatible_multirange = (rettype == ANYCOMPATIBLEMULTIRANGEOID);
 	int			n_poly_args = 0;	/* this counts all family-1 arguments */
 	int			n_anycompatible_args = 0;	/* this counts only non-unknowns */
 	Oid			anycompatible_actual_types[FUNC_MAX_ARGS];
@@ -2213,7 +2212,6 @@ enforce_generic_type_consistency(const Oid *actual_arg_types,
 		else if (decl_type == ANYCOMPATIBLEMULTIRANGEOID)
 		{
 			have_poly_anycompatible = true;
-			have_anycompatible_multirange = true;
 			if (actual_type == UNKNOWNOID)
 				continue;
 			if (allow_poly && decl_type == actual_type)
