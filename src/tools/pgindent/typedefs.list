@@ -2279,6 +2279,7 @@ ShellTypeInfo
 ShippableCacheEntry
 ShippableCacheKey
 ShmemIndexEnt
+ShortRangeType
 ShutdownForeignScan_function
 ShutdownInformation
 ShutdownMode
