@@ -131,17 +131,12 @@ expand_multirange(Datum multirangedatum, MemoryContext parentcontext, TypeCacheE
 	emrh->rangeCount = multirange->rangeCount;
 
 	/* Convert each ShortRangeType into a RangeType */
-
-	ShortRangeType	*shortrange;
-	Pointer		ptr;
-	Pointer		end;
-	int32		i;
-	RangeBound	lower;
-	RangeBound	upper;
-	bool		empty;
-
 	if (emrh->rangeCount > 0)
 	{
+		Pointer		ptr;
+		Pointer		end;
+		int32		i;
+
 		emrh->ranges = palloc(emrh->rangeCount * sizeof(RangeType *));
 
 		ptr = (char *) multirange;
@@ -150,6 +145,11 @@ expand_multirange(Datum multirangedatum, MemoryContext parentcontext, TypeCacheE
 		i = 0;
 		while (ptr < end)
 		{
+			ShortRangeType	*shortrange;
+			RangeBound	lower;
+			RangeBound	upper;
+			bool		empty;
+
 			shortrange = (ShortRangeType *) ptr;
 			shortrange_deserialize(rangetyp, shortrange, &lower, &upper, &empty);
 			emrh->ranges[i++] = make_range(rangetyp, &lower, &upper, empty);
