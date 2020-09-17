@@ -68,7 +68,7 @@ static void shortrange_serialize(ShortRangeType *range, TypeCacheEntry *typcache
 /* "Methods" required for an expanded object */
 static Size EMR_get_flat_size(ExpandedObjectHeader *eohptr);
 static void EMR_flatten_into(ExpandedObjectHeader *eohptr,
-							void *result, Size allocated_size);
+							 void *result, Size allocated_size);
 
 static const ExpandedObjectMethods EMR_methods =
 {
@@ -587,8 +587,8 @@ multirange_deserialize(TypeCacheEntry *rangetyp,
 					   RangeType ***ranges)
 {
 	ExpandedMultirangeHeader *emrh = (ExpandedMultirangeHeader *)
-		DatumGetEOHP(expand_multirange(MultirangeTypePGetDatum(multirange),
-									   CurrentMemoryContext, rangetyp));
+	DatumGetEOHP(expand_multirange(MultirangeTypePGetDatum(multirange),
+								   CurrentMemoryContext, rangetyp));
 
 	*range_count = emrh->rangeCount;
 	if (*range_count == 0)
@@ -620,15 +620,15 @@ make_empty_multirange(Oid mltrngtypoid, TypeCacheEntry *rangetyp)
 Datum
 expand_multirange(Datum multirangedatum, MemoryContext parentcontext, TypeCacheEntry *rangetyp)
 {
-	MultirangeType  *multirange;
+	MultirangeType *multirange;
 	ExpandedMultirangeHeader *emrh;
 	MemoryContext objcxt;
 	MemoryContext oldcxt;
 
 	/*
 	 * Allocate private context for expanded object.  We start by assuming
-	 * that the multirange won't be very large; but if it does grow a lot, don't
-	 * constrain aset.c's large-context behavior.
+	 * that the multirange won't be very large; but if it does grow a lot,
+	 * don't constrain aset.c's large-context behavior.
 	 */
 	objcxt = AllocSetContextCreate(parentcontext,
 								   "expanded multirange",
@@ -672,7 +672,7 @@ expand_multirange(Datum multirangedatum, MemoryContext parentcontext, TypeCacheE
 		i = 0;
 		while (ptr < end)
 		{
-			ShortRangeType	*shortrange;
+			ShortRangeType *shortrange;
 			RangeBound	lower;
 			RangeBound	upper;
 			bool		empty;
@@ -697,8 +697,9 @@ expand_multirange(Datum multirangedatum, MemoryContext parentcontext, TypeCacheE
 /*
  * shortrange_deserialize: Extract bounds and empty flag from a ShortRangeType
  */
-void shortrange_deserialize(TypeCacheEntry *typcache, const ShortRangeType *range,
-							RangeBound *lower, RangeBound *upper, bool *empty)
+void
+shortrange_deserialize(TypeCacheEntry *typcache, const ShortRangeType *range,
+					   RangeBound *lower, RangeBound *upper, bool *empty)
 {
 	char		flags;
 	int16		typlen;
@@ -801,10 +802,10 @@ EMR_flatten_into(ExpandedObjectHeader *eohptr,
 				 void *result, Size allocated_size)
 {
 	ExpandedMultirangeHeader *emrh = (ExpandedMultirangeHeader *) eohptr;
-	MultirangeType  *mrresult = (MultirangeType *) result;
-	TypeCacheEntry	*typcache;
+	MultirangeType *mrresult = (MultirangeType *) result;
+	TypeCacheEntry *typcache;
 	int			rangeCount;
-	RangeType	**ranges;
+	RangeType **ranges;
 	RangeBound	lower;
 	RangeBound	upper;
 	bool		empty;
@@ -819,7 +820,7 @@ EMR_flatten_into(ExpandedObjectHeader *eohptr,
 
 	/* Fill result multirange from RangeTypes */
 	rangeCount = emrh->rangeCount;
-	ranges	= emrh->ranges;
+	ranges = emrh->ranges;
 
 	/* We must ensure that any pad space is zero-filled */
 	memset(mrresult, 0, allocated_size);
@@ -1069,9 +1070,9 @@ multirange_constructor1(PG_FUNCTION_ARGS)
 	 */
 
 	if (PG_ARGISNULL(0))
-				ereport(ERROR,
-						(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
-						 errmsg("multirange values cannot contain NULL members")));
+		ereport(ERROR,
+				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
+				 errmsg("multirange values cannot contain NULL members")));
 
 	range = PG_GETARG_RANGE_P(0);
 
@@ -1105,7 +1106,7 @@ multirange_constructor0(PG_FUNCTION_ARGS)
 	if (PG_NARGS() == 0)
 		PG_RETURN_MULTIRANGE_P(make_multirange(mltrngtypid, rangetyp, 0, NULL));
 	else
-		elog(ERROR,		/* can't happen */
+		elog(ERROR,				/* can't happen */
 			 "niladic multirange constructor must not receive arguments");
 }
 
