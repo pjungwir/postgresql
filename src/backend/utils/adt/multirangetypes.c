@@ -59,13 +59,11 @@ static MultirangeIOData *get_multirange_io_data(FunctionCallInfo fcinfo, Oid mlt
 												IOFuncSelector func);
 static int32 multirange_canonicalize(TypeCacheEntry *rangetyp, int32 input_range_count,
 									 RangeType **ranges);
-
-
-/*
- *----------------------------------------------------------
- * EXPANDED TOAST FUNCTIONS
- *----------------------------------------------------------
- */
+static void shortrange_deserialize(TypeCacheEntry *typcache,
+								   const ShortRangeType *range,
+								   RangeBound *lower, RangeBound *upper, bool *empty);
+static void shortrange_serialize(ShortRangeType *range, TypeCacheEntry *typcache,
+								 RangeBound *lower, RangeBound *upper, bool empty);
 
 /* "Methods" required for an expanded object */
 static Size EMR_get_flat_size(ExpandedObjectHeader *eohptr);
@@ -77,353 +75,6 @@ static const ExpandedObjectMethods EMR_methods =
 	EMR_get_flat_size,
 	EMR_flatten_into
 };
-
-/* Other local functions */
-
-static void shortrange_deserialize(TypeCacheEntry *typcache, const ShortRangeType *range,
-		RangeBound *lower, RangeBound *upper, bool *empty);
-static void shortrange_serialize(ShortRangeType *range, TypeCacheEntry *typcache, RangeBound *lower,
-		RangeBound *upper, bool empty);
-
-/*
- * expand_multirange: convert a multirange Datum into an expanded multirange
- *
- * The expanded object will be a child of parentcontext.
- */
-Datum
-expand_multirange(Datum multirangedatum, MemoryContext parentcontext, TypeCacheEntry *rangetyp)
-{
-	MultirangeType  *multirange;
-	ExpandedMultirangeHeader *emrh;
-	MemoryContext objcxt;
-	MemoryContext oldcxt;
-
-	/*
-	 * Allocate private context for expanded object.  We start by assuming
-	 * that the multirange won't be very large; but if it does grow a lot, don't
-	 * constrain aset.c's large-context behavior.
-	 */
-	objcxt = AllocSetContextCreate(parentcontext,
-								   "expanded multirange",
-								   ALLOCSET_START_SMALL_SIZES);
-
-	/* Set up expanded multirange header */
-	emrh = (ExpandedMultirangeHeader *)
-		MemoryContextAlloc(objcxt, sizeof(ExpandedMultirangeHeader));
-
-	EOH_init_header(&emrh->hdr, &EMR_methods, objcxt);
-	emrh->emr_magic = EMR_MAGIC;
-
-	/*
-	 * Detoast and copy source multirange into private context. We need to do
-	 * this so that we get our own copies of the upper/lower bounds.
-	 *
-	 * Note that this coding risks leaking some memory in the private context
-	 * if we have to fetch data from a TOAST table; however, experimentation
-	 * says that the leak is minimal.  Doing it this way saves a copy step,
-	 * which seems worthwhile, especially if the multirange is large enough to
-	 * need external storage.
-	 */
-	oldcxt = MemoryContextSwitchTo(objcxt);
-	multirange = DatumGetMultirangeTypePCopy(multirangedatum);
-
-	emrh->multirangetypid = multirange->multirangetypid;
-	emrh->rangeCount = multirange->rangeCount;
-
-	/* Convert each ShortRangeType into a RangeType */
-	if (emrh->rangeCount > 0)
-	{
-		Pointer		ptr;
-		Pointer		end;
-		int32		i;
-
-		emrh->ranges = palloc(emrh->rangeCount * sizeof(RangeType *));
-
-		ptr = (char *) multirange;
-		end = ptr + VARSIZE(multirange);
-		ptr = (char *) MAXALIGN(multirange + 1);
-		i = 0;
-		while (ptr < end)
-		{
-			ShortRangeType	*shortrange;
-			RangeBound	lower;
-			RangeBound	upper;
-			bool		empty;
-
-			shortrange = (ShortRangeType *) ptr;
-			shortrange_deserialize(rangetyp, shortrange, &lower, &upper, &empty);
-			emrh->ranges[i++] = make_range(rangetyp, &lower, &upper, empty);
-
-			ptr += MAXALIGN(VARSIZE(shortrange));
-		}
-	}
-	else
-	{
-		emrh->ranges = NULL;
-	}
-	MemoryContextSwitchTo(oldcxt);
-
-	/* return a R/W pointer to the expanded multirange */
-	return EOHPGetRWDatum(&emrh->hdr);
-}
-
-/*
- * shortrange_deserialize: Extract bounds and empty flag from a ShortRangeType
- */
-void shortrange_deserialize(TypeCacheEntry *typcache, const ShortRangeType *range,
-							RangeBound *lower, RangeBound *upper, bool *empty)
-{
-	char		flags;
-	int16		typlen;
-	bool		typbyval;
-	char		typalign;
-	Pointer		ptr;
-	Datum		lbound;
-	Datum		ubound;
-
-	/* fetch the flag byte */
-	flags = range->flags;
-
-	/* fetch information about range's element type */
-	typlen = typcache->rngelemtype->typlen;
-	typbyval = typcache->rngelemtype->typbyval;
-	typalign = typcache->rngelemtype->typalign;
-
-	/* initialize data pointer just after the range struct fields */
-	ptr = (Pointer) MAXALIGN(range + 1);
-
-	/* fetch lower bound, if any */
-	if (RANGE_HAS_LBOUND(flags))
-	{
-		/* att_align_pointer cannot be necessary here */
-		lbound = fetch_att(ptr, typbyval, typlen);
-		ptr = (Pointer) att_addlength_pointer(ptr, typlen, ptr);
-	}
-	else
-		lbound = (Datum) 0;
-
-	/* fetch upper bound, if any */
-	if (RANGE_HAS_UBOUND(flags))
-	{
-		ptr = (Pointer) att_align_pointer(ptr, typalign, typlen, ptr);
-		ubound = fetch_att(ptr, typbyval, typlen);
-		/* no need for att_addlength_pointer */
-	}
-	else
-		ubound = (Datum) 0;
-
-	/* emit results */
-
-	*empty = (flags & RANGE_EMPTY) != 0;
-
-	lower->val = lbound;
-	lower->infinite = (flags & RANGE_LB_INF) != 0;
-	lower->inclusive = (flags & RANGE_LB_INC) != 0;
-	lower->lower = true;
-
-	upper->val = ubound;
-	upper->infinite = (flags & RANGE_UB_INF) != 0;
-	upper->inclusive = (flags & RANGE_UB_INC) != 0;
-	upper->lower = false;
-}
-
-/*
- * get_flat_size method for expanded multirange
- */
-static Size
-EMR_get_flat_size(ExpandedObjectHeader *eohptr)
-{
-	ExpandedMultirangeHeader *emrh = (ExpandedMultirangeHeader *) eohptr;
-	RangeType  *range;
-	Size		nbytes;
-	int			i;
-
-	Assert(emrh->emr_magic == EMR_MAGIC);
-
-	/* If we have a cached size value, believe that */
-	if (emrh->flat_size)
-		return emrh->flat_size;
-
-	/*
-	 * Compute space needed by examining ranges.
-	 */
-	nbytes = MAXALIGN(sizeof(MultirangeType));
-	for (i = 0; i < emrh->rangeCount; i++)
-	{
-		range = emrh->ranges[i];
-		nbytes += MAXALIGN(VARSIZE(range) - sizeof(char));
-		/* check for overflow of total request */
-		if (!AllocSizeIsValid(nbytes))
-			ereport(ERROR,
-					(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
-					 errmsg("multirange size exceeds the maximum allowed (%d)",
-							(int) MaxAllocSize)));
-	}
-
-	/* cache for next time */
-	emrh->flat_size = nbytes;
-
-	return nbytes;
-}
-
-/*
- * flatten_into method for expanded multiranges
- */
-static void
-EMR_flatten_into(ExpandedObjectHeader *eohptr,
-				 void *result, Size allocated_size)
-{
-	ExpandedMultirangeHeader *emrh = (ExpandedMultirangeHeader *) eohptr;
-	MultirangeType  *mrresult = (MultirangeType *) result;
-	TypeCacheEntry	*typcache;
-	int			rangeCount;
-	RangeType	**ranges;
-	RangeBound	lower;
-	RangeBound	upper;
-	bool		empty;
-	Pointer		ptr;
-	int			i;
-
-	Assert(emrh->emr_magic == EMR_MAGIC);
-
-	typcache = lookup_type_cache(emrh->multirangetypid, TYPECACHE_MULTIRANGE_INFO);
-	if (typcache->rngtype == NULL)
-		elog(ERROR, "type %u is not a multirange type", emrh->multirangetypid);
-
-	/* Fill result multirange from RangeTypes */
-	rangeCount = emrh->rangeCount;
-	ranges	= emrh->ranges;
-
-	/* We must ensure that any pad space is zero-filled */
-	memset(mrresult, 0, allocated_size);
-
-	SET_VARSIZE(mrresult, allocated_size);
-
-	/* Now fill in the datum with ShortRangeTypes */
-	mrresult->multirangetypid = emrh->multirangetypid;
-	mrresult->rangeCount = rangeCount;
-
-	ptr = (char *) MAXALIGN(mrresult + 1);
-	for (i = 0; i < rangeCount; i++)
-	{
-		range_deserialize(typcache->rngtype, ranges[i], &lower, &upper, &empty);
-		shortrange_serialize((ShortRangeType *) ptr, typcache->rngtype, &lower, &upper, empty);
-		ptr += MAXALIGN(VARSIZE(ptr));
-	}
-}
-
-/*
- * shortrange_serialize: fill in pre-allocationed range param based on the
- * given bounds and flags.
- */
-static void
-shortrange_serialize(ShortRangeType *range, TypeCacheEntry *typcache,
-					 RangeBound *lower, RangeBound *upper, bool empty)
-{
-	int			cmp;
-	Size		msize;
-	Pointer		ptr;
-	int16		typlen;
-	bool		typbyval;
-	char		typalign;
-	char		typstorage;
-	char		flags = 0;
-
-	/*
-	 * Verify range is not invalid on its face, and construct flags value,
-	 * preventing any non-canonical combinations such as infinite+inclusive.
-	 */
-	Assert(lower->lower);
-	Assert(!upper->lower);
-
-	if (empty)
-		flags |= RANGE_EMPTY;
-	else
-	{
-		cmp = range_cmp_bound_values(typcache, lower, upper);
-
-		/* error check: if lower bound value is above upper, it's wrong */
-		if (cmp > 0)
-			ereport(ERROR,
-					(errcode(ERRCODE_DATA_EXCEPTION),
-					 errmsg("range lower bound must be less than or equal to range upper bound")));
-
-		/* if bounds are equal, and not both inclusive, range is empty */
-		if (cmp == 0 && !(lower->inclusive && upper->inclusive))
-			flags |= RANGE_EMPTY;
-		else
-		{
-			/* infinite boundaries are never inclusive */
-			if (lower->infinite)
-				flags |= RANGE_LB_INF;
-			else if (lower->inclusive)
-				flags |= RANGE_LB_INC;
-			if (upper->infinite)
-				flags |= RANGE_UB_INF;
-			else if (upper->inclusive)
-				flags |= RANGE_UB_INC;
-		}
-	}
-
-	/* Fetch information about range's element type */
-	typlen = typcache->rngelemtype->typlen;
-	typbyval = typcache->rngelemtype->typbyval;
-	typalign = typcache->rngelemtype->typalign;
-	typstorage = typcache->rngelemtype->typstorage;
-
-	/* Count space for varlena header */
-	msize = sizeof(ShortRangeType);
-	Assert(msize == MAXALIGN(msize));
-
-	/* Count space for bounds */
-	if (RANGE_HAS_LBOUND(flags))
-	{
-		/*
-		 * Make sure item to be inserted is not toasted.  It is essential that
-		 * we not insert an out-of-line toast value pointer into a range
-		 * object, for the same reasons that arrays and records can't contain
-		 * them.  It would work to store a compressed-in-line value, but we
-		 * prefer to decompress and then let compression be applied to the
-		 * whole range object if necessary.  But, unlike arrays, we do allow
-		 * short-header varlena objects to stay as-is.
-		 */
-		if (typlen == -1)
-			lower->val = PointerGetDatum(PG_DETOAST_DATUM_PACKED(lower->val));
-
-		msize = datum_compute_size(msize, lower->val, typbyval, typalign,
-								   typlen, typstorage);
-	}
-
-	if (RANGE_HAS_UBOUND(flags))
-	{
-		/* Make sure item to be inserted is not toasted */
-		if (typlen == -1)
-			upper->val = PointerGetDatum(PG_DETOAST_DATUM_PACKED(upper->val));
-
-		msize = datum_compute_size(msize, upper->val, typbyval, typalign,
-								   typlen, typstorage);
-	}
-
-	SET_VARSIZE(range, msize);
-
-	ptr = (char *) (range + 1);
-
-	if (RANGE_HAS_LBOUND(flags))
-	{
-		Assert(lower->lower);
-		ptr = datum_write(ptr, lower->val, typbyval, typalign, typlen,
-						  typstorage);
-	}
-
-	if (RANGE_HAS_UBOUND(flags))
-	{
-		Assert(!upper->lower);
-		ptr = datum_write(ptr, upper->val, typbyval, typalign, typlen,
-						  typstorage);
-	}
-
-	range->flags = flags;
-}
 
 /*
  *----------------------------------------------------------
@@ -775,6 +426,69 @@ get_multirange_io_data(FunctionCallInfo fcinfo, Oid mltrngtypid, IOFuncSelector 
 }
 
 /*
+ * Converts a list of arbitrary ranges into a list that is sorted and merged.
+ * Changes the contents of `ranges`.
+ *
+ * Returns the number of slots actually used, which may be less than
+ * input_range_count but never more.
+ *
+ * We assume that no input ranges are null, but empties are okay.
+ */
+static int32
+multirange_canonicalize(TypeCacheEntry *rangetyp, int32 input_range_count,
+						RangeType **ranges)
+{
+	RangeType  *lastRange = NULL;
+	RangeType  *currentRange;
+	int32		i;
+	int32		output_range_count = 0;
+
+	/* Sort the ranges so we can find the ones that overlap/meet. */
+	qsort_arg(ranges, input_range_count, sizeof(RangeType *), range_compare,
+			  rangetyp);
+
+	/* Now merge where possible: */
+	for (i = 0; i < input_range_count; i++)
+	{
+		currentRange = ranges[i];
+		if (RangeIsEmpty(currentRange))
+			continue;
+
+		if (lastRange == NULL)
+		{
+			ranges[output_range_count++] = lastRange = currentRange;
+			continue;
+		}
+
+		/*
+		 * range_adjacent_internal gives true if *either* A meets B or B meets
+		 * A, which is not quite want we want, but we rely on the sorting
+		 * above to rule out B meets A ever happening.
+		 */
+		if (range_adjacent_internal(rangetyp, lastRange, currentRange))
+		{
+			/* The two ranges touch (without overlap), so merge them: */
+			ranges[output_range_count - 1] = lastRange =
+				range_union_internal(rangetyp, lastRange, currentRange, false);
+		}
+		else if (range_before_internal(rangetyp, lastRange, currentRange))
+		{
+			/* There's a gap, so make a new entry: */
+			lastRange = ranges[output_range_count] = currentRange;
+			output_range_count++;
+		}
+		else
+		{
+			/* They must overlap, so merge them: */
+			ranges[output_range_count - 1] = lastRange =
+				range_union_internal(rangetyp, lastRange, currentRange, true);
+		}
+	}
+
+	return output_range_count;
+}
+
+/*
  *----------------------------------------------------------
  * SUPPORT FUNCTIONS
  *
@@ -862,69 +576,6 @@ make_multirange(Oid mltrngtypoid, TypeCacheEntry *rangetyp, int32 range_count,
 }
 
 /*
- * Converts a list of arbitrary ranges into a list that is sorted and merged.
- * Changes the contents of `ranges`.
- *
- * Returns the number of slots actually used, which may be less than
- * input_range_count but never more.
- *
- * We assume that no input ranges are null, but empties are okay.
- */
-static int32
-multirange_canonicalize(TypeCacheEntry *rangetyp, int32 input_range_count,
-						RangeType **ranges)
-{
-	RangeType  *lastRange = NULL;
-	RangeType  *currentRange;
-	int32		i;
-	int32		output_range_count = 0;
-
-	/* Sort the ranges so we can find the ones that overlap/meet. */
-	qsort_arg(ranges, input_range_count, sizeof(RangeType *), range_compare,
-			  rangetyp);
-
-	/* Now merge where possible: */
-	for (i = 0; i < input_range_count; i++)
-	{
-		currentRange = ranges[i];
-		if (RangeIsEmpty(currentRange))
-			continue;
-
-		if (lastRange == NULL)
-		{
-			ranges[output_range_count++] = lastRange = currentRange;
-			continue;
-		}
-
-		/*
-		 * range_adjacent_internal gives true if *either* A meets B or B meets
-		 * A, which is not quite want we want, but we rely on the sorting
-		 * above to rule out B meets A ever happening.
-		 */
-		if (range_adjacent_internal(rangetyp, lastRange, currentRange))
-		{
-			/* The two ranges touch (without overlap), so merge them: */
-			ranges[output_range_count - 1] = lastRange =
-				range_union_internal(rangetyp, lastRange, currentRange, false);
-		}
-		else if (range_before_internal(rangetyp, lastRange, currentRange))
-		{
-			/* There's a gap, so make a new entry: */
-			lastRange = ranges[output_range_count] = currentRange;
-			output_range_count++;
-		}
-		else
-		{
-			/* They must overlap, so merge them: */
-			ranges[output_range_count - 1] = lastRange =
-				range_union_internal(rangetyp, lastRange, currentRange, true);
-		}
-	}
-
-	return output_range_count;
-}
-
-/*
  * multirange_deserialize: deconstruct a multirange value
  *
  * NB: the given multirange object must be fully detoasted; it cannot have a
@@ -954,6 +605,353 @@ make_empty_multirange(Oid mltrngtypoid, TypeCacheEntry *rangetyp)
 {
 	return make_multirange(mltrngtypoid, rangetyp, 0, NULL);
 }
+
+/*
+ *----------------------------------------------------------
+ * EXPANDED TOAST FUNCTIONS
+ *----------------------------------------------------------
+ */
+
+/*
+ * expand_multirange: convert a multirange Datum into an expanded multirange
+ *
+ * The expanded object will be a child of parentcontext.
+ */
+Datum
+expand_multirange(Datum multirangedatum, MemoryContext parentcontext, TypeCacheEntry *rangetyp)
+{
+	MultirangeType  *multirange;
+	ExpandedMultirangeHeader *emrh;
+	MemoryContext objcxt;
+	MemoryContext oldcxt;
+
+	/*
+	 * Allocate private context for expanded object.  We start by assuming
+	 * that the multirange won't be very large; but if it does grow a lot, don't
+	 * constrain aset.c's large-context behavior.
+	 */
+	objcxt = AllocSetContextCreate(parentcontext,
+								   "expanded multirange",
+								   ALLOCSET_START_SMALL_SIZES);
+
+	/* Set up expanded multirange header */
+	emrh = (ExpandedMultirangeHeader *)
+		MemoryContextAlloc(objcxt, sizeof(ExpandedMultirangeHeader));
+
+	EOH_init_header(&emrh->hdr, &EMR_methods, objcxt);
+	emrh->emr_magic = EMR_MAGIC;
+
+	/*
+	 * Detoast and copy source multirange into private context. We need to do
+	 * this so that we get our own copies of the upper/lower bounds.
+	 *
+	 * Note that this coding risks leaking some memory in the private context
+	 * if we have to fetch data from a TOAST table; however, experimentation
+	 * says that the leak is minimal.  Doing it this way saves a copy step,
+	 * which seems worthwhile, especially if the multirange is large enough to
+	 * need external storage.
+	 */
+	oldcxt = MemoryContextSwitchTo(objcxt);
+	multirange = DatumGetMultirangeTypePCopy(multirangedatum);
+
+	emrh->multirangetypid = multirange->multirangetypid;
+	emrh->rangeCount = multirange->rangeCount;
+
+	/* Convert each ShortRangeType into a RangeType */
+	if (emrh->rangeCount > 0)
+	{
+		Pointer		ptr;
+		Pointer		end;
+		int32		i;
+
+		emrh->ranges = palloc(emrh->rangeCount * sizeof(RangeType *));
+
+		ptr = (char *) multirange;
+		end = ptr + VARSIZE(multirange);
+		ptr = (char *) MAXALIGN(multirange + 1);
+		i = 0;
+		while (ptr < end)
+		{
+			ShortRangeType	*shortrange;
+			RangeBound	lower;
+			RangeBound	upper;
+			bool		empty;
+
+			shortrange = (ShortRangeType *) ptr;
+			shortrange_deserialize(rangetyp, shortrange, &lower, &upper, &empty);
+			emrh->ranges[i++] = make_range(rangetyp, &lower, &upper, empty);
+
+			ptr += MAXALIGN(VARSIZE(shortrange));
+		}
+	}
+	else
+	{
+		emrh->ranges = NULL;
+	}
+	MemoryContextSwitchTo(oldcxt);
+
+	/* return a R/W pointer to the expanded multirange */
+	return EOHPGetRWDatum(&emrh->hdr);
+}
+
+/*
+ * shortrange_deserialize: Extract bounds and empty flag from a ShortRangeType
+ */
+void shortrange_deserialize(TypeCacheEntry *typcache, const ShortRangeType *range,
+							RangeBound *lower, RangeBound *upper, bool *empty)
+{
+	char		flags;
+	int16		typlen;
+	bool		typbyval;
+	char		typalign;
+	Pointer		ptr;
+	Datum		lbound;
+	Datum		ubound;
+
+	/* fetch the flag byte */
+	flags = range->flags;
+
+	/* fetch information about range's element type */
+	typlen = typcache->rngelemtype->typlen;
+	typbyval = typcache->rngelemtype->typbyval;
+	typalign = typcache->rngelemtype->typalign;
+
+	/* initialize data pointer just after the range struct fields */
+	ptr = (Pointer) MAXALIGN(range + 1);
+
+	/* fetch lower bound, if any */
+	if (RANGE_HAS_LBOUND(flags))
+	{
+		/* att_align_pointer cannot be necessary here */
+		lbound = fetch_att(ptr, typbyval, typlen);
+		ptr = (Pointer) att_addlength_pointer(ptr, typlen, ptr);
+	}
+	else
+		lbound = (Datum) 0;
+
+	/* fetch upper bound, if any */
+	if (RANGE_HAS_UBOUND(flags))
+	{
+		ptr = (Pointer) att_align_pointer(ptr, typalign, typlen, ptr);
+		ubound = fetch_att(ptr, typbyval, typlen);
+		/* no need for att_addlength_pointer */
+	}
+	else
+		ubound = (Datum) 0;
+
+	/* emit results */
+
+	*empty = (flags & RANGE_EMPTY) != 0;
+
+	lower->val = lbound;
+	lower->infinite = (flags & RANGE_LB_INF) != 0;
+	lower->inclusive = (flags & RANGE_LB_INC) != 0;
+	lower->lower = true;
+
+	upper->val = ubound;
+	upper->infinite = (flags & RANGE_UB_INF) != 0;
+	upper->inclusive = (flags & RANGE_UB_INC) != 0;
+	upper->lower = false;
+}
+
+/*
+ * get_flat_size method for expanded multirange
+ */
+static Size
+EMR_get_flat_size(ExpandedObjectHeader *eohptr)
+{
+	ExpandedMultirangeHeader *emrh = (ExpandedMultirangeHeader *) eohptr;
+	RangeType  *range;
+	Size		nbytes;
+	int			i;
+
+	Assert(emrh->emr_magic == EMR_MAGIC);
+
+	/* If we have a cached size value, believe that */
+	if (emrh->flat_size)
+		return emrh->flat_size;
+
+	/*
+	 * Compute space needed by examining ranges.
+	 */
+	nbytes = MAXALIGN(sizeof(MultirangeType));
+	for (i = 0; i < emrh->rangeCount; i++)
+	{
+		range = emrh->ranges[i];
+		nbytes += MAXALIGN(VARSIZE(range) - sizeof(char));
+		/* check for overflow of total request */
+		if (!AllocSizeIsValid(nbytes))
+			ereport(ERROR,
+					(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+					 errmsg("multirange size exceeds the maximum allowed (%d)",
+							(int) MaxAllocSize)));
+	}
+
+	/* cache for next time */
+	emrh->flat_size = nbytes;
+
+	return nbytes;
+}
+
+/*
+ * flatten_into method for expanded multiranges
+ */
+static void
+EMR_flatten_into(ExpandedObjectHeader *eohptr,
+				 void *result, Size allocated_size)
+{
+	ExpandedMultirangeHeader *emrh = (ExpandedMultirangeHeader *) eohptr;
+	MultirangeType  *mrresult = (MultirangeType *) result;
+	TypeCacheEntry	*typcache;
+	int			rangeCount;
+	RangeType	**ranges;
+	RangeBound	lower;
+	RangeBound	upper;
+	bool		empty;
+	Pointer		ptr;
+	int			i;
+
+	Assert(emrh->emr_magic == EMR_MAGIC);
+
+	typcache = lookup_type_cache(emrh->multirangetypid, TYPECACHE_MULTIRANGE_INFO);
+	if (typcache->rngtype == NULL)
+		elog(ERROR, "type %u is not a multirange type", emrh->multirangetypid);
+
+	/* Fill result multirange from RangeTypes */
+	rangeCount = emrh->rangeCount;
+	ranges	= emrh->ranges;
+
+	/* We must ensure that any pad space is zero-filled */
+	memset(mrresult, 0, allocated_size);
+
+	SET_VARSIZE(mrresult, allocated_size);
+
+	/* Now fill in the datum with ShortRangeTypes */
+	mrresult->multirangetypid = emrh->multirangetypid;
+	mrresult->rangeCount = rangeCount;
+
+	ptr = (char *) MAXALIGN(mrresult + 1);
+	for (i = 0; i < rangeCount; i++)
+	{
+		range_deserialize(typcache->rngtype, ranges[i], &lower, &upper, &empty);
+		shortrange_serialize((ShortRangeType *) ptr, typcache->rngtype, &lower, &upper, empty);
+		ptr += MAXALIGN(VARSIZE(ptr));
+	}
+}
+
+/*
+ * shortrange_serialize: fill in pre-allocationed range param based on the
+ * given bounds and flags.
+ */
+static void
+shortrange_serialize(ShortRangeType *range, TypeCacheEntry *typcache,
+					 RangeBound *lower, RangeBound *upper, bool empty)
+{
+	int			cmp;
+	Size		msize;
+	Pointer		ptr;
+	int16		typlen;
+	bool		typbyval;
+	char		typalign;
+	char		typstorage;
+	char		flags = 0;
+
+	/*
+	 * Verify range is not invalid on its face, and construct flags value,
+	 * preventing any non-canonical combinations such as infinite+inclusive.
+	 */
+	Assert(lower->lower);
+	Assert(!upper->lower);
+
+	if (empty)
+		flags |= RANGE_EMPTY;
+	else
+	{
+		cmp = range_cmp_bound_values(typcache, lower, upper);
+
+		/* error check: if lower bound value is above upper, it's wrong */
+		if (cmp > 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_DATA_EXCEPTION),
+					 errmsg("range lower bound must be less than or equal to range upper bound")));
+
+		/* if bounds are equal, and not both inclusive, range is empty */
+		if (cmp == 0 && !(lower->inclusive && upper->inclusive))
+			flags |= RANGE_EMPTY;
+		else
+		{
+			/* infinite boundaries are never inclusive */
+			if (lower->infinite)
+				flags |= RANGE_LB_INF;
+			else if (lower->inclusive)
+				flags |= RANGE_LB_INC;
+			if (upper->infinite)
+				flags |= RANGE_UB_INF;
+			else if (upper->inclusive)
+				flags |= RANGE_UB_INC;
+		}
+	}
+
+	/* Fetch information about range's element type */
+	typlen = typcache->rngelemtype->typlen;
+	typbyval = typcache->rngelemtype->typbyval;
+	typalign = typcache->rngelemtype->typalign;
+	typstorage = typcache->rngelemtype->typstorage;
+
+	/* Count space for varlena header */
+	msize = sizeof(ShortRangeType);
+	Assert(msize == MAXALIGN(msize));
+
+	/* Count space for bounds */
+	if (RANGE_HAS_LBOUND(flags))
+	{
+		/*
+		 * Make sure item to be inserted is not toasted.  It is essential that
+		 * we not insert an out-of-line toast value pointer into a range
+		 * object, for the same reasons that arrays and records can't contain
+		 * them.  It would work to store a compressed-in-line value, but we
+		 * prefer to decompress and then let compression be applied to the
+		 * whole range object if necessary.  But, unlike arrays, we do allow
+		 * short-header varlena objects to stay as-is.
+		 */
+		if (typlen == -1)
+			lower->val = PointerGetDatum(PG_DETOAST_DATUM_PACKED(lower->val));
+
+		msize = datum_compute_size(msize, lower->val, typbyval, typalign,
+								   typlen, typstorage);
+	}
+
+	if (RANGE_HAS_UBOUND(flags))
+	{
+		/* Make sure item to be inserted is not toasted */
+		if (typlen == -1)
+			upper->val = PointerGetDatum(PG_DETOAST_DATUM_PACKED(upper->val));
+
+		msize = datum_compute_size(msize, upper->val, typbyval, typalign,
+								   typlen, typstorage);
+	}
+
+	SET_VARSIZE(range, msize);
+
+	ptr = (char *) (range + 1);
+
+	if (RANGE_HAS_LBOUND(flags))
+	{
+		Assert(lower->lower);
+		ptr = datum_write(ptr, lower->val, typbyval, typalign, typlen,
+						  typstorage);
+	}
+
+	if (RANGE_HAS_UBOUND(flags))
+	{
+		Assert(!upper->lower);
+		ptr = datum_write(ptr, upper->val, typbyval, typalign, typlen,
+						  typstorage);
+	}
+
+	range->flags = flags;
+}
+
 
 /*
  *----------------------------------------------------------
