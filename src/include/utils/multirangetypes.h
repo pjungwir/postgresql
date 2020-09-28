@@ -74,7 +74,7 @@ typedef struct ExpandedMultirangeHeader
 	Size		flat_size;
 } ExpandedMultirangeHeader;
 
-/* Use this macro in preference to fetching multirangetypid field directly */
+/* Use these macros in preference to accessing these fields directly */
 #define MultirangeTypeGetOid(mr)	((mr)->multirangetypid)
 #define MultirangeIsEmpty(mr)  ((mr)->rangeCount == 0)
 
