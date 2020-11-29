@@ -1693,6 +1693,7 @@ rewriteTargetListUD(Query *parsetree, RangeTblEntry *target_rte,
 /*
  * Record in target_rte->extraUpdatedCols the indexes of any generated columns
  * that depend on any columns mentioned in target_rte->updatedCols.
+ * If the update uses FOR PORTION OF, include the PK range.
  */
 void
 fill_extraUpdatedCols(RangeTblEntry *target_rte, Relation target_relation)
@@ -3211,6 +3212,7 @@ rewriteTargetView(Query *parsetree, Relation view)
 		{
 			foreach(lc, parsetree->forPortionOf->rangeSet)
 			{
+				ereport(NOTICE, (errmsg("adding rangeSet to modified_cols")));
 				TargetEntry *tle = (TargetEntry *) lfirst(lc);
 
 				if (!tle->resjunk)
@@ -3860,6 +3862,25 @@ RewriteQuery(Query *parsetree, List *rewrite_events)
 
 			/* Also populate extraUpdatedCols (for generated columns) */
 			fill_extraUpdatedCols(rt_entry, rt_entry_relation);
+
+			/*
+			 * Record in extraUpdatedCols the temporal bounds if using FOR PORTION OF.
+			 * Since these are part of the primary key this ensures we get the right lock type,
+			 * and it also tells column-specific triggers on those columns to fire.
+			 */
+			if (parsetree->forPortionOf)
+			{
+				ereport(NOTICE, (errmsg("adding to extraUpdatedCols")));
+				ListCell   *tl;
+				// TODO: give start/end columns if using a PERIOD:
+				foreach(tl, parsetree->forPortionOf->rangeSet)
+				{
+					TargetEntry *tle = (TargetEntry *) lfirst(tl);
+					ereport(NOTICE, (errmsg("col %d", tle->resno)));
+					rt_entry->extraUpdatedCols = bms_add_member(rt_entry->extraUpdatedCols,
+																tle->resno - FirstLowInvalidHeapAttributeNumber);
+				}
+			}
 		}
 		else if (event == CMD_DELETE)
 		{
