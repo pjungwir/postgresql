@@ -156,7 +156,7 @@ FP_insert_leftovers(PG_FUNCTION_ARGS)
 	/* Only do something if the statement has FOR PORTION OF */
 	if (!trigdata->tg_temporal)
 		return PointerGetDatum(NULL);
-		
+
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "SPI_connect failed");
 
