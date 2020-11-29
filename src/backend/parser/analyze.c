@@ -1244,6 +1244,7 @@ transformForPortionOfClause(ParseState *pstate,
 	FuncCall *fc = makeFuncCall(SystemFuncName(range_type_name),
 								list_make2(forPortionOf->target_start,
 										   forPortionOf->target_end),
+								COERCE_EXPLICIT_CALL,
 								// TODO: FROM...TO... location instead?:
 								forPortionOf->range_name_location);
 	result->targetRange = (Node *) fc;
