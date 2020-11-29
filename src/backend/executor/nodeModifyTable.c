@@ -1601,7 +1601,6 @@ ExecUpdate(ModifyTableState *mtstate,
 	TM_Result	result;
 	TM_FailureData tmfd;
 	List	   *recheckIndexes = NIL;
-	TupleConversionMap *saved_tcs_map = NULL;
 
 	/*
 	 * abort the operation if not running transactions
