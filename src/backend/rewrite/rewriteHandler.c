@@ -3741,6 +3741,16 @@ RewriteQuery(Query *parsetree, List *rewrite_events)
 		}
 		else if (event == CMD_UPDATE)
 		{
+			/* Update FOR PORTION OF column(s) automatically */
+			if (parsetree->forPortionOf)
+			{
+				ListCell *tl;
+				foreach(tl, parsetree->forPortionOf->rangeSet)
+				{
+					TargetEntry *tle = (TargetEntry *) lfirst(tl);
+					parsetree->targetList = lappend(parsetree->targetList, tle);
+				}
+			}
 			parsetree->targetList =
 				rewriteTargetListIU(parsetree->targetList,
 									parsetree->commandType,
