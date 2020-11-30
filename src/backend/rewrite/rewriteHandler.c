@@ -3750,25 +3750,6 @@ RewriteQuery(Query *parsetree, List *rewrite_events)
 
 			/* Also populate extraUpdatedCols (for generated columns) */
 			fill_extraUpdatedCols(rt_entry, rt_entry_relation);
-
-			/*
-			 * Record in extraUpdatedCols the temporal bounds if using FOR PORTION OF.
-			 * Since these are part of the primary key this ensures we get the right lock type,
-			 * and it also tells column-specific triggers on those columns to fire.
-			 */
-			if (parsetree->forPortionOf)
-			{
-				ereport(NOTICE, (errmsg("adding to extraUpdatedCols")));
-				ListCell   *tl;
-				// TODO: give start/end columns if using a PERIOD:
-				foreach(tl, parsetree->forPortionOf->rangeSet)
-				{
-					TargetEntry *tle = (TargetEntry *) lfirst(tl);
-					ereport(NOTICE, (errmsg("col %d", tle->resno)));
-					rt_entry->extraUpdatedCols = bms_add_member(rt_entry->extraUpdatedCols,
-																tle->resno - FirstLowInvalidHeapAttributeNumber);
-				}
-			}
 		}
 		else if (event == CMD_DELETE)
 		{
