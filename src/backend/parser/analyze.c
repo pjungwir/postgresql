@@ -2563,17 +2563,6 @@ transformUpdateTargetList(ParseState *pstate, List *origTlist, ForPortionOfExpr 
 	if (orig_tl != NULL)
 		elog(ERROR, "UPDATE target count mismatch --- internal error");
 
-	/* Update the FOR PORTION OF column */
-	if (forPortionOf)
-	{
-		foreach(tl, forPortionOf->rangeSet)
-		{
-			TargetEntry *tle = (TargetEntry *) lfirst(tl);
-			updateTargetListEntry(pstate, tle, tle->resname, tle->resno, false, -1);
-			tlist = lappend(tlist, tle);
-		}
-	}
-
 	return tlist;
 }
 
