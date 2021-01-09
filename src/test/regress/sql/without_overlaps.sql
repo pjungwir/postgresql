@@ -56,6 +56,17 @@ DROP TABLE without_overlaps_test2;
 -- PK with two columns plus a PERIOD:
 -- TODO
 
+-- PK with USING INDEX (not yet allowed):
+CREATE TABLE without_overlaps_test2 (
+	id int4range,
+	valid_at tsrange
+);
+CREATE INDEX idx_without_overlaps2 ON without_overlaps_test2 USING gist (id, valid_at);
+ALTER TABLE without_overlaps_test2
+  ADD CONSTRAINT without_overlaps2_pk
+  PRIMARY KEY USING INDEX idx_without_overlaps2;
+DROP TABLE without_overlaps_test2;
+
 -- PK with a custom range type:
 CREATE TYPE textrange2 AS range (subtype=text, collation="C");
 CREATE TABLE without_overlaps_test2 (
