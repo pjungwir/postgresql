@@ -65,6 +65,7 @@ static List *transformInsertRow(ParseState *pstate, List *exprlist,
 								bool strip_indirection);
 static OnConflictExpr *transformOnConflictClause(ParseState *pstate,
 												 OnConflictClause *onConflictClause);
+static Node *transformForPortionOfBound(Node *n);
 static ForPortionOfExpr *transformForPortionOfClause(ParseState *pstate,
 													 int rtindex,
 													 ForPortionOfClause *forPortionOfClause);
@@ -1134,6 +1135,26 @@ transformOnConflictClause(ParseState *pstate,
 }
 
 /*
+ * transformForPortionOfBound
+ *    transforms MINVALUE and MAXVALUE pseudo-column references to NULL
+ *    (which represent "unbounded" in a range type, otherwise returns
+ *    its input unchanged.
+ */
+static Node *
+transformForPortionOfBound(Node *n)
+{
+	if (nodeTag(n) == T_ColumnRef)
+	{
+		A_Const    *n2 = makeNode(A_Const);
+		n2->val.type = T_Null;
+		n2->location = ((ColumnRef *)n)->location;
+		return (Node *)n2;
+	}
+	else
+		return n;
+}
+
+/*
  * transformForPortionOfClause
  *	  transforms a ForPortionOfClause in an UPDATE/DELETE statement
  */
@@ -1255,12 +1276,14 @@ transformForPortionOfClause(ParseState *pstate,
 	 * Build a range from the FROM ... TO .... bounds.
 	 * This should give a constant result, so we accept functions like NOW()
 	 * but not column references, subqueries, etc.
+	 *
+	 * It also permits MINVALUE and MAXVALUE like declarative partitions.
 	 */
+	Node *target_start = transformForPortionOfBound(forPortionOf->target_start);
+	Node *target_end   = transformForPortionOfBound(forPortionOf->target_end);
 	FuncCall *fc = makeFuncCall(SystemFuncName(range_type_name),
-								list_make2(forPortionOf->target_start,
-										   forPortionOf->target_end),
+								list_make2(target_start, target_end),
 								COERCE_EXPLICIT_CALL,
-								// TODO: FROM...TO... location instead?:
 								forPortionOf->range_name_location);
 	result->targetRange = transformExpr(pstate, (Node *) fc, EXPR_KIND_UPDATE_PORTION);
 
