@@ -43,6 +43,20 @@ CREATE TABLE without_overlaps_test2 (
 DROP TABLE without_overlaps_test2;
 -- PK with one column plus a PERIOD:
 -- PK with two columns plus a PERIOD:
+-- PK with USING INDEX (not yet allowed):
+CREATE TABLE without_overlaps_test2 (
+	id int4range,
+	valid_at tsrange
+);
+CREATE INDEX idx_without_overlaps2 ON without_overlaps_test2 USING gist (id, valid_at);
+ALTER TABLE without_overlaps_test2
+  ADD CONSTRAINT without_overlaps2_pk
+  PRIMARY KEY USING INDEX idx_without_overlaps2;
+ERROR:  "idx_without_overlaps2" is not a unique index
+LINE 2:   ADD CONSTRAINT without_overlaps2_pk
+              ^
+DETAIL:  Cannot create a primary key or unique constraint using such an index.
+DROP TABLE without_overlaps_test2;
 -- PK with a custom range type:
 CREATE TYPE textrange2 AS range (subtype=text, collation="C");
 CREATE TABLE without_overlaps_test2 (
