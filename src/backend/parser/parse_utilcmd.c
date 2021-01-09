@@ -2428,6 +2428,11 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 					 errmsg("index \"%s\" is not valid", index_name),
 					 parser_errposition(cxt->pstate, constraint->location)));
 
+		/*
+		 * Today we forbid non-unique indexes, but we could permit GiST
+		 * indexes whose last entry is a range type and use that to create a
+		 * WITHOUT OVERLAPS constraint (i.e. a temporal constraint).
+		 */
 		if (!index_form->indisunique)
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
