@@ -8,11 +8,11 @@ CREATE TABLE for_portion_of_test (
 );
 
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-01-15' TO NULL
+FOR PORTION OF valid_at FROM '2018-01-15' TO MAXVALUE
 SET name = 'foo';
 
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-01-15' TO NULL;
+FOR PORTION OF valid_at FROM '2018-01-15' TO MAXVALUE;
 
 DROP TABLE for_portion_of_test;
 CREATE TABLE for_portion_of_test (
@@ -38,13 +38,13 @@ VALUES
 
 -- Setting with a missing column fails
 UPDATE for_portion_of_test
-FOR PORTION OF invalid_at FROM '2018-06-01' TO NULL
+FOR PORTION OF invalid_at FROM '2018-06-01' TO MAXVALUE
 SET name = 'foo'
 WHERE id = '[5,6)';
 
 -- Setting the range fails
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-06-01' TO NULL
+FOR PORTION OF valid_at FROM '2018-06-01' TO MAXVALUE
 SET valid_at = '[1990-01-01,1999-01-01)'
 WHERE id = '[5,6)';
 
@@ -62,25 +62,25 @@ WHERE id = '[3,4)';
 
 -- Updating a finite/open portion with a finite/open target
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-06-01' TO NULL
+FOR PORTION OF valid_at FROM '2018-06-01' TO MAXVALUE
 SET name = 'three^1'
 WHERE id = '[3,4)';
 
 -- Updating a finite/open portion with an open/finite target
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM NULL TO '2018-03-01'
+FOR PORTION OF valid_at FROM MINVALUE TO '2018-03-01'
 SET name = 'three^2'
 WHERE id = '[3,4)';
 
 -- Updating an open/finite portion with an open/finite target
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM NULL TO '2018-02-01'
+FOR PORTION OF valid_at FROM MINVALUE TO '2018-02-01'
 SET name = 'four^1'
 WHERE id = '[4,5)';
 
 -- Updating an open/finite portion with a finite/open target
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2017-01-01' TO NULL
+FOR PORTION OF valid_at FROM '2017-01-01' TO MAXVALUE
 SET name = 'four^2'
 WHERE id = '[4,5)';
 
@@ -92,7 +92,7 @@ WHERE id = '[4,5)';
 
 -- Updating an enclosed span
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM NULL TO NULL
+FOR PORTION OF valid_at FROM MINVALUE TO MAXVALUE
 SET name = 'two^2'
 WHERE id = '[2,3)';
 
