@@ -4250,7 +4250,7 @@ ASSERT <replaceable class="parameter">condition</replaceable> <optional> , <repl
      <term><varname>TG_PERIOD_NAME</varname> <type>text</type></term>
      <listitem>
       <para>
-       the column name used in a <literal>FOR PORTION OF</literal> clause,
+       the column/period name used in a <literal>FOR PORTION OF</literal> clause,
        or else <symbol>NULL</symbol>.
       </para>
      </listitem>
