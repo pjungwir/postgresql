@@ -1403,7 +1403,9 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	CmdType		oldOperation;
 	TransitionCaptureState *oldTcs;
 	FmgrInfo	flinfo;
-	ReturnSetInfo rsi;
+	ReturnSetInfo	rsi;
+	Relation		rel;
+	bool		hasPeriod = false;
 	bool		didInit = false;
 	bool		shouldFree = false;
 
@@ -1515,6 +1517,8 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 				ExecForceStoreHeapTuple(oldtuple, leftoverSlot, false);
 			}
 
+			hasPeriod = forPortionOf->startVar;
+
 			/*
 			 * Save some mtstate things so we can restore them below. XXX:
 			 * Should we create our own ModifyTableState instead?
@@ -1526,8 +1530,42 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 			didInit = true;
 		}
 
-		leftoverSlot->tts_values[forPortionOf->rangeVar->varattno - 1] = leftover;
-		leftoverSlot->tts_isnull[forPortionOf->rangeVar->varattno - 1] = false;
+		if (hasPeriod)
+		{
+			RangeType  *leftoverRange;
+			RangeBound	leftoverLower;
+			RangeBound	leftoverUpper;
+			bool		leftoverEmpty;
+			AttrNumber	startAttno;
+			AttrNumber	endAttno;
+
+			leftoverRange = DatumGetRangeTypeP(leftover);
+			range_deserialize(typcache, leftoverRange, &leftoverLower, &leftoverUpper, &leftoverEmpty);
+
+			startAttno = forPortionOf->startVar->varattno;
+			endAttno = forPortionOf->endVar->varattno;
+
+			if (leftoverLower.infinite)
+				leftoverSlot->tts_nulls[startAttno - 1] = true;
+			else
+			{
+				leftoverSlot->tts_nulls[startAttno - 1] = false;
+				leftoverSlot->tts_values[startAttno - 1] = leftoverLower.val;
+			}
+
+			if (leftoverUpper.infinite)
+				leftoverSlot->tts_nulls[endAttno - 1] = true;
+			else
+			{
+				leftoverSlot->tts_nulls[endAttno - 1] = false;
+				leftoverSlot->tts_values[endAttno - 1] = leftoverUpper.val;
+			}
+		}
+		else
+		{
+			leftoverSlot->tts_values[forPortionOf->rangeVar->varattno - 1] = leftover;
+			leftoverSlot->tts_isnull[forPortionOf->rangeVar->varattno - 1] = false;
+		}
 		ExecMaterializeSlot(leftoverSlot);
 
 		/*
