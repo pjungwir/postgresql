@@ -89,6 +89,76 @@ SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'te
  CREATE UNIQUE INDEX temporal_rng2_pk ON temporal_rng2 USING gist (id1, id2, valid_at)
 (1 row)
 
+-- PK with one column plus a PERIOD:
+CREATE TABLE temporal_per (
+  id int4range,
+  valid_from date,
+  valid_til date,
+  PERIOD FOR valid_at (valid_from, valid_til),
+  CONSTRAINT temporal_per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+\d temporal_per
+               Table "public.temporal_per"
+   Column   |   Type    | Collation | Nullable | Default 
+------------+-----------+-----------+----------+---------
+ id         | int4range |           | not null | 
+ valid_from | date      |           |          | 
+ valid_til  | date      |           |          | 
+Periods:
+    valid_at (valid_from, valid_til)
+Indexes:
+    "temporal_per_pk" PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "temporal_per_valid_at_check" CHECK (valid_from < valid_til)
+
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_per_pk';
+            pg_get_constraintdef             
+---------------------------------------------
+ PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+(1 row)
+
+SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_per_pk';
+                                pg_get_indexdef                                
+-------------------------------------------------------------------------------
+ CREATE UNIQUE INDEX temporal_per_pk ON temporal_per USING gist (id, valid_at)
+(1 row)
+
+-- PK with two columns plus a PERIOD:
+CREATE TABLE temporal_per2 (
+  id1 int4range,
+  id2 int4range,
+  valid_from date,
+  valid_til date,
+  PERIOD FOR valid_at (valid_from, valid_til),
+  CONSTRAINT temporal_per2_pk PRIMARY KEY (id1, id2, valid_at WITHOUT OVERLAPS)
+);
+\d temporal_per2
+              Table "public.temporal_per2"
+   Column   |   Type    | Collation | Nullable | Default 
+------------+-----------+-----------+----------+---------
+ id1        | int4range |           | not null | 
+ id2        | int4range |           | not null | 
+ valid_from | date      |           |          | 
+ valid_til  | date      |           |          | 
+Periods:
+    valid_at (valid_from, valid_til)
+Indexes:
+    "temporal_per2_pk" PRIMARY KEY (id1, id2, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "temporal_per2_valid_at_check" CHECK (valid_from < valid_til)
+
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_per2_pk';
+               pg_get_constraintdef                
+---------------------------------------------------
+ PRIMARY KEY (id1, id2, valid_at WITHOUT OVERLAPS)
+(1 row)
+
+SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_per2_pk';
+                                    pg_get_indexdef                                    
+---------------------------------------------------------------------------------------
+ CREATE UNIQUE INDEX temporal_per2_pk ON temporal_per2 USING gist (id1, id2, valid_at)
+(1 row)
+
 -- PK with a custom range type:
 CREATE TYPE textrange2 AS range (subtype=text, collation="C");
 CREATE TABLE temporal_rng3 (
@@ -224,6 +294,78 @@ SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'te
 (1 row)
 
 DROP TABLE temporal_rng3;
+-- UNIQUE with one column plus a PERIOD:
+CREATE TABLE temporal_per3 (
+  id int4range,
+  valid_from date,
+  valid_til date,
+  PERIOD FOR valid_at (valid_from, valid_til),
+  CONSTRAINT temporal_per3_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
+);
+\d temporal_per3
+              Table "public.temporal_per3"
+   Column   |   Type    | Collation | Nullable | Default 
+------------+-----------+-----------+----------+---------
+ id         | int4range |           |          | 
+ valid_from | date      |           |          | 
+ valid_til  | date      |           |          | 
+Periods:
+    valid_at (valid_from, valid_til)
+Indexes:
+    "temporal_per3_uq" UNIQUE (id, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "temporal_per3_valid_at_check" CHECK (valid_from < valid_til)
+
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_per3_uq';
+          pg_get_constraintdef          
+----------------------------------------
+ UNIQUE (id, valid_at WITHOUT OVERLAPS)
+(1 row)
+
+SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_per3_uq';
+                                 pg_get_indexdef                                 
+---------------------------------------------------------------------------------
+ CREATE UNIQUE INDEX temporal_per3_uq ON temporal_per3 USING gist (id, valid_at)
+(1 row)
+
+DROP TABLE temporal_per3;
+-- UNIQUE with two columns plus a PERIOD:
+CREATE TABLE temporal_per3 (
+  id1 int4range,
+  id2 int4range,
+  valid_from date,
+  valid_til date,
+  PERIOD FOR valid_at (valid_from, valid_til),
+  CONSTRAINT temporal_per3_uq UNIQUE (id1, id2, valid_at WITHOUT OVERLAPS)
+);
+\d temporal_per3
+              Table "public.temporal_per3"
+   Column   |   Type    | Collation | Nullable | Default 
+------------+-----------+-----------+----------+---------
+ id1        | int4range |           |          | 
+ id2        | int4range |           |          | 
+ valid_from | date      |           |          | 
+ valid_til  | date      |           |          | 
+Periods:
+    valid_at (valid_from, valid_til)
+Indexes:
+    "temporal_per3_uq" UNIQUE (id1, id2, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "temporal_per3_valid_at_check" CHECK (valid_from < valid_til)
+
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_per3_uq';
+             pg_get_constraintdef             
+----------------------------------------------
+ UNIQUE (id1, id2, valid_at WITHOUT OVERLAPS)
+(1 row)
+
+SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_per3_uq';
+                                    pg_get_indexdef                                    
+---------------------------------------------------------------------------------------
+ CREATE UNIQUE INDEX temporal_per3_uq ON temporal_per3 USING gist (id1, id2, valid_at)
+(1 row)
+
+DROP TABLE temporal_per3;
 -- UNIQUE with a custom range type:
 CREATE TYPE textrange2 AS range (subtype=text, collation="C");
 CREATE TABLE temporal_rng3 (
@@ -301,6 +443,106 @@ ALTER TABLE temporal3
 	ADD COLUMN valid_at daterange,
 	ADD CONSTRAINT temporal3_uq
 	UNIQUE (id, valid_at WITHOUT OVERLAPS);
+DROP TABLE temporal3;
+-- PRIMARY KEY with PERIOD already there
+CREATE TABLE temporal3 (
+  id int4range,
+  valid_from date,
+  valid_til date,
+  PERIOD FOR valid_at (valid_from, valid_til)
+);
+ALTER TABLE temporal3
+  ADD CONSTRAINT temporal3_pk
+  PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+\d temporal3
+                Table "public.temporal3"
+   Column   |   Type    | Collation | Nullable | Default 
+------------+-----------+-----------+----------+---------
+ id         | int4range |           | not null | 
+ valid_from | date      |           |          | 
+ valid_til  | date      |           |          | 
+Periods:
+    valid_at (valid_from, valid_til)
+Indexes:
+    "temporal3_pk" PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "temporal3_valid_at_check" CHECK (valid_from < valid_til)
+
+DROP TABLE temporal3;
+-- PRIMARY KEY with PERIOD too
+CREATE TABLE temporal3 (
+  id int4range,
+  valid_from date,
+  valid_til date
+);
+ALTER TABLE temporal3
+  ADD PERIOD FOR valid_at (valid_from, valid_til),
+  ADD CONSTRAINT temporal3_pk
+  PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+\d temporal3
+                Table "public.temporal3"
+   Column   |   Type    | Collation | Nullable | Default 
+------------+-----------+-----------+----------+---------
+ id         | int4range |           | not null | 
+ valid_from | date      |           |          | 
+ valid_til  | date      |           |          | 
+Periods:
+    valid_at (valid_from, valid_til)
+Indexes:
+    "temporal3_pk" PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "temporal3_valid_at_check" CHECK (valid_from < valid_til)
+
+DROP TABLE temporal3;
+-- UNIQUE with PERIOD already there
+CREATE TABLE temporal3 (
+  id int4range,
+  valid_from date,
+  valid_til date,
+  PERIOD FOR valid_at (valid_from, valid_til)
+);
+ALTER TABLE temporal3
+  ADD CONSTRAINT temporal3_uq
+  UNIQUE (id, valid_at WITHOUT OVERLAPS);
+\d temporal3
+                Table "public.temporal3"
+   Column   |   Type    | Collation | Nullable | Default 
+------------+-----------+-----------+----------+---------
+ id         | int4range |           |          | 
+ valid_from | date      |           |          | 
+ valid_til  | date      |           |          | 
+Periods:
+    valid_at (valid_from, valid_til)
+Indexes:
+    "temporal3_uq" UNIQUE (id, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "temporal3_valid_at_check" CHECK (valid_from < valid_til)
+
+DROP TABLE temporal3;
+-- UNIQUE with PERIOD too
+CREATE TABLE temporal3 (
+  id int4range,
+  valid_from date,
+  valid_til date
+);
+ALTER TABLE temporal3
+  ADD PERIOD FOR valid_at (valid_from, valid_til),
+  ADD CONSTRAINT temporal3_uq
+  UNIQUE (id, valid_at WITHOUT OVERLAPS);
+\d temporal3
+                Table "public.temporal3"
+   Column   |   Type    | Collation | Nullable | Default 
+------------+-----------+-----------+----------+---------
+ id         | int4range |           |          | 
+ valid_from | date      |           |          | 
+ valid_til  | date      |           |          | 
+Periods:
+    valid_at (valid_from, valid_til)
+Indexes:
+    "temporal3_uq" UNIQUE (id, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "temporal3_valid_at_check" CHECK (valid_from < valid_til)
+
 DROP TABLE temporal3;
 --
 -- test PK inserts
@@ -592,6 +834,18 @@ CREATE TABLE temporal_fk_rng2rng (
 	CONSTRAINT temporal_fk_rng2rng_fk FOREIGN KEY (parent_id, PERIOD valid_at)
 		REFERENCES temporal_rng (id, PERIOD valid_at)
 );
+\d temporal_fk_rng2rng
+           Table "public.temporal_fk_rng2rng"
+  Column   |   Type    | Collation | Nullable | Default 
+-----------+-----------+-----------+----------+---------
+ id        | int4range |           | not null | 
+ valid_at  | daterange |           | not null | 
+ parent_id | int4range |           |          | 
+Indexes:
+    "temporal_fk_rng2rng_pk" PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+Foreign-key constraints:
+    "temporal_fk_rng2rng_fk" FOREIGN KEY (parent_id, PERIOD valid_at) REFERENCES temporal_rng(id, PERIOD valid_at)
+
 DROP TABLE temporal_fk_rng2rng;
 -- with mismatched PERIOD columns:
 -- (parent_id, PERIOD valid_at) REFERENCES (id, valid_at)
@@ -2667,6 +2921,1171 @@ SELECT * FROM temporal_fk2_mltrng2mltrng WHERE id = '[200,201)' ORDER BY id, val
 -----------+---------------------------+------------+------------
  [200,201) | {[2018-01-01,2020-01-01)} | [-1,0)     | [8,9)
  [200,201) | {[2020-01-01,2021-01-01)} | [8,9)      | [8,9)
+(2 rows)
+
+--
+-- test FOREIGN KEY, PERIOD references PERIOD
+--
+-- test table setup
+DROP TABLE temporal_per;
+CREATE TABLE temporal_per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	PERIOD FOR valid_at (valid_from, valid_til)
+);
+ALTER TABLE temporal_per
+	ADD CONSTRAINT temporal_per_pk
+	PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+-- Can't create a FK with a mismatched range type
+CREATE TABLE temporal_fk_per2per (
+	id int4range,
+	valid_from int,
+	valid_til int,
+	parent_id int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk_per2per_pk2 PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_per2per_fk2 FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES temporal_per (id, PERIOD valid_at)
+);
+ERROR:  foreign key constraint "temporal_fk_per2per_fk2" cannot be implemented
+DETAIL:  Key columns "valid_at" and "valid_at" are of incompatible types: int4range and daterange.
+-- works: PERIOD for both referenced and referencing
+CREATE TABLE temporal_fk_per2per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	parent_id int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk_per2per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_per2per_fk FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES temporal_per (id, PERIOD valid_at)
+);
+\d temporal_fk_per2per
+           Table "public.temporal_fk_per2per"
+   Column   |   Type    | Collation | Nullable | Default 
+------------+-----------+-----------+----------+---------
+ id         | int4range |           | not null | 
+ valid_from | date      |           |          | 
+ valid_til  | date      |           |          | 
+ parent_id  | int4range |           |          | 
+Periods:
+    valid_at (valid_from, valid_til)
+Indexes:
+    "temporal_fk_per2per_pk" PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "temporal_fk_per2per_valid_at_check" CHECK (valid_from < valid_til)
+Foreign-key constraints:
+    "temporal_fk_per2per_fk" FOREIGN KEY (parent_id, PERIOD valid_at) REFERENCES temporal_per(id, PERIOD valid_at)
+
+DROP TABLE temporal_fk_per2per;
+-- with mismatched PERIOD columns:
+-- (parent_id, PERIOD valid_at) REFERENCES (id, valid_at)
+-- REFERENCES part should specify PERIOD
+CREATE TABLE temporal_fk_per2per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	parent_id int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk_per2per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_per2per_fk FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES temporal_per (id, valid_at)
+);
+ERROR:  foreign key uses PERIOD on the referencing table but not the referenced table
+-- (parent_id, valid_at) REFERENCES (id, PERIOD valid_at)
+-- FOREIGN KEY part should specify PERIOD
+CREATE TABLE temporal_fk_per2per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	parent_id int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk_per2per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_per2per_fk FOREIGN KEY (parent_id, valid_at)
+		REFERENCES temporal_per (id, PERIOD valid_at)
+);
+ERROR:  foreign key uses PERIOD on the referenced table but not the referencing table
+-- (parent_id, valid_at) REFERENCES [implicit]
+-- FOREIGN KEY part should specify PERIOD
+CREATE TABLE temporal_fk_per2per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	parent_id int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk_per2per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_per2per_fk FOREIGN KEY (parent_id, valid_at)
+		REFERENCES temporal_per
+);
+ERROR:  number of referencing and referenced columns for foreign key disagree
+-- (parent_id, PERIOD valid_at) REFERENCES (id)
+CREATE TABLE temporal_fk_per2per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	parent_id int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk_per2per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_per2per_fk FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES temporal_per (id)
+);
+ERROR:  foreign key uses PERIOD on the referencing table but not the referenced table
+-- (parent_id) REFERENCES (id, PERIOD valid_at)
+CREATE TABLE temporal_fk_per2per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	parent_id int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk_per2per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_per2per_fk FOREIGN KEY (parent_id)
+		REFERENCES temporal_per (id, PERIOD valid_at)
+);
+ERROR:  foreign key uses PERIOD on the referenced table but not the referencing table
+-- with inferred PK on the referenced table:
+-- (This is not permitted by the SQL standard. See 11.8 syntax rule 4b.)
+CREATE TABLE temporal_fk_per2per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	parent_id int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk_per2per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_per2per_fk FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES temporal_per
+);
+ERROR:  foreign key uses PERIOD on the referencing table but not the referenced table
+-- (parent_id) REFERENCES [implicit]
+-- This finds the PK (omitting the WITHOUT OVERLAPS element),
+-- but it's not a b-tree index, so it fails anyway.
+-- Anyway it must fail because the two sides have a different definition of "unique".
+CREATE TABLE temporal_fk_per2per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	parent_id int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk_per2per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_per2per_fk FOREIGN KEY (parent_id)
+		REFERENCES temporal_per
+);
+ERROR:  only b-tree indexes are supported for foreign keys
+-- should fail because of duplicate referenced columns:
+CREATE TABLE temporal_fk_per2per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	parent_id int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk_per2per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_per2per_fk FOREIGN KEY (parent_id, PERIOD parent_id)
+		REFERENCES temporal_per (id, PERIOD id)
+);
+ERROR:  foreign key referenced-columns list must not contain duplicates
+-- Two scalar columns
+DROP TABLE temporal_per2;
+CREATE TABLE temporal_per2 (
+	id1 int4range,
+	id2 int4range,
+	valid_from date,
+	valid_til date,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_per2_pk PRIMARY KEY (id1, id2, valid_at WITHOUT OVERLAPS)
+);
+CREATE TABLE temporal_fk2_per2per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	parent_id1 int4range,
+	parent_id2 int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk2_per2per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk2_per2per_fk FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
+		REFERENCES temporal_per2 (id1, id2, PERIOD valid_at)
+);
+\d temporal_fk2_per2per
+           Table "public.temporal_fk2_per2per"
+   Column   |   Type    | Collation | Nullable | Default 
+------------+-----------+-----------+----------+---------
+ id         | int4range |           | not null | 
+ valid_from | date      |           |          | 
+ valid_til  | date      |           |          | 
+ parent_id1 | int4range |           |          | 
+ parent_id2 | int4range |           |          | 
+Periods:
+    valid_at (valid_from, valid_til)
+Indexes:
+    "temporal_fk2_per2per_pk" PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "temporal_fk2_per2per_valid_at_check" CHECK (valid_from < valid_til)
+Foreign-key constraints:
+    "temporal_fk2_per2per_fk" FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at) REFERENCES temporal_per2(id1, id2, PERIOD valid_at)
+
+DROP TABLE temporal_fk2_per2per;
+--
+-- test ALTER TABLE ADD CONSTRAINT
+--
+CREATE TABLE temporal_fk_per2per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	parent_id int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk_per2per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+ALTER TABLE temporal_fk_per2per
+	ADD CONSTRAINT temporal_fk_per2per_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES temporal_per (id, PERIOD valid_at);
+-- Two scalar columns:
+CREATE TABLE temporal_fk2_per2per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	parent_id1 int4range,
+	parent_id2 int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk2_per2per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+ALTER TABLE temporal_fk2_per2per
+	ADD CONSTRAINT temporal_fk2_per2per_fk
+	FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
+	REFERENCES temporal_per2 (id1, id2, PERIOD valid_at);
+\d temporal_fk2_per2per
+           Table "public.temporal_fk2_per2per"
+   Column   |   Type    | Collation | Nullable | Default 
+------------+-----------+-----------+----------+---------
+ id         | int4range |           | not null | 
+ valid_from | date      |           |          | 
+ valid_til  | date      |           |          | 
+ parent_id1 | int4range |           |          | 
+ parent_id2 | int4range |           |          | 
+Periods:
+    valid_at (valid_from, valid_til)
+Indexes:
+    "temporal_fk2_per2per_pk" PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "temporal_fk2_per2per_valid_at_check" CHECK (valid_from < valid_til)
+Foreign-key constraints:
+    "temporal_fk2_per2per_fk" FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at) REFERENCES temporal_per2(id1, id2, PERIOD valid_at)
+
+-- should fail because of duplicate referenced columns:
+ALTER TABLE temporal_fk_per2per
+	ADD CONSTRAINT temporal_fk_per2per_fk2
+	FOREIGN KEY (parent_id, PERIOD parent_id)
+	REFERENCES temporal_per (id, PERIOD id);
+ERROR:  foreign key referenced-columns list must not contain duplicates
+--
+-- test with rows already
+--
+DELETE FROM temporal_fk_per2per;
+DELETE FROM temporal_per;
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
+  ('[1,1]', '2018-01-02', '2018-02-03'),
+  ('[1,1]', '2018-03-03', '2018-04-04'),
+  ('[2,2]', '2018-01-01', '2018-01-05'),
+  ('[3,3]', '2018-01-01', NULL);
+ALTER TABLE temporal_fk_per2per
+	DROP CONSTRAINT temporal_fk_per2per_fk;
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[1,1]', '2018-01-02', '2018-02-01', '[1,1]');
+ALTER TABLE temporal_fk_per2per
+	ADD CONSTRAINT temporal_fk_per2per_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES temporal_per (id, PERIOD valid_at);
+ALTER TABLE temporal_fk_per2per
+	DROP CONSTRAINT temporal_fk_per2per_fk;
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[2,2]', '2018-01-02', '2018-04-01', '[1,1]');
+-- should fail:
+ALTER TABLE temporal_fk_per2per
+	ADD CONSTRAINT temporal_fk_per2per_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES temporal_per (id, PERIOD valid_at);
+ERROR:  insert or update on table "temporal_fk_per2per" violates foreign key constraint "temporal_fk_per2per_fk"
+DETAIL:  Key (parent_id, valid_at)=([1,2), [2018-01-02,2018-04-01)) is not present in table "temporal_per".
+-- okay again:
+DELETE FROM temporal_fk_per2per;
+ALTER TABLE temporal_fk_per2per
+	ADD CONSTRAINT temporal_fk_per2per_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES temporal_per (id, PERIOD valid_at);
+--
+-- test pg_get_constraintdef
+--
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_fk_per2per_fk';
+                                 pg_get_constraintdef                                  
+---------------------------------------------------------------------------------------
+ FOREIGN KEY (parent_id, PERIOD valid_at) REFERENCES temporal_per(id, PERIOD valid_at)
+(1 row)
+
+--
+-- test FK referencing inserts
+--
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[1,1]', '2018-01-02', '2018-02-01', '[1,1]');
+-- should fail:
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[2,2]', '2018-01-02', '2018-04-01', '[1,1]');
+ERROR:  insert or update on table "temporal_fk_per2per" violates foreign key constraint "temporal_fk_per2per_fk"
+DETAIL:  Key (parent_id, valid_at)=([1,2), [2018-01-02,2018-04-01)) is not present in table "temporal_per".
+-- now it should work:
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[1,1]', '2018-02-03', '2018-03-03');
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[2,2]', '2018-01-02', '2018-04-01', '[1,1]');
+--
+-- test FK referencing updates
+--
+UPDATE temporal_fk_per2per SET valid_from = '2018-01-02', valid_til = '2018-03-01' WHERE id = '[1,1]';
+-- should fail:
+UPDATE temporal_fk_per2per SET valid_from = '2018-01-02', valid_til = '2018-05-01' WHERE id = '[1,1]';
+ERROR:  insert or update on table "temporal_fk_per2per" violates foreign key constraint "temporal_fk_per2per_fk"
+DETAIL:  Key (parent_id, valid_at)=([1,2), [2018-01-02,2018-05-01)) is not present in table "temporal_per".
+UPDATE temporal_fk_per2per SET parent_id = '[8,8]' WHERE id = '[1,1]';
+ERROR:  insert or update on table "temporal_fk_per2per" violates foreign key constraint "temporal_fk_per2per_fk"
+DETAIL:  Key (parent_id, valid_at)=([8,9), [2018-01-02,2018-03-01)) is not present in table "temporal_per".
+-- ALTER FK DEFERRABLE
+BEGIN;
+  INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
+    ('[5,5]', '2018-01-01', '2018-02-01'),
+    ('[5,5]', '2018-02-01', '2018-03-01');
+  INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES
+    ('[3,3]', '2018-01-05', '2018-01-10', '[5,5]');
+  ALTER TABLE temporal_fk_per2per
+    ALTER CONSTRAINT temporal_fk_per2per_fk
+    DEFERRABLE INITIALLY DEFERRED;
+  DELETE FROM temporal_per WHERE id = '[5,5]'; --should not fail yet.
+COMMIT; -- should fail here.
+ERROR:  update or delete on table "temporal_per" violates foreign key constraint "temporal_fk_per2per_fk" on table "temporal_fk_per2per"
+DETAIL:  Key (id, valid_at)=([5,6), [2018-01-01,2018-02-01)) is still referenced from table "temporal_fk_per2per".
+--
+-- test FK parent updates NO ACTION
+--
+TRUNCATE temporal_per, temporal_fk_per2per;
+-- a PK update that succeeds because the numeric id isn't referenced:
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[5,5]', '2018-01-01', '2018-02-01');
+UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01' WHERE id = '[5,5]';
+-- a PK update that succeeds even though the numeric id is referenced because the range isn't:
+DELETE FROM temporal_per WHERE id = '[5,5]';
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
+  ('[5,5]', '2018-01-01', '2018-02-01'),
+  ('[5,5]', '2018-02-01', '2018-03-01');
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[3,3]', '2018-01-05', '2018-01-10', '[5,5]');
+UPDATE temporal_per SET valid_from = '2016-02-01', valid_til = '2016-03-01'
+WHERE id = '[5,5]' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
+-- a PK update that fails because both are referenced:
+UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01'
+WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+ERROR:  update or delete on table "temporal_per" violates foreign key constraint "temporal_fk_per2per_fk" on table "temporal_fk_per2per"
+DETAIL:  Key (id, valid_at)=([5,6), [2018-01-01,2018-02-01)) is still referenced from table "temporal_fk_per2per".
+-- changing the scalar part fails:
+UPDATE temporal_per SET id = '[7,7]'
+WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+ERROR:  update or delete on table "temporal_per" violates foreign key constraint "temporal_fk_per2per_fk" on table "temporal_fk_per2per"
+DETAIL:  Key (id, valid_at)=([5,6), [2018-01-01,2018-02-01)) is still referenced from table "temporal_fk_per2per".
+-- changing an unreferenced part is okay:
+UPDATE temporal_per
+FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
+SET id = '[7,7]'
+WHERE id = '[5,5]';
+-- changing just a part fails:
+UPDATE temporal_per
+FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
+SET id = '[7,7]'
+WHERE id = '[5,5]';
+ERROR:  update or delete on table "temporal_per" violates foreign key constraint "temporal_fk_per2per_fk" on table "temporal_fk_per2per"
+DETAIL:  Key (id, valid_at)=([5,6), [2018-01-03,2018-02-01)) is still referenced from table "temporal_fk_per2per".
+SELECT * FROM temporal_per WHERE id in ('[5,5]', '[7,7]') ORDER BY id, valid_at;
+  id   | valid_from | valid_til  
+-------+------------+------------
+ [5,6) | 2016-02-01 | 2016-03-01
+ [5,6) | 2018-01-01 | 2018-01-02
+ [5,6) | 2018-01-03 | 2018-02-01
+ [7,8) | 2018-01-02 | 2018-01-03
+(4 rows)
+
+SELECT * FROM temporal_fk_per2per WHERE id in ('[3,3]') ORDER BY id, valid_at;
+  id   | valid_from | valid_til  | parent_id 
+-------+------------+------------+-----------
+ [3,4) | 2018-01-05 | 2018-01-10 | [5,6)
+(1 row)
+
+-- then delete the objecting FK record and the same PK update succeeds:
+DELETE FROM temporal_fk_per2per WHERE id = '[3,3]';
+UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01'
+WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+--
+-- test FK parent updates RESTRICT
+--
+TRUNCATE temporal_per, temporal_fk_per2per;
+ALTER TABLE temporal_fk_per2per
+	DROP CONSTRAINT temporal_fk_per2per_fk;
+ALTER TABLE temporal_fk_per2per
+	ADD CONSTRAINT temporal_fk_per2per_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES temporal_per (id, PERIOD valid_at)
+	ON UPDATE RESTRICT;
+-- a PK update that succeeds because the numeric id isn't referenced:
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[5,5]', '2018-01-01', '2018-02-01');
+UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01' WHERE id = '[5,5]';
+-- a PK update that succeeds even though the numeric id is referenced because the range isn't:
+DELETE FROM temporal_per WHERE id = '[5,5]';
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
+  ('[5,5]', '2018-01-01', '2018-02-01'),
+  ('[5,5]', '2018-02-01', '2018-03-01');
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[3,3]', '2018-01-05', '2018-01-10', '[5,5]');
+UPDATE temporal_per SET valid_from = '2016-02-01', valid_til = '2016-03-01'
+WHERE id = '[5,5]' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
+-- a PK update that fails because both are referenced:
+UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01'
+WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+ERROR:  update or delete on table "temporal_per" violates foreign key constraint "temporal_fk_per2per_fk" on table "temporal_fk_per2per"
+DETAIL:  Key (id, valid_at)=([5,6), [2018-01-01,2018-02-01)) is still referenced from table "temporal_fk_per2per".
+-- changing the scalar part fails:
+UPDATE temporal_per SET id = '[7,7]'
+WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+ERROR:  update or delete on table "temporal_per" violates foreign key constraint "temporal_fk_per2per_fk" on table "temporal_fk_per2per"
+DETAIL:  Key (id, valid_at)=([5,6), [2018-01-01,2018-02-01)) is still referenced from table "temporal_fk_per2per".
+-- changing an unreferenced part is okay:
+UPDATE temporal_per
+FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
+SET id = '[7,7]'
+WHERE id = '[5,5]';
+-- changing just a part fails:
+UPDATE temporal_per
+FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
+SET id = '[7,7]'
+WHERE id = '[5,5]';
+ERROR:  update or delete on table "temporal_per" violates foreign key constraint "temporal_fk_per2per_fk" on table "temporal_fk_per2per"
+DETAIL:  Key (id, valid_at)=([5,6), [2018-01-03,2018-02-01)) is still referenced from table "temporal_fk_per2per".
+SELECT * FROM temporal_per WHERE id in ('[5,5]', '[7,7]') ORDER BY id, valid_at;
+  id   | valid_from | valid_til  
+-------+------------+------------
+ [5,6) | 2016-02-01 | 2016-03-01
+ [5,6) | 2018-01-01 | 2018-01-02
+ [5,6) | 2018-01-03 | 2018-02-01
+ [7,8) | 2018-01-02 | 2018-01-03
+(4 rows)
+
+SELECT * FROM temporal_fk_per2per WHERE id in ('[3,3]') ORDER BY id, valid_at;
+  id   | valid_from | valid_til  | parent_id 
+-------+------------+------------+-----------
+ [3,4) | 2018-01-05 | 2018-01-10 | [5,6)
+(1 row)
+
+-- then delete the objecting FK record and the same PK update succeeds:
+DELETE FROM temporal_fk_per2per WHERE id = '[3,3]';
+UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01'
+WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+--
+-- test FK parent deletes NO ACTION
+--
+TRUNCATE temporal_per, temporal_fk_per2per;
+ALTER TABLE temporal_fk_per2per
+	DROP CONSTRAINT temporal_fk_per2per_fk;
+ALTER TABLE temporal_fk_per2per
+	ADD CONSTRAINT temporal_fk_per2per_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES temporal_per (id, PERIOD valid_at);
+-- a PK delete that succeeds because the numeric id isn't referenced:
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[5,5]', '2018-01-01', '2018-02-01');
+DELETE FROM temporal_per WHERE id = '[5,5]';
+-- a PK delete that succeeds even though the numeric id is referenced because the range isn't:
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
+  ('[5,5]', '2018-01-01', '2018-02-01'),
+  ('[5,5]', '2018-02-01', '2018-03-01');
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[3,3]', '2018-01-05', '2018-01-10', '[5,5]');
+DELETE FROM temporal_per WHERE id = '[5,5]' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
+-- a PK delete that fails because both are referenced:
+DELETE FROM temporal_per WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+ERROR:  update or delete on table "temporal_per" violates foreign key constraint "temporal_fk_per2per_fk" on table "temporal_fk_per2per"
+DETAIL:  Key (id, valid_at)=([5,6), [2018-01-01,2018-02-01)) is still referenced from table "temporal_fk_per2per".
+-- deleting an unreferenced part is okay:
+DELETE FROM temporal_per
+FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
+WHERE id = '[5,5]';
+-- deleting just a part fails:
+DELETE FROM temporal_per
+FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
+WHERE id = '[5,5]';
+ERROR:  update or delete on table "temporal_per" violates foreign key constraint "temporal_fk_per2per_fk" on table "temporal_fk_per2per"
+DETAIL:  Key (id, valid_at)=([5,6), [2018-01-03,2018-02-01)) is still referenced from table "temporal_fk_per2per".
+SELECT * FROM temporal_per WHERE id in ('[5,5]', '[7,7]') ORDER BY id, valid_at;
+  id   | valid_from | valid_til  
+-------+------------+------------
+ [5,6) | 2018-01-01 | 2018-01-02
+ [5,6) | 2018-01-03 | 2018-02-01
+(2 rows)
+
+SELECT * FROM temporal_fk_per2per WHERE id in ('[3,3]') ORDER BY id, valid_at;
+  id   | valid_from | valid_til  | parent_id 
+-------+------------+------------+-----------
+ [3,4) | 2018-01-05 | 2018-01-10 | [5,6)
+(1 row)
+
+-- then delete the objecting FK record and the same PK delete succeeds:
+DELETE FROM temporal_fk_per2per WHERE id = '[3,3]';
+DELETE FROM temporal_per WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+--
+-- test FK parent deletes RESTRICT
+--
+TRUNCATE temporal_per, temporal_fk_per2per;
+ALTER TABLE temporal_fk_per2per
+	DROP CONSTRAINT temporal_fk_per2per_fk;
+ALTER TABLE temporal_fk_per2per
+	ADD CONSTRAINT temporal_fk_per2per_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES temporal_per (id, PERIOD valid_at)
+	ON DELETE RESTRICT;
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[5,5]', '2018-01-01', '2018-02-01');
+DELETE FROM temporal_per WHERE id = '[5,5]';
+-- a PK delete that succeeds even though the numeric id is referenced because the range isn't:
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
+  ('[5,5]', '2018-01-01', '2018-02-01'),
+  ('[5,5]', '2018-02-01', '2018-03-01');
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[3,3]', '2018-01-05', '2018-01-10', '[5,5]');
+DELETE FROM temporal_per WHERE id = '[5,5]' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
+-- a PK delete that fails because both are referenced:
+DELETE FROM temporal_per WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+ERROR:  update or delete on table "temporal_per" violates foreign key constraint "temporal_fk_per2per_fk" on table "temporal_fk_per2per"
+DETAIL:  Key (id, valid_at)=([5,6), [2018-01-01,2018-02-01)) is still referenced from table "temporal_fk_per2per".
+-- deleting an unreferenced part is okay:
+DELETE FROM temporal_per
+FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
+WHERE id = '[5,5]';
+-- deleting just a part fails:
+DELETE FROM temporal_per
+FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
+WHERE id = '[5,5]';
+ERROR:  update or delete on table "temporal_per" violates foreign key constraint "temporal_fk_per2per_fk" on table "temporal_fk_per2per"
+DETAIL:  Key (id, valid_at)=([5,6), [2018-01-03,2018-02-01)) is still referenced from table "temporal_fk_per2per".
+SELECT * FROM temporal_per WHERE id in ('[5,5]', '[7,7]') ORDER BY id, valid_at;
+  id   | valid_from | valid_til  
+-------+------------+------------
+ [5,6) | 2018-01-01 | 2018-01-02
+ [5,6) | 2018-01-03 | 2018-02-01
+(2 rows)
+
+SELECT * FROM temporal_fk_per2per WHERE id in ('[3,3]') ORDER BY id, valid_at;
+  id   | valid_from | valid_til  | parent_id 
+-------+------------+------------+-----------
+ [3,4) | 2018-01-05 | 2018-01-10 | [5,6)
+(1 row)
+
+-- then delete the objecting FK record and the same PK delete succeeds:
+DELETE FROM temporal_fk_per2per WHERE id = '[3,3]';
+DELETE FROM temporal_per WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+--
+-- per2per test ON UPDATE/DELETE options
+--
+-- TOC:
+-- parent updates CASCADE
+-- parent deletes CASCADE
+-- parent updates SET NULL
+-- parent deletes SET NULL
+-- parent updates SET DEFAULT
+-- parent deletes SET DEFAULT
+-- parent updates CASCADE (two scalar cols)
+-- parent deletes CASCADE (two scalar cols)
+-- parent updates SET NULL (two scalar cols)
+-- parent deletes SET NULL (two scalar cols)
+-- parent deletes SET NULL (two scalar cols, SET NULL subset)
+-- parent updates SET DEFAULT (two scalar cols)
+-- parent deletes SET DEFAULT (two scalar cols)
+-- parent deletes SET DEFAULT (two scalar cols, SET DEFAULT subset)
+--
+-- test FK parent updates CASCADE
+--
+TRUNCATE temporal_per, temporal_fk_per2per;
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[6,6]', '2018-01-01', '2021-01-01');
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]');
+ALTER TABLE temporal_fk_per2per
+	DROP CONSTRAINT temporal_fk_per2per_fk,
+	ADD CONSTRAINT temporal_fk_per2per_fk
+		FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES temporal_per (id, PERIOD valid_at)
+		ON DELETE CASCADE ON UPDATE CASCADE;
+-- leftovers on both sides:
+UPDATE temporal_per FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id = '[7,7]' WHERE id = '[6,6]';
+SELECT * FROM temporal_fk_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id 
+-----------+------------+------------+-----------
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 | [7,8)
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)
+(3 rows)
+
+-- non-FPO update:
+UPDATE temporal_per SET id = '[7,7]' WHERE id = '[6,6]';
+SELECT * FROM temporal_fk_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id 
+-----------+------------+------------+-----------
+ [100,101) | 2018-01-01 | 2019-01-01 | [7,8)
+ [100,101) | 2019-01-01 | 2020-01-01 | [7,8)
+ [100,101) | 2020-01-01 | 2021-01-01 | [7,8)
+(3 rows)
+
+-- FK across two referenced rows:
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[8,8]', '2018-01-01', '2020-01-01');
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[8,8]', '2020-01-01', '2021-01-01');
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]');
+UPDATE temporal_per SET id = '[9,9]' WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::date;
+SELECT * FROM temporal_fk_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id 
+-----------+------------+------------+-----------
+ [200,201) | 2018-01-01 | 2020-01-01 | [9,10)
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)
+(2 rows)
+
+--
+-- test FK parent deletes CASCADE
+--
+TRUNCATE temporal_per, temporal_fk_per2per;
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[6,6]', '2018-01-01', '2021-01-01');
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]');
+-- leftovers on both sides:
+DELETE FROM temporal_per FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[6,6]';
+SELECT * FROM temporal_fk_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id 
+-----------+------------+------------+-----------
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)
+(2 rows)
+
+-- non-FPO delete:
+DELETE FROM temporal_per WHERE id = '[6,6]';
+SELECT * FROM temporal_fk_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+ id | valid_from | valid_til | parent_id 
+----+------------+-----------+-----------
+(0 rows)
+
+-- FK across two referenced rows:
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[8,8]', '2018-01-01', '2020-01-01');
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[8,8]', '2020-01-01', '2021-01-01');
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]');
+DELETE FROM temporal_per WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::date;
+SELECT * FROM temporal_fk_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id 
+-----------+------------+------------+-----------
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)
+(1 row)
+
+--
+-- test FK parent updates SET NULL
+--
+TRUNCATE temporal_per, temporal_fk_per2per;
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[6,6]', '2018-01-01', '2021-01-01');
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]');
+ALTER TABLE temporal_fk_per2per
+	DROP CONSTRAINT temporal_fk_per2per_fk,
+	ADD CONSTRAINT temporal_fk_per2per_fk
+		FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES temporal_per (id, PERIOD valid_at)
+		ON DELETE SET NULL ON UPDATE SET NULL;
+-- leftovers on both sides:
+UPDATE temporal_per FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id = '[7,7]' WHERE id = '[6,6]';
+SELECT * FROM temporal_fk_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id 
+-----------+------------+------------+-----------
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 | 
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)
+(3 rows)
+
+-- non-FPO update:
+UPDATE temporal_per SET id = '[7,7]' WHERE id = '[6,6]';
+SELECT * FROM temporal_fk_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id 
+-----------+------------+------------+-----------
+ [100,101) | 2018-01-01 | 2019-01-01 | 
+ [100,101) | 2019-01-01 | 2020-01-01 | 
+ [100,101) | 2020-01-01 | 2021-01-01 | 
+(3 rows)
+
+-- FK across two referenced rows:
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[8,8]', '2018-01-01', '2020-01-01');
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[8,8]', '2020-01-01', '2021-01-01');
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]');
+UPDATE temporal_per SET id = '[9,9]' WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::date;
+SELECT * FROM temporal_fk_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id 
+-----------+------------+------------+-----------
+ [200,201) | 2018-01-01 | 2020-01-01 | 
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)
+(2 rows)
+
+--
+-- test FK parent deletes SET NULL
+--
+TRUNCATE temporal_per, temporal_fk_per2per;
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[6,6]', '2018-01-01', '2021-01-01');
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]');
+-- leftovers on both sides:
+DELETE FROM temporal_per FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[6,6]';
+SELECT * FROM temporal_fk_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id 
+-----------+------------+------------+-----------
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 | 
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)
+(3 rows)
+
+-- non-FPO delete:
+DELETE FROM temporal_per WHERE id = '[6,6]';
+SELECT * FROM temporal_fk_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id 
+-----------+------------+------------+-----------
+ [100,101) | 2018-01-01 | 2019-01-01 | 
+ [100,101) | 2019-01-01 | 2020-01-01 | 
+ [100,101) | 2020-01-01 | 2021-01-01 | 
+(3 rows)
+
+-- FK across two referenced rows:
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[8,8]', '2018-01-01', '2020-01-01');
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[8,8]', '2020-01-01', '2021-01-01');
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]');
+DELETE FROM temporal_per WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::date;
+SELECT * FROM temporal_fk_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id 
+-----------+------------+------------+-----------
+ [200,201) | 2018-01-01 | 2020-01-01 | 
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)
+(2 rows)
+
+--
+-- test FK parent updates SET DEFAULT
+--
+TRUNCATE temporal_per, temporal_fk_per2per;
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[-1,-1]', null, null);
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[6,6]', '2018-01-01', '2021-01-01');
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]');
+ALTER TABLE temporal_fk_per2per
+  ALTER COLUMN parent_id SET DEFAULT '[-1,-1]',
+	DROP CONSTRAINT temporal_fk_per2per_fk,
+	ADD CONSTRAINT temporal_fk_per2per_fk
+		FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES temporal_per (id, PERIOD valid_at)
+		ON DELETE SET DEFAULT ON UPDATE SET DEFAULT;
+-- leftovers on both sides:
+UPDATE temporal_per FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id = '[7,7]' WHERE id = '[6,6]';
+SELECT * FROM temporal_fk_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id 
+-----------+------------+------------+-----------
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 | [-1,0)
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)
+(3 rows)
+
+-- non-FPO update:
+UPDATE temporal_per SET id = '[7,7]' WHERE id = '[6,6]';
+SELECT * FROM temporal_fk_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id 
+-----------+------------+------------+-----------
+ [100,101) | 2018-01-01 | 2019-01-01 | [-1,0)
+ [100,101) | 2019-01-01 | 2020-01-01 | [-1,0)
+ [100,101) | 2020-01-01 | 2021-01-01 | [-1,0)
+(3 rows)
+
+-- FK across two referenced rows:
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[8,8]', '2018-01-01', '2020-01-01');
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[8,8]', '2020-01-01', '2021-01-01');
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]');
+UPDATE temporal_per SET id = '[9,9]' WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::date;
+SELECT * FROM temporal_fk_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id 
+-----------+------------+------------+-----------
+ [200,201) | 2018-01-01 | 2020-01-01 | [-1,0)
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)
+(2 rows)
+
+--
+-- test FK parent deletes SET DEFAULT
+--
+TRUNCATE temporal_per, temporal_fk_per2per;
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[-1,-1]', null, null);
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[6,6]', '2018-01-01', '2021-01-01');
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]');
+-- leftovers on both sides:
+DELETE FROM temporal_per FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[6,6]';
+SELECT * FROM temporal_fk_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id 
+-----------+------------+------------+-----------
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 | [-1,0)
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)
+(3 rows)
+
+-- non-FPO update:
+DELETE FROM temporal_per WHERE id = '[6,6]';
+SELECT * FROM temporal_fk_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id 
+-----------+------------+------------+-----------
+ [100,101) | 2018-01-01 | 2019-01-01 | [-1,0)
+ [100,101) | 2019-01-01 | 2020-01-01 | [-1,0)
+ [100,101) | 2020-01-01 | 2021-01-01 | [-1,0)
+(3 rows)
+
+-- FK across two referenced rows:
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[8,8]', '2018-01-01', '2020-01-01');
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[8,8]', '2020-01-01', '2021-01-01');
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]');
+DELETE FROM temporal_per WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::date;
+SELECT * FROM temporal_fk_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id 
+-----------+------------+------------+-----------
+ [200,201) | 2018-01-01 | 2020-01-01 | [-1,0)
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)
+(2 rows)
+
+--
+-- test FK parent updates CASCADE (two scalar cols)
+--
+TRUNCATE temporal_per2, temporal_fk2_per2per;
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[6,6]', '[6,6]', '2018-01-01', '2021-01-01');
+INSERT INTO temporal_fk2_per2per (id, valid_from, valid_til, parent_id1, parent_id2) VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]', '[6,6]');
+ALTER TABLE temporal_fk2_per2per
+	DROP CONSTRAINT temporal_fk2_per2per_fk,
+	ADD CONSTRAINT temporal_fk2_per2per_fk
+		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
+		REFERENCES temporal_per2 (id1, id2, PERIOD valid_at)
+		ON DELETE CASCADE ON UPDATE CASCADE;
+-- leftovers on both sides:
+UPDATE temporal_per2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id1 = '[7,7]' WHERE id1 = '[6,6]';
+SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id1 | parent_id2 
+-----------+------------+------------+------------+------------
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)      | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 | [7,8)      | [6,7)
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)      | [6,7)
+(3 rows)
+
+-- non-FPO update:
+UPDATE temporal_per2 SET id1 = '[7,7]' WHERE id1 = '[6,6]';
+SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id1 | parent_id2 
+-----------+------------+------------+------------+------------
+ [100,101) | 2018-01-01 | 2019-01-01 | [7,8)      | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 | [7,8)      | [6,7)
+ [100,101) | 2020-01-01 | 2021-01-01 | [7,8)      | [6,7)
+(3 rows)
+
+-- FK across two referenced rows:
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[8,8]', '[8,8]', '2018-01-01', '2020-01-01');
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[8,8]', '[8,8]', '2020-01-01', '2021-01-01');
+INSERT INTO temporal_fk2_per2per (id, valid_from, valid_til, parent_id1, parent_id2) VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]', '[8,8]');
+UPDATE temporal_per2 SET id1 = '[9,9]' WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date;
+SELECT * FROM temporal_fk2_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id1 | parent_id2 
+-----------+------------+------------+------------+------------
+ [200,201) | 2018-01-01 | 2020-01-01 | [9,10)     | [8,9)
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)      | [8,9)
+(2 rows)
+
+--
+-- test FK parent deletes CASCADE (two scalar cols)
+--
+TRUNCATE temporal_per2, temporal_fk2_per2per;
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[6,6]', '[6,6]', '2018-01-01', '2021-01-01');
+INSERT INTO temporal_fk2_per2per (id, valid_from, valid_til, parent_id1, parent_id2) VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]', '[6,6]');
+-- leftovers on both sides:
+DELETE FROM temporal_per2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id1 = '[6,6]';
+SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id1 | parent_id2 
+-----------+------------+------------+------------+------------
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)      | [6,7)
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)      | [6,7)
+(2 rows)
+
+-- non-FPO delete:
+DELETE FROM temporal_per2 WHERE id1 = '[6,6]';
+SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+ id | valid_from | valid_til | parent_id1 | parent_id2 
+----+------------+-----------+------------+------------
+(0 rows)
+
+-- FK across two referenced rows:
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[8,8]', '[8,8]', '2018-01-01', '2020-01-01');
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[8,8]', '[8,8]', '2020-01-01', '2021-01-01');
+INSERT INTO temporal_fk2_per2per (id, valid_from, valid_til, parent_id1, parent_id2) VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]', '[8,8]');
+DELETE FROM temporal_per2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date;
+SELECT * FROM temporal_fk2_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id1 | parent_id2 
+-----------+------------+------------+------------+------------
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)      | [8,9)
+(1 row)
+
+--
+-- test FK parent updates SET NULL (two scalar cols)
+--
+TRUNCATE temporal_per2, temporal_fk2_per2per;
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[6,6]', '[6,6]', '2018-01-01', '2021-01-01');
+INSERT INTO temporal_fk2_per2per (id, valid_from, valid_til, parent_id1, parent_id2) VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]', '[6,6]');
+ALTER TABLE temporal_fk2_per2per
+	DROP CONSTRAINT temporal_fk2_per2per_fk,
+	ADD CONSTRAINT temporal_fk2_per2per_fk
+		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
+		REFERENCES temporal_per2 (id1, id2, PERIOD valid_at)
+		ON DELETE SET NULL ON UPDATE SET NULL;
+-- leftovers on both sides:
+UPDATE temporal_per2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id1 = '[7,7]' WHERE id1 = '[6,6]';
+SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id1 | parent_id2 
+-----------+------------+------------+------------+------------
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)      | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 |            | 
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)      | [6,7)
+(3 rows)
+
+-- non-FPO update:
+UPDATE temporal_per2 SET id1 = '[7,7]' WHERE id1 = '[6,6]';
+SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id1 | parent_id2 
+-----------+------------+------------+------------+------------
+ [100,101) | 2018-01-01 | 2019-01-01 |            | 
+ [100,101) | 2019-01-01 | 2020-01-01 |            | 
+ [100,101) | 2020-01-01 | 2021-01-01 |            | 
+(3 rows)
+
+-- FK across two referenced rows:
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[8,8]', '[8,8]', '2018-01-01', '2020-01-01');
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[8,8]', '[8,8]', '2020-01-01', '2021-01-01');
+INSERT INTO temporal_fk2_per2per (id, valid_from, valid_til, parent_id1, parent_id2) VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]', '[8,8]');
+UPDATE temporal_per2 SET id1 = '[9,9]' WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date;
+SELECT * FROM temporal_fk2_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id1 | parent_id2 
+-----------+------------+------------+------------+------------
+ [200,201) | 2018-01-01 | 2020-01-01 |            | 
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)      | [8,9)
+(2 rows)
+
+--
+-- test FK parent deletes SET NULL (two scalar cols)
+--
+TRUNCATE temporal_per2, temporal_fk2_per2per;
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[6,6]', '[6,6]', '2018-01-01', '2021-01-01');
+INSERT INTO temporal_fk2_per2per (id, valid_from, valid_til, parent_id1, parent_id2) VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]', '[6,6]');
+-- leftovers on both sides:
+DELETE FROM temporal_per2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id1 = '[6,6]';
+SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id1 | parent_id2 
+-----------+------------+------------+------------+------------
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)      | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 |            | 
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)      | [6,7)
+(3 rows)
+
+-- non-FPO delete:
+DELETE FROM temporal_per2 WHERE id1 = '[6,6]';
+SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id1 | parent_id2 
+-----------+------------+------------+------------+------------
+ [100,101) | 2018-01-01 | 2019-01-01 |            | 
+ [100,101) | 2019-01-01 | 2020-01-01 |            | 
+ [100,101) | 2020-01-01 | 2021-01-01 |            | 
+(3 rows)
+
+-- FK across two referenced rows:
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[8,8]', '[8,8]', '2018-01-01', '2020-01-01');
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[8,8]', '[8,8]', '2020-01-01', '2021-01-01');
+INSERT INTO temporal_fk2_per2per (id, valid_from, valid_til, parent_id1, parent_id2) VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]', '[8,8]');
+DELETE FROM temporal_per2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date;
+SELECT * FROM temporal_fk2_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id1 | parent_id2 
+-----------+------------+------------+------------+------------
+ [200,201) | 2018-01-01 | 2020-01-01 |            | 
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)      | [8,9)
+(2 rows)
+
+--
+-- test FK parent deletes SET NULL (two scalar cols, SET NULL subset)
+--
+TRUNCATE temporal_per2, temporal_fk2_per2per;
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[6,6]', '[6,6]', '2018-01-01', '2021-01-01');
+INSERT INTO temporal_fk2_per2per (id, valid_from, valid_til, parent_id1, parent_id2) VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]', '[6,6]');
+-- fails because you can't set the PERIOD column:
+ALTER TABLE temporal_fk2_per2per
+	DROP CONSTRAINT temporal_fk2_per2per_fk,
+	ADD CONSTRAINT temporal_fk2_per2per_fk
+		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
+		REFERENCES temporal_per2 (id1, id2, PERIOD valid_at)
+		ON DELETE SET NULL (valid_at) ON UPDATE SET NULL;
+ERROR:  column "valid_at" referenced in ON DELETE SET action cannot be PERIOD
+-- ok:
+ALTER TABLE temporal_fk2_per2per
+	DROP CONSTRAINT temporal_fk2_per2per_fk,
+	ADD CONSTRAINT temporal_fk2_per2per_fk
+		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
+		REFERENCES temporal_per2 (id1, id2, PERIOD valid_at)
+		ON DELETE SET NULL (parent_id1) ON UPDATE SET NULL;
+-- leftovers on both sides:
+DELETE FROM temporal_per2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id1 = '[6,6]';
+SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id1 | parent_id2 
+-----------+------------+------------+------------+------------
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)      | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 |            | [6,7)
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)      | [6,7)
+(3 rows)
+
+-- non-FPO delete:
+DELETE FROM temporal_per2 WHERE id1 = '[6,6]';
+SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id1 | parent_id2 
+-----------+------------+------------+------------+------------
+ [100,101) | 2018-01-01 | 2019-01-01 |            | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 |            | [6,7)
+ [100,101) | 2020-01-01 | 2021-01-01 |            | [6,7)
+(3 rows)
+
+-- FK across two referenced rows:
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[8,8]', '[8,8]', '2018-01-01', '2020-01-01');
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[8,8]', '[8,8]', '2020-01-01', '2021-01-01');
+INSERT INTO temporal_fk2_per2per (id, valid_from, valid_til, parent_id1, parent_id2) VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]', '[8,8]');
+DELETE FROM temporal_per2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date;
+SELECT * FROM temporal_fk2_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id1 | parent_id2 
+-----------+------------+------------+------------+------------
+ [200,201) | 2018-01-01 | 2020-01-01 |            | [8,9)
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)      | [8,9)
+(2 rows)
+
+--
+-- test FK parent updates SET DEFAULT (two scalar cols)
+--
+TRUNCATE temporal_per2, temporal_fk2_per2per;
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[-1,-1]', '[-1,-1]', null, null);
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[6,6]', '[6,6]', '2018-01-01', '2021-01-01');
+INSERT INTO temporal_fk2_per2per (id, valid_from, valid_til, parent_id1, parent_id2) VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]', '[6,6]');
+ALTER TABLE temporal_fk2_per2per
+  ALTER COLUMN parent_id1 SET DEFAULT '[-1,-1]',
+  ALTER COLUMN parent_id2 SET DEFAULT '[-1,-1]',
+	DROP CONSTRAINT temporal_fk2_per2per_fk,
+	ADD CONSTRAINT temporal_fk2_per2per_fk
+		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
+		REFERENCES temporal_per2 (id1, id2, PERIOD valid_at)
+		ON DELETE SET DEFAULT ON UPDATE SET DEFAULT;
+-- leftovers on both sides:
+UPDATE temporal_per2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id1 = '[7,7]', id2 = '[7,7]' WHERE id1 = '[6,6]';
+SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id1 | parent_id2 
+-----------+------------+------------+------------+------------
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)      | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 | [-1,0)     | [-1,0)
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)      | [6,7)
+(3 rows)
+
+-- non-FPO update:
+UPDATE temporal_per2 SET id1 = '[7,7]', id2 = '[7,7]' WHERE id1 = '[6,6]';
+SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id1 | parent_id2 
+-----------+------------+------------+------------+------------
+ [100,101) | 2018-01-01 | 2019-01-01 | [-1,0)     | [-1,0)
+ [100,101) | 2019-01-01 | 2020-01-01 | [-1,0)     | [-1,0)
+ [100,101) | 2020-01-01 | 2021-01-01 | [-1,0)     | [-1,0)
+(3 rows)
+
+-- FK across two referenced rows:
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[8,8]', '[8,8]', '2018-01-01', '2020-01-01');
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[8,8]', '[8,8]', '2020-01-01', '2021-01-01');
+INSERT INTO temporal_fk2_per2per (id, valid_from, valid_til, parent_id1, parent_id2) VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]', '[8,8]');
+UPDATE temporal_per2 SET id1 = '[9,9]', id2 = '[9,9]' WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date;
+SELECT * FROM temporal_fk2_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id1 | parent_id2 
+-----------+------------+------------+------------+------------
+ [200,201) | 2018-01-01 | 2020-01-01 | [-1,0)     | [-1,0)
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)      | [8,9)
+(2 rows)
+
+--
+-- test FK parent deletes SET DEFAULT (two scalar cols)
+--
+TRUNCATE temporal_per2, temporal_fk2_per2per;
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[-1,-1]', '[-1,-1]', null, null);
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[6,6]', '[6,6]', '2018-01-01', '2021-01-01');
+INSERT INTO temporal_fk2_per2per (id, valid_from, valid_til, parent_id1, parent_id2) VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]', '[6,6]');
+-- leftovers on both sides:
+DELETE FROM temporal_per2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id1 = '[6,6]';
+SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id1 | parent_id2 
+-----------+------------+------------+------------+------------
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)      | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 | [-1,0)     | [-1,0)
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)      | [6,7)
+(3 rows)
+
+-- non-FPO update:
+DELETE FROM temporal_per2 WHERE id1 = '[6,6]';
+SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id1 | parent_id2 
+-----------+------------+------------+------------+------------
+ [100,101) | 2018-01-01 | 2019-01-01 | [-1,0)     | [-1,0)
+ [100,101) | 2019-01-01 | 2020-01-01 | [-1,0)     | [-1,0)
+ [100,101) | 2020-01-01 | 2021-01-01 | [-1,0)     | [-1,0)
+(3 rows)
+
+-- FK across two referenced rows:
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[8,8]', '[8,8]', '2018-01-01', '2020-01-01');
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[8,8]', '[8,8]', '2020-01-01', '2021-01-01');
+INSERT INTO temporal_fk2_per2per (id, valid_from, valid_til, parent_id1, parent_id2) VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]', '[8,8]');
+DELETE FROM temporal_per2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date;
+SELECT * FROM temporal_fk2_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id1 | parent_id2 
+-----------+------------+------------+------------+------------
+ [200,201) | 2018-01-01 | 2020-01-01 | [-1,0)     | [-1,0)
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)      | [8,9)
+(2 rows)
+
+--
+-- test FK parent deletes SET DEFAULT (two scalar cols, SET DEFAULT subset)
+--
+TRUNCATE temporal_per2, temporal_fk2_per2per;
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[-1,-1]', '[6,6]', null, null);
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[6,6]', '[6,6]', '2018-01-01', '2021-01-01');
+INSERT INTO temporal_fk2_per2per (id, valid_from, valid_til, parent_id1, parent_id2) VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]', '[6,6]');
+-- fails because you can't set the PERIOD column:
+ALTER TABLE temporal_fk2_per2per
+  ALTER COLUMN parent_id1 SET DEFAULT '[-1,-1]',
+	DROP CONSTRAINT temporal_fk2_per2per_fk,
+	ADD CONSTRAINT temporal_fk2_per2per_fk
+		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
+		REFERENCES temporal_per2 (id1, id2, PERIOD valid_at)
+		ON DELETE SET DEFAULT (valid_at) ON UPDATE SET DEFAULT;
+ERROR:  column "valid_at" referenced in ON DELETE SET action cannot be PERIOD
+-- ok:
+ALTER TABLE temporal_fk2_per2per
+  ALTER COLUMN parent_id1 SET DEFAULT '[-1,-1]',
+	DROP CONSTRAINT temporal_fk2_per2per_fk,
+	ADD CONSTRAINT temporal_fk2_per2per_fk
+		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
+		REFERENCES temporal_per2 (id1, id2, PERIOD valid_at)
+		ON DELETE SET DEFAULT (parent_id1) ON UPDATE SET DEFAULT;
+-- leftovers on both sides:
+DELETE FROM temporal_per2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id1 = '[6,6]';
+SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id1 | parent_id2 
+-----------+------------+------------+------------+------------
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)      | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 | [-1,0)     | [6,7)
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)      | [6,7)
+(3 rows)
+
+-- non-FPO update:
+DELETE FROM temporal_per2 WHERE id1 = '[6,6]';
+SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id1 | parent_id2 
+-----------+------------+------------+------------+------------
+ [100,101) | 2018-01-01 | 2019-01-01 | [-1,0)     | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 | [-1,0)     | [6,7)
+ [100,101) | 2020-01-01 | 2021-01-01 | [-1,0)     | [6,7)
+(3 rows)
+
+-- FK across two referenced rows:
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[8,8]', '[8,8]', '2018-01-01', '2020-01-01');
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[8,8]', '[8,8]', '2020-01-01', '2021-01-01');
+INSERT INTO temporal_per2 (id1, id2, valid_from, valid_til) VALUES ('[-1,-1]', '[8,8]', null, null);
+INSERT INTO temporal_fk2_per2per (id, valid_from, valid_til, parent_id1, parent_id2) VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]', '[8,8]');
+DELETE FROM temporal_per2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date;
+SELECT * FROM temporal_fk2_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
+    id     | valid_from | valid_til  | parent_id1 | parent_id2 
+-----------+------------+------------+------------+------------
+ [200,201) | 2018-01-01 | 2020-01-01 | [-1,0)     | [8,9)
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)      | [8,9)
 (2 rows)
 
 -- FK with a custom range type
