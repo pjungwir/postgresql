@@ -56,17 +56,6 @@ DROP TABLE without_overlaps_test2;
 -- PK with two columns plus a PERIOD:
 -- TODO
 
--- PK with USING INDEX (not yet allowed):
-CREATE TABLE without_overlaps_test2 (
-	id int4range,
-	valid_at tsrange
-);
-CREATE INDEX idx_without_overlaps2 ON without_overlaps_test2 USING gist (id, valid_at);
-ALTER TABLE without_overlaps_test2
-  ADD CONSTRAINT without_overlaps2_pk
-  PRIMARY KEY USING INDEX idx_without_overlaps2;
-DROP TABLE without_overlaps_test2;
-
 -- PK with a custom range type:
 CREATE TYPE textrange2 AS range (subtype=text, collation="C");
 CREATE TABLE without_overlaps_test2 (
@@ -76,6 +65,69 @@ CREATE TABLE without_overlaps_test2 (
 );
 ALTER TABLE without_overlaps_test2 DROP CONSTRAINT without_overlaps2_pk;
 DROP TABLE without_overlaps_test2;
+DROP TYPE textrange2;
+
+-- UNIQUE with no columns just WITHOUT OVERLAPS:
+
+CREATE TABLE without_overlaps_uq_test (
+	valid_at tsrange,
+	CONSTRAINT without_overlaps_uq UNIQUE (valid_at WITHOUT OVERLAPS)
+);
+
+-- UNIQUE with a range column that isn't there:
+
+CREATE TABLE without_overlaps_uq_test (
+	id INTEGER,
+	CONSTRAINT without_overlaps_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
+);
+
+-- UNIQUE with a PERIOD that isn't there:
+-- TODO
+
+-- UNIQUE with a non-range column:
+
+CREATE TABLE without_overlaps_uq_test (
+	id INTEGER,
+	valid_at TEXT,
+	CONSTRAINT without_overlaps_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
+);
+
+-- UNIQUE with one column plus a range:
+
+CREATE TABLE without_overlaps_uq_test (
+	-- Since we can't depend on having btree_gist here,
+	-- use an int4range instead of an int.
+	-- (The rangetypes regression test uses the same trick.)
+	id int4range,
+	valid_at tsrange,
+	CONSTRAINT without_overlaps_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
+);
+
+-- UNIQUE with two columns plus a range:
+CREATE TABLE without_overlaps_uq_test2 (
+	id1 int4range,
+	id2 int4range,
+	valid_at tsrange,
+	CONSTRAINT without_overlaps2_uq UNIQUE (id1, id2, valid_at WITHOUT OVERLAPS)
+);
+DROP TABLE without_overlaps_uq_test2;
+
+
+-- UNIQUE with one column plus a PERIOD:
+-- TODO
+
+-- UNIQUE with two columns plus a PERIOD:
+-- TODO
+
+-- UNIQUE with a custom range type:
+CREATE TYPE textrange2 AS range (subtype=text, collation="C");
+CREATE TABLE without_overlaps_uq_test2 (
+	id int4range,
+	valid_at textrange2,
+	CONSTRAINT without_overlaps2_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
+);
+ALTER TABLE without_overlaps_uq_test2 DROP CONSTRAINT without_overlaps2_uq;
+DROP TABLE without_overlaps_uq_test2;
 DROP TYPE textrange2;
 
 --
@@ -90,6 +142,28 @@ CREATE TABLE without_overlaps_test (
 ALTER TABLE without_overlaps_test
 	ADD CONSTRAINT without_overlaps_pk
 	PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+
+-- PK with USING INDEX (not yet allowed):
+CREATE TABLE without_overlaps_test2 (
+	id int4range,
+	valid_at tsrange
+);
+CREATE INDEX idx_without_overlaps2 ON without_overlaps_test2 USING gist (id, valid_at);
+ALTER TABLE without_overlaps_test2
+  ADD CONSTRAINT without_overlaps2_pk
+  PRIMARY KEY USING INDEX idx_without_overlaps2;
+DROP TABLE without_overlaps_test2;
+
+-- UNIQUE with USING INDEX (not yet allowed):
+CREATE TABLE without_overlaps_uq_test2 (
+	id int4range,
+	valid_at tsrange
+);
+CREATE INDEX idx_without_overlaps_uq ON without_overlaps_uq_test2 USING gist (id, valid_at);
+ALTER TABLE without_overlaps_uq_test2
+  ADD CONSTRAINT without_overlaps2_uq
+  UNIQUE USING INDEX idx_without_overlaps_uq;
+DROP TABLE without_overlaps_uq_test2;
 
 --
 -- test pg_get_constraintdef
