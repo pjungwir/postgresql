@@ -86,6 +86,7 @@ enum dbObjectTypePriorities
 	PRIO_CONSTRAINT,
 	PRIO_INDEX,
 	PRIO_INDEX_ATTACH,
+	PRIO_PERIOD,
 	PRIO_STATSEXT,
 	PRIO_RULE,
 	PRIO_TRIGGER,
@@ -121,6 +122,7 @@ static const int dbObjectTypePriority[] =
 	[DO_ATTRDEF] = PRIO_ATTRDEF,
 	[DO_INDEX] = PRIO_INDEX,
 	[DO_INDEX_ATTACH] = PRIO_INDEX_ATTACH,
+	[DO_PERIOD] = PRIO_PERIOD,
 	[DO_STATSEXT] = PRIO_STATSEXT,
 	[DO_RULE] = PRIO_RULE,
 	[DO_TRIGGER] = PRIO_TRIGGER,
@@ -450,6 +452,23 @@ DOTypeNameCompare(const void *p1, const void *p2)
 		/* Sort by publication name, since ->name is just nspname */
 		cmpval = strcmp(psobj1->publication->dobj.name,
 						psobj2->publication->dobj.name);
+		if (cmpval != 0)
+			return cmpval;
+	}
+	else if (obj1->objType == DO_PERIOD)
+	{
+		PeriodInfo *pobj1 = *(PeriodInfo *const *) p1;
+		PeriodInfo *pobj2 = *(PeriodInfo *const *) p2;
+
+		/* Sort by table namespace . . . */
+		cmpval = strcmp(pobj1->pertable->dobj.namespace->dobj.name,
+						pobj2->pertable->dobj.namespace->dobj.name);
+		if (cmpval != 0)
+			return cmpval;
+
+		/* . . . and table name */
+		cmpval = strcmp(pobj1->pertable->dobj.name,
+						pobj2->pertable->dobj.name);
 		if (cmpval != 0)
 			return cmpval;
 	}
@@ -1623,6 +1642,11 @@ describeDumpableObject(DumpableObject *obj, char *buf, int bufsize)
 		case DO_FK_CONSTRAINT:
 			snprintf(buf, bufsize,
 					 "FK CONSTRAINT %s  (ID %d OID %u)",
+					 obj->name, obj->dumpId, obj->catId.oid);
+			return;
+		case DO_PERIOD:
+			snprintf(buf, bufsize,
+					 "PERIOD %s  (ID %d OID %u)",
 					 obj->name, obj->dumpId, obj->catId.oid);
 			return;
 		case DO_PROCLANG:
