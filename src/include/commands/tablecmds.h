@@ -40,7 +40,8 @@ extern LOCKMODE AlterTableGetLockLevel(List *cmds);
 
 extern void ATExecChangeOwner(Oid relationOid, Oid newOwnerId, bool recursing, LOCKMODE lockmode);
 
-extern void AlterTableInternal(Oid relid, List *cmds, bool recurse);
+extern void AlterTableInternal(Oid relid, List *cmds, bool recurse,
+							   struct AlterTableUtilityContext *context);
 
 extern Oid	AlterTableMoveAll(AlterTableMoveAllStmt *stmt);
 
@@ -108,5 +109,6 @@ extern bool PartConstraintImpliedByRelConstraint(Relation scanrel,
 extern void FindFKPeriodOpersAndProcs(Oid opclass,
 									  Oid *periodoperoid,
 									  Oid *periodprocoid);
+extern Oid choose_rangetype_for_period(PeriodDef *period);
 
 #endif							/* TABLECMDS_H */
