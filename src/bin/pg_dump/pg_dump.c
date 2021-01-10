@@ -6360,6 +6360,7 @@ getTables(Archive *fout, int *numTables)
 	int			i_relkind;
 	int			i_rolname;
 	int			i_relchecks;
+	int			i_nperiod;
 	int			i_relhasindex;
 	int			i_relhasrules;
 	int			i_relpages;
@@ -6423,6 +6424,14 @@ getTables(Archive *fout, int *numTables)
 	else
 		appendPQExpBufferStr(query,
 							 "c.relhasoids, ");
+
+	/* In PG15 upwards we have PERIODs. */
+	if (fout->remoteVersion >= 150000)
+		appendPQExpBufferStr(query,
+							 "(SELECT count(*) FROM pg_period WHERE perrelid = c.oid) AS nperiods, ");
+	else
+		appendPQExpBufferStr(query,
+							 "0 AS nperiods, ");
 
 	if (fout->remoteVersion >= 80400)
 		appendPQExpBufferStr(query,
@@ -6686,6 +6695,7 @@ getTables(Archive *fout, int *numTables)
 	i_relkind = PQfnumber(res, "relkind");
 	i_rolname = PQfnumber(res, "rolname");
 	i_relchecks = PQfnumber(res, "relchecks");
+	i_nperiod = PQfnumber(res, "nperiods");
 	i_relhasindex = PQfnumber(res, "relhasindex");
 	i_relhasrules = PQfnumber(res, "relhasrules");
 	i_relpages = PQfnumber(res, "relpages");
@@ -6762,6 +6772,7 @@ getTables(Archive *fout, int *numTables)
 		}
 		tblinfo[i].reltablespace = pg_strdup(PQgetvalue(res, i, i_reltablespace));
 		tblinfo[i].hasoids = (strcmp(PQgetvalue(res, i, i_relhasoids), "t") == 0);
+		tblinfo[i].nperiod = atoi(PQgetvalue(res, i, i_nperiod));
 		tblinfo[i].hastriggers = (strcmp(PQgetvalue(res, i, i_relhastriggers), "t") == 0);
 		tblinfo[i].relpersistence = *(PQgetvalue(res, i, i_relpersistence));
 		tblinfo[i].relispopulated = (strcmp(PQgetvalue(res, i, i_relispopulated), "t") == 0);
@@ -8551,6 +8562,8 @@ getTableAttrs(Archive *fout, TableInfo *tblinfo, int numTables)
 		PGresult   *res;
 		int			ntups;
 		bool		hasdefaults;
+		int			ndumpablechecks;	/* number of CHECK constraints that do
+										   not belong to a period */
 
 		/* Don't bother to collect info for sequences */
 		if (tbinfo->relkind == RELKIND_SEQUENCE)
@@ -8857,10 +8870,12 @@ getTableAttrs(Archive *fout, TableInfo *tblinfo, int numTables)
 		}
 
 		/*
-		 * Get info about table CHECK constraints.  This is skipped for a
-		 * data-only dump, as it is only needed for table schemas.
+		 * Get info about table CHECK constraints that don't belong to a PERIOD.
+		 * This is skipped for a data-only dump, as it is only needed for table
+		 * schemas.
 		 */
-		if (tbinfo->ncheck > 0 && !dopt->dataOnly)
+		ndumpablechecks = tbinfo->ncheck - tbinfo->nperiod;
+		if (ndumpablechecks > 0 && !dopt->dataOnly)
 		{
 			ConstraintInfo *constrs;
 			int			numConstrs;
@@ -8870,7 +8885,25 @@ getTableAttrs(Archive *fout, TableInfo *tblinfo, int numTables)
 						tbinfo->dobj.name);
 
 			resetPQExpBuffer(q);
-			if (fout->remoteVersion >= 90200)
+			if (fout->remoteVersion >= 150000)
+			{
+				/*
+				 * PERIODs were added in v15 and we don't dump CHECK
+				 * constraints for them.
+				 */
+				appendPQExpBuffer(q,
+								  "SELECT tableoid, oid, conname, "
+								  "pg_catalog.pg_get_constraintdef(oid) AS consrc, "
+								  "conislocal, convalidated "
+								  "FROM pg_catalog.pg_constraint "
+								  "WHERE conrelid = '%u'::pg_catalog.oid "
+								  "   AND contype = 'c' "
+								  "   AND NOT EXISTS (SELECT FROM pg_period "
+								  "                   WHERE (perrelid, perconstraint) = (conrelid, pg_constraint.oid)) "
+								  "ORDER BY conname",
+								  tbinfo->dobj.catId.oid);
+			}
+			else if (fout->remoteVersion >= 90200)
 			{
 				/*
 				 * convalidated is new in 9.2 (actually, it is there in 9.1,
@@ -8912,12 +8945,12 @@ getTableAttrs(Archive *fout, TableInfo *tblinfo, int numTables)
 			res = ExecuteSqlQuery(fout, q->data, PGRES_TUPLES_OK);
 
 			numConstrs = PQntuples(res);
-			if (numConstrs != tbinfo->ncheck)
+			if (numConstrs != ndumpablechecks)
 			{
 				pg_log_error(ngettext("expected %d check constraint on table \"%s\" but found %d",
 									  "expected %d check constraints on table \"%s\" but found %d",
-									  tbinfo->ncheck),
-							 tbinfo->ncheck, tbinfo->dobj.name, numConstrs);
+									  ndumpablechecks),
+							 ndumpablechecks, tbinfo->dobj.name, numConstrs);
 				pg_log_error("(The system catalogs might be corrupted.)");
 				exit_nicely(1);
 			}
@@ -8972,6 +9005,74 @@ getTableAttrs(Archive *fout, TableInfo *tblinfo, int numTables)
 				 * (in pre-8.4 databases).  We also detect later if the
 				 * constraint must be split out from the table definition.
 				 */
+			}
+			PQclear(res);
+		}
+
+		/*
+		 * Get info about PERIOD definitions
+		 */
+		if (tbinfo->nperiod > 0)
+		{
+			PeriodInfo *periods;
+			int			numPeriods;
+			int			j;
+
+			/* We shouldn't have any periods before v15 */
+			Assert(fout->remoteVersion >= 150000);
+
+			pg_log_info("finding periods for table \"%s.%s\"\n",
+						tbinfo->dobj.namespace->dobj.name,
+						tbinfo->dobj.name);
+
+			resetPQExpBuffer(q);
+			appendPQExpBuffer(q,
+				"SELECT p.tableoid, p.oid, p.pername, "
+				"       sa.attname AS perstart, ea.attname AS perend, "
+				"       r.typname AS rngtype, "
+				"       c.conname AS conname "
+				"FROM pg_catalog.pg_period AS p "
+				"JOIN pg_catalog.pg_attribute AS sa ON (sa.attrelid, sa.attnum) = (p.perrelid, p.perstart) "
+				"JOIN pg_catalog.pg_attribute AS ea ON (ea.attrelid, ea.attnum) = (p.perrelid, p.perend) "
+				"JOIN pg_catalog.pg_type AS r ON r.oid = p.perrngtype "
+				"JOIN pg_catalog.pg_constraint AS c ON c.oid = p.perconstraint "
+				"WHERE p.perrelid = '%u'::pg_catalog.oid "
+				"ORDER BY p.pername",
+				tbinfo->dobj.catId.oid);
+
+			res = ExecuteSqlQuery(fout, q->data, PGRES_TUPLES_OK);
+
+			/*
+			 * If we didn't get the number of rows we thought we were going to,
+			 * then those JOINs didn't work.
+			 */
+			numPeriods = PQntuples(res);
+			if (numPeriods != tbinfo->nperiod)
+			{
+				pg_log_info(ngettext("expected %d period on table \"%s\" but found %d\n",
+									 "expected %d periods on table \"%s\" but found %d\n",
+									 tbinfo->nperiod),
+							tbinfo->nperiod, tbinfo->dobj.name, numPeriods);
+				pg_log_info("(The system catalogs might be corrupted.)\n");
+				exit_nicely(1);
+			}
+
+			periods = (PeriodInfo *) pg_malloc(numPeriods * sizeof(PeriodInfo));
+			tbinfo->periods = periods;
+
+			for (j = 0; j < numPeriods; j++)
+			{
+				periods[j].dobj.objType = DO_PERIOD;
+				periods[j].dobj.catId.tableoid = atooid(PQgetvalue(res, j, 0));
+				periods[j].dobj.catId.oid = atooid(PQgetvalue(res, j, 1));
+				AssignDumpId(&periods[j].dobj);
+				periods[j].dobj.name = pg_strdup(PQgetvalue(res, j, 2));
+				periods[j].dobj.namespace = tbinfo->dobj.namespace;
+				periods[j].pertable = tbinfo;
+				periods[j].perstart = pg_strdup(PQgetvalue(res, j, 3));
+				periods[j].perend = pg_strdup(PQgetvalue(res, j, 4));
+				periods[j].rngtype = pg_strdup(PQgetvalue(res, j, 5));
+				periods[j].conname = pg_strdup(PQgetvalue(res, j, 6));
 			}
 			PQclear(res);
 		}
@@ -10252,6 +10353,8 @@ dumpDumpableObject(Archive *fout, const DumpableObject *dobj)
 			break;
 		case DO_FK_CONSTRAINT:
 			dumpConstraint(fout, (const ConstraintInfo *) dobj);
+			break;
+		case DO_PERIOD:
 			break;
 		case DO_PROCLANG:
 			dumpProcLang(fout, (const ProcLangInfo *) dobj);
@@ -15984,6 +16087,32 @@ dumpTableSchema(Archive *fout, const TableInfo *tbinfo)
 			}
 
 			/*
+			 * Add non-inherited PERIOD definitions, if any.
+			 */
+			for (j = 0; j < tbinfo->nperiod; j++)
+			{
+				PeriodInfo *period = &(tbinfo->periods[j]);
+
+				char	   *name = pg_strdup(fmtId(period->dobj.name));
+				char	   *start = pg_strdup(fmtId(period->perstart));
+				char	   *end = pg_strdup(fmtId(period->perend));
+				char	   *rngtype = pg_strdup(fmtId(period->rngtype));
+				char	   *conname = pg_strdup(fmtId(period->conname));
+
+				if (actual_atts == 0)
+					appendPQExpBufferStr(q, " (\n    ");
+				else
+					appendPQExpBufferStr(q, ",\n    ");
+
+				appendPQExpBuffer(q, "PERIOD FOR %s (%s, %s) "
+						"WITH (rangetype = %s, constraint_name = %s)",
+								  name, start, end,
+								  rngtype, conname);
+
+				actual_atts++;
+			}
+
+			/*
 			 * Add non-inherited CHECK constraints, if any.
 			 *
 			 * For partitions, we need to include check constraints even if
@@ -15991,7 +16120,7 @@ dumpTableSchema(Archive *fout, const TableInfo *tbinfo)
 			 * PARTITION that we'll emit later expects the constraint to be
 			 * there.  (No need to fix conislocal: ATTACH PARTITION does that)
 			 */
-			for (j = 0; j < tbinfo->ncheck; j++)
+			for (j = 0; j < tbinfo->ncheck - tbinfo->nperiod; j++)
 			{
 				ConstraintInfo *constr = &(tbinfo->checkexprs[j]);
 
@@ -16191,7 +16320,7 @@ dumpTableSchema(Archive *fout, const TableInfo *tbinfo)
 			 * For partitions, they were already dumped, and conislocal
 			 * doesn't need fixing.
 			 */
-			for (k = 0; k < tbinfo->ncheck; k++)
+			for (k = 0; k < tbinfo->ncheck - tbinfo->nperiod; k++)
 			{
 				ConstraintInfo *constr = &(tbinfo->checkexprs[k]);
 
@@ -16473,7 +16602,7 @@ dumpTableSchema(Archive *fout, const TableInfo *tbinfo)
 		dumpTableSecLabel(fout, tbinfo, reltypename);
 
 	/* Dump comments on inlined table constraints */
-	for (j = 0; j < tbinfo->ncheck; j++)
+	for (j = 0; j < tbinfo->ncheck - tbinfo->nperiod; j++)
 	{
 		ConstraintInfo *constr = &(tbinfo->checkexprs[j]);
 
@@ -18556,6 +18685,7 @@ addBoundaryDependencies(DumpableObject **dobjs, int numObjs,
 			case DO_TRIGGER:
 			case DO_EVENT_TRIGGER:
 			case DO_DEFAULT_ACL:
+			case DO_PERIOD:
 			case DO_POLICY:
 			case DO_PUBLICATION:
 			case DO_PUBLICATION_REL:
