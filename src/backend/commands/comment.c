@@ -101,6 +101,16 @@ CommentObject(CommentStmt *stmt)
 						 errmsg("\"%s\" is not a table, view, materialized view, composite type, or foreign table",
 								RelationGetRelationName(relation))));
 			break;
+
+		case OBJECT_PERIOD:
+			/* Periods can only go on tables */
+			if (relation->rd_rel->relkind != RELKIND_RELATION)
+				ereport(ERROR,
+						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+						 errmsg("\"%s\" is not a table",
+								RelationGetRelationName(relation))));
+			break;
+
 		default:
 			break;
 	}

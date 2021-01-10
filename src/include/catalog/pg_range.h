@@ -63,6 +63,8 @@ DECLARE_UNIQUE_INDEX_PKEY(pg_range_rngtypid_index, 3542, on pg_range using btree
 DECLARE_UNIQUE_INDEX(pg_range_rngmultitypid_index, 2228, on pg_range using btree(rngmultitypid oid_ops));
 #define RangeMultirangeTypidIndexId			2228
 
+DECLARE_UNIQUE_INDEX(pg_range_rngsubtype_rngtypid_index, 8003, on pg_range using btree(rngsubtype oid_ops, rngtypid oid_ops));
+#define RangeSubTypidTypidIndexId			8003
 
 /*
  * prototypes for functions in pg_range.c
