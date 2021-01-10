@@ -1491,6 +1491,7 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	FmgrInfo flinfo;
 	ReturnSetInfo rsi;
 	Relation rel;
+	bool hasPeriod = false;
 	bool didInit = false;
 	bool shouldFree = false;
 	LOCAL_FCINFO(fcinfo, 2);
@@ -1600,6 +1601,7 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 			else
 				leftoverSlot = oldtupleSlot;
 
+			hasPeriod = forPortionOf->startVar;
 			tupdesc = leftoverSlot->tts_tupleDescriptor;
 			natts = tupdesc->natts;
 
@@ -1700,8 +1702,42 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 				fpoState->fp_nulls[i] = leftoverSlot->tts_isnull[i] ? 'n' : ' ';
 		}
 
-		fpoState->fp_nulls[forPortionOf->rangeVar->varattno - 1] = ' ';
-		fpoState->fp_values[forPortionOf->rangeVar->varattno - 1] = leftover;
+		if (hasPeriod)
+		{
+			RangeType  *leftoverRange;
+			RangeBound	leftoverLower;
+			RangeBound	leftoverUpper;
+			bool		leftoverEmpty;
+			AttrNumber	startAttno;
+			AttrNumber	endAttno;
+
+			leftoverRange = DatumGetRangeTypeP(leftover);
+			range_deserialize(typcache, leftoverRange, &leftoverLower, &leftoverUpper, &leftoverEmpty);
+
+			startAttno = forPortionOf->startVar->varattno;
+			endAttno = forPortionOf->endVar->varattno;
+
+			if (leftoverLower.infinite)
+				fpoState->fp_nulls[startAttno - 1] = 'n';
+			else
+			{
+				fpoState->fp_nulls[startAttno - 1] = ' ';
+				fpoState->fp_values[startAttno - 1] = leftoverLower.val;
+			}
+
+			if (leftoverUpper.infinite)
+				fpoState->fp_nulls[endAttno - 1] = 'n';
+			else
+			{
+				fpoState->fp_nulls[endAttno - 1] = ' ';
+				fpoState->fp_values[endAttno - 1] = leftoverUpper.val;
+			}
+		}
+		else
+		{
+			fpoState->fp_nulls[forPortionOf->rangeVar->varattno - 1] = ' ';
+			fpoState->fp_values[forPortionOf->rangeVar->varattno - 1] = leftover;
+		}
 
 		spi_result = SPI_execute_snapshot(qplan,
 										  fpoState->fp_values,
