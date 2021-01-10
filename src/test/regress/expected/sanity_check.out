@@ -137,6 +137,7 @@ pg_opclass|t
 pg_operator|t
 pg_opfamily|t
 pg_partitioned_table|t
+pg_period|t
 pg_policy|t
 pg_proc|t
 pg_publication|t
@@ -167,6 +168,8 @@ pg_type|t
 pg_user_mapping|t
 point_tbl|t
 polygon_tbl|t
+pt|f
+pt2|f
 quad_box_tbl|t
 quad_box_tbl_ord_seq1|f
 quad_box_tbl_ord_seq2|f
