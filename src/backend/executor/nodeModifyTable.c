@@ -1355,8 +1355,46 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 		}
 
 		/* store the new range */
-		leftoverSlot->tts_values[forPortionOf->rangeVar->varattno - 1] = leftover;
-		leftoverSlot->tts_isnull[forPortionOf->rangeVar->varattno - 1] = false;
+		if (forPortionOf->startVar)
+		{
+			/* For PERIODs we must split the range into start and end columns */
+
+			RangeType  *r = DatumGetRangeTypeP(leftover);
+			RangeBound	lower;
+			RangeBound	upper;
+			bool		empty;
+
+			range_deserialize(typcache, r, &lower, &upper, &empty);
+
+			if (lower.infinite)
+			{
+				leftoverSlot->tts_values[forPortionOf->startVar->varattno - 1] = 0;
+				leftoverSlot->tts_isnull[forPortionOf->startVar->varattno - 1] = true;
+			}
+			else
+			{
+				leftoverSlot->tts_values[forPortionOf->startVar->varattno - 1] = lower.val;
+				leftoverSlot->tts_isnull[forPortionOf->startVar->varattno - 1] = false;
+			}
+
+			if (upper.infinite)
+			{
+				leftoverSlot->tts_values[forPortionOf->endVar->varattno - 1] = 0;
+				leftoverSlot->tts_isnull[forPortionOf->endVar->varattno - 1] = true;
+			}
+			else
+			{
+				leftoverSlot->tts_values[forPortionOf->endVar->varattno - 1] = upper.val;
+				leftoverSlot->tts_isnull[forPortionOf->endVar->varattno - 1] = false;
+			}
+		}
+		else
+		{
+			/* Just store into the range/whatever column */
+
+			leftoverSlot->tts_values[forPortionOf->rangeVar->varattno - 1] = leftover;
+			leftoverSlot->tts_isnull[forPortionOf->rangeVar->varattno - 1] = false;
+		}
 		ExecMaterializeSlot(leftoverSlot);
 
 		/*
