@@ -28,6 +28,7 @@
 #include "access/sysattr.h"
 #include "catalog/pg_am.h"
 #include "catalog/pg_operator.h"
+#include "catalog/pg_period.h"
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "commands/defrem.h"
@@ -50,6 +51,7 @@
 #include "parser/parse_relation.h"
 #include "parser/parse_target.h"
 #include "parser/parse_type.h"
+#include "parser/parser.h"
 #include "parser/parsetree.h"
 #include "utils/backend_status.h"
 #include "utils/builtins.h"
@@ -1321,6 +1323,10 @@ transformForPortionOfClause(ParseState *pstate,
 	char	   *range_type_namespace = NULL;
 	char	   *range_type_name = NULL;
 	int			range_attno = InvalidAttrNumber;
+	AttrNumber	start_attno = InvalidAttrNumber;
+	AttrNumber	end_attno = InvalidAttrNumber;
+	char	   *startcolname = NULL;
+	char	   *endcolname = NULL;
 	Form_pg_attribute attr;
 	Oid			opclass;
 	Oid			opfamily;
@@ -1365,6 +1371,54 @@ transformForPortionOfClause(ParseState *pstate,
 	if (!get_typname_and_namespace(attr->atttypid, &range_type_name, &range_type_namespace))
 		elog(ERROR, "cache lookup failed for type %u", attr->atttypid);
 
+	/*
+	 * If we are using a PERIOD, we need the start & end columns. If the
+	 * attribute it not a GENERATED column, we needn't query pg_period.
+	 */
+	if (attr->attgenerated == ATTRIBUTE_GENERATED_STORED)
+	{
+		HeapTuple	perTuple = SearchSysCache2(PERIODNAME,
+											   ObjectIdGetDatum(RelationGetRelid(targetrel)),
+											   PointerGetDatum(range_name));
+
+		if (HeapTupleIsValid(perTuple))
+		{
+			Form_pg_period per = (Form_pg_period) GETSTRUCT(perTuple);
+			Form_pg_attribute perattr;
+
+			start_attno = per->perstart;
+			end_attno = per->perend;
+
+			perattr = TupleDescAttr(targetrel->rd_att, start_attno - 1);
+			startcolname = NameStr(perattr->attname);
+
+			result->startVar = makeVar(
+									   rtindex,
+									   start_attno,
+									   perattr->atttypid,
+									   perattr->atttypmod,
+									   perattr->attcollation,
+									   0);
+
+			perattr = TupleDescAttr(targetrel->rd_att, end_attno - 1);
+			endcolname = NameStr(perattr->attname);
+			result->endVar = makeVar(
+									 rtindex,
+									 end_attno,
+									 perattr->atttypid,
+									 perattr->atttypmod,
+									 perattr->attcollation,
+									 0);
+
+			ReleaseSysCache(perTuple);
+		}
+	}
+
+	if (start_attno == InvalidAttrNumber)
+	{
+		result->startVar = NULL;
+		result->endVar = NULL;
+	}
 
 	if (forPortionOf->target)
 
@@ -1436,7 +1490,10 @@ transformForPortionOfClause(ParseState *pstate,
 	{
 		/*
 		 * Now make sure we update the start/end time of the record. For a
-		 * range col (r) this is `r = r * targetRange`.
+		 * range col (r) this is `r = r * targetRange`. For a PERIOD with cols
+		 * (s, e) this is `s = lower(tsrange(s, e) * targetRange)` and `e =
+		 * upper(tsrange(s, e) * targetRange` (of course not necessarily with
+		 * tsrange, but with whatever range type is used there).
 		 */
 		Oid			intersectoperoid;
 		List	   *funcArgs = NIL;
@@ -1471,14 +1528,71 @@ transformForPortionOfClause(ParseState *pstate,
 		rangeTLEExpr = makeFuncExpr(funcid, attr->atttypid, funcArgs,
 									InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
 
-		/* Make a TLE to set the range column */
+		/* Make a TLE to set the range column or start/end columns */
 		result->rangeTargetList = NIL;
-		tle = makeTargetEntry((Expr *) rangeTLEExpr, range_attno, range_name, false);
-		result->rangeTargetList = lappend(result->rangeTargetList, tle);
 
-		/* Mark the range column as requiring update permissions */
-		target_perminfo->updatedCols = bms_add_member(target_perminfo->updatedCols,
-													  range_attno - FirstLowInvalidHeapAttributeNumber);
+		if (result->startVar)
+		{
+			FuncExpr   *boundTLEExpr;
+			Oid			arg_types[1] = {ANYRANGEOID};
+			FuncDetailCode fdresult;
+			Oid			rettype;
+			bool		retset;
+			int			nvargs;
+			Oid			vatype;
+			Oid		   *declared_arg_types;
+			Oid			elemtypid = get_range_subtype(attr->atttypid);
+
+			/* set the start column */
+			fdresult = func_get_detail(SystemFuncName("lower"), NIL, NIL, 1,
+									   arg_types,
+									   false, false, false, &fgc_flags,
+									   &funcid, &rettype, &retset,
+									   &nvargs, &vatype,
+									   &declared_arg_types, NULL);
+			if (fdresult != FUNCDETAIL_NORMAL)
+				elog(ERROR, "failed to find lower(anyrange) function");
+			boundTLEExpr = makeFuncExpr(funcid,
+										elemtypid,
+										list_make1(rangeTLEExpr),
+										InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
+			tle = makeTargetEntry((Expr *) boundTLEExpr, start_attno, startcolname, false);
+			result->rangeTargetList = lappend(result->rangeTargetList, tle);
+
+			/* set the end column */
+			fdresult = func_get_detail(SystemFuncName("upper"), NIL, NIL, 1,
+									   arg_types,
+									   false, false, false, &fgc_flags,
+									   &funcid, &rettype, &retset,
+									   &nvargs, &vatype,
+									   &declared_arg_types, NULL);
+			if (fdresult != FUNCDETAIL_NORMAL)
+				elog(ERROR, "failed to find upper(anyrange) function");
+			boundTLEExpr = makeFuncExpr(funcid,
+										elemtypid,
+										list_make1(rangeTLEExpr),
+										InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
+			tle = makeTargetEntry((Expr *) boundTLEExpr, end_attno, endcolname, false);
+			result->rangeTargetList = lappend(result->rangeTargetList, tle);
+
+			/*
+			 * Mark the start/end columns as requiring update permissions. As
+			 * usual, we don't check permissions for the GENERATED column.
+			 */
+			target_perminfo->updatedCols = bms_add_member(target_perminfo->updatedCols,
+														  start_attno - FirstLowInvalidHeapAttributeNumber);
+			target_perminfo->updatedCols = bms_add_member(target_perminfo->updatedCols,
+														  end_attno - FirstLowInvalidHeapAttributeNumber);
+		}
+		else
+		{
+			tle = makeTargetEntry((Expr *) rangeTLEExpr, range_attno, range_name, false);
+			result->rangeTargetList = lappend(result->rangeTargetList, tle);
+
+			/* Mark the range column as requiring update permissions */
+			target_perminfo->updatedCols = bms_add_member(target_perminfo->updatedCols,
+														  range_attno - FirstLowInvalidHeapAttributeNumber);
+		}
 	}
 	else
 		result->rangeTargetList = NIL;
