@@ -48,6 +48,7 @@
 #include "catalog/pg_operator.h"
 #include "catalog/pg_opfamily.h"
 #include "catalog/pg_parameter_acl.h"
+#include "catalog/pg_period.h"
 #include "catalog/pg_policy.h"
 #include "catalog/pg_proc.h"
 #include "catalog/pg_publication.h"
@@ -1394,6 +1395,10 @@ doDeletion(const ObjectAddress *object, int flags)
 
 		case OCLASS_CONSTRAINT:
 			RemoveConstraintById(object->objectId);
+			break;
+
+		case OCLASS_PERIOD:
+			RemovePeriodById(object->objectId);
 			break;
 
 		case OCLASS_DEFAULT:
@@ -2811,6 +2816,9 @@ getObjectClass(const ObjectAddress *object)
 
 		case ConstraintRelationId:
 			return OCLASS_CONSTRAINT;
+
+		case PeriodRelationId:
+			return OCLASS_PERIOD;
 
 		case ConversionRelationId:
 			return OCLASS_CONVERSION;
