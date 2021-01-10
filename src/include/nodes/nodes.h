@@ -459,6 +459,7 @@ typedef enum NodeTag
 	T_IndexElem,
 	T_StatsElem,
 	T_Constraint,
+	T_Period,
 	T_DefElem,
 	T_RangeTblEntry,
 	T_RangeTblFunction,

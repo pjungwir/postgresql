@@ -3097,6 +3097,21 @@ _copyConstraint(const Constraint *from)
 	return newnode;
 }
 
+static Period *
+_copyPeriod(const Period *from)
+{
+	Period *newnode = makeNode(Period);
+
+	COPY_STRING_FIELD(periodname);
+	COPY_STRING_FIELD(startcolname);
+	COPY_STRING_FIELD(endcolname);
+	COPY_NODE_FIELD(options);
+	COPY_SCALAR_FIELD(rngtypid);
+	COPY_LOCATION_FIELD(location);
+
+	return newnode;
+}
+
 static DefElem *
 _copyDefElem(const DefElem *from)
 {
@@ -3656,6 +3671,7 @@ _copyIndexStmt(const IndexStmt *from)
 	COPY_STRING_FIELD(tableSpace);
 	COPY_NODE_FIELD(indexParams);
 	COPY_NODE_FIELD(indexIncludingParams);
+	COPY_NODE_FIELD(period);
 	COPY_NODE_FIELD(options);
 	COPY_NODE_FIELD(whereClause);
 	COPY_NODE_FIELD(excludeOpNames);
@@ -5858,6 +5874,9 @@ copyObjectImpl(const void *from)
 			break;
 		case T_Constraint:
 			retval = _copyConstraint(from);
+			break;
+		case T_Period:
+			retval = _copyPeriod(from);
 			break;
 		case T_DefElem:
 			retval = _copyDefElem(from);

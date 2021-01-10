@@ -80,6 +80,7 @@ typedef struct
 	bool		isforeign;		/* true if CREATE/ALTER FOREIGN TABLE */
 	bool		isalter;		/* true if altering existing table */
 	List	   *columns;		/* ColumnDef items */
+	List	   *periods;		/* Period items */
 	List	   *ckconstraints;	/* CHECK constraints */
 	List	   *fkconstraints;	/* FOREIGN KEY constraints */
 	List	   *ixconstraints;	/* index-creating constraints */
@@ -112,6 +113,8 @@ typedef struct
 
 static void transformColumnDefinition(CreateStmtContext *cxt,
 									  ColumnDef *column);
+static void transformTablePeriod(CreateStmtContext *cxt,
+								 Period *period);
 static void transformTableConstraint(CreateStmtContext *cxt,
 									 Constraint *constraint);
 static void transformTableLikeClause(CreateStmtContext *cxt,
@@ -231,6 +234,7 @@ transformCreateStmt(CreateStmt *stmt, const char *queryString)
 	cxt.inhRelations = stmt->inhRelations;
 	cxt.isalter = false;
 	cxt.columns = NIL;
+	cxt.periods = NIL;
 	cxt.ckconstraints = NIL;
 	cxt.fkconstraints = NIL;
 	cxt.ixconstraints = NIL;
@@ -268,6 +272,10 @@ transformCreateStmt(CreateStmt *stmt, const char *queryString)
 		{
 			case T_ColumnDef:
 				transformColumnDefinition(&cxt, (ColumnDef *) element);
+				break;
+
+			case T_Period:
+				transformTablePeriod(&cxt, (Period *) element);
 				break;
 
 			case T_Constraint:
@@ -337,6 +345,7 @@ transformCreateStmt(CreateStmt *stmt, const char *queryString)
 	 * Output results.
 	 */
 	stmt->tableElts = cxt.columns;
+	stmt->periods = cxt.periods;
 	stmt->constraints = cxt.ckconstraints;
 
 	result = lappend(cxt.blist, stmt);
@@ -855,6 +864,136 @@ transformColumnDefinition(CreateStmtContext *cxt, ColumnDef *column)
 
 		cxt->alist = lappend(cxt->alist, stmt);
 	}
+}
+
+void
+transformPeriodOptions(Period *period)
+{
+	ListCell   *option;
+	DefElem	   *dconstraintname = NULL;
+	DefElem	   *drangetypename = NULL;
+
+	foreach(option, period->options)
+	{
+		DefElem    *defel = (DefElem *) lfirst(option);
+
+		if (strcmp(defel->defname, "check_constraint_name") == 0)
+		{
+			if (dconstraintname)
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+						 errmsg("conflicting or redundant options")));
+			dconstraintname = defel;
+		}
+		else if (strcmp(defel->defname, "rangetype") == 0)
+		{
+			if (drangetypename)
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+						 errmsg("conflicting or redundant options")));
+			drangetypename = defel;
+		}
+		else
+			ereport(ERROR,
+					(errcode(ERRCODE_SYNTAX_ERROR),
+					 errmsg("option \"%s\" not recognized", defel->defname)));
+	}
+
+	if (dconstraintname != NULL)
+		period->constraintname = defGetString(dconstraintname);
+	else
+		period->constraintname = NULL;
+
+	if (drangetypename != NULL)
+		period->rangetypename = defGetString(drangetypename);
+	else
+		period->rangetypename = NULL;
+}
+
+/*
+ * transformTablePeriod
+ *		transform a Period node within CREATE TABLE or ALTER TABLE
+ */
+static void
+transformTablePeriod(CreateStmtContext *cxt, Period *period)
+{
+	Oid			coltypid;
+	ColumnDef  *col;
+	ListCell   *columns;
+
+	if (strcmp(period->periodname, "system_time") == 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("PERIOD FOR SYSTEM_TIME is not supported"),
+					 parser_errposition(cxt->pstate,
+										period->location)));
+
+	/*
+	 * Determine the column info and range type so that transformIndexConstraints
+	 * knows how to create PRIMARY KEY/UNIQUE constraints using this PERIOD.
+	 */
+	transformPeriodOptions(period);
+
+	/*
+	 * Find a suitable range type for operations involving this period.
+	 * Use the rangetype option if provided, otherwise try to find a
+	 * non-ambiguous existing type.
+	 */
+	coltypid = InvalidOid;
+
+	/* First find out the type of the period's columns */
+	period->rngtypid = InvalidOid;
+	foreach (columns, cxt->columns)
+	{
+		col = (ColumnDef *) lfirst(columns);
+		if (strcmp(col->colname, period->startcolname) == 0)
+		{
+			coltypid = typenameTypeId(cxt->pstate, col->typeName);
+			break;
+		}
+	}
+	if (coltypid == InvalidOid)
+		ereport(ERROR, (errmsg("column \"%s\" of relation \"%s\" does not exist",
+						period->startcolname, cxt->relation->relname)));
+
+	/* Now make sure it matches rangetypename or we can find a matching range */
+	if (period->rangetypename != NULL)
+	{
+		/* Make sure it exists */
+		period->rngtypid = TypenameGetTypidExtended(period->rangetypename, false);
+		if (period->rngtypid == InvalidOid)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("Range type %s not found", period->rangetypename)));
+
+		/* Make sure it is a range type */
+		if (!type_is_range(period->rngtypid))
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("Type %s is not a range type", period->rangetypename)));
+
+		/* Make sure it matches the column type */
+		if (get_range_subtype(period->rngtypid) != coltypid)
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("Range type %s does not match column type %s",
+						 period->rangetypename,
+						 format_type_be(coltypid))));
+	}
+	else
+	{
+		period->rngtypid = get_subtype_range(coltypid);
+		if (period->rngtypid == InvalidOid)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("no range type for %s found for period %s",
+							format_type_be(coltypid),
+							period->periodname),
+					 errhint("You can define a custom range type with CREATE TYPE")));
+
+	}
+
+	cxt->periods = lappend(cxt->periods, period);
 }
 
 /*
@@ -1587,6 +1726,11 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 	index->concurrent = false;
 	index->if_not_exists = false;
 	index->reset_default_tblspc = false;
+
+	/* Copy the period */
+	Period *p = makeNode(Period);
+	p->oid = idxrec->indperiod;
+	index->period = p;
 
 	/*
 	 * We don't try to preserve the name of the source index; instead, just
@@ -2872,6 +3016,10 @@ transformIndexStmt(Oid relid, IndexStmt *stmt, const char *queryString)
 		}
 	}
 
+	/* take care of the period */
+	if (stmt->period)
+		stmt->period->oid = get_period_oid(relid, stmt->period->periodname, false);
+
 	/*
 	 * Check that only the base rel is mentioned.  (This should be dead code
 	 * now that add_missing_from is history.)
@@ -3333,6 +3481,7 @@ transformAlterTableStmt(Oid relid, AlterTableStmt *stmt,
 	cxt.inhRelations = NIL;
 	cxt.isalter = true;
 	cxt.columns = NIL;
+	cxt.periods = NIL;
 	cxt.ckconstraints = NIL;
 	cxt.fkconstraints = NIL;
 	cxt.ixconstraints = NIL;
@@ -3395,6 +3544,12 @@ transformAlterTableStmt(Oid relid, AlterTableStmt *stmt,
 					elog(ERROR, "unrecognized node type: %d",
 						 (int) nodeTag(cmd->def));
 				break;
+
+			case AT_AddPeriod:
+				{
+					newcmds = lappend(newcmds, cmd);
+					break;
+				}
 
 			case AT_AlterColumnType:
 				{
