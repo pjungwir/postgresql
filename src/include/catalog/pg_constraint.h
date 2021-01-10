@@ -266,7 +266,8 @@ extern AttrNumber extractNotNullColumn(HeapTuple constrTup);
 extern bool AdjustNotNullInheritance(Oid relid, AttrNumber attnum,
 									 bool is_local, bool is_no_inherit, bool is_notvalid);
 extern List *RelationGetNotNullConstraints(Oid relid, bool cooked,
-										   bool include_noinh);
+										   bool include_noinh,
+										   Bitmapset *excludes);
 
 extern void RemoveConstraintById(Oid conId);
 extern void RenameConstraintById(Oid conId, const char *newname);
