@@ -37,10 +37,13 @@
    Application-time periods are referenced in several temporal operations described in
    this chapter: temporal primary keys, unique constraints, foreign keys,
    update commands, and delete commands.
-   <productname>PostgreSQL</productname> does not yet support periods.
-   Commands that accept periods instead accept columns with a
-   <link linkend="rangetypes-builtin">rangetype or multirangetype</link>.
-   Support for periods is planned for the future.
+   In all cases, <productname>PostgreSQL</productname> supports either periods
+   or regular columns with a <link linkend="rangetypes-builtin">rangetype or
+   multirangetype</link>.
+  </para>
+
+  <para>
+   System-time periods are not yet supported, but are planned for the future.
   </para>
  </sect1>
 
