@@ -226,6 +226,11 @@
      </row>
 
      <row>
+      <entry><link linkend="catalog-pg-period"><structname>pg_period</structname></link></entry>
+      <entry>periods</entry>
+     </row>
+
+     <row>
       <entry><link linkend="catalog-pg-policy"><structname>pg_policy</structname></link></entry>
       <entry>row-security policies</entry>
      </row>
@@ -5492,7 +5497,119 @@ SCRAM-SHA-256$<replaceable>&lt;iteration count&gt;</replaceable>:<replaceable>&l
        entry in <structfield>partattrs</structfield>.  Null if all partition key columns
        are simple references.
       </para></entry>
+      </entry>
      </row>
+
+    </tbody>
+   </tgroup>
+  </table>
+ </sect1>
+
+
+ <sect1 id="catalog-pg-period">
+  <title><structname>pg_period</structname></title>
+
+  <indexterm zone="catalog-pg-period">
+   <primary>pg_period</primary>
+  </indexterm>
+
+  <para>
+   The catalog <structname>pg_period</structname> stores
+   information about system and application time periods.
+  </para>
+
+  <para>
+   Periods are described in <xref linkend="ddl-periods"/>.
+  </para>
+
+  <table>
+   <title><structname>pg_period</structname> Columns</title>
+
+   <tgroup cols="4">
+    <thead>
+     <row>
+      <entry>Name</entry>
+      <entry>Type</entry>
+      <entry>References</entry>
+      <entry>Description</entry>
+     </row>
+    </thead>
+
+    <tbody>
+
+     <row>
+      <entry><structfield>pername</structfield></entry>
+      <entry><type>name</type></entry>
+      <entry></entry>
+      <entry>Period name</entry>
+     </row>
+
+     <row>
+      <entry><structfield>perrelid</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry><literal><link linkend="catalog-pg-class"><structname>pg_class</structname></link>.oid</literal></entry>
+      <entry>The OID of the <structname>pg_class</structname> entry for the table containing this period.</entry>
+     </row>
+
+     <row>
+      <entry><structfield>perstart</structfield></entry>
+      <entry><type>int2</type></entry>
+      <entry><literal><link linkend="catalog-pg-attribute">pg_attribute</link>.attnum</literal></entry>
+      <entry>
+       The attribute number of the start column.
+      </entry>
+     </row>
+
+     <row>
+      <entry><structfield>perend</structfield></entry>
+      <entry><type>int2</type></entry>
+      <entry><literal><link linkend="catalog-pg-attribute">pg_attribute</link>.attnum</literal></entry>
+      <entry>
+       The attribute number of the end column.
+      </entry>
+     </row>
+
+     <row>
+      <entry><structfield>peropclass</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry><literal><link linkend="catalog-pg-opclass"><structname>pg_opclass</structname></link>.oid</literal></entry>
+      <entry>
+       This contains the OID of the operator class to use.
+      </entry>
+     </row>
+
+     <row>
+      <entry><structfield>perconstraint</structfield></entry>
+      <entry><type>oid</type></entry>
+      <entry><literal><link linkend="catalog-pg-constraint"><structname>pg_constraint</structname></link>.oid</literal></entry>
+      <entry>
+       This contains the OID of the CHECK constraint owned by the period to
+       ensure that <literal>(</literal><replaceable>startcolumn</replaceable>
+       <literal>&lt;</literal>
+       <replaceable>endcolumn</replaceable><literal>)</literal>.
+      </entry>
+     </row>
+
+     <row>
+      <entry><structfield>perislocal</structfield></entry>
+      <entry><type>bool</type></entry>
+      <entry></entry>
+      <entry>
+       This period is defined locally for the relation.  Note that a period can
+       be locally defined and inherited simultaneously.
+      </entry>
+     </row>
+
+     <row>
+      <entry><structfield>perinhcount</structfield></entry>
+      <entry><type>int4</type></entry>
+      <entry></entry>
+      <entry>
+       The number of direct inheritance ancestors this period has.  A period
+       with a nonzero number of ancestors cannot be dropped.
+      </entry>
+     </row>
+
     </tbody>
    </tgroup>
   </table>

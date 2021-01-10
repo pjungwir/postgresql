@@ -48,6 +48,7 @@
 #include "catalog/pg_operator.h"
 #include "catalog/pg_opfamily.h"
 #include "catalog/pg_partitioned_table.h"
+#include "catalog/pg_period.h"
 #include "catalog/pg_proc.h"
 #include "catalog/pg_publication.h"
 #include "catalog/pg_publication_rel.h"
@@ -579,6 +580,27 @@ static const struct cachedesc cacheinfo[] = {
 		{
 			Anum_pg_partitioned_table_partrelid,
 			0,
+			0,
+			0
+		},
+		32
+	},
+	{PeriodRelationId,		/* PERIODNAME */
+		PeriodRelidNameIndexId,
+		2,
+		{
+			Anum_pg_period_perrelid,
+			Anum_pg_period_pername,
+			0,
+			0
+		},
+		32
+	},
+	{PeriodRelationId,		/* PERIODOID */
+		PeriodObjectIndexId,
+		1,
+		{
+			ObjectIdAttributeNumber,
 			0,
 			0
 		},

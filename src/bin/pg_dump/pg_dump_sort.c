@@ -62,6 +62,7 @@ static const int dbObjectTypePriority[] =
 	32,							/* DO_TRIGGER */
 	27,							/* DO_CONSTRAINT */
 	33,							/* DO_FK_CONSTRAINT */
+	30,							/* DO_PERIOD */
 	2,							/* DO_PROCLANG */
 	10,							/* DO_CAST */
 	23,							/* DO_TABLE_DATA */
@@ -1325,6 +1326,11 @@ describeDumpableObject(DumpableObject *obj, char *buf, int bufsize)
 		case DO_FK_CONSTRAINT:
 			snprintf(buf, bufsize,
 					 "FK CONSTRAINT %s  (ID %d OID %u)",
+					 obj->name, obj->dumpId, obj->catId.oid);
+			return;
+		case DO_PERIOD:
+			snprintf(buf, bufsize,
+					 "PERIOD %s  (ID %d OID %u)",
 					 obj->name, obj->dumpId, obj->catId.oid);
 			return;
 		case DO_PROCLANG:
