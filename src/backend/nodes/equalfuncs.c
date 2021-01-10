@@ -2692,6 +2692,18 @@ _equalConstraint(const Constraint *a, const Constraint *b)
 }
 
 static bool
+_equalPeriod(const Period *a, const Period *b)
+{
+	COMPARE_STRING_FIELD(periodname);
+	COMPARE_STRING_FIELD(startcolname);
+	COMPARE_STRING_FIELD(endcolname);
+	COMPARE_NODE_FIELD(options);
+	COMPARE_LOCATION_FIELD(location);
+
+	return true;
+}
+
+static bool
 _equalDefElem(const DefElem *a, const DefElem *b)
 {
 	COMPARE_STRING_FIELD(defnamespace);
@@ -3774,6 +3786,9 @@ equal(const void *a, const void *b)
 			break;
 		case T_Constraint:
 			retval = _equalConstraint(a, b);
+			break;
+		case T_Period:
+			retval = _equalPeriod(a, b);
 			break;
 		case T_DefElem:
 			retval = _equalDefElem(a, b);

@@ -116,6 +116,8 @@ typedef struct
 
 static void transformColumnDefinition(CreateStmtContext *cxt,
 									  ColumnDef *column);
+static void transformTablePeriod(CreateStmtContext *cxt,
+								 Period *period);
 static void transformTableConstraint(CreateStmtContext *cxt,
 									 Constraint *constraint);
 static void transformTableLikeClause(CreateStmtContext *cxt,
@@ -278,6 +280,10 @@ transformCreateStmt(CreateStmt *stmt, const char *queryString)
 		{
 			case T_ColumnDef:
 				transformColumnDefinition(&cxt, (ColumnDef *) element);
+				break;
+
+			case T_Period:
+				transformTablePeriod(&cxt, (Period *) element);
 				break;
 
 			case T_Constraint:
@@ -867,6 +873,42 @@ transformColumnDefinition(CreateStmtContext *cxt, ColumnDef *column)
 
 		cxt->alist = lappend(cxt->alist, stmt);
 	}
+}
+
+/*
+ * transformTablePeriod
+ *		transform a Period node within CREATE TABLE or ALTER TABLE
+ */
+static void
+transformTablePeriod(CreateStmtContext *cxt, Period *period)
+{
+	AlterTableStmt *alterstmt;
+	AlterTableCmd  *altercmd;
+
+	if (strcmp(period->periodname, "system_time") == 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("PERIOD FOR SYSTEM_TIME is not supported"),
+					 parser_errposition(cxt->pstate,
+										period->location)));
+
+	/*
+	 * Instead of duplicating code, just create an ALTER TABLE statement to run
+	 * after the table is created.
+	 */
+	alterstmt = makeNode(AlterTableStmt);
+	alterstmt->relation = cxt->relation;
+	alterstmt->cmds = NIL;
+	alterstmt->relkind = OBJECT_TABLE;
+
+	altercmd = makeNode(AlterTableCmd);
+	altercmd->subtype = AT_AddPeriod;
+	altercmd->name = NULL;
+	altercmd->def = (Node *) period;
+
+	alterstmt->cmds = lappend(alterstmt->cmds, altercmd);
+
+	cxt->alist = lappend(cxt->alist, alterstmt);
 }
 
 /*
@@ -3425,6 +3467,23 @@ transformAlterTableStmt(Oid relid, AlterTableStmt *stmt,
 					elog(ERROR, "unrecognized node type: %d",
 						 (int) nodeTag(cmd->def));
 				break;
+
+			case AT_AddPeriod:
+				{
+					/*
+					Period  *period = castNode(Period, cmd->def);
+
+					if (strcmp(period->periodname, "system_time") == 0)
+							ereport(ERROR,
+									(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+									 errmsg("period for system_time is not supported"),
+									 parser_errposition(cxt->pstate,
+														period->location)));
+
+														*/
+					newcmds = lappend(newcmds, cmd);
+					break;
+				}
 
 			case AT_AlterColumnType:
 				{

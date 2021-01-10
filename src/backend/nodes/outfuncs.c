@@ -3748,6 +3748,18 @@ _outConstraint(StringInfo str, const Constraint *node)
 }
 
 static void
+_outPeriod(StringInfo str, const Period *node)
+{
+	WRITE_NODE_TYPE("PERIOD");
+
+	WRITE_STRING_FIELD(periodname);
+	WRITE_STRING_FIELD(startcolname);
+	WRITE_STRING_FIELD(endcolname);
+	WRITE_NODE_FIELD(options);
+	WRITE_LOCATION_FIELD(location);
+}
+
+static void
 _outForeignKeyCacheInfo(StringInfo str, const ForeignKeyCacheInfo *node)
 {
 	WRITE_NODE_TYPE("FOREIGNKEYCACHEINFO");
@@ -4470,6 +4482,9 @@ outNode(StringInfo str, const void *obj)
 				break;
 			case T_Constraint:
 				_outConstraint(str, obj);
+				break;
+			case T_Period:
+				_outPeriod(str, obj);
 				break;
 			case T_FuncCall:
 				_outFuncCall(str, obj);
