@@ -3842,18 +3842,19 @@ ConstraintElem:
 					n->initially_valid = !n->skip_validation;
 					$$ = (Node *)n;
 				}
-			| UNIQUE '(' columnList ')' opt_c_include opt_definition OptConsTableSpace
+			| UNIQUE '(' columnList withoutOverlapsClause ')' opt_c_include opt_definition OptConsTableSpace
 				ConstraintAttributeSpec
 				{
 					Constraint *n = makeNode(Constraint);
 					n->contype = CONSTR_UNIQUE;
 					n->location = @1;
 					n->keys = $3;
-					n->including = $5;
-					n->options = $6;
+					n->without_overlaps = $4;
+					n->including = $6;
+					n->options = $7;
 					n->indexname = NULL;
-					n->indexspace = $7;
-					processCASbits($8, @8, "UNIQUE",
+					n->indexspace = $8;
+					processCASbits($9, @9, "UNIQUE",
 								   &n->deferrable, &n->initdeferred, NULL,
 								   NULL, yyscanner);
 					$$ = (Node *)n;
