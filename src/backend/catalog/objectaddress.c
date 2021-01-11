@@ -3050,7 +3050,7 @@ getObjectDescription(const ObjectAddress *object, bool missing_ok)
 					StringInfoData rel;
 
 					initStringInfo(&rel);
-					getRelationDescription(&rel, per->perrelid);
+					getRelationDescription(&rel, per->perrelid, false);
 					appendStringInfo(&buffer, _("period %s on %s"),
 									 NameStr(per->pername), rel.data);
 					pfree(rel.data);
@@ -4910,7 +4910,7 @@ getObjectIdentityParts(const ObjectAddress *object,
 
 				appendStringInfo(&buffer, "%s on ",
 								 quote_identifier(NameStr(per->pername)));
-				getRelationIdentity(&buffer, per->perrelid, objname);
+				getRelationIdentity(&buffer, per->perrelid, objname, false);
 				if (objname)
 					*objname = lappend(*objname, pstrdup(NameStr(per->pername)));
 

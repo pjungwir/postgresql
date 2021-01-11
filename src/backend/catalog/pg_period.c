@@ -33,7 +33,7 @@ RemovePeriodById(Oid periodId)
 	Relation	pg_period;
 	HeapTuple	tup;
 
-	pg_period = heap_open(PeriodRelationId, RowExclusiveLock);
+	pg_period = table_open(PeriodRelationId, RowExclusiveLock);
 
 	tup = SearchSysCache1(PERIODOID, ObjectIdGetDatum(periodId));
 	if (!HeapTupleIsValid(tup)) /* should not happen */
@@ -44,7 +44,7 @@ RemovePeriodById(Oid periodId)
 
 	/* Clean up */
 	ReleaseSysCache(tup);
-	heap_close(pg_period, RowExclusiveLock);
+	table_close(pg_period, RowExclusiveLock);
 }
 
 /*
@@ -66,7 +66,7 @@ get_relation_period_oid(Oid relid, const char *pername, bool missing_ok)
 	 * one match, because periods are not required to have unique names;
 	 * if so, error out.
 	 */
-	pg_period = heap_open(PeriodRelationId, AccessShareLock);
+	pg_period = table_open(PeriodRelationId, AccessShareLock);
 
 	ScanKeyInit(&skey[0],
 				Anum_pg_period_perrelid,
@@ -87,7 +87,7 @@ get_relation_period_oid(Oid relid, const char *pername, bool missing_ok)
 						(errcode(ERRCODE_DUPLICATE_OBJECT),
 						 errmsg("table \"%s\" has multiple periods named \"%s\"",
 								get_rel_name(relid), pername)));
-			perOid = HeapTupleGetOid(tuple);
+			perOid = period->oid;
 		}
 	}
 
@@ -100,7 +100,7 @@ get_relation_period_oid(Oid relid, const char *pername, bool missing_ok)
 				 errmsg("period \"%s\" for table \"%s\" does not exist",
 						pername, get_rel_name(relid))));
 
-	heap_close(pg_period, AccessShareLock);
+	table_close(pg_period, AccessShareLock);
 
 	return perOid;
 }

@@ -9126,14 +9126,14 @@ getTableAttrs(Archive *fout, TableInfo *tblinfo, int numTables)
 		{
 			PeriodInfo *periods;
 			int			numPeriods;
+			int			j;
 
 			/* We shouldn't have any periods before v12 */
 			Assert(fout->remoteVersion >= 0); /* TODO */
 
-			if (g_verbose)
-				write_msg(NULL, "finding periods for table \"%s.%s\"\n",
-						  tbinfo->dobj.namespace->dobj.name,
-						  tbinfo->dobj.name);
+			pg_log_info("finding periods for table \"%s.%s\"\n",
+						tbinfo->dobj.namespace->dobj.name,
+						tbinfo->dobj.name);
 
 			resetPQExpBuffer(q);
 			appendPQExpBuffer(q,
@@ -9160,11 +9160,11 @@ getTableAttrs(Archive *fout, TableInfo *tblinfo, int numTables)
 			numPeriods = PQntuples(res);
 			if (numPeriods != tbinfo->nperiod)
 			{
-				write_msg(NULL, ngettext("expected %d period on table \"%s\" but found %d\n",
-										 "expected %d periods on table \"%s\" but found %d\n",
-										 tbinfo->nperiod),
-						  tbinfo->nperiod, tbinfo->dobj.name, numPeriods);
-				write_msg(NULL, "(The system catalogs might be corrupted.)\n");
+				pg_log_info(ngettext("expected %d period on table \"%s\" but found %d\n",
+									 "expected %d periods on table \"%s\" but found %d\n",
+									 tbinfo->nperiod),
+							tbinfo->nperiod, tbinfo->dobj.name, numPeriods);
+				pg_log_info("(The system catalogs might be corrupted.)\n");
 				exit_nicely(1);
 			}
 

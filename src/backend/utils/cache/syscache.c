@@ -600,7 +600,7 @@ static const struct cachedesc cacheinfo[] = {
 		PeriodObjectIndexId,
 		1,
 		{
-			ObjectIdAttributeNumber,
+			Anum_pg_period_oid,
 			0,
 			0
 		},

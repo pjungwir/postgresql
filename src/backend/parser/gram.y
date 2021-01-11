@@ -15981,6 +15981,7 @@ bare_label_keyword:
 			| PARTITION
 			| PASSING
 			| PASSWORD
+			| PERIOD
 			| PLACING
 			| PLANS
 			| POLICY
