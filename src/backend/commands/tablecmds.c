@@ -145,13 +145,14 @@ static List *on_commits = NIL;
 #define AT_PASS_OLD_CONSTR		3	/* re-add existing constraints */
 /* We could support a RENAME COLUMN pass here, but not currently used */
 #define AT_PASS_ADD_COL			4	/* ADD COLUMN */
-#define AT_PASS_ADD_CONSTR		5	/* ADD constraints (initial examination) */
-#define AT_PASS_COL_ATTRS		6	/* set column attributes, eg NOT NULL */
-#define AT_PASS_ADD_INDEXCONSTR	7	/* ADD index-based constraints */
-#define AT_PASS_ADD_INDEX		8	/* ADD indexes */
-#define AT_PASS_ADD_OTHERCONSTR	9	/* ADD other constraints, defaults */
-#define AT_PASS_MISC			10	/* other stuff */
-#define AT_NUM_PASSES			11
+#define AT_PASS_ADD_PERIOD		5	/* ADD PERIOD */
+#define AT_PASS_ADD_CONSTR		6	/* ADD constraints (initial examination) */
+#define AT_PASS_COL_ATTRS		7	/* set column attributes, eg NOT NULL */
+#define AT_PASS_ADD_INDEXCONSTR	8	/* ADD index-based constraints */
+#define AT_PASS_ADD_INDEX		9	/* ADD indexes */
+#define AT_PASS_ADD_OTHERCONSTR	10	/* ADD other constraints, defaults */
+#define AT_PASS_MISC			11	/* other stuff */
+#define AT_NUM_PASSES			12
 
 typedef struct AlteredTableInfo
 {
@@ -4495,10 +4496,10 @@ ATPrepCmd(List **wqueue, Relation rel, AlterTableCmd *cmd,
 		case AT_AddPeriod: /* ALTER TABLE ... ADD PERIOD FOR name (start, end) */
 			ATSimplePermissions(rel, ATT_TABLE);
 			/*
-			 * Must add it before ADD_CONSTR so that adding a PK/FK at the
-			 * same time will be able to "see" it.
+			 * We must add PERIODs after columns, in case they reference a newly-added column,
+			 * and before constraints, in case a newly-added PK/FK references them.
 			 */
-			pass = AT_PASS_ADD_COL;
+			pass = AT_PASS_ADD_PERIOD;
 			break;
 		case AT_DropPeriod: /* ALTER TABLE ... DROP PERIOD FOR name */
 			ATSimplePermissions(rel, ATT_TABLE);
