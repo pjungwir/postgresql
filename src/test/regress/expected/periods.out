@@ -53,3 +53,6 @@ alter table pt add column p integer;
 ERROR:  column name "p" conflicts with a period name
 alter table pt rename column id to p;
 ERROR:  column name "p" conflicts with a period name
+/* adding columns and the period at the same time */
+create table pt2 (id integer);
+alter table pt2 add column ds date, add column de date, add period for p (ds, de);

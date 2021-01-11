@@ -38,3 +38,7 @@ alter table pt alter column ds type timestamp;
 /* column/period namespace conflicts */
 alter table pt add column p integer;
 alter table pt rename column id to p;
+
+/* adding columns and the period at the same time */
+create table pt2 (id integer);
+alter table pt2 add column ds date, add column de date, add period for p (ds, de);
