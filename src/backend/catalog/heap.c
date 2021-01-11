@@ -2220,6 +2220,10 @@ StorePeriod(Relation rel, const char *periodname, AttrNumber startnum,
 	MemSet(values, 0, sizeof(values));
 	MemSet(nulls, false, sizeof(nulls));
 
+	pg_period = table_open(PeriodRelationId, RowExclusiveLock);
+
+	oid = GetNewOidWithIndex(pg_period, AttrDefaultOidIndexId, Anum_pg_period_oid);
+	values[Anum_pg_period_oid - 1] = ObjectIdGetDatum(oid);
 	values[Anum_pg_period_pername - 1] = NameGetDatum(&pername);
 	values[Anum_pg_period_perrelid - 1] = RelationGetRelid(rel);
 	values[Anum_pg_period_perstart - 1] = startnum;
@@ -2227,10 +2231,8 @@ StorePeriod(Relation rel, const char *periodname, AttrNumber startnum,
 	values[Anum_pg_period_peropclass -1] = opclass;
 	values[Anum_pg_period_perconstraint - 1] = conoid;
 
-	pg_period = heap_open(PeriodRelationId, RowExclusiveLock);
-
 	tuple = heap_form_tuple(RelationGetDescr(pg_period), values, nulls);
-	oid = CatalogTupleInsert(pg_period, tuple);
+	CatalogTupleInsert(pg_period, tuple);
 
 	ObjectAddressSet(myself, PeriodRelationId, oid);
 
@@ -2253,9 +2255,9 @@ StorePeriod(Relation rel, const char *periodname, AttrNumber startnum,
 	 * (Note that myself and referenced are reversed for this one.)
 	 */
 	ObjectAddressSet(referenced, ConstraintRelationId, conoid);
-	recordDependencyOn(&referenced, &myself, DEPENDENCY_INTERNAL_AUTO);
+	recordDependencyOn(&referenced, &myself, DEPENDENCY_INTERNAL);
 
-	heap_close(pg_period, RowExclusiveLock);
+	table_close(pg_period, RowExclusiveLock);
 
 	return oid;
 }

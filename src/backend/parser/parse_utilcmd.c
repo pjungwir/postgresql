@@ -899,7 +899,7 @@ transformTablePeriod(CreateStmtContext *cxt, Period *period)
 	alterstmt = makeNode(AlterTableStmt);
 	alterstmt->relation = cxt->relation;
 	alterstmt->cmds = NIL;
-	alterstmt->relkind = OBJECT_TABLE;
+	alterstmt->objtype = OBJECT_TABLE;
 
 	altercmd = makeNode(AlterTableCmd);
 	altercmd->subtype = AT_AddPeriod;

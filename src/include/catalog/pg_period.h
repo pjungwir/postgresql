@@ -25,8 +25,9 @@
  *		typedef struct FormData_pg_period
  * ----------------
  */
-CATALOG(pg_period,3996,PeriodRelationId)
+CATALOG(pg_period,8000,PeriodRelationId)
 {
+	Oid			oid;
 	NameData	pername;		/* name of period */
 	Oid			perrelid;		/* OID of relation containing this period */
 	int16		perstart;		/* column for start value */
@@ -44,10 +45,10 @@ CATALOG(pg_period,3996,PeriodRelationId)
  */
 typedef FormData_pg_period *Form_pg_period;
 
-DECLARE_UNIQUE_INDEX(pg_period_oid_index, 4101, on pg_period using btree(oid oid_ops));
-#define PeriodObjectIndexId 4101
-DECLARE_UNIQUE_INDEX(pg_period_perrelid_pername_index, 3998, on pg_period using btree(perrelid oid_ops, pername name_ops));
-#define PeriodRelidNameIndexId 3998
+DECLARE_UNIQUE_INDEX(pg_period_oid_index, 8001, on pg_period using btree(oid oid_ops));
+#define PeriodObjectIndexId 8001
+DECLARE_UNIQUE_INDEX(pg_period_perrelid_pername_index, 8002, on pg_period using btree(perrelid oid_ops, pername name_ops));
+#define PeriodRelidNameIndexId 8002
 
 extern void RemovePeriodById(Oid periodId);
 

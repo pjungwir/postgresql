@@ -441,7 +441,8 @@ static ObjectAddress ATExecColumnDefault(Relation rel, const char *colName,
 										 Node *newDefault, LOCKMODE lockmode);
 static ObjectAddress ATExecCookedColumnDefault(Relation rel, AttrNumber attnum,
 											   Node *newDefault);
-static ObjectAddress ATExecAddPeriod(Relation rel, Period *period, LOCKMODE lockmode);
+static ObjectAddress ATExecAddPeriod(Relation rel, Period *period, LOCKMODE lockmode,
+									 AlterTableUtilityContext *context);
 static void ATExecDropPeriod(Relation rel, const char *periodName,
 							 DropBehavior behavior,
 							 bool recurse, bool recursing,
@@ -4046,12 +4047,12 @@ AlterTable(AlterTableStmt *stmt, LOCKMODE lockmode,
  * existing query plans.  On the assumption it's not used for such, we
  * don't have to reject pending AFTER triggers, either.
  *
- * Also, since we don't have an AlterTableUtilityContext, this cannot be
+ * Also, if you don't pass an AlterTableUtilityContext, this cannot be
  * used for any subcommand types that require parse transformation or
  * could generate subcommands that have to be passed to ProcessUtility.
  */
 void
-AlterTableInternal(Oid relid, List *cmds, bool recurse)
+AlterTableInternal(Oid relid, List *cmds, bool recurse, AlterTableUtilityContext *context)
 {
 	Relation	rel;
 	LOCKMODE	lockmode = AlterTableGetLockLevel(cmds);
@@ -4060,7 +4061,7 @@ AlterTableInternal(Oid relid, List *cmds, bool recurse)
 
 	EventTriggerAlterTableRelid(relid);
 
-	ATController(NULL, rel, cmds, recurse, lockmode, NULL);
+	ATController(NULL, rel, cmds, recurse, lockmode, context);
 }
 
 /*
@@ -4493,7 +4494,11 @@ ATPrepCmd(List **wqueue, Relation rel, AlterTableCmd *cmd,
 			break;
 		case AT_AddPeriod: /* ALTER TABLE ... ADD PERIOD FOR name (start, end) */
 			ATSimplePermissions(rel, ATT_TABLE);
-			pass = AT_PASS_ADD_CONSTR;
+			/*
+			 * Must add it before ADD_CONSTR so that adding a PK/FK at the
+			 * same time will be able to "see" it.
+			 */
+			pass = AT_PASS_ADD_COL;
 			break;
 		case AT_DropPeriod: /* ALTER TABLE ... DROP PERIOD FOR name */
 			ATSimplePermissions(rel, ATT_TABLE);
@@ -4879,8 +4884,9 @@ ATExecCmd(List **wqueue, AlteredTableInfo *tab,
 			break;
 		case AT_CookedColumnDefault:	/* add a pre-cooked default */
 			address = ATExecCookedColumnDefault(rel, cmd->num, cmd->def);
+			break;
 		case AT_AddPeriod:
-			address = ATExecAddPeriod(rel, (Period *) cmd->def, lockmode);
+			address = ATExecAddPeriod(rel, (Period *) cmd->def, lockmode, context);
 			break;
 		case AT_DropPeriod:
 			ATExecDropPeriod(rel, cmd->name, cmd->behavior,
@@ -7549,7 +7555,8 @@ ATExecCookedColumnDefault(Relation rel, AttrNumber attnum,
  * Returns the CHECK constraint Oid.
  */
 static Oid
-make_constraints_for_period(Relation rel, Period *period, char *constraintname)
+make_constraints_for_period(Relation rel, Period *period, char *constraintname,
+							LOCKMODE lockmode, AlterTableUtilityContext *context)
 {
 	List		   *cmds = NIL;
 	AlterTableCmd  *cmd;
@@ -7575,11 +7582,13 @@ make_constraints_for_period(Relation rel, Period *period, char *constraintname)
 	if (constraintname)
 		conname = constraintname;
 	else
+	{
 		conname = ChooseConstraintName(RelationGetRelationName(rel),
 									   period->periodname,
 									   "check",
 									   RelationGetNamespace(rel),
 									   NIL);
+	}
 
 	scol = makeNode(ColumnRef);
 	scol->fields = list_make1(makeString(pstrdup(period->startcolname)));
@@ -7594,7 +7603,7 @@ make_constraints_for_period(Relation rel, Period *period, char *constraintname)
 	constr->conname = conname;
 	constr->deferrable = false;
 	constr->initdeferred = false;
-	constr->location = 0;
+	constr->location = -1;
 	constr->is_no_inherit = false;
 	constr->raw_expr = (Node *) makeSimpleA_Expr(AEXPR_OP, "<", (Node *) scol, (Node *) ecol, 0);
 	constr->cooked_expr = NULL;
@@ -7607,7 +7616,7 @@ make_constraints_for_period(Relation rel, Period *period, char *constraintname)
 	cmds = lappend(cmds, cmd);
 
 	/* Do the deed. */
-	AlterTableInternal(RelationGetRelid(rel), cmds, true);
+	AlterTableInternal(RelationGetRelid(rel), cmds, true, context);
 
 	return get_relation_constraint_oid(RelationGetRelid(rel), conname, false);
 }
@@ -7618,7 +7627,8 @@ make_constraints_for_period(Relation rel, Period *period, char *constraintname)
  * Return the address of the what?
  */
 static ObjectAddress
-ATExecAddPeriod(Relation rel, Period *period, LOCKMODE lockmode)
+ATExecAddPeriod(Relation rel, Period *period, LOCKMODE lockmode,
+				AlterTableUtilityContext *context)
 {
 	Relation	attrelation;
 	HeapTuple	starttuple, endtuple;
@@ -7668,7 +7678,7 @@ ATExecAddPeriod(Relation rel, Period *period, LOCKMODE lockmode)
 					 errmsg("option \"%s\" not recognized", defel->defname)));
 	}
 
-	attrelation = heap_open(AttributeRelationId, RowExclusiveLock);
+	attrelation = table_open(AttributeRelationId, RowExclusiveLock);
 
 	/* Find the start column */
 	starttuple = SearchSysCacheCopyAttName(RelationGetRelid(rel), period->startcolname);
@@ -7728,12 +7738,12 @@ ATExecAddPeriod(Relation rel, Period *period, LOCKMODE lockmode)
 	heap_freetuple(endtuple);
 
 	conoid = make_constraints_for_period(rel, period,
-				dconstraintname ? defGetString(dconstraintname) : NULL);
+				dconstraintname ? defGetString(dconstraintname) : NULL, lockmode, context);
 
 	/* Save it */
 	StorePeriod(rel, period->periodname, startattnum, endattnum, opclass, conoid);
 
-	heap_close(attrelation, RowExclusiveLock);
+	table_close(attrelation, RowExclusiveLock);
 
 	return InvalidObjectAddress;
 }
@@ -7760,7 +7770,7 @@ ATExecDropPeriod(Relation rel, const char *periodName,
 	if (recursing)
 		ATSimplePermissions(rel, ATT_TABLE);
 
-	pg_period = heap_open(PeriodRelationId, RowExclusiveLock);
+	pg_period = table_open(PeriodRelationId, RowExclusiveLock);
 
 	/*
 	 * Find and drop the target period
@@ -7785,7 +7795,7 @@ ATExecDropPeriod(Relation rel, const char *periodName,
 		 * Perform the actual period deletion
 		 */
 		perobj.classId = PeriodRelationId;
-		perobj.objectId = HeapTupleGetOid(tuple);
+		perobj.objectId = period->oid;
 		perobj.objectSubId = 0;
 
 		performDeletion(&perobj, behavior, 0);
@@ -7812,12 +7822,12 @@ ATExecDropPeriod(Relation rel, const char *periodName,
 			ereport(NOTICE,
 					(errmsg("period \"%s\" on relation \"%s\" does not exist, skipping",
 							periodName, RelationGetRelationName(rel))));
-			heap_close(pg_period, RowExclusiveLock);
+			table_close(pg_period, RowExclusiveLock);
 			return;
 		}
 	}
 
-	heap_close(pg_period, RowExclusiveLock);
+	table_close(pg_period, RowExclusiveLock);
 }
 
 /*
@@ -12468,7 +12478,7 @@ ATExecAlterColumnType(AlteredTableInfo *tab, Relation rel,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("cannot alter type of a column used by a period"),
 						 errdetail("%s depends on column \"%s\"",
-								   getObjectDescription(&foundObject),
+								   getObjectDescription(&foundObject, false),
 								   colName)));
 				break;
 
@@ -14487,7 +14497,7 @@ AlterTableMoveAll(AlterTableMoveAllStmt *stmt)
 
 		EventTriggerAlterTableStart((Node *) stmt);
 		/* OID is set by AlterTableInternal */
-		AlterTableInternal(lfirst_oid(l), cmds, false);
+		AlterTableInternal(lfirst_oid(l), cmds, false, NULL);
 		EventTriggerAlterTableEnd();
 	}
 
