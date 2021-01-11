@@ -9028,7 +9028,7 @@ getTableAttrs(Archive *fout, TableInfo *tblinfo, int numTables)
 			int			j;
 
 			/* We shouldn't have any periods before v12 */
-			Assert(fout->remoteVersion >= 0); /* TODO */
+			Assert(fout->remoteVersion >= 130000);
 
 			pg_log_info("finding periods for table \"%s.%s\"\n",
 						tbinfo->dobj.namespace->dobj.name,

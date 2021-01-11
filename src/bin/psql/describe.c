@@ -2325,7 +2325,7 @@ describeOneTableDetails(const char *schemaname,
 		int			tuples = 0;
 
 		/* print periods */
-		if (pset.sversion >= 0) /* TODO */
+		if (pset.sversion >= 130000)
 		{
 			printfPQExpBuffer(&buf,
 							  "SELECT quote_ident(p.pername), quote_ident(s.attname) AS startatt, quote_ident(e.attname) AS endatt\n"
