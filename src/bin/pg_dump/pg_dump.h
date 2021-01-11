@@ -712,7 +712,6 @@ extern InhInfo *getInherits(Archive *fout, int *numInherits);
 extern void getIndexes(Archive *fout, TableInfo tblinfo[], int numTables);
 extern void getExtendedStatistics(Archive *fout);
 extern void getConstraints(Archive *fout, TableInfo tblinfo[], int numTables);
-/*extern void getPeriods(Archive *fout, TableInfo tblinfo[], int numTables);*/
 extern RuleInfo *getRules(Archive *fout, int *numRules);
 extern void getTriggers(Archive *fout, TableInfo tblinfo[], int numTables);
 extern ProcLangInfo *getProcLangs(Archive *fout, int *numProcLangs);
