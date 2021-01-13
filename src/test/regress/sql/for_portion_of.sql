@@ -195,7 +195,12 @@ FOR PORTION OF valid_at FROM '2025-01-01' TO NULL;
 
 SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
 
--- TODO: and UPDATE ... RETURNING ... returns only the updated values (not the inserted side values)
+-- UPDATE ... RETURNING returns only the updated values (not the inserted side values)
+UPDATE for_portion_of_test
+FOR PORTION OF valid_at FROM '2018-02-01' TO '2018-02-15'
+SET name = 'three^3'
+WHERE id = '[3,4)'
+RETURNING *;
 
 -- test that we run triggers on the UPDATE/DELETEd row and the INSERTed rows
 
@@ -248,5 +253,4 @@ DELETE FROM for_portion_of_test
 FOR PORTION OF valid_at FROM '2023-01-01' TO '2024-01-01'
 WHERE id = '[5,6)';
 
--- test that we run triggers on the DELETEd row and the INSERTed rows
 SELECT * FROM for_portion_of_test ORDER BY id, valid_at;

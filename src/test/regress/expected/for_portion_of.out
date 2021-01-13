@@ -215,6 +215,18 @@ SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
  [5,6) | ["Mon Jan 01 00:00:00 2018","Fri Jun 01 00:00:00 2018") | five^3
  [5,6) | ["Mon Jun 01 00:00:00 2020","Wed Jan 01 00:00:00 2025") | five
 (11 rows)
+
+-- UPDATE ... RETURNING returns only the updated values (not the inserted side values)
+UPDATE for_portion_of_test
+FOR PORTION OF valid_at FROM '2018-02-01' TO '2018-02-15'
+SET name = 'three^3'
+WHERE id = '[3,4)'
+RETURNING *;
+  id   |                        valid_at                         |  name   
+-------+---------------------------------------------------------+---------
+ [3,4) | ["Thu Feb 01 00:00:00 2018","Thu Feb 15 00:00:00 2018") | three^3
+(1 row)
+
 -- test that we run triggers on the UPDATE/DELETEd row and the INSERTed rows
 CREATE FUNCTION for_portion_of_trigger()
 RETURNS trigger
@@ -258,7 +270,6 @@ UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM '2021-01-01' TO '2022-01-01'
 SET name = 'five^4'
 WHERE id = '[5,6)';
-SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
 NOTICE:  BEFORE UPDATE ["Fri Jan 01 00:00:00 2021","Sat Jan 01 00:00:00 2022") of ["Mon Jun 01 00:00:00 2020","Wed Jan 01 00:00:00 2025")
 NOTICE:  BEFORE INSERT ["Mon Jun 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") of <NULL>
 NOTICE:  BEFORE INSERT ["Sat Jan 01 00:00:00 2022","Wed Jan 01 00:00:00 2025") of <NULL>
@@ -274,3 +285,4 @@ NOTICE:  BEFORE INSERT ["Mon Jan 01 00:00:00 2024","Wed Jan 01 00:00:00 2025") o
 NOTICE:  AFTER INSERT ["Sat Jan 01 00:00:00 2022","Sun Jan 01 00:00:00 2023") of <NULL>
 NOTICE:  AFTER INSERT ["Mon Jan 01 00:00:00 2024","Wed Jan 01 00:00:00 2025") of <NULL>
 NOTICE:  AFTER DELETE <NULL> of ["Sat Jan 01 00:00:00 2022","Wed Jan 01 00:00:00 2025")
+SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
