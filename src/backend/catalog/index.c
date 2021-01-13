@@ -233,13 +233,16 @@ index_check_primary_key(Relation heapRel,
 		HeapTuple	atttuple;
 		Form_pg_attribute attform;
 
-		if (attnum == 0)
+		if (attnum == 0 && !(stmt->istemporal && i > 0))
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("primary keys cannot be expressions")));
 
-		/* System attributes are never null, so no need to check */
-		if (attnum < 0)
+		/*
+		 * System attributes are never null, so no need to check.
+		 * Also skip expressions.
+		 */
+		if (attnum <= 0)
 			continue;
 
 		atttuple = SearchSysCache2(ATTNUM,
@@ -1493,6 +1496,7 @@ index_concurrently_create_copy(Relation heapRelation, Oid oldIndexId, const char
 							indexExprs,
 							indexPreds,
 							oldInfo->ii_Unique,
+							oldInfo->ii_Temporal,
 							false,	/* not ready for inserts */
 							true);
 
@@ -2002,7 +2006,8 @@ index_constraint_create(Relation heapRelation,
 
 	/* primary/unique constraints shouldn't have any expressions */
 	if (indexInfo->ii_Expressions &&
-		constraintType != CONSTRAINT_EXCLUSION)
+		constraintType != CONSTRAINT_EXCLUSION &&
+		!indexInfo->ii_Temporal)
 		elog(ERROR, "constraints cannot have index expressions");
 
 	/*
@@ -2495,6 +2500,7 @@ BuildIndexInfo(Relation index)
 					   RelationGetIndexExpressions(index),
 					   RelationGetIndexPredicate(index),
 					   indexStruct->indisunique,
+					   false,	// TODO
 					   indexStruct->indisready,
 					   false);
 
@@ -2554,6 +2560,7 @@ BuildDummyIndexInfo(Relation index)
 					   RelationGetDummyIndexExpressions(index),
 					   NIL,
 					   indexStruct->indisunique,
+					   false,
 					   indexStruct->indisready,
 					   false);
 

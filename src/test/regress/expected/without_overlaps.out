@@ -10,13 +10,12 @@ CREATE TABLE without_overlaps_test (
 ERROR:  syntax error at or near "WITHOUT"
 LINE 3: ...STRAINT without_overlaps_pk PRIMARY KEY (valid_at WITHOUT OV...
                                                              ^
--- PK with a range column that isn't there:
+-- PK with a range column/PERIOD that isn't there:
 CREATE TABLE without_overlaps_test (
 	id INTEGER,
 	CONSTRAINT without_overlaps_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
 ERROR:  range or PERIOD "valid_at" named in WITHOUT OVERLAPS does not exist
--- PK with a PERIOD that isn't there:
 -- PK with a non-range column:
 CREATE TABLE without_overlaps_test (
 	id INTEGER,
@@ -42,7 +41,24 @@ CREATE TABLE without_overlaps_test2 (
 );
 DROP TABLE without_overlaps_test2;
 -- PK with one column plus a PERIOD:
+CREATE TABLE without_overlaps_test2 (
+  id int4range,
+  valid_from date,
+  valid_til date,
+  PERIOD FOR valid_at (valid_from, valid_til),
+  CONSTRAINT without_overlaps2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+DROP TABLE without_overlaps_test2;
 -- PK with two columns plus a PERIOD:
+CREATE TABLE without_overlaps_test2 (
+  id1 int4range,
+  id2 int4range,
+  valid_from date,
+  valid_til date,
+  PERIOD FOR valid_at (valid_from, valid_til),
+  CONSTRAINT without_overlaps2_pk PRIMARY KEY (id1, id2, valid_at WITHOUT OVERLAPS)
+);
+DROP TABLE without_overlaps_test2;
 -- PK with a custom range type:
 CREATE TYPE textrange2 AS range (subtype=text, collation="C");
 CREATE TABLE without_overlaps_test2 (
@@ -61,14 +77,12 @@ CREATE TABLE without_overlaps_uq_test (
 ERROR:  syntax error at or near "WITHOUT"
 LINE 3:  CONSTRAINT without_overlaps_uq UNIQUE (valid_at WITHOUT OVE...
                                                          ^
--- UNIQUE with a range column that isn't there:
+-- UNIQUE with a range column/PERIOD that isn't there:
 CREATE TABLE without_overlaps_uq_test (
 	id INTEGER,
 	CONSTRAINT without_overlaps_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
 );
 ERROR:  range or PERIOD "valid_at" named in WITHOUT OVERLAPS does not exist
--- UNIQUE with a PERIOD that isn't there:
--- TODO
 -- UNIQUE with a non-range column:
 CREATE TABLE without_overlaps_uq_test (
 	id INTEGER,
@@ -94,9 +108,24 @@ CREATE TABLE without_overlaps_uq_test2 (
 );
 DROP TABLE without_overlaps_uq_test2;
 -- UNIQUE with one column plus a PERIOD:
--- TODO
+CREATE TABLE without_overlaps_uq_test2 (
+	id int4range,
+	valid_from timestamp,
+	valid_til timestamp,
+  PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT without_overlaps2_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
+);
+DROP TABLE without_overlaps_uq_test2;
 -- UNIQUE with two columns plus a PERIOD:
--- TODO
+CREATE TABLE without_overlaps_uq_test2 (
+	id1 int4range,
+	id2 int4range,
+	valid_from timestamp,
+	valid_til timestamp,
+  PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT without_overlaps2_uq UNIQUE (id1, id2, valid_at WITHOUT OVERLAPS)
+);
+DROP TABLE without_overlaps_uq_test2;
 -- UNIQUE with a custom range type:
 CREATE TYPE textrange2 AS range (subtype=text, collation="C");
 CREATE TABLE without_overlaps_uq_test2 (

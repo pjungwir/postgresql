@@ -40,6 +40,7 @@
 #include "catalog/pg_constraint.h"
 #include "catalog/pg_opclass.h"
 #include "catalog/pg_operator.h"
+#include "catalog/pg_period.h"
 #include "catalog/pg_statistic_ext.h"
 #include "catalog/pg_type.h"
 #include "commands/comment.h"
@@ -50,6 +51,7 @@
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
+#include "nodes/print.h"	// TODO remove
 #include "optimizer/optimizer.h"
 #include "parser/analyze.h"
 #include "parser/parse_clause.h"
@@ -923,7 +925,6 @@ transformTablePeriod(CreateStmtContext *cxt, Period *period)
 					 parser_errposition(cxt->pstate,
 										period->location)));
 
-	// TODO:
 	/*
 	 * Determine the column info and range type so that transformIndexConstraints
 	 * knows how to create PRIMARY KEY/UNIQUE constraints using this PERIOD.
@@ -2712,6 +2713,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 						}
 						else
 						{
+							// TODO: allow PERIODs too, both existing periods and from cxt->periods
 							ereport(ERROR,
 									(errcode(ERRCODE_DATATYPE_MISMATCH),
 									 errmsg("column \"%s\" named in WITHOUT OVERLAPS is not a range type",
@@ -2719,6 +2721,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 						}
 					}
 				}
+				/* TODO: Look up columns-to-be-created too? How do I get their attno? */
 			}
 			else
 			{
@@ -2766,28 +2769,79 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 				/*
 				 * TODO: Search for a non-system PERIOD with the right name.
 				 */
+				// TODO: Don't let you use SYSTEM TIME as the name (not for ranges either in fact).
+				Period *period = NULL;
+				ListCell *periods = NULL;
+				foreach(periods, cxt->periods)
+				{
+					period = castNode(Period, lfirst(periods));
+					if (strcmp(period->periodname, without_overlaps_str) == 0)
+					{
+						found = true;
+						break;
+					}
+				}
 				if (found)
 				{
+					ColumnDef *startcol = NULL;
+					ColumnDef *endcol = NULL;
+
+					/* Find the start column */
+					foreach(columns, cxt->columns)
+					{
+						column = castNode(ColumnDef, lfirst(columns));
+						if (strcmp(column->colname, period->startcolname) == 0)
+						{
+							startcol = column;
+							break;
+						}
+					}
+
+					/* Find the end column */
+					foreach(columns, cxt->columns)
+					{
+						column = castNode(ColumnDef, lfirst(columns));
+						if (strcmp(column->colname, period->endcolname) == 0)
+						{
+							endcol = column;
+							break;
+						}
+					}
+
+					/* The period itself should have verified that these exist: */
+					if (startcol == NULL)
+						elog(ERROR, "Missing startcol %s for period %s",
+							 period->startcolname, period->periodname);
+					if (endcol == NULL)
+						elog(ERROR, "Missing endcol %s for period %s",
+							 period->endcolname, period->periodname);
+
+					/* Get the start/end columns */
+
+					ColumnRef *start = makeNode(ColumnRef);
+					start->fields = list_make1(makeString(startcol->colname));
+					start->location = constraint->location;
+
+					ColumnRef *end = makeNode(ColumnRef);
+					end->fields = list_make1(makeString(endcol->colname));
+					end->location = constraint->location;
+
+					Oid rngtypid = get_elemtype_range(typenameTypeId(NULL, startcol->typeName));
+					char *range_type_name = get_typname(rngtypid);
+
+					/* Use a range to represent the PERIOD. */
 					iparam->name = NULL;
-					/*
-					 * TODO: Build up a parse tree to cast the period to a range.
-					 * See transformExpr (called below and defined in parser/parse_expr.c.
-					 */
-					/*
-					TypeCast *expr = makeNode(TypeCast);
-					expr->arg = constraint->without_overlaps;
-					expr->typeName = "....";		// TODO: need to look up which range type to use
-					expr->location = -1;
-					iparam->expr = transformExpr(..., expr, EXPR_KIND_INDEX_EXPRESSION);
-					*/
+					iparam->expr = (Node *) makeFuncCall(SystemFuncName(range_type_name),
+														 list_make2(start, end),
+														 COERCE_EXPLICIT_CALL,
+														 -1);
+					pprint(iparam->expr);
 				}
 				else
-				{
 					ereport(ERROR,
 							(errcode(ERRCODE_UNDEFINED_COLUMN),
 							 errmsg("range or PERIOD \"%s\" named in WITHOUT OVERLAPS does not exist",
 									without_overlaps_str)));
-				}
 			}
 			{
 				List *opname;
