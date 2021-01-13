@@ -815,7 +815,7 @@ transformColumnRef(ParseState *pstate, ColumnRef *cref)
 			case CRERR_TOO_MANY:
 				ereport(ERROR,
 						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("improper qualified name (too many dotted names): %s",
+						 errmsg("iiiiimproper qualified name (too many dotted names): %s",
 								NameListToString(cref->fields)),
 						 parser_errposition(pstate, cref->location)));
 				break;

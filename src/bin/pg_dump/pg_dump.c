@@ -6220,8 +6220,8 @@ getTables(Archive *fout, int *numTables)
 		if (fout->remoteVersion >= 120000)
 			relhasoids = "'f'::bool";
 
-		/* In PG13 upwards we have PERIODs. */
-		if (fout->remoteVersion >= 130000)
+		/* In PG14 upwards we have PERIODs. */
+		if (fout->remoteVersion >= 140000)
 			nperiod = "(SELECT count(*) FROM pg_period WHERE perrelid = c.oid)";
 
 		/*
@@ -9035,8 +9035,8 @@ getTableAttrs(Archive *fout, TableInfo *tblinfo, int numTables)
 			int			numPeriods;
 			int			j;
 
-			/* We shouldn't have any periods before v12 */
-			Assert(fout->remoteVersion >= 130000);
+			/* We shouldn't have any periods before v14 */
+			Assert(fout->remoteVersion >= 140000);
 
 			pg_log_info("finding periods for table \"%s.%s\"\n",
 						tbinfo->dobj.namespace->dobj.name,
