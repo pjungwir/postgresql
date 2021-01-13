@@ -188,9 +188,73 @@ ALTER TABLE without_overlaps_uq_test2
   UNIQUE USING INDEX idx_without_overlaps_uq;
 DROP TABLE without_overlaps_uq_test2;
 
--- TODO: Add range column and the PK at the same time
--- TODO: Add period and the PK at the same time
--- TODO: Add date columns, period, and the PK at the same time
+-- Add range column and the PK at the same time
+CREATE TABLE without_overlaps_test2 (
+  id int4range
+);
+ALTER TABLE without_overlaps_test2
+  ADD COLUMN valid_at tsrange,
+  ADD CONSTRAINT without_overlaps2_pk
+  PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+DROP TABLE without_overlaps_test2;
+
+-- Add PERIOD and the PK at the same time
+CREATE TABLE without_overlaps_test2 (
+  id int4range,
+  valid_from date,
+  valid_til date
+);
+ALTER TABLE without_overlaps_test2
+  ADD PERIOD FOR valid_at (valid_from, valid_til),
+  ADD CONSTRAINT without_overlaps2_pk
+  PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+DROP TABLE without_overlaps_test2;
+
+-- Add range column and UNIQUE constraint at the same time
+CREATE TABLE without_overlaps_test2 (
+  id int4range
+);
+ALTER TABLE without_overlaps_test2
+  ADD COLUMN valid_at tsrange,
+  ADD CONSTRAINT without_overlaps2_uq
+  UNIQUE (id, valid_at WITHOUT OVERLAPS);
+DROP TABLE without_overlaps_test2;
+
+-- Add PERIOD column and UNIQUE constraint at the same time
+CREATE TABLE without_overlaps_test2 (
+  id int4range,
+  valid_from date,
+  valid_til date
+);
+ALTER TABLE without_overlaps_test2
+  ADD PERIOD FOR valid_at (valid_from, valid_til),
+  ADD CONSTRAINT without_overlaps2_uq
+  UNIQUE (id, valid_at WITHOUT OVERLAPS);
+DROP TABLE without_overlaps_test2;
+
+-- Add date columns, PERIOD, and the PK at the same time
+CREATE TABLE without_overlaps_test2 (
+  id int4range
+);
+ALTER TABLE without_overlaps_test2
+  ADD COLUMN valid_from date,
+  ADD COLUMN valid_til date,
+  ADD PERIOD FOR valid_at (valid_from, valid_til),
+  ADD CONSTRAINT without_overlaps2_pk
+  PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+DROP TABLE without_overlaps_test2;
+
+-- Add date columns, PERIOD, and UNIQUE constraint at the same time
+CREATE TABLE without_overlaps_test2 (
+  id int4range
+);
+ALTER TABLE without_overlaps_test2
+  ADD COLUMN valid_from date,
+  ADD COLUMN valid_til date,
+  ADD PERIOD FOR valid_at (valid_from, valid_til),
+  ADD CONSTRAINT without_overlaps2_uq
+  UNIQUE (id, valid_at WITHOUT OVERLAPS);
+DROP TABLE without_overlaps_test2;
 
 --
 -- test pg_get_constraintdef

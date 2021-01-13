@@ -134,6 +134,8 @@ static List *get_opclass(Oid opclass, Oid actual_datatype);
 static void transformIndexConstraints(CreateStmtContext *cxt);
 static IndexStmt *transformIndexConstraint(Constraint *constraint,
 										   CreateStmtContext *cxt);
+static bool findNewOrOldColumn(CreateStmtContext *cxt, char *colname, char **typname,
+							   Oid *typid);
 static void transformExtendedStatistics(CreateStmtContext *cxt);
 static void transformFKConstraints(CreateStmtContext *cxt,
 								   bool skipValidation,
@@ -2754,152 +2756,103 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 			 *
 			 * Otherwise report an error.
 			 */
-			bool		found = false;
-			ColumnDef  *column = NULL;
-			ListCell   *columns;
-			if (cxt->isalter)
+			bool	found = false;
+			char   *typname;
+			Oid		typid;
+
+			if (findNewOrOldColumn(cxt, without_overlaps_str, &typname, &typid))
 			{
-				// TODO: DRY this up with the non-ALTER case:
-				Relation rel = cxt->rel;
-				/*
-				 * Look up columns on existing table.
-				 */
-				for (int i = 0; i < rel->rd_att->natts; i++)
+				if (type_is_range(typid))
 				{
-					Form_pg_attribute attr = TupleDescAttr(rel->rd_att, i);
-					const char *attname = NameStr(attr->attname);
-					if (strcmp(attname, without_overlaps_str) == 0)
-					{
-						if (type_is_range(attr->atttypid))
-						{
-							found = true;
-							break;
-						}
-						else
-						{
-							// TODO: allow PERIODs too, both existing periods and from cxt->periods
-							ereport(ERROR,
-									(errcode(ERRCODE_DATATYPE_MISMATCH),
-									 errmsg("column \"%s\" named in WITHOUT OVERLAPS is not a range type",
-											without_overlaps_str)));
-						}
-					}
+					found = true;
+					iparam->name = pstrdup(without_overlaps_str);
+					iparam->expr = NULL;
+
+					// TODO: maybe we don't need found at all.
+					/*
+					 * Force the column to NOT NULL since it is part of the primary key.
+					 */
+					AlterTableCmd *notnullcmd = makeNode(AlterTableCmd);
+
+					notnullcmd->subtype = AT_SetNotNull;
+					notnullcmd->name = pstrdup(without_overlaps_str);
+					notnullcmds = lappend(notnullcmds, notnullcmd);
 				}
-				/* TODO: Look up columns-to-be-created too? How do I get their attno? */
+				else
+					ereport(ERROR,
+							(errcode(ERRCODE_DATATYPE_MISMATCH),
+							 errmsg("column \"%s\" named in WITHOUT OVERLAPS is not a range type",
+									without_overlaps_str)));
 			}
 			else
 			{
-				/*
-				 * Look up columns on the being-created table.
-				 */
-				foreach(columns, cxt->columns)
-				{
-					column = castNode(ColumnDef, lfirst(columns));
-					if (strcmp(column->colname, without_overlaps_str) == 0)
-					{
-						Oid colTypeOid = typenameTypeId(NULL, column->typeName);
-						if (type_is_range(colTypeOid))
-						{
-							found = true;
-							break;
-						}
-						else
-						{
-							ereport(ERROR,
-									(errcode(ERRCODE_DATATYPE_MISMATCH),
-									 errmsg("column \"%s\" named in WITHOUT OVERLAPS is not a range type",
-											without_overlaps_str)));
-						}
-					}
-				}
-			}
-			if (found)
-			{
-				AlterTableCmd *notnullcmd;
-				iparam->name = pstrdup(without_overlaps_str);
-				iparam->expr = NULL;
-
-				/*
-				 * Force the column to NOT NULL since it is part of the primary key.
-				 */
-				notnullcmd = makeNode(AlterTableCmd);
-
-				notnullcmd->subtype = AT_SetNotNull;
-				notnullcmd->name = pstrdup(without_overlaps_str);
-				notnullcmds = lappend(notnullcmds, notnullcmd);
-			}
-			else {
-				found = false;
-				/*
-				 * TODO: Search for a non-system PERIOD with the right name.
-				 */
-				// TODO: Don't let you use SYSTEM TIME as the name (not for ranges either in fact).
-				Period *period = NULL;
+				/* Look for a PERIOD, first newly-defined */
+				char *startcolname = NULL;
+				char *endcolname = NULL;
 				ListCell *periods = NULL;
 				foreach(periods, cxt->periods)
 				{
-					period = castNode(Period, lfirst(periods));
+					Period *period = castNode(Period, lfirst(periods));
 					if (strcmp(period->periodname, without_overlaps_str) == 0)
 					{
 						found = true;
+						startcolname = period->startcolname;
+						endcolname = period->endcolname;
 						break;
 					}
 				}
-				if (found)
+
+				if (startcolname == NULL && cxt->rel)
 				{
-					ColumnDef *startcol = NULL;
-					ColumnDef *endcol = NULL;
-
-					/* Find the start column */
-					foreach(columns, cxt->columns)
+					/* Look for an already-existing PERIOD */
+					// TODO: locking? releasing?
+					HeapTuple perTuple;
+					Oid relid = RelationGetRelid(cxt->rel);
+					perTuple = SearchSysCache2(PERIODNAME,
+							ObjectIdGetDatum(relid),
+							PointerGetDatum(without_overlaps_str));
+					if (HeapTupleIsValid(perTuple))
 					{
-						column = castNode(ColumnDef, lfirst(columns));
-						if (strcmp(column->colname, period->startcolname) == 0)
-						{
-							startcol = column;
-							break;
-						}
+						Form_pg_period per = (Form_pg_period) GETSTRUCT(perTuple);
+						startcolname = get_attname(relid, per->perstart, false);
+						endcolname = get_attname(relid, per->perend, false);
+						ReleaseSysCache(perTuple);
 					}
-
-					/* Find the end column */
-					foreach(columns, cxt->columns)
-					{
-						column = castNode(ColumnDef, lfirst(columns));
-						if (strcmp(column->colname, period->endcolname) == 0)
-						{
-							endcol = column;
-							break;
-						}
-					}
-
-					/* The period itself should have verified that these exist: */
-					if (startcol == NULL)
+				}
+				if (startcolname != NULL)
+				{
+					if (!findNewOrOldColumn(cxt, startcolname, &typname, &typid))
 						elog(ERROR, "Missing startcol %s for period %s",
-							 period->startcolname, period->periodname);
-					if (endcol == NULL)
+							 startcolname, without_overlaps_str);
+					if (!findNewOrOldColumn(cxt, endcolname, &typname, &typid))
 						elog(ERROR, "Missing endcol %s for period %s",
-							 period->endcolname, period->periodname);
+							 endcolname, without_overlaps_str);
 
-					/* Get the start/end columns */
+					/* Use the start/end columns */
 
 					ColumnRef *start = makeNode(ColumnRef);
-					start->fields = list_make1(makeString(startcol->colname));
+					start->fields = list_make1(makeString(startcolname));
 					start->location = constraint->location;
 
 					ColumnRef *end = makeNode(ColumnRef);
-					end->fields = list_make1(makeString(endcol->colname));
+					end->fields = list_make1(makeString(endcolname));
 					end->location = constraint->location;
 
-					Oid rngtypid = get_elemtype_range(typenameTypeId(NULL, startcol->typeName));
+					Oid rngtypid = get_elemtype_range(typid);
+					if (rngtypid == InvalidOid)
+						ereport(ERROR,
+								(errcode(ERRCODE_UNDEFINED_OBJECT),
+								 errmsg("PERIOD \"%s\" cannot be used in a constraint without a corresponding range type",
+										without_overlaps_str)));
+
 					char *range_type_name = get_typname(rngtypid);
 
-					/* Use a range to represent the PERIOD. */
+					/* Build a range to represent the PERIOD. */
 					iparam->name = NULL;
 					iparam->expr = (Node *) makeFuncCall(SystemFuncName(range_type_name),
 														 list_make2(start, end),
 														 COERCE_EXPLICIT_CALL,
 														 -1);
-					pprint(iparam->expr);
 				}
 				else
 					ereport(ERROR,
@@ -2908,7 +2861,6 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 									without_overlaps_str)));
 			}
 			{
-				List *opname;
 				iparam->indexcolname = NULL;
 				iparam->collation = NIL;
 				iparam->opclass = NIL;
@@ -2916,8 +2868,8 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 				iparam->nulls_ordering = SORTBY_NULLS_DEFAULT;
 				index->indexParams = lappend(index->indexParams, iparam);
 
-				opname = list_make1(makeString("&&"));
-				index->excludeOpNames = lappend(index->excludeOpNames, opname);
+				index->excludeOpNames = lappend(index->excludeOpNames,
+												list_make1(makeString("&&")));
 				index->accessMethod = "gist";
 				constraint->access_method = "gist";
 			}
@@ -3039,6 +2991,55 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 	}
 
 	return index;
+}
+
+/*
+ * Tries to find a column by name among the existing ones (if it's an ALTER TABLE)
+ * and the new ones. Sets typname and typid if one is found. Returns false if we
+ * couldn't find a match.
+ */
+static bool
+findNewOrOldColumn(CreateStmtContext *cxt, char *colname, char **typname, Oid *typid)
+{
+	/* Check the new columns first in case their type is changing. */
+
+	ColumnDef  *column = NULL;
+	ListCell   *columns;
+
+	foreach(columns, cxt->columns)
+	{
+		column = lfirst_node(ColumnDef, columns);
+		if (strcmp(column->colname, colname) == 0)
+		{
+			*typid = typenameTypeId(NULL, column->typeName);
+			*typname = TypeNameToString(column->typeName);
+			return true;
+		}
+	}
+
+	// TODO: should I consider DROP COLUMN?
+
+	/* Look up columns on existing table. */
+
+	if (cxt->isalter)
+	{
+		Relation rel = cxt->rel;
+		for (int i = 0; i < rel->rd_att->natts; i++)
+		{
+			Form_pg_attribute attr = TupleDescAttr(rel->rd_att, i);
+			const char *attname = NameStr(attr->attname);
+			if (strcmp(attname, colname) == 0)
+			{
+				*typid = attr->atttypid;
+				Type type = typeidType(attr->atttypid);
+				*typname = pstrdup(typeTypeName(type));
+				ReleaseSysCache(type);
+				return true;
+			}
+		}
+	}
+
+	return false;
 }
 
 /*
@@ -3718,6 +3719,7 @@ transformAlterTableStmt(Oid relid, AlterTableStmt *stmt,
 	cxt.inhRelations = NIL;
 	cxt.isalter = true;
 	cxt.columns = NIL;
+	cxt.periods = NIL;
 	cxt.ckconstraints = NIL;
 	cxt.fkconstraints = NIL;
 	cxt.ixconstraints = NIL;
@@ -3783,17 +3785,6 @@ transformAlterTableStmt(Oid relid, AlterTableStmt *stmt,
 
 			case AT_AddPeriod:
 				{
-					/*
-					Period  *period = castNode(Period, cmd->def);
-
-					if (strcmp(period->periodname, "system_time") == 0)
-							ereport(ERROR,
-									(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-									 errmsg("period for system_time is not supported"),
-									 parser_errposition(cxt->pstate,
-														period->location)));
-
-														*/
 					newcmds = lappend(newcmds, cmd);
 					break;
 				}
