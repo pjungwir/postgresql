@@ -7638,7 +7638,8 @@ ATExecAddPeriod(Relation rel, Period *period, LOCKMODE lockmode,
 	ListCell   *option;
 	DefElem	   *dconstraintname = NULL;
 	DefElem	   *dopclass = NULL;
-	Oid			conoid, opclass;
+	DefElem	   *drangetypename = NULL;
+	Oid			coltypid, rngtypid, conoid, opclass;
 
 	/*
 	 * PERIOD FOR SYSTEM_TIME is not yet implemented, but make sure no one uses
@@ -7672,6 +7673,14 @@ ATExecAddPeriod(Relation rel, Period *period, LOCKMODE lockmode,
 						(errcode(ERRCODE_SYNTAX_ERROR),
 						 errmsg("conflicting or redundant options")));
 			dopclass = defel;
+		}
+		else if (strcmp(defel->defname, "rangetype") == 0)
+		{
+			if (drangetypename)
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+						 errmsg("conflicting or redundant options")));
+			drangetypename = defel;
 		}
 		else
 			ereport(ERROR,
@@ -7735,6 +7744,47 @@ ATExecAddPeriod(Relation rel, Period *period, LOCKMODE lockmode,
 				(errcode(ERRCODE_COLLATION_MISMATCH),
 				 errmsg("start and end columns of period must have same collation")));
 
+	/*
+	 * Find a suitable range type for operations involving this period.
+	 * Use the rangetype option if provided, otherwise try to find a
+	 * non-ambiguous existing type.
+	 */
+	coltypid = startatttuple->atttypid;
+	if (drangetypename != NULL)
+	{
+		char *rangetypename = defGetString(drangetypename);
+		/* Make sure it exists */
+		rngtypid = TypenameGetTypidExtended(rangetypename, false);
+		if (rngtypid == InvalidOid)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("Range type %s not found", rangetypename)));
+
+		/* Make sure it is a range type */
+		if (!type_is_range(rngtypid))
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("Type %s is not a range type", rangetypename)));
+
+		/* Make sure it matches the column type */
+		if (get_range_subtype(rngtypid) != coltypid)
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("Range type %s does not match column type %s",
+						 rangetypename,
+						 format_type_be(coltypid))));
+	}
+	else
+	{
+		rngtypid = get_subtype_range(coltypid);
+		if (rngtypid == InvalidOid)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("no compatible range type found for %s period",
+							format_type_be(coltypid))));
+
+	}
+
 	heap_freetuple(starttuple);
 	heap_freetuple(endtuple);
 
@@ -7742,7 +7792,7 @@ ATExecAddPeriod(Relation rel, Period *period, LOCKMODE lockmode,
 				dconstraintname ? defGetString(dconstraintname) : NULL, lockmode, context);
 
 	/* Save it */
-	StorePeriod(rel, period->periodname, startattnum, endattnum, opclass, conoid);
+	StorePeriod(rel, period->periodname, startattnum, endattnum, rngtypid, opclass, conoid);
 
 	table_close(attrelation, RowExclusiveLock);
 

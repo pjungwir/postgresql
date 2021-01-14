@@ -3448,6 +3448,30 @@ get_multirange_range(Oid multirangeOid)
 		return InvalidOid;
 }
 
+Oid
+get_subtype_range(Oid subtypeOid)
+{
+	CatCList *catlist;
+	Oid	result = InvalidOid;
+
+	catlist = SearchSysCacheList1(RANGESUBTYPE, ObjectIdGetDatum(subtypeOid));
+
+	if (catlist->n_members == 1)
+	{
+		HeapTuple	tuple = &catlist->members[0]->tuple;
+		Form_pg_range rngtup = (Form_pg_range) GETSTRUCT(tuple);
+		result = rngtup->rngtypid;
+		ReleaseCatCacheList(catlist);
+	}
+	else if (catlist->n_members > 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_INDETERMINATE_DATATYPE),
+				 errmsg("ambiguous range for type %s",
+						format_type_be(subtypeOid))));
+
+	return result;
+}
+
 /*				---------- PG_INDEX CACHE ----------				 */
 
 /*
