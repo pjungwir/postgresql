@@ -56,3 +56,24 @@ ERROR:  column name "p" conflicts with a period name
 /* adding columns and the period at the same time */
 create table pt2 (id integer);
 alter table pt2 add column ds date, add column de date, add period for p (ds, de);
+drop table pt2;
+/* Ambiguous range types raise an error */
+create type mydaterange as range(subtype=date);
+create table pt2 (id int, ds date, de date, period for p (ds, de));
+ERROR:  ambiguous range for type date
+/* You can give an explicit range type */
+create table pt2 (id int, ds date, de date, period for p (ds, de) with (rangetype = 'mydaterange'));
+drop type mydaterange;
+ERROR:  cannot drop type mydaterange because other objects depend on it
+DETAIL:  period p on table pt2 depends on type mydaterange
+HINT:  Use DROP ... CASCADE to drop the dependent objects too.
+drop type mydaterange cascade;
+NOTICE:  drop cascades to period p on table pt2
+drop table pt2;
+create table pt2 (id int, ds date, de date, period for p (ds, de) with (rangetype = 'daterange'));
+/* Range type is not found */
+create table pt3 (id int, ds date, de date, period for p (ds, de) with (rangetype = 'notarange'));
+ERROR:  Range type notarange not found
+/* Range type is the wrong type */
+create table pt3 (id int, ds date, de date, period for p (ds, de) with (rangetype = 'tstzrange'));
+ERROR:  Range type tstzrange does not match column type date
