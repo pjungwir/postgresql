@@ -38,8 +38,7 @@ extern LOCKMODE AlterTableGetLockLevel(List *cmds);
 
 extern void ATExecChangeOwner(Oid relationOid, Oid newOwnerId, bool recursing, LOCKMODE lockmode);
 
-extern void AlterTableInternal(Oid relid, List *cmds, bool recurse,
-							   struct AlterTableUtilityContext *context);
+extern void AlterTableInternal(Oid relid, List *cmds, bool recurse, struct AlterTableUtilityContext *context);
 
 extern Oid	AlterTableMoveAll(AlterTableMoveAllStmt *stmt);
 

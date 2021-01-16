@@ -70,6 +70,7 @@
 #include "utils/ruleutils.h"
 #include "utils/syscache.h"
 #include "utils/typcache.h"
+#include "nodes/print.h"	// TODO remove
 
 
 /* State shared by transformCreateStmt and its subroutines */
@@ -83,6 +84,7 @@ typedef struct
 	bool		isforeign;		/* true if CREATE/ALTER FOREIGN TABLE */
 	bool		isalter;		/* true if altering existing table */
 	List	   *columns;		/* ColumnDef items */
+	List	   *periods;		/* Period items */
 	List	   *ckconstraints;	/* CHECK constraints */
 	List	   *fkconstraints;	/* FOREIGN KEY constraints */
 	List	   *ixconstraints;	/* index-creating constraints */
@@ -169,6 +171,7 @@ static Const *transformPartitionBoundValue(ParseState *pstate, Node *con,
 List *
 transformCreateStmt(CreateStmt *stmt, const char *queryString)
 {
+	ereport(NOTICE, (errmsg("transformCreateStmt")));
 	ParseState *pstate;
 	CreateStmtContext cxt;
 	List	   *result;
@@ -272,6 +275,9 @@ transformCreateStmt(CreateStmt *stmt, const char *queryString)
 	 * Run through each primary element in the table creation clause. Separate
 	 * column defs from constraints, and do preliminary analysis.
 	 */
+	// TODO: Make sure we handle periods after columns (just like we must already be handling constraints after columns)
+	ereport(NOTICE, (errmsg("transformCreateStmt foreach tableElts")));
+	pprint(stmt->tableElts);
 	foreach(elements, stmt->tableElts)
 	{
 		Node	   *element = lfirst(elements);
@@ -283,6 +289,7 @@ transformCreateStmt(CreateStmt *stmt, const char *queryString)
 				break;
 
 			case T_Period:
+				ereport(NOTICE, (errmsg("....period")));
 				transformTablePeriod(&cxt, (Period *) element);
 				break;
 
@@ -350,14 +357,188 @@ transformCreateStmt(CreateStmt *stmt, const char *queryString)
 	 * Output results.
 	 */
 	stmt->tableElts = cxt.columns;
+	stmt->periods = cxt.periods;
 	stmt->constraints = cxt.ckconstraints;
 
 	result = lappend(cxt.blist, stmt);
 	result = list_concat(result, cxt.alist);
 	result = list_concat(result, save_alist);
 
+	// at this point we have a CreateStmt and an AlterTableStmt (for the period)
+	pprint(result);
 	return result;
 }
+
+// TODO: remove this probably....
+#if false
+Oid
+chooseRangeTypeForPeriod(Relation *rel, Period *period)
+{
+	Relation	attrelation;
+	HeapTuple	starttuple, endtuple;
+	Form_pg_attribute	startatttuple, endatttuple;
+	AttrNumber	startattnum, endattnum;
+	ListCell   *option;
+	DefElem	   *dconstraintname = NULL;
+	DefElem	   *dopclass = NULL;
+	DefElem	   *drangetypename = NULL;
+	Oid			coltypid, rngtypid, conoid, opclass;
+
+	/* Parse options */
+	foreach(option, period->options)
+	{
+		DefElem    *defel = (DefElem *) lfirst(option);
+
+		if (strcmp(defel->defname, "check_constraint_name") == 0)
+		{
+			if (dconstraintname)
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+						 errmsg("conflicting or redundant options")));
+			dconstraintname = defel;
+		}
+		else if (strcmp(defel->defname, "operator_class") == 0)
+		{
+			if (dopclass)
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+						 errmsg("conflicting or redundant options")));
+			dopclass = defel;
+		}
+		else if (strcmp(defel->defname, "rangetype") == 0)
+		{
+			if (drangetypename)
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+						 errmsg("conflicting or redundant options")));
+			drangetypename = defel;
+		}
+		else
+			ereport(ERROR,
+					(errcode(ERRCODE_SYNTAX_ERROR),
+					 errmsg("option \"%s\" not recognized", defel->defname)));
+	}
+
+	attrelation = table_open(AttributeRelationId, RowExclusiveLock);
+
+	/* Find the start column */
+	starttuple = SearchSysCacheCopyAttName(RelationGetRelid(rel), period->startcolname);
+	if (!HeapTupleIsValid(starttuple))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_COLUMN),
+				 errmsg("column \"%s\" of relation \"%s\" does not exist",
+						period->startcolname, RelationGetRelationName(rel))));
+	startatttuple = (Form_pg_attribute) GETSTRUCT(starttuple);
+	startattnum = startatttuple->attnum;
+
+	/* Make sure it's not a system column */
+	if (startattnum <= 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
+				 errmsg("cannot use system column \"%s\" in period",
+						period->startcolname)));
+
+	/*
+	 * Get the btree operator class for it (ResolveOpClass will error out if
+	 * necessary)
+	 */
+	opclass = ResolveOpClass(dopclass ? defGetQualifiedName(dopclass) : NULL,
+							 startatttuple->atttypid,
+							 "btree", BTREE_AM_OID);
+
+	/* Find the end column */
+	endtuple = SearchSysCacheCopyAttName(RelationGetRelid(rel), period->endcolname);
+	if (!HeapTupleIsValid(endtuple))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_COLUMN),
+				 errmsg("column \"%s\" of relation \"%s\" does not exist",
+						period->endcolname, RelationGetRelationName(rel))));
+	endatttuple = (Form_pg_attribute) GETSTRUCT(endtuple);
+	endattnum = endatttuple->attnum;
+
+	/* Make sure it's not a system column */
+	if (endattnum <= 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
+				 errmsg("cannot use system column \"%s\" in period",
+						period->endcolname)));
+
+	/* Both columns must be of same type */
+	if (startatttuple->atttypid != endatttuple->atttypid)
+		ereport(ERROR,
+				(errcode(ERRCODE_DATATYPE_MISMATCH),
+				 errmsg("start and end columns of period must be of same type")));
+
+	/* Both columns must have the same collation */
+	if (startatttuple->attcollation != endatttuple->attcollation)
+		ereport(ERROR,
+				(errcode(ERRCODE_COLLATION_MISMATCH),
+				 errmsg("start and end columns of period must have same collation")));
+
+	/*
+	 * Find a suitable range type for operations involving this period.
+	 * Use the rangetype option if provided, otherwise try to find a
+	 * non-ambiguous existing type.
+	 */
+	// TODO: Factor this out into a separate method,
+	// so we can call it both here and from transformTablePeriod.
+	// It's weird there is no "analysis" step for defining a PERIOD
+	// that runs for both CREATE TABLE and ALTER TABLE.
+	// Or perhaps even better would be to guarantee that the period runs
+	// before we create the index.
+	// I guess everything just gets added to an "after" list?
+	// And CREATE TABLE doesn't have "passes" like ALTER TABLE does?
+	// Perhaps I should add this and then just see if actually ATExecAddPeriod is getting called
+	// even in the CREATE TABLE case (it must be), just *after* transformIndexConstraint.
+	// Then perhaps there is some way to force periods to run before index constraints.
+	// Write down the path for CREATE TABLE vs ALTER TABLE.
+	// I think for CREATE TABLE the PERIOD turns into a separate ALTER TABLE command and runs at the end?
+	// What is the infrastructure for running things at the end anyway?
+	coltypid = startatttuple->atttypid;
+	if (drangetypename != NULL)
+	{
+		char *rangetypename = defGetString(drangetypename);
+		/* Make sure it exists */
+		rngtypid = TypenameGetTypidExtended(rangetypename, false);
+		if (rngtypid == InvalidOid)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("Range type %s not found", rangetypename)));
+
+		/* Make sure it is a range type */
+		if (!type_is_range(rngtypid))
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("Type %s is not a range type", rangetypename)));
+
+		/* Make sure it matches the column type */
+		if (get_range_subtype(rngtypid) != coltypid)
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("Range type %s does not match column type %s",
+						 rangetypename,
+						 format_type_be(coltypid))));
+	}
+	else
+	{
+		rngtypid = get_subtype_range(coltypid);
+		if (rngtypid == InvalidOid)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("no compatible range type found for %s period",
+							format_type_be(coltypid))));
+
+	}
+	period->rngtypid = rngtypid;
+
+	heap_freetuple(starttuple);
+	heap_freetuple(endtuple);
+
+	table_close(attrelation, RowExclusiveLock);
+
+	return rngtypid;
+}
+#endif
 
 /*
  * generateSerialExtraStmts
@@ -869,9 +1050,9 @@ transformColumnDefinition(CreateStmtContext *cxt, ColumnDef *column)
 static void
 transformTablePeriod(CreateStmtContext *cxt, Period *period)
 {
-	AlterTableStmt *alterstmt;
-	AlterTableCmd  *altercmd;
+	ereport(NOTICE, (errmsg("transformTablePeriod")));
 
+	// TODO: Why have this here when we have it in New...
 	if (strcmp(period->periodname, "system_time") == 0)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -879,23 +1060,7 @@ transformTablePeriod(CreateStmtContext *cxt, Period *period)
 					 parser_errposition(cxt->pstate,
 										period->location)));
 
-	/*
-	 * Instead of duplicating code, just create an ALTER TABLE statement to run
-	 * after the table is created.
-	 */
-	alterstmt = makeNode(AlterTableStmt);
-	alterstmt->relation = cxt->relation;
-	alterstmt->cmds = NIL;
-	alterstmt->objtype = OBJECT_TABLE;
-
-	altercmd = makeNode(AlterTableCmd);
-	altercmd->subtype = AT_AddPeriod;
-	altercmd->name = NULL;
-	altercmd->def = (Node *) period;
-
-	alterstmt->cmds = lappend(alterstmt->cmds, altercmd);
-
-	cxt->alist = lappend(cxt->alist, alterstmt);
+	cxt->periods = lappend(cxt->periods, period);
 }
 
 /*
@@ -2553,7 +2718,177 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 				notnullcmd->name = pstrdup(key);
 				notnullcmds = lappend(notnullcmds, notnullcmd);
 			}
+#if false
+
+			if (constraint->without_overlaps != NULL)
+			{
+				/*
+				 * We are building the index like for an EXCLUSION constraint,
+				 * so use the equality operator for these elements.
+				 */
+				List *opname = list_make1(makeString("="));
+				index->excludeOpNames = lappend(index->excludeOpNames, opname);
+			}
+#endif
 		}
+
+#if false
+		/*
+		 * Anything in without_overlaps should be included,
+		 * but with the overlaps operator (&&) instead of equality.
+		 */
+		if (constraint->without_overlaps != NULL) {
+			// char *without_overlaps_str = nodeToString(constraint->without_overlaps);
+			char *without_overlaps_str = strVal(constraint->without_overlaps);
+			IndexElem *iparam = makeNode(IndexElem);
+
+			/*
+			 * Iterate through the table's columns
+			 * (like just a little bit above).
+			 * If we find one whose name is the same as without_overlaps,
+			 * validate that it's a range type.
+			 *
+			 * Otherwise iterate through the table's non-system PERIODs,
+			 * and if we find one then use its start/end columns
+			 * to construct a range expression.
+			 *
+			 * Otherwise report an error.
+			 */
+			bool	found = false;
+			char   *typname;
+			Oid		typid;
+
+			if (findNewOrOldColumn(cxt, without_overlaps_str, &typname, &typid))
+			{
+				if (type_is_range(typid))
+				{
+					found = true;
+					iparam->name = pstrdup(without_overlaps_str);
+					iparam->expr = NULL;
+
+					// TODO: maybe we don't need found at all.
+					/*
+					 * Force the column to NOT NULL since it is part of the primary key.
+					 */
+					AlterTableCmd *notnullcmd = makeNode(AlterTableCmd);
+
+					notnullcmd->subtype = AT_SetNotNull;
+					notnullcmd->name = pstrdup(without_overlaps_str);
+					notnullcmds = lappend(notnullcmds, notnullcmd);
+				}
+				else
+					ereport(ERROR,
+							(errcode(ERRCODE_DATATYPE_MISMATCH),
+							 errmsg("column \"%s\" named in WITHOUT OVERLAPS is not a range type",
+									without_overlaps_str)));
+			}
+			else
+			{
+				ereport(NOTICE, (errmsg("looking for a period")));
+				/* Look for a PERIOD, first newly-defined */
+				char *startcolname = NULL;
+				char *endcolname = NULL;
+				Oid		rngtypid = InvalidOid;
+				// TODO:
+				// Why do we still need this loop if we're always creating the period before we get here:?
+				// Answer: because transformIndexConstraints runs before we *execute* anything,
+				// so the PERIOD may not exist yet.
+				// Unfortunately we don't deduce the range type until we execute the period either.
+				// We could do all that in transformTablePeriod (maybe),
+				// but what if the ALTER TABLE also includes changes to a column's type?
+				// Then we'll have the old type.
+				ListCell *periods = NULL;
+				foreach(periods, cxt->periods)
+				{
+					Period *period = castNode(Period, lfirst(periods));
+					if (strcmp(period->periodname, without_overlaps_str) == 0)
+					{
+						found = true;
+						startcolname = period->startcolname;
+						endcolname = period->endcolname;
+
+						/* The rngtypid should have been set when we created the period */
+						rngtypid = period->rngtypid;
+						// rngtypid = chooseRangeTypeForPeriod(cxt->relation, period);
+
+						break;
+					}
+				}
+
+				if (startcolname == NULL && cxt->rel != NULL)
+				{
+					/* Look for an already-existing PERIOD */
+					// TODO: locking? releasing?
+					HeapTuple perTuple;
+					Oid relid = RelationGetRelid(cxt->rel);
+					perTuple = SearchSysCache2(PERIODNAME,
+							ObjectIdGetDatum(relid),
+							PointerGetDatum(without_overlaps_str));
+					if (HeapTupleIsValid(perTuple))
+					{
+						Form_pg_period per = (Form_pg_period) GETSTRUCT(perTuple);
+						startcolname = get_attname(relid, per->perstart, false);
+						endcolname = get_attname(relid, per->perend, false);
+						rngtypid = per->perrngtype;
+						ReleaseSysCache(perTuple);
+					}
+				}
+				if (startcolname != NULL)
+				{
+					if (!findNewOrOldColumn(cxt, startcolname, &typname, &typid))
+						elog(ERROR, "Missing startcol %s for period %s",
+							 startcolname, without_overlaps_str);
+					if (!findNewOrOldColumn(cxt, endcolname, &typname, &typid))
+						elog(ERROR, "Missing endcol %s for period %s",
+							 endcolname, without_overlaps_str);
+
+					/* Use the start/end columns */
+
+					ColumnRef *start = makeNode(ColumnRef);
+					start->fields = list_make1(makeString(startcolname));
+					start->location = constraint->location;
+
+					ColumnRef *end = makeNode(ColumnRef);
+					end->fields = list_make1(makeString(endcolname));
+					end->location = constraint->location;
+
+					/* The rangetype should be set above but just in case */
+					if (rngtypid == InvalidOid || !type_is_range(rngtypid))
+						ereport(ERROR,
+								(errcode(ERRCODE_UNDEFINED_OBJECT),
+								 errmsg("PERIOD \"%s\" cannot be used in a constraint without a corresponding range type",
+										without_overlaps_str)));
+
+					char *range_type_name = get_typname(rngtypid);
+
+					/* Build a range to represent the PERIOD. */
+					iparam->name = NULL;
+					iparam->expr = (Node *) makeFuncCall(SystemFuncName(range_type_name),
+														 list_make2(start, end),
+														 COERCE_EXPLICIT_CALL,
+														 -1);
+				}
+				else
+					ereport(ERROR,
+							(errcode(ERRCODE_UNDEFINED_COLUMN),
+							 errmsg("range or PERIOD \"%s\" named in WITHOUT OVERLAPS does not exist",
+									without_overlaps_str)));
+			}
+			{
+				iparam->indexcolname = NULL;
+				iparam->collation = NIL;
+				iparam->opclass = NIL;
+				iparam->ordering = SORTBY_DEFAULT;
+				iparam->nulls_ordering = SORTBY_NULLS_DEFAULT;
+				index->indexParams = lappend(index->indexParams, iparam);
+
+				index->excludeOpNames = lappend(index->excludeOpNames,
+												list_make1(makeString("&&")));
+				index->accessMethod = "gist";
+				constraint->access_method = "gist";
+			}
+		}
+#endif
 	}
 
 	/*

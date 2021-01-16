@@ -2633,6 +2633,7 @@ _outCreateStmtInfo(StringInfo str, const CreateStmt *node)
 {
 	WRITE_NODE_FIELD(relation);
 	WRITE_NODE_FIELD(tableElts);
+	WRITE_NODE_FIELD(periods);
 	WRITE_NODE_FIELD(inhRelations);
 	WRITE_NODE_FIELD(partspec);
 	WRITE_NODE_FIELD(partbound);
@@ -2662,6 +2663,28 @@ _outCreateForeignTableStmt(StringInfo str, const CreateForeignTableStmt *node)
 
 	WRITE_STRING_FIELD(servername);
 	WRITE_NODE_FIELD(options);
+}
+
+static void
+_outAlterTableStmt(StringInfo str, const AlterTableStmt *node)
+{
+	WRITE_NODE_TYPE("ALTERTABLESTMT");
+
+	WRITE_NODE_FIELD(relation);
+	WRITE_NODE_FIELD(cmds);
+}
+
+static void
+_outAlterTableCmd(StringInfo str, const AlterTableCmd *node)
+{
+	WRITE_NODE_TYPE("ALTERTABLECMD");
+
+	WRITE_ENUM_FIELD(subtype, AlterTableType);
+	WRITE_STRING_FIELD(name);
+	WRITE_NODE_FIELD(object);
+	WRITE_INT_FIELD(num);
+	WRITE_NODE_FIELD(def);
+	WRITE_BOOL_FIELD(missing_ok);
 }
 
 static void
@@ -3643,6 +3666,7 @@ _outPeriod(StringInfo str, const Period *node)
 	WRITE_STRING_FIELD(startcolname);
 	WRITE_STRING_FIELD(endcolname);
 	WRITE_NODE_FIELD(options);
+	WRITE_OID_FIELD(rngtypid);
 	WRITE_LOCATION_FIELD(location);
 }
 
@@ -4213,6 +4237,12 @@ outNode(StringInfo str, const void *obj)
 				break;
 			case T_CreateForeignTableStmt:
 				_outCreateForeignTableStmt(str, obj);
+				break;
+			case T_AlterTableStmt:
+				_outAlterTableStmt(str, obj);
+				break;
+			case T_AlterTableCmd:
+				_outAlterTableCmd(str, obj);
 				break;
 			case T_ImportForeignSchemaStmt:
 				_outImportForeignSchemaStmt(str, obj);

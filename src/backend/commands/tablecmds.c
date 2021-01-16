@@ -99,6 +99,7 @@
 #include "utils/syscache.h"
 #include "utils/timestamp.h"
 #include "utils/typcache.h"
+#include "nodes/print.h"
 
 /*
  * ON COMMIT action list
@@ -570,6 +571,10 @@ static List *GetParentedForeignKeyRefs(Relation partition);
 static void ATDetachCheckNoForeignKeyRefs(Relation partition);
 static void ATExecAlterCollationRefreshVersion(Relation rel, List *coll);
 
+// static Oid make_constraints_for_period(Relation rel, Period *period, char *constraintname,
+									   // AlterTableUtilityContext *context);
+static void AddRelationNewPeriod(Relation rel, Period *period);
+
 
 /* ----------------------------------------------------------------
  *		DefineRelation
@@ -789,6 +794,7 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId,
 	 * inherited attributes.  (Note that stmt->tableElts is destructively
 	 * modified by MergeAttributes.)
 	 */
+	pprint(stmt->tableElts);	// here we have just columns in tableElts. Does it only hold periods for ALTER?
 	stmt->tableElts =
 		MergeAttributes(stmt->tableElts, inheritOids,
 						stmt->relation->relpersistence,
@@ -1175,6 +1181,17 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId,
 		AddRelationNewConstraints(rel, NIL, stmt->constraints,
 								  true, true, false, queryString);
 
+	/*
+	 * Create periods for the table. This must come after we create columns
+	 * and before we create index constraints. It will automatically create
+	 * NOT NULL and CHECK constraints for the period.
+	 */
+	foreach(listptr, stmt->periods)
+	{
+		Period *period = (Period *) lfirst(listptr);
+		AddRelationNewPeriod(rel, period);
+	}
+
 	ObjectAddressSet(address, RelationRelationId, relationId);
 
 	/*
@@ -1184,6 +1201,313 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId,
 	relation_close(rel, NoLock);
 
 	return address;
+}
+
+/*
+ * make_period_not_null
+ *
+ * Build constraints to make both columns NOT NULL.
+ */
+static List *
+make_period_not_null(Relation rel, Period *period)
+{
+	AlterTableCmd  *cmd;
+	List		   *cmds = NIL;
+
+	/* Start column must be NOT NULL */
+	cmd = makeNode(AlterTableCmd);
+	cmd->subtype = AT_SetNotNull;
+	cmd->name = period->startcolname;
+	cmds = lappend(cmds, cmd);
+
+	/* End column must be NOT NULL */
+	cmd = makeNode(AlterTableCmd);
+	cmd->subtype = AT_SetNotNull;
+	cmd->name = period->endcolname;
+	cmds = lappend(cmds, cmd);
+
+	return cmds;
+}
+
+static Constraint *
+make_period_not_backward(Relation rel, Period *period, char *constraintname)
+{
+	ColumnRef	   *scol, *ecol;
+	Constraint	   *constr;
+
+	/*
+	 * Create the CHECK constraint
+	 */
+
+	scol = makeNode(ColumnRef);
+	scol->fields = list_make1(makeString(pstrdup(period->startcolname)));
+	scol->location = 0;
+
+	ecol = makeNode(ColumnRef);
+	ecol->fields = list_make1(makeString(pstrdup(period->endcolname)));
+	ecol->location = 0;
+
+	constr = makeNode(Constraint);
+	constr->contype = CONSTR_CHECK;
+	constr->conname = constraintname;
+	constr->deferrable = false;
+	constr->initdeferred = false;
+	constr->location = -1;
+	constr->is_no_inherit = false;
+	constr->raw_expr = (Node *) makeSimpleA_Expr(AEXPR_OP, "<", (Node *) scol, (Node *) ecol, 0);
+	constr->cooked_expr = NULL;
+	constr->skip_validation = false;
+	constr->initially_valid = true;
+
+	return constr;
+	/*
+	cmd = makeNode(AlterTableCmd);
+	cmd->subtype = AT_AddConstraint;
+	cmd->def = (Node *) constr;
+	cmds = lappend(cmds, cmd);
+
+	return cmds;
+	*/
+	/* Do the deed. */
+	// AlterTableInternal(RelationGetRelid(rel), cmds, true, context);
+
+	// return get_relation_constraint_oid(RelationGetRelid(rel), conname, false);
+}
+
+static void
+validate_period_name(Relation rel, Period *period)
+{
+	/*
+	 * PERIOD FOR SYSTEM_TIME is not yet implemented, but make sure no one uses
+	 * the name.
+	 */
+	if (strcmp(period->periodname, "system_time") == 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("PERIOD FOR SYSTEM_TIME is not supported")));
+
+	/* The period name must not already exist */
+	(void) check_for_period_name_collision(rel, period->periodname, false);
+}
+
+static void
+period_parse_options(Relation rel, Period *period, char **constraintname, List **opclass, char **rangetypename)
+{
+	ListCell   *option;
+
+	*constraintname = NULL;
+	*opclass = NULL;
+	*rangetypename = NULL;
+
+	// TODO: Do all this after we know the columns, so we can *completely* resolve the opclass and the rangetype?
+	/* Parse options */
+	foreach(option, period->options)
+	{
+		DefElem    *defel = (DefElem *) lfirst(option);
+
+		if (strcmp(defel->defname, "check_constraint_name") == 0)
+		{
+			if (*constraintname)
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+						 errmsg("conflicting or redundant options")));
+			*constraintname = defGetString(defel);
+		}
+		else if (strcmp(defel->defname, "operator_class") == 0)
+		{
+			if (*opclass)
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+						 errmsg("conflicting or redundant options")));
+			*opclass = defGetQualifiedName(defel);
+		}
+		else if (strcmp(defel->defname, "rangetype") == 0)
+		{
+			if (*rangetypename)
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+						 errmsg("conflicting or redundant options")));
+			*rangetypename = defGetString(defel);
+		}
+		else
+			ereport(ERROR,
+					(errcode(ERRCODE_SYNTAX_ERROR),
+					 errmsg("option \"%s\" not recognized", defel->defname)));
+	}
+
+	if (*constraintname == NULL)
+	{
+		*constraintname = ChooseConstraintName(RelationGetRelationName(rel),
+									   period->periodname,
+									   "check",
+									   RelationGetNamespace(rel),
+									   NIL);
+	}
+}
+
+// caller must lock AttributeRelationId
+static void
+period_lookup_attributes(Relation rel, Period *period, List *opclassname, AttrNumber *startattnum, AttrNumber *endattnum, Oid *opclass, Oid *coltypid)
+{
+	HeapTuple	starttuple, endtuple;
+	Form_pg_attribute	startatttuple, endatttuple;
+
+	/* Find the start column */
+	starttuple = SearchSysCacheCopyAttName(RelationGetRelid(rel), period->startcolname);
+	if (!HeapTupleIsValid(starttuple))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_COLUMN),
+				 errmsg("column \"%s\" of relation \"%s\" does not exist",
+						period->startcolname, RelationGetRelationName(rel))));
+	startatttuple = (Form_pg_attribute) GETSTRUCT(starttuple);
+	*startattnum = startatttuple->attnum;
+
+	/* Make sure it's not a system column */
+	if (*startattnum <= 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
+				 errmsg("cannot use system column \"%s\" in period",
+						period->startcolname)));
+
+	/*
+	 * Get the btree operator class for it (ResolveOpClass will error out if
+	 * necessary)
+	 */
+	*opclass = ResolveOpClass(opclassname, startatttuple->atttypid, "btree", BTREE_AM_OID);
+
+	/* Find the end column */
+	endtuple = SearchSysCacheCopyAttName(RelationGetRelid(rel), period->endcolname);
+	if (!HeapTupleIsValid(endtuple))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_COLUMN),
+				 errmsg("column \"%s\" of relation \"%s\" does not exist",
+						period->endcolname, RelationGetRelationName(rel))));
+	endatttuple = (Form_pg_attribute) GETSTRUCT(endtuple);
+	*endattnum = endatttuple->attnum;
+
+	/* Make sure it's not a system column */
+	if (*endattnum <= 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
+				 errmsg("cannot use system column \"%s\" in period",
+						period->endcolname)));
+
+	/* Both columns must be of same type */
+	if (startatttuple->atttypid != endatttuple->atttypid)
+		ereport(ERROR,
+				(errcode(ERRCODE_DATATYPE_MISMATCH),
+				 errmsg("start and end columns of period must be of same type")));
+
+	/* Both columns must have the same collation */
+	if (startatttuple->attcollation != endatttuple->attcollation)
+		ereport(ERROR,
+				(errcode(ERRCODE_COLLATION_MISMATCH),
+				 errmsg("start and end columns of period must have same collation")));
+
+	*coltypid = startatttuple->atttypid;
+
+	heap_freetuple(starttuple);
+	heap_freetuple(endtuple);
+}
+
+static Oid
+period_lookup_rangetype(char *rangetypename, Oid coltypid)
+{
+	// get info about 2 columns and the range type:
+	/*
+	 * Find a suitable range type for operations involving this period.
+	 * Use the rangetype option if provided, otherwise try to find a
+	 * non-ambiguous existing type.
+	 */
+	// TODO: Factor this out into a separate method,
+	// so we can call it both here and from transformTablePeriod.
+	// It's weird there is no "analysis" step for defining a PERIOD
+	// that runs for both CREATE TABLE and ALTER TABLE.
+	// Or perhaps even better would be to guarantee that the period runs
+	// before we create the index.
+	// I guess everything just gets added to an "after" list?
+	// And CREATE TABLE doesn't have "passes" like ALTER TABLE does?
+	// Perhaps I should add this and then just see if actually ATExecAddPeriod is getting called
+	// even in the CREATE TABLE case (it must be), just *after* transformIndexConstraint.
+	// Then perhaps there is some way to force periods to run before index constraints.
+	// Write down the path for CREATE TABLE vs ALTER TABLE.
+	// I think for CREATE TABLE the PERIOD turns into a separate ALTER TABLE command and runs at the end?
+	// What is the infrastructure for running things at the end anyway?
+	Oid	rngtypid;
+
+	if (rangetypename != NULL)
+	{
+		/* Make sure it exists */
+		rngtypid = TypenameGetTypidExtended(rangetypename, false);
+		if (rngtypid == InvalidOid)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("Range type %s not found", rangetypename)));
+
+		/* Make sure it is a range type */
+		if (!type_is_range(rngtypid))
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("Type %s is not a range type", rangetypename)));
+
+		/* Make sure it matches the column type */
+		if (get_range_subtype(rngtypid) != coltypid)
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("Range type %s does not match column type %s",
+						 rangetypename,
+						 format_type_be(coltypid))));
+	}
+	else
+	{
+		rngtypid = get_subtype_range(coltypid);
+		if (rngtypid == InvalidOid)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("no compatible range type found for %s period",
+							format_type_be(coltypid))));
+
+	}
+
+	return rngtypid;
+}
+
+static void
+AddRelationNewPeriod(Relation rel, Period *period)
+{
+	Relation	attrelation;
+	AttrNumber	startattnum, endattnum;
+	char	   *constraintname = NULL;
+	List	   *opclassname = NULL;
+	char	   *rangetypename = NULL;
+	List	   *cmds, *newconstrs;
+	Oid			coltypid, conoid, opclass;
+	ereport(NOTICE, (errmsg("AddRelationNewPeriod")));
+
+	validate_period_name(rel, period);
+
+	period_parse_options(rel, period, &constraintname, &opclassname, &rangetypename);
+
+	attrelation = table_open(AttributeRelationId, RowExclusiveLock);
+
+	period_lookup_attributes(rel, period, opclassname, &startattnum, &endattnum, &opclass, &coltypid);
+
+	period->rngtypid = period_lookup_rangetype(rangetypename, coltypid);
+
+	// cmds = make_constraints_for_period(rel, period, constraintname);
+	// cmds = AddRelationNewConstraints(rel, NIL, cmds, false, true, true, NULL);
+	// conoid = get_relation_constraint_oid(RelationGetRelid(rel), conname, false);
+	cmds = make_period_not_null(rel, period);
+	AlterTableInternal(RelationGetRelid(rel), cmds, true, NULL);
+
+	Constraint *constr = make_period_not_backward(rel, period, constraintname);
+	newconstrs = AddRelationNewConstraints(rel, NIL, list_make1(constr), false, true, true, NULL);
+	conoid = ((CookedConstraint *)linitial(cmds))->conoid;
+
+	/* Save it */
+	StorePeriod(rel, period->periodname, startattnum, endattnum, period->rngtypid, opclass, conoid);
+
+	table_close(attrelation, RowExclusiveLock);
 }
 
 /*
@@ -2152,8 +2476,6 @@ MergeAttributes(List *schema, List *supers, char relpersistence,
 	 *
 	 * Note that we also need to check that we do not exceed this figure after
 	 * including columns from inherited relations.
-	 *
-	 * TODO: What about periods?
 	 */
 	if (list_length(schema) > MaxHeapAttributeNumber)
 		ereport(ERROR,
@@ -7162,80 +7484,6 @@ ATExecCookedColumnDefault(Relation rel, AttrNumber attnum,
 }
 
 /*
- * make_constraints_for_period
- *
- * Add constraints to make both columns NOT NULL and CHECK (start < end).
- *
- * Returns the CHECK constraint Oid.
- */
-static Oid
-make_constraints_for_period(Relation rel, Period *period, char *constraintname,
-							LOCKMODE lockmode, AlterTableUtilityContext *context)
-{
-	List		   *cmds = NIL;
-	AlterTableCmd  *cmd;
-	ColumnRef	   *scol, *ecol;
-	Constraint	   *constr;
-	char		   *conname;
-
-	/* Start column must be NOT NULL */
-	cmd = makeNode(AlterTableCmd);
-	cmd->subtype = AT_SetNotNull;
-	cmd->name = period->startcolname;
-	cmds = lappend(cmds, cmd);
-
-	/* End column must be NOT NULL */
-	cmd = makeNode(AlterTableCmd);
-	cmd->subtype = AT_SetNotNull;
-	cmd->name = period->endcolname;
-	cmds = lappend(cmds, cmd);
-
-	/*
-	 * Create the CHECK constraint
-	 */
-	if (constraintname)
-		conname = constraintname;
-	else
-	{
-		conname = ChooseConstraintName(RelationGetRelationName(rel),
-									   period->periodname,
-									   "check",
-									   RelationGetNamespace(rel),
-									   NIL);
-	}
-
-	scol = makeNode(ColumnRef);
-	scol->fields = list_make1(makeString(pstrdup(period->startcolname)));
-	scol->location = 0;
-
-	ecol = makeNode(ColumnRef);
-	ecol->fields = list_make1(makeString(pstrdup(period->endcolname)));
-	ecol->location = 0;
-
-	constr = makeNode(Constraint);
-	constr->contype = CONSTR_CHECK;
-	constr->conname = conname;
-	constr->deferrable = false;
-	constr->initdeferred = false;
-	constr->location = -1;
-	constr->is_no_inherit = false;
-	constr->raw_expr = (Node *) makeSimpleA_Expr(AEXPR_OP, "<", (Node *) scol, (Node *) ecol, 0);
-	constr->cooked_expr = NULL;
-	constr->skip_validation = false;
-	constr->initially_valid = true;
-
-	cmd = makeNode(AlterTableCmd);
-	cmd->subtype = AT_AddConstraint;
-	cmd->def = (Node *) constr;
-	cmds = lappend(cmds, cmd);
-
-	/* Do the deed. */
-	AlterTableInternal(RelationGetRelid(rel), cmds, true, context);
-
-	return get_relation_constraint_oid(RelationGetRelid(rel), conname, false);
-}
-
-/*
  * ALTER TABLE ADD PERIOD
  *
  * Return the address of the what?
@@ -7245,164 +7493,38 @@ ATExecAddPeriod(Relation rel, Period *period, LOCKMODE lockmode,
 				AlterTableUtilityContext *context)
 {
 	Relation	attrelation;
-	HeapTuple	starttuple, endtuple;
-	Form_pg_attribute	startatttuple, endatttuple;
 	AttrNumber	startattnum, endattnum;
-	ListCell   *option;
-	DefElem	   *dconstraintname = NULL;
-	DefElem	   *dopclass = NULL;
-	DefElem	   *drangetypename = NULL;
+	char	   *constraintname = NULL;
+	List	   *opclassname = NULL;
+	char	   *rangetypename = NULL;
+	List	   *cmds;
 	Oid			coltypid, rngtypid, conoid, opclass;
+	ereport(NOTICE, (errmsg("ATExecAddPeriod")));
 
-	/*
-	 * PERIOD FOR SYSTEM_TIME is not yet implemented, but make sure no one uses
-	 * the name.
-	 */
-	if (strcmp(period->periodname, "system_time") == 0)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("PERIOD FOR SYSTEM_TIME is not supported")));
+	validate_period_name(rel, period);
 
-	/* The period name must not already exist */
-	(void) check_for_period_name_collision(rel, period->periodname, false);
-
-	/* Parse options */
-	foreach(option, period->options)
-	{
-		DefElem    *defel = (DefElem *) lfirst(option);
-
-		if (strcmp(defel->defname, "check_constraint_name") == 0)
-		{
-			if (dconstraintname)
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("conflicting or redundant options")));
-			dconstraintname = defel;
-		}
-		else if (strcmp(defel->defname, "operator_class") == 0)
-		{
-			if (dopclass)
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("conflicting or redundant options")));
-			dopclass = defel;
-		}
-		else if (strcmp(defel->defname, "rangetype") == 0)
-		{
-			if (drangetypename)
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("conflicting or redundant options")));
-			drangetypename = defel;
-		}
-		else
-			ereport(ERROR,
-					(errcode(ERRCODE_SYNTAX_ERROR),
-					 errmsg("option \"%s\" not recognized", defel->defname)));
-	}
+	period_parse_options(rel, period, &constraintname, &opclassname, &rangetypename);
 
 	attrelation = table_open(AttributeRelationId, RowExclusiveLock);
 
-	/* Find the start column */
-	starttuple = SearchSysCacheCopyAttName(RelationGetRelid(rel), period->startcolname);
-	if (!HeapTupleIsValid(starttuple))
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_COLUMN),
-				 errmsg("column \"%s\" of relation \"%s\" does not exist",
-						period->startcolname, RelationGetRelationName(rel))));
-	startatttuple = (Form_pg_attribute) GETSTRUCT(starttuple);
-	startattnum = startatttuple->attnum;
+	period_lookup_attributes(rel, period, opclassname, &startattnum, &endattnum, &opclass, &coltypid);
 
-	/* Make sure it's not a system column */
-	if (startattnum <= 0)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
-				 errmsg("cannot use system column \"%s\" in period",
-						period->startcolname)));
+	// TODO: Does setting this on the struct really do anything?:
+	rngtypid = period->rngtypid = period_lookup_rangetype(rangetypename, coltypid);
 
-	/*
-	 * Get the btree operator class for it (ResolveOpClass will error out if
-	 * necessary)
-	 */
-	opclass = ResolveOpClass(dopclass ? defGetQualifiedName(dopclass) : NULL,
-							 startatttuple->atttypid,
-							 "btree", BTREE_AM_OID);
+	/* Make the NOT NULL and CHECK constraints */
+	// cmds = make_constraints_for_period(rel, period, constraintname);
+	// AlterTableInternal(RelationGetRelid(rel), cmds, true, context);
+	// conoid = get_relation_constraint_oid(RelationGetRelid(rel), conname, false);
 
-	/* Find the end column */
-	endtuple = SearchSysCacheCopyAttName(RelationGetRelid(rel), period->endcolname);
-	if (!HeapTupleIsValid(endtuple))
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_COLUMN),
-				 errmsg("column \"%s\" of relation \"%s\" does not exist",
-						period->endcolname, RelationGetRelationName(rel))));
-	endatttuple = (Form_pg_attribute) GETSTRUCT(endtuple);
-	endattnum = endatttuple->attnum;
-
-	/* Make sure it's not a system column */
-	if (endattnum <= 0)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
-				 errmsg("cannot use system column \"%s\" in period",
-						period->endcolname)));
-
-	/* Both columns must be of same type */
-	if (startatttuple->atttypid != endatttuple->atttypid)
-		ereport(ERROR,
-				(errcode(ERRCODE_DATATYPE_MISMATCH),
-				 errmsg("start and end columns of period must be of same type")));
-
-	/* Both columns must have the same collation */
-	if (startatttuple->attcollation != endatttuple->attcollation)
-		ereport(ERROR,
-				(errcode(ERRCODE_COLLATION_MISMATCH),
-				 errmsg("start and end columns of period must have same collation")));
-
-	/*
-	 * Find a suitable range type for operations involving this period.
-	 * Use the rangetype option if provided, otherwise try to find a
-	 * non-ambiguous existing type.
-	 */
-	coltypid = startatttuple->atttypid;
-	if (drangetypename != NULL)
-	{
-		char *rangetypename = defGetString(drangetypename);
-		/* Make sure it exists */
-		rngtypid = TypenameGetTypidExtended(rangetypename, false);
-		if (rngtypid == InvalidOid)
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("Range type %s not found", rangetypename)));
-
-		/* Make sure it is a range type */
-		if (!type_is_range(rngtypid))
-			ereport(ERROR,
-					(errcode(ERRCODE_DATATYPE_MISMATCH),
-					 errmsg("Type %s is not a range type", rangetypename)));
-
-		/* Make sure it matches the column type */
-		if (get_range_subtype(rngtypid) != coltypid)
-			ereport(ERROR,
-					(errcode(ERRCODE_DATATYPE_MISMATCH),
-					 errmsg("Range type %s does not match column type %s",
-						 rangetypename,
-						 format_type_be(coltypid))));
-	}
-	else
-	{
-		rngtypid = get_subtype_range(coltypid);
-		if (rngtypid == InvalidOid)
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("no compatible range type found for %s period",
-							format_type_be(coltypid))));
-
-	}
-
-	heap_freetuple(starttuple);
-	heap_freetuple(endtuple);
-
-	conoid = make_constraints_for_period(rel, period,
-				dconstraintname ? defGetString(dconstraintname) : NULL, lockmode, context);
+	cmds = make_period_not_null(rel, period);
+	Constraint *constr = make_period_not_backward(rel, period, constraintname);
+	AlterTableCmd *cmd = makeNode(AlterTableCmd);
+	cmd->subtype = AT_AddConstraint;
+	cmd->def = (Node *) constr;
+	cmds = lappend(cmds, cmd);
+	AlterTableInternal(RelationGetRelid(rel), cmds, true, context);
+	conoid = get_relation_constraint_oid(RelationGetRelid(rel), constraintname, false);
 
 	/* Save it */
 	StorePeriod(rel, period->periodname, startattnum, endattnum, rngtypid, opclass, conoid);
