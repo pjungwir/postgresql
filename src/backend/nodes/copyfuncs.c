@@ -3099,6 +3099,7 @@ _copyPeriod(const Period *from)
 	COPY_STRING_FIELD(startcolname);
 	COPY_STRING_FIELD(endcolname);
 	COPY_NODE_FIELD(options);
+	COPY_SCALAR_FIELD(rngtypid);
 	COPY_LOCATION_FIELD(location);
 
 	return newnode;

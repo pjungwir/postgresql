@@ -2698,6 +2698,7 @@ _equalPeriod(const Period *a, const Period *b)
 	COMPARE_STRING_FIELD(startcolname);
 	COMPARE_STRING_FIELD(endcolname);
 	COMPARE_NODE_FIELD(options);
+	COMPARE_SCALAR_FIELD(rngtypid);
 	COMPARE_LOCATION_FIELD(location);
 
 	return true;

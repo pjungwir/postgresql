@@ -612,6 +612,7 @@ static void refuseDupeIndexAttach(Relation parentIdx, Relation partIdx,
 static List *GetParentedForeignKeyRefs(Relation partition);
 static void ATDetachCheckNoForeignKeyRefs(Relation partition);
 static char GetAttributeCompression(Form_pg_attribute att, char *compression);
+static void AddRelationNewPeriod(Relation rel, Period *period);
 
 
 /* ----------------------------------------------------------------
@@ -1231,6 +1232,17 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId,
 		AddRelationNewConstraints(rel, NIL, stmt->constraints,
 								  true, true, false, queryString);
 
+	/*
+	 * Create periods for the table. This must come after we create columns
+	 * and before we create index constraints. It will automatically create
+	 * NOT NULL and CHECK constraints for the period.
+	 */
+	foreach(listptr, stmt->periods)
+	{
+		Period *period = (Period *) lfirst(listptr);
+		AddRelationNewPeriod(rel, period);
+	}
+
 	ObjectAddressSet(address, RelationRelationId, relationId);
 
 	/*
@@ -1240,6 +1252,15 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId,
 	relation_close(rel, NoLock);
 
 	return address;
+}
+
+static void
+AddRelationNewPeriod(Relation rel, Period *period)
+{
+	/*
+	Relation	attrelation;
+	AttrNumber	startattnum, endattnum
+	*/
 }
 
 /*
