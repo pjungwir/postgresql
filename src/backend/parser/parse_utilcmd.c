@@ -83,6 +83,7 @@ typedef struct
 	bool		isforeign;		/* true if CREATE/ALTER FOREIGN TABLE */
 	bool		isalter;		/* true if altering existing table */
 	List	   *columns;		/* ColumnDef items */
+	List	   *periods;		/* Period items */
 	List	   *ckconstraints;	/* CHECK constraints */
 	List	   *fkconstraints;	/* FOREIGN KEY constraints */
 	List	   *ixconstraints;	/* index-creating constraints */
@@ -243,6 +244,7 @@ transformCreateStmt(CreateStmt *stmt, const char *queryString)
 	cxt.inhRelations = stmt->inhRelations;
 	cxt.isalter = false;
 	cxt.columns = NIL;
+	cxt.periods = NIL;
 	cxt.ckconstraints = NIL;
 	cxt.fkconstraints = NIL;
 	cxt.ixconstraints = NIL;
@@ -350,6 +352,7 @@ transformCreateStmt(CreateStmt *stmt, const char *queryString)
 	 * Output results.
 	 */
 	stmt->tableElts = cxt.columns;
+	stmt->periods = cxt.periods;
 	stmt->constraints = cxt.ckconstraints;
 
 	result = lappend(cxt.blist, stmt);
@@ -896,6 +899,7 @@ transformTablePeriod(CreateStmtContext *cxt, Period *period)
 	alterstmt->cmds = lappend(alterstmt->cmds, altercmd);
 
 	cxt->alist = lappend(cxt->alist, alterstmt);
+	cxt->periods = lappend(cxt->periods, period);
 }
 
 /*

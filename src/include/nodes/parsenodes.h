@@ -2090,12 +2090,12 @@ typedef struct CreateStmt
 	NodeTag		type;
 	RangeVar   *relation;		/* relation to create */
 	List	   *tableElts;		/* column definitions (list of ColumnDef) */
+	List	   *periods;		/* periods (list of Period nodes) */
 	List	   *inhRelations;	/* relations to inherit from (list of
 								 * inhRelation) */
 	PartitionBoundSpec *partbound;	/* FOR VALUES clause */
 	PartitionSpec *partspec;	/* PARTITION BY clause */
 	TypeName   *ofTypename;		/* OF typename */
-	List	   *periods;		/* periods (list of Period nodes) */
 	List	   *constraints;	/* constraints (list of Constraint nodes) */
 	List	   *options;		/* options from WITH clause */
 	OnCommitAction oncommit;	/* what do we do at COMMIT? */
@@ -2117,6 +2117,7 @@ typedef struct Period
 	char	   *startcolname;	/* name of start column */
 	char	   *endcolname;		/* name of end column */
 	List	   *options;		/* options from WITH clause */
+	Oid			rngtypid;		/* the range type to use */
 	int			location;		/* token location, or -1 if unknown */
 } Period;
 
