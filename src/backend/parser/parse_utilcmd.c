@@ -872,9 +872,6 @@ transformColumnDefinition(CreateStmtContext *cxt, ColumnDef *column)
 static void
 transformTablePeriod(CreateStmtContext *cxt, Period *period)
 {
-	AlterTableStmt *alterstmt;
-	AlterTableCmd  *altercmd;
-
 	if (strcmp(period->periodname, "system_time") == 0)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -882,23 +879,12 @@ transformTablePeriod(CreateStmtContext *cxt, Period *period)
 					 parser_errposition(cxt->pstate,
 										period->location)));
 
+	// TODO:
 	/*
-	 * Instead of duplicating code, just create an ALTER TABLE statement to run
-	 * after the table is created.
+	 * Determine the column info and range type so that transformIndexConstraints
+	 * knows how to create PRIMARY KEY/UNIQUE constraints using this PERIOD.
 	 */
-	alterstmt = makeNode(AlterTableStmt);
-	alterstmt->relation = cxt->relation;
-	alterstmt->cmds = NIL;
-	alterstmt->objtype = OBJECT_TABLE;
 
-	altercmd = makeNode(AlterTableCmd);
-	altercmd->subtype = AT_AddPeriod;
-	altercmd->name = NULL;
-	altercmd->def = (Node *) period;
-
-	alterstmt->cmds = lappend(alterstmt->cmds, altercmd);
-
-	cxt->alist = lappend(cxt->alist, alterstmt);
 	cxt->periods = lappend(cxt->periods, period);
 }
 
