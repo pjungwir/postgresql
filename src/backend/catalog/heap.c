@@ -2205,7 +2205,7 @@ SetAttrMissing(Oid relid, char *attname, char *value)
  */
 Oid
 StorePeriod(Relation rel, const char *periodname, AttrNumber startnum,
-			AttrNumber endnum, Oid rngtypid, Oid opclass, Oid conoid)
+			AttrNumber endnum, Oid rngtypid, Oid conoid)
 {
 	Datum		values[Natts_pg_period];
 	bool		nulls[Natts_pg_period];
@@ -2229,7 +2229,6 @@ StorePeriod(Relation rel, const char *periodname, AttrNumber startnum,
 	values[Anum_pg_period_perstart - 1] = startnum;
 	values[Anum_pg_period_perend - 1] = endnum;
 	values[Anum_pg_period_perrngtype - 1] = rngtypid;
-	values[Anum_pg_period_peropclass -1] = opclass;
 	values[Anum_pg_period_perconstraint - 1] = conoid;
 
 	tuple = heap_form_tuple(RelationGetDescr(pg_period), values, nulls);
@@ -2249,10 +2248,6 @@ StorePeriod(Relation rel, const char *periodname, AttrNumber startnum,
 
 	/* Make sure we don't lose our rangetype. */
 	ObjectAddressSet(referenced, TypeRelationId, rngtypid);
-	recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
-
-	/* Make sure we don't lose our operator class. */
-	ObjectAddressSet(referenced, OperatorClassRelationId, opclass);
 	recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
 
 	/*

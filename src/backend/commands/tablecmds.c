@@ -1385,7 +1385,7 @@ AddRelationNewPeriod(Relation rel, Period *period)
 	HeapTuple	starttuple, endtuple;
 	Form_pg_attribute	startatttuple, endatttuple;
 	AttrNumber	startattnum, endattnum;
-	Oid			conoid, opclass;
+	Oid			conoid;
 
 	/* The period name must not already exist */
 	(void) check_for_period_name_collision(rel, period->periodname, false);
@@ -1408,12 +1408,6 @@ AddRelationNewPeriod(Relation rel, Period *period)
 				(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
 				 errmsg("cannot use system column \"%s\" in period",
 						period->startcolname)));
-
-	/*
-	 * Get the btree operator class for it (ResolveOpClass will error out if
-	 * necessary)
-	 */
-	opclass = ResolveOpClass(period->opclassname, startatttuple->atttypid, "btree", BTREE_AM_OID);
 
 	/* Find the end column */
 	endtuple = SearchSysCacheCopyAttName(RelationGetRelid(rel), period->endcolname);
@@ -1465,7 +1459,7 @@ AddRelationNewPeriod(Relation rel, Period *period)
 	conoid = ((CookedConstraint *) linitial(newconstrs))->conoid;
 
 	/* Save it */
-	StorePeriod(rel, period->periodname, startattnum, endattnum, period->rngtypid, opclass, conoid);
+	StorePeriod(rel, period->periodname, startattnum, endattnum, period->rngtypid, conoid);
 
 	table_close(attrelation, RowExclusiveLock);
 }
@@ -7789,7 +7783,7 @@ ATExecAddPeriod(Relation rel, Period *period, LOCKMODE lockmode,
 	HeapTuple	starttuple, endtuple;
 	Form_pg_attribute	startatttuple, endatttuple;
 	AttrNumber	startattnum, endattnum;
-	Oid			coltypid, rngtypid, conoid, opclass;
+	Oid			coltypid, rngtypid, conoid;
 
 	/*
 	 * PERIOD FOR SYSTEM_TIME is not yet implemented, but make sure no one uses
@@ -7824,12 +7818,6 @@ ATExecAddPeriod(Relation rel, Period *period, LOCKMODE lockmode,
 				(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
 				 errmsg("cannot use system column \"%s\" in period",
 						period->startcolname)));
-
-	/*
-	 * Get the btree operator class for it (ResolveOpClass will error out if
-	 * necessary)
-	 */
-	opclass = ResolveOpClass(period->opclassname, startatttuple->atttypid, "btree", BTREE_AM_OID);
 
 	/* Find the end column */
 	endtuple = SearchSysCacheCopyAttName(RelationGetRelid(rel), period->endcolname);
@@ -7906,7 +7894,7 @@ ATExecAddPeriod(Relation rel, Period *period, LOCKMODE lockmode,
 	conoid = make_constraints_for_period(rel, period, period->constraintname, lockmode, context);
 
 	/* Save it */
-	StorePeriod(rel, period->periodname, startattnum, endattnum, rngtypid, opclass, conoid);
+	StorePeriod(rel, period->periodname, startattnum, endattnum, rngtypid, conoid);
 
 	table_close(attrelation, RowExclusiveLock);
 

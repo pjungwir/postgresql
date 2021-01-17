@@ -883,7 +883,6 @@ transformPeriodOptions(Period *period)
 {
 	ListCell   *option;
 	DefElem	   *dconstraintname = NULL;
-	DefElem	   *dopclass = NULL;
 	DefElem	   *drangetypename = NULL;
 
 	foreach(option, period->options)
@@ -897,14 +896,6 @@ transformPeriodOptions(Period *period)
 						(errcode(ERRCODE_SYNTAX_ERROR),
 						 errmsg("conflicting or redundant options")));
 			dconstraintname = defel;
-		}
-		else if (strcmp(defel->defname, "operator_class") == 0)
-		{
-			if (dopclass)
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("conflicting or redundant options")));
-			dopclass = defel;
 		}
 		else if (strcmp(defel->defname, "rangetype") == 0)
 		{
@@ -924,11 +915,6 @@ transformPeriodOptions(Period *period)
 		period->constraintname = defGetString(dconstraintname);
 	else
 		period->constraintname = NULL;
-
-	if (dopclass != NULL)
-		period->opclassname = defGetQualifiedName(dopclass);
-	else
-		period->opclassname = NULL;
 
 	if (drangetypename != NULL)
 		period->rangetypename = defGetString(drangetypename);

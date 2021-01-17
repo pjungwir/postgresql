@@ -122,7 +122,7 @@ extern Oid	StoreAttrDefault(Relation rel, AttrNumber attnum,
 
 extern Oid StorePeriod(Relation rel, const char *period,
 					   AttrNumber startnum, AttrNumber endnum,
-					   Oid rngtypid, Oid opclass, Oid conoid);
+					   Oid rngtypid, Oid conoid);
 
 extern Node *cookDefault(ParseState *pstate,
 						 Node *raw_default,
