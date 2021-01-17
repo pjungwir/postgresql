@@ -33,7 +33,6 @@ CATALOG(pg_period,8000,PeriodRelationId)
 	int16		perstart;		/* column for start value */
 	int16		perend;			/* column for end value */
 	Oid			perrngtype;		/* OID of the range type for this period */
-	Oid			peropclass;		/* OID of the operator class used */
 	Oid			perconstraint;	/* OID of (start < end) constraint */
 	bool		perislocal;		/* is the period local or inherited? */
 	int32		perinhcount;	/* number of parents having this period */
