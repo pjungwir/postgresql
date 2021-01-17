@@ -944,6 +944,66 @@ transformTablePeriod(CreateStmtContext *cxt, Period *period)
 	 */
 	transformPeriodOptions(period);
 
+	/*
+	 * Find a suitable range type for operations involving this period.
+	 * Use the rangetype option if provided, otherwise try to find a
+	 * non-ambiguous existing type.
+	 */
+	Oid			coltypid = InvalidOid;
+	ColumnDef  *col;
+	ListCell   *columns;
+
+	/* First find out the type of the period's columns */
+	period->rngtypid = InvalidOid;
+	foreach (columns, cxt->columns)
+	{
+		col = (ColumnDef *) lfirst(columns);
+		if (strcmp(col->colname, period->startcolname) == 0)
+		{
+			coltypid = typenameTypeId(cxt->pstate, col->typeName);
+			break;
+		}
+	}
+	if (coltypid == InvalidOid)
+		ereport(ERROR, (errmsg("column \"%s\" of relation \"%s\" does not exist",
+						period->startcolname, cxt->relation->relname)));
+
+	/* Now make sure it matches rangetypename or we can find a matching range */
+	if (period->rangetypename != NULL)
+	{
+		/* Make sure it exists */
+		period->rngtypid = TypenameGetTypidExtended(period->rangetypename, false);
+		if (period->rngtypid == InvalidOid)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("Range type %s not found", period->rangetypename)));
+
+		/* Make sure it is a range type */
+		if (!type_is_range(period->rngtypid))
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("Type %s is not a range type", period->rangetypename)));
+
+		/* Make sure it matches the column type */
+		if (get_range_subtype(period->rngtypid) != coltypid)
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("Range type %s does not match column type %s",
+						 period->rangetypename,
+						 format_type_be(coltypid))));
+	}
+	else
+	{
+		period->rngtypid = get_subtype_range(coltypid);
+		if (period->rngtypid == InvalidOid)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("no compatible range type found for %s period",
+						 // TODO: Hint: "add a range type"
+							format_type_be(coltypid))));
+
+	}
+
 	cxt->periods = lappend(cxt->periods, period);
 }
 

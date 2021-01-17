@@ -15,8 +15,7 @@ create table pt (id integer, ds text collate "C", de text collate "POSIX", perio
 ERROR:  start and end columns of period must have same collation
 /* Periods must have a default BTree operator class */
 create table pt (id integer, ds xml, de xml, period for p (ds, de));
-ERROR:  data type xml has no default operator class for access method "btree"
-HINT:  You must specify an operator class for the index or define a default operator class for the data type.
+ERROR:  no compatible range type found for xml period
 /* Period and column names are in the same namespace */
 create table pt (id integer, ds date, de date, period for ctid (ds, de));
 ERROR:  period name "ctid" conflicts with a system column name

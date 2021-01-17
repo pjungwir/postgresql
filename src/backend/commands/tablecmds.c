@@ -1330,7 +1330,7 @@ AddRelationNewPeriod(Relation rel, Period *period)
 	HeapTuple	starttuple, endtuple;
 	Form_pg_attribute	startatttuple, endatttuple;
 	AttrNumber	startattnum, endattnum;
-	Oid			coltypid, rngtypid, conoid, opclass;
+	Oid			conoid, opclass;
 
 	/* The period name must not already exist */
 	(void) check_for_period_name_collision(rel, period->periodname, false);
@@ -1389,46 +1389,6 @@ AddRelationNewPeriod(Relation rel, Period *period)
 				(errcode(ERRCODE_COLLATION_MISMATCH),
 				 errmsg("start and end columns of period must have same collation")));
 
-	/*
-	 * Find a suitable range type for operations involving this period.
-	 * Use the rangetype option if provided, otherwise try to find a
-	 * non-ambiguous existing type.
-	 */
-	coltypid = startatttuple->atttypid;
-	if (period->rangetypename != NULL)
-	{
-		/* Make sure it exists */
-		rngtypid = TypenameGetTypidExtended(period->rangetypename, false);
-		if (rngtypid == InvalidOid)
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("Range type %s not found", period->rangetypename)));
-
-		/* Make sure it is a range type */
-		if (!type_is_range(rngtypid))
-			ereport(ERROR,
-					(errcode(ERRCODE_DATATYPE_MISMATCH),
-					 errmsg("Type %s is not a range type", period->rangetypename)));
-
-		/* Make sure it matches the column type */
-		if (get_range_subtype(rngtypid) != coltypid)
-			ereport(ERROR,
-					(errcode(ERRCODE_DATATYPE_MISMATCH),
-					 errmsg("Range type %s does not match column type %s",
-						 period->rangetypename,
-						 format_type_be(coltypid))));
-	}
-	else
-	{
-		rngtypid = get_subtype_range(coltypid);
-		if (rngtypid == InvalidOid)
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("no compatible range type found for %s period",
-							format_type_be(coltypid))));
-
-	}
-
 	heap_freetuple(starttuple);
 	heap_freetuple(endtuple);
 
@@ -1450,7 +1410,7 @@ AddRelationNewPeriod(Relation rel, Period *period)
 	conoid = ((CookedConstraint *) linitial(newconstrs))->conoid;
 
 	/* Save it */
-	StorePeriod(rel, period->periodname, startattnum, endattnum, rngtypid, opclass, conoid);
+	StorePeriod(rel, period->periodname, startattnum, endattnum, period->rngtypid, opclass, conoid);
 
 	table_close(attrelation, RowExclusiveLock);
 }
