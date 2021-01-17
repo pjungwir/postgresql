@@ -984,9 +984,10 @@ transformTablePeriod(CreateStmtContext *cxt, Period *period)
 		if (period->rngtypid == InvalidOid)
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("no compatible range type found for %s period",
-						 // TODO: Hint: "add a range type"
-							format_type_be(coltypid))));
+					 errmsg("no range type for %s found for period %s",
+							format_type_be(coltypid),
+							period->periodname),
+					 errhint("You can define a custom range type with CREATE TYPE")));
 
 	}
 

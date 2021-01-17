@@ -7473,8 +7473,7 @@ ATExecAddPeriod(Relation rel, Period *period, LOCKMODE lockmode,
 		/* Make sure it exists */
 		rngtypid = TypenameGetTypidExtended(period->rangetypename, false);
 		if (rngtypid == InvalidOid)
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_OBJECT),
+			ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT),
 					 errmsg("Range type %s not found", period->rangetypename)));
 
 		/* Make sure it is a range type */
@@ -7497,8 +7496,10 @@ ATExecAddPeriod(Relation rel, Period *period, LOCKMODE lockmode,
 		if (rngtypid == InvalidOid)
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("no compatible range type found for %s period",
-							format_type_be(coltypid))));
+					 errmsg("no range type for %s found for period %s",
+							format_type_be(coltypid),
+							period->periodname),
+					 errhint("You can define a custom range type with CREATE TYPE")));
 
 	}
 
