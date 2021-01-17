@@ -2779,7 +2779,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 					end->fields = list_make1(makeString(endcolname));
 					end->location = constraint->location;
 
-					Oid rngtypid = get_elemtype_range(typid);
+					Oid rngtypid = get_subtype_range(typid);
 					if (rngtypid == InvalidOid)
 						ereport(ERROR,
 								(errcode(ERRCODE_UNDEFINED_OBJECT),
