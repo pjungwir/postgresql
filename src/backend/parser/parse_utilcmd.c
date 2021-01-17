@@ -865,6 +865,64 @@ transformColumnDefinition(CreateStmtContext *cxt, ColumnDef *column)
 	}
 }
 
+void
+transformPeriodOptions(Period *period)
+{
+	ListCell   *option;
+	DefElem	   *dconstraintname = NULL;
+	DefElem	   *dopclass = NULL;
+	DefElem	   *drangetypename = NULL;
+
+	foreach(option, period->options)
+	{
+		DefElem    *defel = (DefElem *) lfirst(option);
+
+		if (strcmp(defel->defname, "check_constraint_name") == 0)
+		{
+			if (dconstraintname)
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+						 errmsg("conflicting or redundant options")));
+			dconstraintname = defel;
+		}
+		else if (strcmp(defel->defname, "operator_class") == 0)
+		{
+			if (dopclass)
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+						 errmsg("conflicting or redundant options")));
+			dopclass = defel;
+		}
+		else if (strcmp(defel->defname, "rangetype") == 0)
+		{
+			if (drangetypename)
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+						 errmsg("conflicting or redundant options")));
+			drangetypename = defel;
+		}
+		else
+			ereport(ERROR,
+					(errcode(ERRCODE_SYNTAX_ERROR),
+					 errmsg("option \"%s\" not recognized", defel->defname)));
+	}
+
+	if (dconstraintname != NULL)
+		period->constraintname = defGetString(dconstraintname);
+	else
+		period->constraintname = NULL;
+
+	if (dopclass != NULL)
+		period->opclassname = defGetQualifiedName(dopclass);
+	else
+		period->opclassname = NULL;
+
+	if (drangetypename != NULL)
+		period->rangetypename = defGetString(drangetypename);
+	else
+		period->rangetypename = NULL;
+}
+
 /*
  * transformTablePeriod
  *		transform a Period node within CREATE TABLE or ALTER TABLE
@@ -884,6 +942,7 @@ transformTablePeriod(CreateStmtContext *cxt, Period *period)
 	 * Determine the column info and range type so that transformIndexConstraints
 	 * knows how to create PRIMARY KEY/UNIQUE constraints using this PERIOD.
 	 */
+	transformPeriodOptions(period);
 
 	cxt->periods = lappend(cxt->periods, period);
 }

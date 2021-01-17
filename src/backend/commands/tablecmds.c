@@ -1330,58 +1330,10 @@ AddRelationNewPeriod(Relation rel, Period *period)
 	HeapTuple	starttuple, endtuple;
 	Form_pg_attribute	startatttuple, endatttuple;
 	AttrNumber	startattnum, endattnum;
-	ListCell   *option;
-	DefElem	   *dconstraintname = NULL;
-	DefElem	   *dopclass = NULL;
-	DefElem	   *drangetypename = NULL;
 	Oid			coltypid, rngtypid, conoid, opclass;
-
-	/*
-	 * PERIOD FOR SYSTEM_TIME is not yet implemented, but make sure no one uses
-	 * the name.
-	 */
-	if (strcmp(period->periodname, "system_time") == 0)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("PERIOD FOR SYSTEM_TIME is not supported")));
 
 	/* The period name must not already exist */
 	(void) check_for_period_name_collision(rel, period->periodname, false);
-
-	/* Parse options */
-	foreach(option, period->options)
-	{
-		DefElem    *defel = (DefElem *) lfirst(option);
-
-		if (strcmp(defel->defname, "check_constraint_name") == 0)
-		{
-			if (dconstraintname)
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("conflicting or redundant options")));
-			dconstraintname = defel;
-		}
-		else if (strcmp(defel->defname, "operator_class") == 0)
-		{
-			if (dopclass)
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("conflicting or redundant options")));
-			dopclass = defel;
-		}
-		else if (strcmp(defel->defname, "rangetype") == 0)
-		{
-			if (drangetypename)
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("conflicting or redundant options")));
-			drangetypename = defel;
-		}
-		else
-			ereport(ERROR,
-					(errcode(ERRCODE_SYNTAX_ERROR),
-					 errmsg("option \"%s\" not recognized", defel->defname)));
-	}
 
 	attrelation = table_open(AttributeRelationId, RowExclusiveLock);
 
@@ -1406,9 +1358,7 @@ AddRelationNewPeriod(Relation rel, Period *period)
 	 * Get the btree operator class for it (ResolveOpClass will error out if
 	 * necessary)
 	 */
-	opclass = ResolveOpClass(dopclass ? defGetQualifiedName(dopclass) : NULL,
-							 startatttuple->atttypid,
-							 "btree", BTREE_AM_OID);
+	opclass = ResolveOpClass(period->opclassname, startatttuple->atttypid, "btree", BTREE_AM_OID);
 
 	/* Find the end column */
 	endtuple = SearchSysCacheCopyAttName(RelationGetRelid(rel), period->endcolname);
@@ -1445,28 +1395,27 @@ AddRelationNewPeriod(Relation rel, Period *period)
 	 * non-ambiguous existing type.
 	 */
 	coltypid = startatttuple->atttypid;
-	if (drangetypename != NULL)
+	if (period->rangetypename != NULL)
 	{
-		char *rangetypename = defGetString(drangetypename);
 		/* Make sure it exists */
-		rngtypid = TypenameGetTypidExtended(rangetypename, false);
+		rngtypid = TypenameGetTypidExtended(period->rangetypename, false);
 		if (rngtypid == InvalidOid)
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("Range type %s not found", rangetypename)));
+					 errmsg("Range type %s not found", period->rangetypename)));
 
 		/* Make sure it is a range type */
 		if (!type_is_range(rngtypid))
 			ereport(ERROR,
 					(errcode(ERRCODE_DATATYPE_MISMATCH),
-					 errmsg("Type %s is not a range type", rangetypename)));
+					 errmsg("Type %s is not a range type", period->rangetypename)));
 
 		/* Make sure it matches the column type */
 		if (get_range_subtype(rngtypid) != coltypid)
 			ereport(ERROR,
 					(errcode(ERRCODE_DATATYPE_MISMATCH),
 					 errmsg("Range type %s does not match column type %s",
-						 rangetypename,
+						 period->rangetypename,
 						 format_type_be(coltypid))));
 	}
 	else
@@ -1483,23 +1432,20 @@ AddRelationNewPeriod(Relation rel, Period *period)
 	heap_freetuple(starttuple);
 	heap_freetuple(endtuple);
 
-	char *conname;
-	if (dconstraintname)
-		conname = defGetString(dconstraintname);
-	else
+	if (period->constraintname == NULL)
 	{
-		conname = ChooseConstraintName(RelationGetRelationName(rel),
-									   period->periodname,
-									   "check",
-									   RelationGetNamespace(rel),
-									   NIL);
+		period->constraintname = ChooseConstraintName(RelationGetRelationName(rel),
+													  period->periodname,
+													  "check",
+													  RelationGetNamespace(rel),
+													  NIL);
 	}
 	// conoid = make_constraints_for_period(rel, period,
 				// dconstraintname ? defGetString(dconstraintname) : NULL, lockmode, context);
 	List *cmds = make_period_not_null(rel, period);
 	AlterTableInternal(RelationGetRelid(rel), cmds, true, NULL);
 
-	Constraint *constr = make_period_not_backward(rel, period, conname);
+	Constraint *constr = make_period_not_backward(rel, period, period->constraintname);
 	List *newconstrs = AddRelationNewConstraints(rel, NIL, list_make1(constr), false, true, true, NULL);
 	conoid = ((CookedConstraint *) linitial(newconstrs))->conoid;
 
@@ -1507,7 +1453,6 @@ AddRelationNewPeriod(Relation rel, Period *period)
 	StorePeriod(rel, period->periodname, startattnum, endattnum, rngtypid, opclass, conoid);
 
 	table_close(attrelation, RowExclusiveLock);
-
 }
 
 /*
@@ -7498,10 +7443,6 @@ ATExecAddPeriod(Relation rel, Period *period, LOCKMODE lockmode,
 	HeapTuple	starttuple, endtuple;
 	Form_pg_attribute	startatttuple, endatttuple;
 	AttrNumber	startattnum, endattnum;
-	ListCell   *option;
-	DefElem	   *dconstraintname = NULL;
-	DefElem	   *dopclass = NULL;
-	DefElem	   *drangetypename = NULL;
 	Oid			coltypid, rngtypid, conoid, opclass;
 
 	/*
@@ -7517,39 +7458,7 @@ ATExecAddPeriod(Relation rel, Period *period, LOCKMODE lockmode,
 	(void) check_for_period_name_collision(rel, period->periodname, false);
 
 	/* Parse options */
-	foreach(option, period->options)
-	{
-		DefElem    *defel = (DefElem *) lfirst(option);
-
-		if (strcmp(defel->defname, "check_constraint_name") == 0)
-		{
-			if (dconstraintname)
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("conflicting or redundant options")));
-			dconstraintname = defel;
-		}
-		else if (strcmp(defel->defname, "operator_class") == 0)
-		{
-			if (dopclass)
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("conflicting or redundant options")));
-			dopclass = defel;
-		}
-		else if (strcmp(defel->defname, "rangetype") == 0)
-		{
-			if (drangetypename)
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("conflicting or redundant options")));
-			drangetypename = defel;
-		}
-		else
-			ereport(ERROR,
-					(errcode(ERRCODE_SYNTAX_ERROR),
-					 errmsg("option \"%s\" not recognized", defel->defname)));
-	}
+	transformPeriodOptions(period);
 
 	attrelation = table_open(AttributeRelationId, RowExclusiveLock);
 
@@ -7574,9 +7483,7 @@ ATExecAddPeriod(Relation rel, Period *period, LOCKMODE lockmode,
 	 * Get the btree operator class for it (ResolveOpClass will error out if
 	 * necessary)
 	 */
-	opclass = ResolveOpClass(dopclass ? defGetQualifiedName(dopclass) : NULL,
-							 startatttuple->atttypid,
-							 "btree", BTREE_AM_OID);
+	opclass = ResolveOpClass(period->opclassname, startatttuple->atttypid, "btree", BTREE_AM_OID);
 
 	/* Find the end column */
 	endtuple = SearchSysCacheCopyAttName(RelationGetRelid(rel), period->endcolname);
@@ -7613,28 +7520,27 @@ ATExecAddPeriod(Relation rel, Period *period, LOCKMODE lockmode,
 	 * non-ambiguous existing type.
 	 */
 	coltypid = startatttuple->atttypid;
-	if (drangetypename != NULL)
+	if (period->rangetypename != NULL)
 	{
-		char *rangetypename = defGetString(drangetypename);
 		/* Make sure it exists */
-		rngtypid = TypenameGetTypidExtended(rangetypename, false);
+		rngtypid = TypenameGetTypidExtended(period->rangetypename, false);
 		if (rngtypid == InvalidOid)
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("Range type %s not found", rangetypename)));
+					 errmsg("Range type %s not found", period->rangetypename)));
 
 		/* Make sure it is a range type */
 		if (!type_is_range(rngtypid))
 			ereport(ERROR,
 					(errcode(ERRCODE_DATATYPE_MISMATCH),
-					 errmsg("Type %s is not a range type", rangetypename)));
+					 errmsg("Type %s is not a range type", period->rangetypename)));
 
 		/* Make sure it matches the column type */
 		if (get_range_subtype(rngtypid) != coltypid)
 			ereport(ERROR,
 					(errcode(ERRCODE_DATATYPE_MISMATCH),
 					 errmsg("Range type %s does not match column type %s",
-						 rangetypename,
+						 period->rangetypename,
 						 format_type_be(coltypid))));
 	}
 	else
@@ -7651,8 +7557,7 @@ ATExecAddPeriod(Relation rel, Period *period, LOCKMODE lockmode,
 	heap_freetuple(starttuple);
 	heap_freetuple(endtuple);
 
-	conoid = make_constraints_for_period(rel, period,
-				dconstraintname ? defGetString(dconstraintname) : NULL, lockmode, context);
+	conoid = make_constraints_for_period(rel, period, period->constraintname, lockmode, context);
 
 	/* Save it */
 	StorePeriod(rel, period->periodname, startattnum, endattnum, rngtypid, opclass, conoid);

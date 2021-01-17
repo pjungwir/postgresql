@@ -2117,6 +2117,9 @@ typedef struct Period
 	char	   *startcolname;	/* name of start column */
 	char	   *endcolname;		/* name of end column */
 	List	   *options;		/* options from WITH clause */
+	char	   *constraintname;
+	List	   *opclassname;
+	char	   *rangetypename;
 	Oid			rngtypid;		/* the range type to use */
 	int			location;		/* token location, or -1 if unknown */
 } Period;
