@@ -25,6 +25,7 @@
 #include "postgres.h"
 
 #include "access/sysattr.h"
+#include "catalog/pg_period.h"
 #include "catalog/pg_type.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
@@ -1168,11 +1169,44 @@ transformForPortionOfClause(ParseState *pstate,
 	RangeTblEntry *target_rte = pstate->p_target_nsitem->p_rte;
 	char *range_name = forPortionOf->range_name;
 	char *range_type_name;
-	int	range_attno;
+	int	range_attno = InvalidOid;
+	int start_attno = InvalidOid;
+	int	end_attno = InvalidOid;
+	char *startcolname = NULL;
+	char *endcolname = NULL;
 	ForPortionOfExpr *result;
 	List *targetList;
 
 	result = makeNode(ForPortionOfExpr);
+	result->range = NULL;
+
+	/* Make sure the table has a primary key */
+	Oid pkoid = RelationGetPrimaryKeyIndex(targetrel);
+	if (pkoid == InvalidOid)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+				 errmsg("relation \"%s\" does not have a temporal primary key",
+						RelationGetRelationName(pstate->p_target_relation)),
+				 parser_errposition(pstate, forPortionOf->range_name_location)));
+
+	/* Make sure the primary key is a temporal key */
+	// TODO: need a lock here?
+	HeapTuple indexTuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(pkoid));
+	if (!HeapTupleIsValid(indexTuple))	/* should not happen */
+		elog(ERROR, "cache lookup failed for index %u", pkoid);
+	Form_pg_index pk = (Form_pg_index) GETSTRUCT(indexTuple);
+
+	/*
+	 * Only temporal pkey indexes have both isprimary and isexclusion.
+	 * Checking those saves us from scanning pg_constraint
+	 * like in RelationGetExclusionInfo.
+	 */
+	if (!(pk->indisprimary && pk->indisexclusion))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+				 errmsg("relation \"%s\" does not have a temporal primary key",
+						RelationGetRelationName(pstate->p_target_relation)),
+				 parser_errposition(pstate, forPortionOf->range_name_location)));
 
 	/*
 	 * First look for a range column, then look for a period.
@@ -1192,37 +1226,6 @@ transformForPortionOfClause(ParseState *pstate,
 							range_name,
 							RelationGetRelationName(pstate->p_target_relation)),
 					 parser_errposition(pstate, forPortionOf->range_name_location)));
-
-		/* Make sure the table has a primary key */
-		Oid pkoid = RelationGetPrimaryKeyIndex(targetrel);
-		if (pkoid == InvalidOid)
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
-					 errmsg("relation \"%s\" does not have a temporal primary key",
-							RelationGetRelationName(pstate->p_target_relation)),
-					 parser_errposition(pstate, forPortionOf->range_name_location)));
-
-		/* Make sure the primary key is a temporal key */
-		// TODO: need a lock here?
-		HeapTuple indexTuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(pkoid));
-		if (!HeapTupleIsValid(indexTuple))	/* should not happen */
-			elog(ERROR, "cache lookup failed for index %u", pkoid);
-		Form_pg_index pk = (Form_pg_index) GETSTRUCT(indexTuple);
-		ReleaseSysCache(indexTuple);
-
-		/*
-		 * Only temporal pkey indexes have both isprimary and isexclusion.
-		 * Checking those saves us from scanning pg_constraint
-		 * like in RelationGetExclusionInfo.
-		 */
-		if (!(pk->indisprimary && pk->indisexclusion))
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
-					 errmsg("relation \"%s\" does not have a temporal primary key",
-							RelationGetRelationName(pstate->p_target_relation)),
-					 parser_errposition(pstate, forPortionOf->range_name_location)));
-		}
 
 		/* Make sure the range attribute is the last part of the pkey. */
 		if (range_attno != pk->indkey.values[pk->indnkeyatts - 1])
@@ -1244,28 +1247,81 @@ transformForPortionOfClause(ParseState *pstate,
 				0);
 		v->location = forPortionOf->range_name_location;
 		result->range = (Expr *) v;
+		result->rangeType = attr->atttypid;
 		range_type_name = get_typname(attr->atttypid);
 
 	} else {
-		// TODO: Try to find a period,
-		// and set result->range to an Expr like tsrange(period->start_col, period->end_col)
-		// Probably we can make an A_Expr and call transformExpr on it, right?
+		Oid relid = RelationGetRelid(targetrel);
+		HeapTuple perTuple = SearchSysCache2(PERIODNAME,
+				ObjectIdGetDatum(relid),
+				PointerGetDatum(range_name));
+		if (HeapTupleIsValid(perTuple))
+		{
+			Form_pg_period per = (Form_pg_period) GETSTRUCT(perTuple);
+			Type rngtype = typeidType(per->perrngtype);
+			range_type_name = typeTypeName(rngtype);
+			ReleaseSysCache(rngtype);
+			start_attno = per->perstart;
+			end_attno = per->perend;
 
-		/*
-		 * We need to choose a range type based on the period's columns' type.
-		 * Normally inferring a range type from an element type is not allowed,
-		 * because there might be more than one.
-		 * In this case SQL:2011 only has periods for timestamp, timestamptz, and date,
-		 * which all have built-in range types.
-		 * Let's just take the first range we have for that type,
-		 * ordering by oid, so that we get built-in range types first.
-		 */
+			Form_pg_attribute startattr = TupleDescAttr(targetrel->rd_att, start_attno - 1);
+			Form_pg_attribute endattr = TupleDescAttr(targetrel->rd_att, end_attno - 1);
 
-		// TODO: set result->range
-		// TODO: set range_type_name
+			startcolname = NameStr(startattr->attname);
+			endcolname = NameStr(endattr->attname);
+			result->period_start_name = startcolname;
+			result->period_end_name = endcolname;
+
+			/* Make sure the period is the last part of the pkey. */
+			bool pkeyIncludesPeriod = false;
+			if (pk->indkey.values[pk->indnkeyatts - 1] == InvalidOid)
+			{
+				/*
+				 * The PK ends with an expression. Make sure it's for our period.
+				 * There should be only one entry in indexprs, and it should be ours.
+				 */
+				pkeyIncludesPeriod = pk->indperiod == per->oid;
+			}
+
+			if (!pkeyIncludesPeriod)
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+						 errmsg("column \"%s\" is not the temporal part of the primary key for relation \"%s\"",
+								range_name,
+								RelationGetRelationName(pstate->p_target_relation)),
+						 parser_errposition(pstate, forPortionOf->range_name_location)));
+
+			Var	*startvar = makeVar(
+					rtindex,
+					per->perstart,
+					startattr->atttypid,
+					startattr->atttypmod,
+					startattr->attcollation,
+					0);
+			startvar->location = forPortionOf->range_name_location;
+
+			Var *endvar = makeVar(
+					rtindex,
+					per->perend,
+					endattr->atttypid,
+					endattr->atttypmod,
+					endattr->attcollation,
+					0);
+			endvar->location = forPortionOf->range_name_location;
+
+			ReleaseSysCache(perTuple);
+
+			FuncCall *periodRange = makeFuncCall(SystemFuncName(range_type_name),
+								list_make2(startvar, endvar),
+								COERCE_EXPLICIT_CALL,
+								forPortionOf->range_name_location);
+			result->range = (Expr *) periodRange;
+			result->rangeType = typenameTypeId(pstate, typeStringToTypeName(range_type_name));
+		}
 	}
+	ReleaseSysCache(indexTuple);
 
-	if (range_attno == InvalidAttrNumber)
+	if (result->range == NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_COLUMN),
 				 errmsg("column or period \"%s\" of relation \"%s\" does not exist",
@@ -1297,8 +1353,8 @@ transformForPortionOfClause(ParseState *pstate,
 	/*
 	 * Now make sure we update the start/end time of the record.
 	 * For a range col (r) this is `r = r * targetRange`.
-	 * For a PERIOD with cols (s, e) this is `s = lower(tsrange(s, r) * targetRange)`
-	 * and `e = upper(tsrange(e, r) * targetRange` (of course not necessarily with
+	 * For a PERIOD with cols (s, e) this is `s = lower(tsrange(s, e) * targetRange)`
+	 * and `e = upper(tsrange(s, e) * targetRange` (of course not necessarily with
 	 * tsrange, but with whatever range type is used there)).
 	 *
 	 * We also compute the possible left-behind bits at the start and end of the tuple,
@@ -1320,17 +1376,63 @@ transformForPortionOfClause(ParseState *pstate,
 							  false);
 
 		targetList = lappend(targetList, tle);
+
+		/* Mark the range column as requiring update permissions */
+		target_rte->updatedCols = bms_add_member(target_rte->updatedCols,
+												 range_attno - FirstLowInvalidHeapAttributeNumber);
+
 	} else {
-		/* TODO: Set up targetList for PERIODs */
+		Expr *intersectExpr;
+		Expr *boundSetExpr;
+		TargetEntry *tle;
+
+		/* Set up targetList for the PERIOD start column */
+
+		intersectExpr = (Expr *) makeSimpleA_Expr(AEXPR_OP, "*",
+				// TODO: copy?
+				(Node *) result->range, (Node *) fc,
+				forPortionOf->range_name_location);
+
+		boundSetExpr = (Expr *) makeFuncCall(SystemFuncName("lower"),
+								list_make1(intersectExpr),
+								COERCE_EXPLICIT_CALL,
+								forPortionOf->range_name_location);
+		boundSetExpr = (Expr *) transformExpr(pstate, (Node *) boundSetExpr, EXPR_KIND_UPDATE_PORTION);
+
+		tle = makeTargetEntry(boundSetExpr,
+							  start_attno,
+							  startcolname,
+							  false);
+
+		targetList = lappend(targetList, tle);
+
+		/* Set up targetList for the PERIOD end column */
+
+		boundSetExpr = (Expr *) makeFuncCall(SystemFuncName("upper"),
+								list_make1(intersectExpr),
+								COERCE_EXPLICIT_CALL,
+								forPortionOf->range_name_location);
+		boundSetExpr = (Expr *) transformExpr(pstate, (Node *) boundSetExpr, EXPR_KIND_UPDATE_PORTION);
+
+		tle = makeTargetEntry(boundSetExpr,
+							  end_attno,
+							  endcolname,
+							  false);
+
+		targetList = lappend(targetList, tle);
+
+		/* Mark the bound columns as requiring update permissions */
+		target_rte->updatedCols = bms_add_member(target_rte->updatedCols,
+												 start_attno - FirstLowInvalidHeapAttributeNumber);
+		target_rte->updatedCols = bms_add_member(target_rte->updatedCols,
+												 end_attno - FirstLowInvalidHeapAttributeNumber);
 	}
+
 	result->rangeSet = targetList;
-
-	/* Mark the range column as requiring update permissions */
-	target_rte->updatedCols = bms_add_member(target_rte->updatedCols,
-											 range_attno - FirstLowInvalidHeapAttributeNumber);
-
-	result->range_attno = range_attno;
 	result->range_name = range_name;
+	result->range_attno = range_attno;
+	result->start_attno = start_attno;
+	result->end_attno = end_attno;
 
 	return result;
 }
