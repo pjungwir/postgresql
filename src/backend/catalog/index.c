@@ -536,6 +536,7 @@ UpdateIndexRelation(Oid indexoid,
 					bool isready)
 {
 	int2vector *indkey;
+	Oid			indperiod;
 	oidvector  *indcollation;
 	oidvector  *indclass;
 	int2vector *indoption;
@@ -554,6 +555,7 @@ UpdateIndexRelation(Oid indexoid,
 	indkey = buildint2vector(NULL, indexInfo->ii_NumIndexAttrs);
 	for (i = 0; i < indexInfo->ii_NumIndexAttrs; i++)
 		indkey->values[i] = indexInfo->ii_IndexAttrNumbers[i];
+	indperiod = indexInfo->ii_Period ? ((Period *) indexInfo->ii_Period)->oid : InvalidOid;
 	indcollation = buildoidvector(collationOids, indexInfo->ii_NumIndexKeyAttrs);
 	indclass = buildoidvector(classOids, indexInfo->ii_NumIndexKeyAttrs);
 	indoption = buildint2vector(coloptions, indexInfo->ii_NumIndexKeyAttrs);
@@ -613,6 +615,7 @@ UpdateIndexRelation(Oid indexoid,
 	values[Anum_pg_index_indislive - 1] = BoolGetDatum(true);
 	values[Anum_pg_index_indisreplident - 1] = BoolGetDatum(false);
 	values[Anum_pg_index_indkey - 1] = PointerGetDatum(indkey);
+	values[Anum_pg_index_indperiod - 1] = ObjectIdGetDatum(indperiod);
 	values[Anum_pg_index_indcollation - 1] = PointerGetDatum(indcollation);
 	values[Anum_pg_index_indclass - 1] = PointerGetDatum(indclass);
 	values[Anum_pg_index_indoption - 1] = PointerGetDatum(indoption);
@@ -1410,6 +1413,7 @@ index_concurrently_create_copy(Relation heapRelation, Oid oldIndexId, const char
 	Datum		indclassDatum,
 				colOptionDatum,
 				optionDatum;
+	Oid			periodid;
 	oidvector  *indclass;
 	int2vector *indcoloptions;
 	bool		isnull;
@@ -1444,6 +1448,9 @@ index_concurrently_create_copy(Relation heapRelation, Oid oldIndexId, const char
 									 Anum_pg_index_indoption, &isnull);
 	Assert(!isnull);
 	indcoloptions = (int2vector *) DatumGetPointer(colOptionDatum);
+
+	/* Get the period */
+	periodid = oldInfo->ii_Period ? ((Period *) oldInfo->ii_Period)->oid : InvalidOid;
 
 	/* Fetch options of index if any */
 	classTuple = SearchSysCache1(RELOID, oldIndexId);
@@ -1512,6 +1519,16 @@ index_concurrently_create_copy(Relation heapRelation, Oid oldIndexId, const char
 
 		indexColNames = lappend(indexColNames, NameStr(att->attname));
 		newInfo->ii_IndexAttrNumbers[i] = oldInfo->ii_IndexAttrNumbers[i];
+	}
+
+	/* Set the period */
+	if (periodid == InvalidOid)
+		newInfo->ii_Period = NULL;
+	else
+	{
+		Period *p = makeNode(Period);
+		p->oid = periodid;
+		newInfo->ii_Period = (Node *) p;
 	}
 
 	/*
@@ -2508,6 +2525,16 @@ BuildIndexInfo(Relation index)
 	for (i = 0; i < numAtts; i++)
 		ii->ii_IndexAttrNumbers[i] = indexStruct->indkey.values[i];
 
+	/* set the period */
+	if (indexStruct->indperiod == InvalidOid)
+		ii->ii_Period = NULL;
+	else
+	{
+		Period *p = makeNode(Period);
+		p->oid = indexStruct->indperiod;
+		ii->ii_Period = (Node *) p;
+	}
+
 	/* fetch exclusion constraint info if any */
 	if (indexStruct->indisexclusion)
 	{
@@ -2567,6 +2594,9 @@ BuildDummyIndexInfo(Relation index)
 	/* fill in attribute numbers */
 	for (i = 0; i < numAtts; i++)
 		ii->ii_IndexAttrNumbers[i] = indexStruct->indkey.values[i];
+
+	/* no need for a period */
+	ii->ii_Period = NULL;
 
 	/* We ignore the exclusion constraint if any */
 

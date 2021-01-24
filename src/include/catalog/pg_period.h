@@ -27,7 +27,7 @@
  */
 CATALOG(pg_period,8000,PeriodRelationId)
 {
-	Oid			oid;
+	Oid			oid;			/* OID of the period */
 	NameData	pername;		/* name of period */
 	Oid			perrelid;		/* OID of relation containing this period */
 	int16		perstart;		/* column for start value */

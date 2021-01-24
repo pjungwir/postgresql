@@ -1718,6 +1718,11 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 	index->if_not_exists = false;
 	index->reset_default_tblspc = false;
 
+	/* Copy the period */
+	Period *p = makeNode(Period);
+	p->oid = idxrec->indperiod;
+	index->period = p;
+
 	/*
 	 * We don't try to preserve the name of the source index; instead, just
 	 * let DefineIndex() choose a reasonable name.  (If we tried to preserve
@@ -3173,6 +3178,10 @@ transformIndexStmt(Oid relid, IndexStmt *stmt, const char *queryString)
 			 */
 		}
 	}
+
+	/* take care of the period */
+	if (stmt->period)
+		stmt->period->oid = get_period_oid(relid, stmt->period->periodname, false);
 
 	/*
 	 * Check that only the base rel is mentioned.  (This should be dead code
