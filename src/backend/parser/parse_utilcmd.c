@@ -52,7 +52,6 @@
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
-#include "nodes/print.h"	// TODO remove
 #include "optimizer/optimizer.h"
 #include "parser/analyze.h"
 #include "parser/parse_clause.h"
@@ -2768,7 +2767,6 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 					iparam->name = pstrdup(without_overlaps_str);
 					iparam->expr = NULL;
 
-					// TODO: maybe we don't need found at all.
 					/*
 					 * Force the column to NOT NULL since it is part of the primary key.
 					 */
@@ -2798,6 +2796,10 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 						found = true;
 						startcolname = period->startcolname;
 						endcolname = period->endcolname;
+						/* The period has no oid yet, but transformIndexStmt will look it up */
+						index->period = period;
+						index->period->oid = InvalidOid;
+						index->period->periodname = without_overlaps_str;
 						break;
 					}
 				}
@@ -2816,6 +2818,10 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 						Form_pg_period per = (Form_pg_period) GETSTRUCT(perTuple);
 						startcolname = get_attname(relid, per->perstart, false);
 						endcolname = get_attname(relid, per->perend, false);
+						index->period = makeNode(Period);
+						index->period->oid = per->oid;
+						index->period->periodname = without_overlaps_str;
+
 						ReleaseSysCache(perTuple);
 					}
 				}

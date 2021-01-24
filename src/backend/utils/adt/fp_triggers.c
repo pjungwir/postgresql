@@ -173,6 +173,9 @@ FP_insert_leftovers(PG_FUNCTION_ARGS)
 		char	attname[MAX_QUOTED_NAME_LEN];
 		Oid		queryoids[FP_MAX_ATTS];
 		int		rangeAttNum = InvalidAttrNumber;
+		int		periodStartAttNum = InvalidAttrNumber;
+		int		periodEndAttNum = InvalidAttrNumber;
+		bool	usingPeriod;
 
 		/* ----------
 		 * The query string built is
@@ -188,23 +191,45 @@ FP_insert_leftovers(PG_FUNCTION_ARGS)
 		 * The "$x" is whichever attribute is the range column.
 		 * The $n+1 param has the FOR PORTION OF target range.
 		 * The $1...$n params are the values of the pre-UPDATE/DELETE tuple.
+		 * If there is a PERIOD instead of a range,
+		 * then instead of rangeatt we use startatt and endatt.
 		 * ----------
 		 */
 		initStringInfo(&querybuf);
 
+		usingPeriod = trigdata->tg_temporal->fp_periodStartName != NULL;
 		quoteRelationName(relname, rel);
-		quoteOneName(attname, trigdata->tg_temporal->fp_rangeName);
-		appendStringInfo(&querybuf, "INSERT INTO %s (%s", relname, attname);
+		appendStringInfo(&querybuf, "INSERT INTO %s (", relname);
+		if (usingPeriod)
+		{
+			quoteOneName(attname, trigdata->tg_temporal->fp_periodStartName);
+			appendStringInfo(&querybuf, "%s", attname);
+			quoteOneName(attname, trigdata->tg_temporal->fp_periodEndName);
+			appendStringInfo(&querybuf, ", %s", attname);
+		}
+		else
+		{
+			quoteOneName(attname, trigdata->tg_temporal->fp_rangeName);
+			appendStringInfo(&querybuf, "%s", attname);
+		}
 
 		/* INSERT into every attribute but the range column */
 		for (int i = 0; i < natts; i++)
 		{
 			Form_pg_attribute attr = TupleDescAttr(rel->rd_att, i);
 			const char *colname = NameStr(attr->attname);
-			if (strcmp(colname, trigdata->tg_temporal->fp_rangeName) == 0)
+			if (!usingPeriod && strcmp(colname, trigdata->tg_temporal->fp_rangeName) == 0)
 			{
 				rangeAttNum = i + 1;
-				queryoids[natts] = attr->atttypid;
+				// queryoids[natts] = attr->atttypid;
+			}
+			else if (usingPeriod && strcmp(colname, trigdata->tg_temporal->fp_periodStartName) == 0)
+			{
+				periodStartAttNum = i + 1;
+			}
+			else if (usingPeriod && strcmp(colname, trigdata->tg_temporal->fp_periodEndName) == 0)
+			{
+				periodEndAttNum = i + 1;
 			}
 			else
 			{
@@ -213,23 +238,43 @@ FP_insert_leftovers(PG_FUNCTION_ARGS)
 			}
 			queryoids[i] = attr->atttypid;
 		}
-		if (rangeAttNum == InvalidAttrNumber)
+		queryoids[natts] = trigdata->tg_temporal->fp_rangeType;
+		if (!usingPeriod && rangeAttNum == InvalidAttrNumber)
 			elog(ERROR, "range column %s not found", trigdata->tg_temporal->fp_rangeName);
+		else if (usingPeriod && periodStartAttNum == InvalidAttrNumber)
+			elog(ERROR, "period start column %s not found", trigdata->tg_temporal->fp_periodStartName);
+		else if (usingPeriod && periodEndAttNum == InvalidAttrNumber)
+			elog(ERROR, "period end column %s not found", trigdata->tg_temporal->fp_periodEndName);
 
-		appendStringInfo(&querybuf, ") SELECT x.r");
+		if (!usingPeriod)
+			appendStringInfo(&querybuf, ") SELECT x.r");
+		else
+			appendStringInfo(&querybuf, ") SELECT lower(x.r), upper(x.r)");
 
-		/* SELECT all the attributes but the range column */
+		/* SELECT all the attributes but the range/start/end columns */
 		for (int i = 0; i < natts; i++)
-			if (i != rangeAttNum - 1)
+			if (!((!usingPeriod && i == rangeAttNum - 1) ||
+				  (usingPeriod && i == periodStartAttNum - 1) ||
+				  (usingPeriod && i == periodEndAttNum - 1)))
 				appendStringInfo(&querybuf, ", $%d", i + 1);
 
 		appendStringInfo(&querybuf, " FROM (VALUES");
-		appendStringInfo(&querybuf, " (%s(lower($%d), upper($%d)) - $%d),", rangeTypeName, rangeAttNum, natts+1, natts+1);
-		appendStringInfo(&querybuf, " (%s(lower($%d), upper($%d)) - $%d)", rangeTypeName, natts+1, rangeAttNum, natts+1);
+		// TODO: Why use `- $n+1` instead of setting the bound to the edge of $n+1 directly?
+		// (where $n+1 is the range build from FOR PORTION OF)
+		if (!usingPeriod)
+		{
+			appendStringInfo(&querybuf, " (%s(lower($%d), upper($%d)) - $%d),", rangeTypeName, rangeAttNum, natts+1, natts+1);
+			appendStringInfo(&querybuf, " (%s(lower($%d), upper($%d)) - $%d)", rangeTypeName, natts+1, rangeAttNum, natts+1);
+		}
+		else
+		{
+			appendStringInfo(&querybuf, " (%s($%d, upper($%d)) - $%d),", rangeTypeName, periodStartAttNum, natts+1, natts+1);
+			appendStringInfo(&querybuf, " (%s(lower($%d), $%d) - $%d)", rangeTypeName, natts+1, periodEndAttNum, natts+1);
+		}
 		appendStringInfo(&querybuf, ") x(r) WHERE x.r <> 'empty'");
 
 		/* Prepare and save the plan */
-		qplan = fp_PlanInserts(querybuf.data, natts + 1, queryoids, &qkey, rel);
+		qplan = fp_PlanInserts(querybuf.data, natts + (usingPeriod ? 2 : 1), queryoids, &qkey, rel);
 	}
 
 	/*

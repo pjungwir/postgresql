@@ -839,6 +839,7 @@ _equalForPortionOfExpr(const ForPortionOfExpr *a, const ForPortionOfExpr *b)
 	COMPARE_NODE_FIELD(targetStart);
 	COMPARE_NODE_FIELD(targetEnd);
 	COMPARE_NODE_FIELD(targetRange);
+	COMPARE_SCALAR_FIELD(rangeType);
 	COMPARE_NODE_FIELD(overlapsExpr);
 	COMPARE_NODE_FIELD(rangeSet);
 

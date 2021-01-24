@@ -48,6 +48,12 @@ CREATE TABLE without_overlaps_test2 (
   PERIOD FOR valid_at (valid_from, valid_til),
   CONSTRAINT without_overlaps2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'without_overlaps2_pk';
+            pg_get_constraintdef             
+---------------------------------------------
+ PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+(1 row)
+
 DROP TABLE without_overlaps_test2;
 -- PK with two columns plus a PERIOD:
 CREATE TABLE without_overlaps_test2 (
@@ -451,18 +457,6 @@ UPDATE without_overlaps_test SET valid_at = tsrange('2016-01-01', '2016-02-01')
 -- clean up:
 DELETE FROM referencing_period_test WHERE parent_id = '[5,5]';
 DELETE FROM without_overlaps_test WHERE id = '[5,5]';
---
--- test FK parent updates CASCADE
---
---
--- test FK parent updates SET NULL
---
---
--- test FK parent updates SET DEFAULT
---
---
--- test FK parent deletes NO ACTION
---
 ALTER TABLE referencing_period_test
   DROP CONSTRAINT referencing_period_fk;
 ALTER TABLE referencing_period_test
@@ -508,12 +502,3 @@ DETAIL:  Key (id, valid_at)=([5,6), ["Mon Jan 01 00:00:00 2018","Thu Feb 01 00:0
 -- then delete the objecting FK record and the same PK delete succeeds:
 DELETE FROM referencing_period_test WHERE id = '[3,3]';
 DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
---
--- test FK parent deletes CASCADE
---
---
--- test FK parent deletes SET NULL
---
---
--- test FK parent deletes SET DEFAULT
---
