@@ -55,6 +55,7 @@ CREATE TABLE without_overlaps_test2 (
   PERIOD FOR valid_at (valid_from, valid_til),
   CONSTRAINT without_overlaps2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'without_overlaps2_pk';
 DROP TABLE without_overlaps_test2;
 
 -- PK with two columns plus a PERIOD:
@@ -460,19 +461,6 @@ UPDATE without_overlaps_test SET valid_at = tsrange('2016-01-01', '2016-02-01')
 DELETE FROM referencing_period_test WHERE parent_id = '[5,5]';
 DELETE FROM without_overlaps_test WHERE id = '[5,5]';
 --
--- test FK parent updates CASCADE
---
--- TODO
---
--- test FK parent updates SET NULL
---
--- TODO
---
--- test FK parent updates SET DEFAULT
---
--- TODO
-
---
 -- test FK parent deletes NO ACTION
 --
 ALTER TABLE referencing_period_test
@@ -516,15 +504,32 @@ DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_at = tsrange('201
 -- then delete the objecting FK record and the same PK delete succeeds:
 DELETE FROM referencing_period_test WHERE id = '[3,3]';
 DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+
 --
+-- test ON UPDATE/DELETE options
+--
+
+-- FK parent updates CASCADE
+INSERT INTO without_overlaps_test VALUES ('[6,6]', tsrange('2018-01-01', '2021-01-01'));
+INSERT INTO referencing_period_test VALUES ('[4,4]', tsrange('2018-01-01', '2021-01-01'), '[6,6]');
+ALTER TABLE referencing_period_test
+  DROP CONSTRAINT referencing_period_fk,
+  ADD CONSTRAINT referencing_period_fk
+    FOREIGN KEY (parent_id, PERIOD valid_at)
+    REFERENCES without_overlaps_test
+    ON DELETE CASCADE ON UPDATE CASCADE;
+UPDATE without_overlaps_test SET id = '[7,7]';
+SELECT * FROM referencing_period_test WHERE id = '[4,4]';
+-- test FK parent updates SET NULL
+-- TODO
+-- test FK parent updates SET DEFAULT
+-- TODO
+
 -- test FK parent deletes CASCADE
---
 -- TODO
---
 -- test FK parent deletes SET NULL
---
 -- TODO
---
 -- test FK parent deletes SET DEFAULT
---
 -- TODO
+
+-- test cascades through a FOR PORTION OF

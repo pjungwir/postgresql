@@ -402,6 +402,10 @@ typedef struct ForPortionOfState
 	NodeTag		type;
 
 	char   *fp_rangeName;		/* the column/PERIOD named in FOR PORTION OF */
+	Oid		fp_rangeType;		/* the type of the FOR PORTION OF expression */
+	bool	fp_hasPeriod;		/* true iff this is a PERIOD not a range */
+	char   *fp_periodStartName;	/* the PERIOD's start column */
+	char   *fp_periodEndName;	/* the PERIOD's end column */
 	Datum	fp_targetRange;		/* the range from FOR PORTION OF */
 } ForPortionOfState;
 

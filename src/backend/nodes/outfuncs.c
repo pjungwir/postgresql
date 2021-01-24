@@ -1725,6 +1725,7 @@ _outForPortionOfExpr(StringInfo str, const ForPortionOfExpr *node)
 	WRITE_NODE_FIELD(targetStart);
 	WRITE_NODE_FIELD(targetEnd);
 	WRITE_NODE_FIELD(targetRange);
+	WRITE_OID_FIELD(rangeType);
 	WRITE_NODE_FIELD(overlapsExpr);
 	WRITE_NODE_FIELD(rangeSet);
 }

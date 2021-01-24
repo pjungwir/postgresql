@@ -1571,16 +1571,22 @@ typedef struct OnConflictExpr
 typedef struct ForPortionOfExpr
 {
 	NodeTag		type;
-	int			range_attno;	/* Range column number */
-	char	   *range_name;		/* Range name */
-	Expr	   *range;			/* Range column or expression */
-	Node	   *startCol;		/* Start column if using a PERIOD */
-	Node	   *endCol;			/* End column if using a PERIOD */
-	Node	   *targetStart;	/* Same type as the range's elements */
-	Node	   *targetEnd;		/* Same type as the range's elements */
-	Node	   *targetRange;	/* A range from targetStart to targetEnd */
-	Node	   *overlapsExpr;	/* range && targetRange */
-	List	   *rangeSet;		/* List of TargetEntrys to set the time column(s) */
+	int			range_attno;		/* Range column number */
+	int			start_attno;		/* PERIOD start column number */
+	int			end_attno;			/* PERIOD end column number */
+	char	   *range_name;			/* Range name */
+	char	   *period_start_name;	/* PERIOD start column name */
+	char	   *period_end_name;	/* PERIOD end column name */
+	Expr	   *range;				/* Range column or expression */
+	// TODO: I do really use all these fields?:
+	Node	   *startCol;			/* Start column if using a PERIOD */
+	Node	   *endCol;				/* End column if using a PERIOD */
+	Node	   *targetStart;		/* Same type as the range's elements */
+	Node	   *targetEnd;			/* Same type as the range's elements */
+	Node	   *targetRange;		/* A range from targetStart to targetEnd */
+	Oid			rangeType;			/* type of targetRange */
+	Node	   *overlapsExpr;		/* range && targetRange */
+	List	   *rangeSet;			/* List of TargetEntrys to set the time column(s) */
 } ForPortionOfExpr;
 
 #endif							/* PRIMNODES_H */

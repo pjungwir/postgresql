@@ -3208,11 +3208,11 @@ rewriteTargetView(Query *parsetree, Relation view)
 			}
 		}
 
+		// TODO: This doesn't look like it's getting used:
 		if (parsetree->forPortionOf)
 		{
 			foreach(lc, parsetree->forPortionOf->rangeSet)
 			{
-				ereport(NOTICE, (errmsg("adding rangeSet to modified_cols")));
 				TargetEntry *tle = (TargetEntry *) lfirst(lc);
 
 				if (!tle->resjunk)

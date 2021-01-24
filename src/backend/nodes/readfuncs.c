@@ -1393,6 +1393,7 @@ _readForPortionOfExpr(void)
 	READ_NODE_FIELD(targetStart);
 	READ_NODE_FIELD(targetEnd);
 	READ_NODE_FIELD(targetRange);
+	READ_OID_FIELD(rangeType);
 	READ_NODE_FIELD(overlapsExpr);
 	READ_NODE_FIELD(rangeSet);
 	READ_DONE();

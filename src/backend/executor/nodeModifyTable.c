@@ -2524,7 +2524,10 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 
 		resultRelInfo->ri_forPortionOf = makeNode(ForPortionOfState);
 		resultRelInfo->ri_forPortionOf->fp_rangeName = forPortionOf->range_name;
+		resultRelInfo->ri_forPortionOf->fp_periodStartName = forPortionOf->period_start_name;
+		resultRelInfo->ri_forPortionOf->fp_periodEndName = forPortionOf->period_end_name;
 		resultRelInfo->ri_forPortionOf->fp_targetRange = targetRange;
+		resultRelInfo->ri_forPortionOf->fp_rangeType = forPortionOf->rangeType;
 
 		/* Don't free the ExprContext here because the result must last for the whole query */
 		/*
