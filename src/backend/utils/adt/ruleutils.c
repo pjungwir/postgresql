@@ -328,7 +328,7 @@ static char *deparse_expression_pretty(Node *expr, List *dpcontext,
 static char *pg_get_viewdef_worker(Oid viewoid,
 								   int prettyFlags, int wrapColumn);
 static char *pg_get_triggerdef_worker(Oid trigid, bool pretty);
-static int	decompile_column_index_array(Datum column_index_array, Oid relId,
+static int	decompile_column_index_array(Datum column_index_array, Oid relId, Oid indexId,
 										 StringInfo buf);
 static char *pg_get_ruledef_worker(Oid ruleoid, int prettyFlags);
 static char *pg_get_indexdef_worker(Oid indexrelid, int colno,
@@ -2020,7 +2020,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 					elog(ERROR, "null conkey for constraint %u",
 						 constraintId);
 
-				decompile_column_index_array(val, conForm->conrelid, &buf);
+				decompile_column_index_array(val, conForm->conrelid, conForm->conindid, &buf);
 
 				/* add foreign relation name */
 				appendStringInfo(&buf, ") REFERENCES %s(",
@@ -2034,7 +2034,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 					elog(ERROR, "null confkey for constraint %u",
 						 constraintId);
 
-				decompile_column_index_array(val, conForm->confrelid, &buf);
+				decompile_column_index_array(val, conForm->confrelid, conForm->conindid, &buf);
 
 				appendStringInfoChar(&buf, ')');
 
@@ -2135,11 +2135,10 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 					elog(ERROR, "null conkey for constraint %u",
 						 constraintId);
 
-				keyatts = decompile_column_index_array(val, conForm->conrelid, &buf);
+				indexId = conForm->conindid;
+				keyatts = decompile_column_index_array(val, conForm->conrelid, indexId, &buf);
 
 				appendStringInfoChar(&buf, ')');
-
-				indexId = conForm->conindid;
 
 				/* Build including column list (from pg_index.indkeys) */
 				indtup = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(indexId));
@@ -2336,7 +2335,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
  * of keys.
  */
 static int
-decompile_column_index_array(Datum column_index_array, Oid relId,
+decompile_column_index_array(Datum column_index_array, Oid relId, Oid indexId,
 							 StringInfo buf)
 {
 	Datum	   *keys;
@@ -2351,8 +2350,31 @@ decompile_column_index_array(Datum column_index_array, Oid relId,
 	for (j = 0; j < nKeys; j++)
 	{
 		char	   *colName;
+		int			colid = DatumGetInt16(keys[j]);
 
-		colName = get_attname(relId, DatumGetInt16(keys[j]), false);
+		/* The key might contain a PERIOD instead of an attribute */
+		if (colid == 0)
+		{
+			HeapTuple indtup;
+			bool isnull;
+			Datum periodid;
+
+			indtup = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(indexId));
+			if (!HeapTupleIsValid(indtup))
+				elog(ERROR, "cache lookup failed for index %u", indexId);
+
+			periodid = SysCacheGetAttr(INDEXRELID, indtup,
+									   Anum_pg_index_indperiod, &isnull);
+			if (isnull)
+				elog(ERROR, "missing period for index %u", indexId);
+
+			colName = get_periodname(DatumGetObjectId(periodid), false);
+			ReleaseSysCache(indtup);
+		}
+		else
+		{
+			colName = get_attname(relId, colid, false);
+		}
 
 		if (j == 0)
 			appendStringInfoString(buf, quote_identifier(colName));

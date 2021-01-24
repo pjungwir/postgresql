@@ -81,6 +81,9 @@ static void ComputeIndexAttrs(IndexInfo *indexInfo,
 							  const char *accessMethodName, Oid accessMethodId,
 							  bool amcanorder,
 							  bool isconstraint);
+static void ComputeIndexPeriod(IndexInfo *indexInfo,
+							   Oid relId,
+							   const char *periodName);
 static char *ChooseIndexName(const char *tabname, Oid namespaceId,
 							 List *colnames, List *exclusionOpNames,
 							 bool primary, bool isconstraint);
@@ -155,7 +158,8 @@ bool
 CheckIndexCompatible(Oid oldId,
 					 const char *accessMethodName,
 					 List *attributeList,
-					 List *exclusionOpNames)
+					 List *exclusionOpNames,
+					 const char *indexPeriodName)
 {
 	bool		isconstraint;
 	Oid		   *typeObjectId;
@@ -174,6 +178,8 @@ CheckIndexCompatible(Oid oldId,
 	int			old_natts;
 	bool		isnull;
 	bool		ret = true;
+	Oid			old_periodid;
+	Oid			new_periodid;
 	oidvector  *old_indclass;
 	oidvector  *old_indcollation;
 	Relation	irel;
@@ -229,6 +235,7 @@ CheckIndexCompatible(Oid oldId,
 					  accessMethodName, accessMethodId,
 					  amcanorder, isconstraint);
 
+	ComputeIndexPeriod(indexInfo, relationId, indexPeriodName);
 
 	/* Get the soon-obsolete pg_index tuple. */
 	tuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(oldId));
@@ -247,6 +254,12 @@ CheckIndexCompatible(Oid oldId,
 		ReleaseSysCache(tuple);
 		return false;
 	}
+
+	/* The two indexes should have the same period. */
+	old_periodid = indexForm->indperiod;
+	new_periodid = indexInfo->ii_Period ? ((Period *) indexInfo->ii_Period)->oid : InvalidOid;
+	if (old_periodid != new_periodid)
+		return false;
 
 	/* Any change in operator class or collation breaks compatibility. */
 	old_natts = indexForm->indnkeyatts;
@@ -516,6 +529,7 @@ DefineIndex(Oid relationId,
 	Oid			tablespaceId;
 	Oid			createdConstraintId = InvalidOid;
 	List	   *indexColNames;
+	char	   *indexPeriodName;
 	List	   *allIndexParams;
 	Relation	rel;
 	HeapTuple	tuple;
@@ -773,6 +787,11 @@ DefineIndex(Oid relationId,
 	indexColNames = ChooseIndexColumnNames(allIndexParams);
 
 	/*
+	 * Choose the index period name.
+	 */
+	indexPeriodName = stmt->period ? stmt->period->periodname : NULL;
+
+	/*
 	 * Select name for index if caller didn't specify
 	 */
 	indexRelationName = stmt->idxname;
@@ -881,6 +900,8 @@ DefineIndex(Oid relationId,
 					  stmt->excludeOpNames, relationId,
 					  accessMethodName, accessMethodId,
 					  amcanorder, stmt->isconstraint);
+
+	ComputeIndexPeriod(indexInfo, relationId, indexPeriodName);
 
 	/*
 	 * Extra checks when creating a PRIMARY KEY index.
@@ -1983,6 +2004,19 @@ ComputeIndexAttrs(IndexInfo *indexInfo,
 		}
 
 		attn++;
+	}
+}
+
+static void
+ComputeIndexPeriod(IndexInfo *indexInfo, Oid relId, const char *periodName)
+{
+	if (periodName == NULL)
+		indexInfo->ii_Period = NULL;
+	else
+	{
+		Period *p = makeNode(Period);
+		p->oid = get_period_oid(relId, periodName, true);
+		indexInfo->ii_Period = (Node *) p;
 	}
 }
 
