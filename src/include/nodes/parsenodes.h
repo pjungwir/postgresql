@@ -2184,6 +2184,7 @@ typedef struct CreateStmt
 typedef struct Period
 {
 	NodeTag		type;
+	Oid			oid;			/* period oid, once it's transformed */
 	char	   *periodname;		/* period name */
 	char	   *startcolname;	/* name of start column */
 	char	   *endcolname;		/* name of end column */
@@ -2891,6 +2892,7 @@ typedef struct IndexStmt
 	List	   *indexParams;	/* columns to index: a list of IndexElem */
 	List	   *indexIncludingParams;	/* additional columns to index: a list
 										 * of IndexElem */
+	Period	   *period;			/* The period included in the index */
 	List	   *options;		/* WITH clause options: a list of DefElem */
 	Node	   *whereClause;	/* qualification (partial-index predicate) */
 	List	   *excludeOpNames; /* exclusion operator names, or NIL if none */

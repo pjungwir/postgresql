@@ -96,6 +96,8 @@ extern Oid	get_atttype(Oid relid, AttrNumber attnum);
 extern void get_atttypetypmodcoll(Oid relid, AttrNumber attnum,
 								  Oid *typid, int32 *typmod, Oid *collid);
 extern Datum get_attoptions(Oid relid, int16 attnum);
+extern char *get_periodname(Oid periodid, bool missing_ok);
+extern Oid	get_period_oid(Oid relid, const char *periodname, bool missing_ok);
 extern Oid	get_cast_oid(Oid sourcetypeid, Oid targettypeid, bool missing_ok);
 extern char *get_collation_name(Oid colloid);
 extern bool get_collation_isdeterministic(Oid colloid);

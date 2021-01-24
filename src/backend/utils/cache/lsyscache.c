@@ -30,6 +30,7 @@
 #include "catalog/pg_namespace.h"
 #include "catalog/pg_opclass.h"
 #include "catalog/pg_operator.h"
+#include "catalog/pg_period.h"
 #include "catalog/pg_proc.h"
 #include "catalog/pg_range.h"
 #include "catalog/pg_statistic.h"
@@ -1018,6 +1019,68 @@ get_attoptions(Oid relid, int16 attnum)
 	ReleaseSysCache(tuple);
 
 	return result;
+}
+
+/*				---------- PG_PERIOD CACHE ----------				 */
+
+/*
+ * get_periodname - given its OID, look up a period
+ *
+ * If missing_ok is false, throw an error if the period is not found.
+ * If true, just return InvalidOid.
+ */
+char *
+get_periodname(Oid periodid, bool missing_ok)
+{
+	HeapTuple	tp;
+
+	tp = SearchSysCache1(PERIODOID,
+						 ObjectIdGetDatum(periodid));
+	if (HeapTupleIsValid(tp))
+	{
+		Form_pg_period period_tup = (Form_pg_period) GETSTRUCT(tp);
+		char	   *result;
+
+		result = pstrdup(NameStr(period_tup->pername));
+		ReleaseSysCache(tp);
+		return result;
+	}
+
+	if (!missing_ok)
+		elog(ERROR, "cache lookup failed for period %d",
+			 periodid);
+	return NULL;
+}
+
+/*
+ * get_period_oid - gets its relation and name, look up a period
+ *
+ * If missing_ok is false, throw an error if the cast is not found.  If
+ * true, just return InvalidOid.
+ */
+Oid
+get_period_oid(Oid relid, const char *periodname, bool missing_ok)
+{
+	HeapTuple	tp;
+
+	tp = SearchSysCache2(PERIODNAME,
+						 ObjectIdGetDatum(relid),
+						 PointerGetDatum(periodname));
+
+	if (HeapTupleIsValid(tp))
+	{
+		Form_pg_period period_tup = (Form_pg_period) GETSTRUCT(tp);
+		Oid result;
+
+		result = period_tup->oid;
+		ReleaseSysCache(tp);
+		return result;
+	}
+
+	if (!missing_ok)
+		elog(ERROR, "cache lookup failed for period %s",
+			 periodname);
+	return InvalidOid;
 }
 
 /*				---------- PG_CAST CACHE ----------					 */

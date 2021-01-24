@@ -3662,6 +3662,7 @@ _copyIndexStmt(const IndexStmt *from)
 	COPY_STRING_FIELD(tableSpace);
 	COPY_NODE_FIELD(indexParams);
 	COPY_NODE_FIELD(indexIncludingParams);
+	COPY_NODE_FIELD(period);
 	COPY_NODE_FIELD(options);
 	COPY_NODE_FIELD(whereClause);
 	COPY_NODE_FIELD(excludeOpNames);

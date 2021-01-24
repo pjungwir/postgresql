@@ -1254,39 +1254,26 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId,
 	return address;
 }
 
-static List *
-make_period_not_null(Relation rel, Period *period)
-{
-	List		   *cmds = NIL;
-	AlterTableCmd  *cmd;
-
-	/* Start column must be NOT NULL */
-	cmd = makeNode(AlterTableCmd);
-	cmd->subtype = AT_SetNotNull;
-	cmd->name = period->startcolname;
-	cmds = lappend(cmds, cmd);
-
-	/* End column must be NOT NULL */
-	cmd = makeNode(AlterTableCmd);
-	cmd->subtype = AT_SetNotNull;
-	cmd->name = period->endcolname;
-	cmds = lappend(cmds, cmd);
-
-	return cmds;
-}
-
 static Constraint *
 make_period_not_backward(Relation rel, Period *period, char *constraintname)
 {
 	ColumnRef  *scol, *ecol;
 	Constraint *constr;
 
+	if (constraintname == NULL)
+		constraintname = ChooseConstraintName(RelationGetRelationName(rel),
+											  period->periodname,
+											  "check",
+											  RelationGetNamespace(rel),
+											  NIL);
+	period->constraintname = constraintname;
+
 	scol = makeNode(ColumnRef);
-	scol->fields = list_make1(makeString(pstrdup(period->endcolname)));
+	scol->fields = list_make1(makeString(pstrdup(period->startcolname)));
 	scol->location = 0;
 
 	ecol = makeNode(ColumnRef);
-	ecol->fields = list_make1(makeString(pstrdup(period->startcolname)));
+	ecol->fields = list_make1(makeString(pstrdup(period->endcolname)));
 	ecol->location = 0;
 
 	constr = makeNode(Constraint);
@@ -1305,68 +1292,21 @@ make_period_not_backward(Relation rel, Period *period, char *constraintname)
 }
 
 /*
- * make_constraints_for_period
+ * make_constraint_for_period
  *
  * Add constraints to make both columns NOT NULL and CHECK (start < end).
  *
  * Returns the CHECK constraint Oid.
  */
 static Oid
-make_constraints_for_period(Relation rel, Period *period, char *constraintname,
-							LOCKMODE lockmode, AlterTableUtilityContext *context)
+make_constraint_for_period(Relation rel, Period *period, char *constraintname,
+						   LOCKMODE lockmode, AlterTableUtilityContext *context)
 {
 	List		   *cmds = NIL;
 	AlterTableCmd  *cmd;
-	ColumnRef	   *scol, *ecol;
 	Constraint	   *constr;
-	char		   *conname;
 
-	/* Start column must be NOT NULL */
-	cmd = makeNode(AlterTableCmd);
-	cmd->subtype = AT_SetNotNull;
-	cmd->name = period->startcolname;
-	cmds = lappend(cmds, cmd);
-
-	/* End column must be NOT NULL */
-	cmd = makeNode(AlterTableCmd);
-	cmd->subtype = AT_SetNotNull;
-	cmd->name = period->endcolname;
-	cmds = lappend(cmds, cmd);
-
-	/*
-	 * Create the CHECK constraint
-	 */
-	if (constraintname)
-		conname = constraintname;
-	else
-	{
-		conname = ChooseConstraintName(RelationGetRelationName(rel),
-									   period->periodname,
-									   "check",
-									   RelationGetNamespace(rel),
-									   NIL);
-	}
-
-	scol = makeNode(ColumnRef);
-	scol->fields = list_make1(makeString(pstrdup(period->startcolname)));
-	scol->location = 0;
-
-	ecol = makeNode(ColumnRef);
-	ecol->fields = list_make1(makeString(pstrdup(period->endcolname)));
-	ecol->location = 0;
-
-	constr = makeNode(Constraint);
-	constr->contype = CONSTR_CHECK;
-	constr->conname = conname;
-	constr->deferrable = false;
-	constr->initdeferred = false;
-	constr->location = -1;
-	constr->is_no_inherit = false;
-	constr->raw_expr = (Node *) makeSimpleA_Expr(AEXPR_OP, "<", (Node *) scol, (Node *) ecol, 0);
-	constr->cooked_expr = NULL;
-	constr->skip_validation = false;
-	constr->initially_valid = true;
-
+	constr = make_period_not_backward(rel, period, constraintname);
 	cmd = makeNode(AlterTableCmd);
 	cmd->subtype = AT_AddConstraint;
 	cmd->def = (Node *) constr;
@@ -1375,7 +1315,7 @@ make_constraints_for_period(Relation rel, Period *period, char *constraintname,
 	/* Do the deed. */
 	AlterTableInternal(RelationGetRelid(rel), cmds, true, context);
 
-	return get_relation_constraint_oid(RelationGetRelid(rel), conname, false);
+	return get_relation_constraint_oid(RelationGetRelid(rel), period->constraintname, false);
 }
 
 static void
@@ -1449,10 +1389,6 @@ AddRelationNewPeriod(Relation rel, Period *period)
 													  RelationGetNamespace(rel),
 													  NIL);
 	}
-	// conoid = make_constraints_for_period(rel, period,
-				// dconstraintname ? defGetString(dconstraintname) : NULL, lockmode, context);
-	List *cmds = make_period_not_null(rel, period);
-	AlterTableInternal(RelationGetRelid(rel), cmds, true, NULL);
 
 	Constraint *constr = make_period_not_backward(rel, period, period->constraintname);
 	List *newconstrs = AddRelationNewConstraints(rel, NIL, list_make1(constr), false, true, true, NULL);
@@ -7892,7 +7828,7 @@ ATExecAddPeriod(Relation rel, Period *period, LOCKMODE lockmode,
 	heap_freetuple(starttuple);
 	heap_freetuple(endtuple);
 
-	conoid = make_constraints_for_period(rel, period, period->constraintname, lockmode, context);
+	conoid = make_constraint_for_period(rel, period, period->constraintname, lockmode, context);
 
 	/* Save it */
 	StorePeriod(rel, period->periodname, startattnum, endattnum, rngtypid, conoid);
@@ -13535,7 +13471,8 @@ TryReuseIndex(Oid oldId, IndexStmt *stmt)
 	if (CheckIndexCompatible(oldId,
 							 stmt->accessMethod,
 							 stmt->indexParams,
-							 stmt->excludeOpNames))
+							 stmt->excludeOpNames,
+							 stmt->period ? stmt->period->periodname : NULL))
 	{
 		Relation	irel = index_open(oldId, NoLock);
 
