@@ -49,23 +49,23 @@ DROP TABLE without_overlaps_test2;
 
 -- PK with one column plus a PERIOD:
 CREATE TABLE without_overlaps_test2 (
-  id int4range,
-  valid_from date,
-  valid_til date,
-  PERIOD FOR valid_at (valid_from, valid_til),
-  CONSTRAINT without_overlaps2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+	id int4range,
+	valid_from date,
+	valid_til date,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT without_overlaps2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
 SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'without_overlaps2_pk';
 DROP TABLE without_overlaps_test2;
 
 -- PK with two columns plus a PERIOD:
 CREATE TABLE without_overlaps_test2 (
-  id1 int4range,
-  id2 int4range,
-  valid_from date,
-  valid_til date,
-  PERIOD FOR valid_at (valid_from, valid_til),
-  CONSTRAINT without_overlaps2_pk PRIMARY KEY (id1, id2, valid_at WITHOUT OVERLAPS)
+	id1 int4range,
+	id2 int4range,
+	valid_from date,
+	valid_til date,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT without_overlaps2_pk PRIMARY KEY (id1, id2, valid_at WITHOUT OVERLAPS)
 );
 DROP TABLE without_overlaps_test2;
 
@@ -127,7 +127,7 @@ CREATE TABLE without_overlaps_uq_test2 (
 	id int4range,
 	valid_from timestamp,
 	valid_til timestamp,
-  PERIOD FOR valid_at (valid_from, valid_til),
+	PERIOD FOR valid_at (valid_from, valid_til),
 	CONSTRAINT without_overlaps2_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
 );
 DROP TABLE without_overlaps_uq_test2;
@@ -138,7 +138,7 @@ CREATE TABLE without_overlaps_uq_test2 (
 	id2 int4range,
 	valid_from timestamp,
 	valid_til timestamp,
-  PERIOD FOR valid_at (valid_from, valid_til),
+	PERIOD FOR valid_at (valid_from, valid_til),
 	CONSTRAINT without_overlaps2_uq UNIQUE (id1, id2, valid_at WITHOUT OVERLAPS)
 );
 DROP TABLE without_overlaps_uq_test2;
@@ -174,8 +174,8 @@ CREATE TABLE without_overlaps_test2 (
 );
 CREATE INDEX idx_without_overlaps2 ON without_overlaps_test2 USING gist (id, valid_at);
 ALTER TABLE without_overlaps_test2
-  ADD CONSTRAINT without_overlaps2_pk
-  PRIMARY KEY USING INDEX idx_without_overlaps2;
+	ADD CONSTRAINT without_overlaps2_pk
+	PRIMARY KEY USING INDEX idx_without_overlaps2;
 DROP TABLE without_overlaps_test2;
 
 -- UNIQUE with USING INDEX (not yet allowed):
@@ -185,76 +185,76 @@ CREATE TABLE without_overlaps_uq_test2 (
 );
 CREATE INDEX idx_without_overlaps_uq ON without_overlaps_uq_test2 USING gist (id, valid_at);
 ALTER TABLE without_overlaps_uq_test2
-  ADD CONSTRAINT without_overlaps2_uq
-  UNIQUE USING INDEX idx_without_overlaps_uq;
+	ADD CONSTRAINT without_overlaps2_uq
+	UNIQUE USING INDEX idx_without_overlaps_uq;
 DROP TABLE without_overlaps_uq_test2;
 
 -- Add range column and the PK at the same time
 CREATE TABLE without_overlaps_test2 (
-  id int4range
+	id int4range
 );
 ALTER TABLE without_overlaps_test2
-  ADD COLUMN valid_at tsrange,
-  ADD CONSTRAINT without_overlaps2_pk
-  PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+	ADD COLUMN valid_at tsrange,
+	ADD CONSTRAINT without_overlaps2_pk
+	PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
 DROP TABLE without_overlaps_test2;
 
 -- Add PERIOD and the PK at the same time
 CREATE TABLE without_overlaps_test2 (
-  id int4range,
-  valid_from date,
-  valid_til date
+	id int4range,
+	valid_from date,
+	valid_til date
 );
 ALTER TABLE without_overlaps_test2
-  ADD PERIOD FOR valid_at (valid_from, valid_til),
-  ADD CONSTRAINT without_overlaps2_pk
-  PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+	ADD PERIOD FOR valid_at (valid_from, valid_til),
+	ADD CONSTRAINT without_overlaps2_pk
+	PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
 DROP TABLE without_overlaps_test2;
 
 -- Add range column and UNIQUE constraint at the same time
 CREATE TABLE without_overlaps_test2 (
-  id int4range
+	id int4range
 );
 ALTER TABLE without_overlaps_test2
-  ADD COLUMN valid_at tsrange,
-  ADD CONSTRAINT without_overlaps2_uq
-  UNIQUE (id, valid_at WITHOUT OVERLAPS);
+	ADD COLUMN valid_at tsrange,
+	ADD CONSTRAINT without_overlaps2_uq
+	UNIQUE (id, valid_at WITHOUT OVERLAPS);
 DROP TABLE without_overlaps_test2;
 
 -- Add PERIOD column and UNIQUE constraint at the same time
 CREATE TABLE without_overlaps_test2 (
-  id int4range,
-  valid_from date,
-  valid_til date
+	id int4range,
+	valid_from date,
+	valid_til date
 );
 ALTER TABLE without_overlaps_test2
-  ADD PERIOD FOR valid_at (valid_from, valid_til),
-  ADD CONSTRAINT without_overlaps2_uq
-  UNIQUE (id, valid_at WITHOUT OVERLAPS);
+	ADD PERIOD FOR valid_at (valid_from, valid_til),
+	ADD CONSTRAINT without_overlaps2_uq
+	UNIQUE (id, valid_at WITHOUT OVERLAPS);
 DROP TABLE without_overlaps_test2;
 
 -- Add date columns, PERIOD, and the PK at the same time
 CREATE TABLE without_overlaps_test2 (
-  id int4range
+	id int4range
 );
 ALTER TABLE without_overlaps_test2
-  ADD COLUMN valid_from date,
-  ADD COLUMN valid_til date,
-  ADD PERIOD FOR valid_at (valid_from, valid_til),
-  ADD CONSTRAINT without_overlaps2_pk
-  PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+	ADD COLUMN valid_from date,
+	ADD COLUMN valid_til date,
+	ADD PERIOD FOR valid_at (valid_from, valid_til),
+	ADD CONSTRAINT without_overlaps2_pk
+	PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
 DROP TABLE without_overlaps_test2;
 
 -- Add date columns, PERIOD, and UNIQUE constraint at the same time
 CREATE TABLE without_overlaps_test2 (
-  id int4range
+	id int4range
 );
 ALTER TABLE without_overlaps_test2
-  ADD COLUMN valid_from date,
-  ADD COLUMN valid_til date,
-  ADD PERIOD FOR valid_at (valid_from, valid_til),
-  ADD CONSTRAINT without_overlaps2_uq
-  UNIQUE (id, valid_at WITHOUT OVERLAPS);
+	ADD COLUMN valid_from date,
+	ADD COLUMN valid_til date,
+	ADD PERIOD FOR valid_at (valid_from, valid_til),
+	ADD CONSTRAINT without_overlaps2_uq
+	UNIQUE (id, valid_at WITHOUT OVERLAPS);
 DROP TABLE without_overlaps_test2;
 
 --
@@ -295,7 +295,51 @@ ALTER TABLE without_overlaps_test2 DROP COLUMN valid_thru;
 DROP TABLE without_overlaps_test2;
 
 --
--- test FK parser
+-- test FK dependencies
+--
+
+-- can't drop a range referenced by an FK, unless with CASCADE
+CREATE TABLE without_overlaps_test2 (
+	id int4range,
+	valid_at tsrange,
+	CONSTRAINT without_overlaps2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+CREATE TABLE referencing_period_test2 (
+	id int4range,
+	valid_at tsrange,
+	parent_id int4range,
+	CONSTRAINT referencing_period2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT referencing_period2_fk FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES without_overlaps_test2 (id, PERIOD valid_at)
+);
+ALTER TABLE without_overlaps_test2 DROP COLUMN valid_at;
+ALTER TABLE without_overlaps_test2 DROP COLUMN valid_at CASCADE;
+DROP TABLE referencing_period_test2;
+DROP TABLE without_overlaps_test2;
+
+-- can't drop a PERIOD referenced by an FK, unless with CASCADE
+CREATE TABLE without_overlaps_test2 (
+	id int4range,
+	valid_from timestamp,
+	valid_til timestamp,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT without_overlaps2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+CREATE TABLE referencing_period_test2 (
+	id int4range,
+	valid_at tsrange,
+	parent_id int4range,
+	CONSTRAINT referencing_period2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT referencing_period2_fk FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES without_overlaps_test2 (id, PERIOD valid_at)
+);
+ALTER TABLE without_overlaps_test2 DROP PERIOD FOR valid_at;
+ALTER TABLE without_overlaps_test2 DROP PERIOD FOR valid_at CASCADE;
+DROP TABLE referencing_period_test2;
+DROP TABLE without_overlaps_test2;
+
+--
+-- test FOREIGN KEY, range references range
 --
 
 CREATE TABLE referencing_period_test (
@@ -340,48 +384,49 @@ CREATE TABLE referencing_period_test (
 	CONSTRAINT referencing_period_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
 ALTER TABLE referencing_period_test
-  ADD CONSTRAINT referencing_period_fk
-  FOREIGN KEY (parent_id, PERIOD valid_at)
-  REFERENCES without_overlaps_test (id, PERIOD valid_at);
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test (id, PERIOD valid_at);
 ALTER TABLE referencing_period_test
-  DROP CONSTRAINT referencing_period_fk;
+	DROP CONSTRAINT referencing_period_fk;
 -- with inferred PK on the referenced table:
 ALTER TABLE referencing_period_test
-  ADD CONSTRAINT referencing_period_fk
-  FOREIGN KEY (parent_id, PERIOD valid_at)
-  REFERENCES without_overlaps_test;
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test;
 
 -- should fail because of duplicate referenced columns:
 ALTER TABLE referencing_period_test
-  ADD CONSTRAINT referencing_period_fk2
-  FOREIGN KEY (parent_id, PERIOD parent_id)
-  REFERENCES without_overlaps_test (id, PERIOD id);
+	ADD CONSTRAINT referencing_period_fk2
+	FOREIGN KEY (parent_id, PERIOD parent_id)
+	REFERENCES without_overlaps_test (id, PERIOD id);
 
 --
 -- test with rows already
 --
+
 DELETE FROM referencing_period_test;
 ALTER TABLE referencing_period_test
-  DROP CONSTRAINT referencing_period_fk;
+	DROP CONSTRAINT referencing_period_fk;
 INSERT INTO referencing_period_test VALUES ('[1,1]', tsrange('2018-01-02', '2018-02-01'), '[1,1]');
 ALTER TABLE referencing_period_test
-  ADD CONSTRAINT referencing_period_fk
-  FOREIGN KEY (parent_id, PERIOD valid_at)
-  REFERENCES without_overlaps_test;
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test;
 ALTER TABLE referencing_period_test
-  DROP CONSTRAINT referencing_period_fk;
+	DROP CONSTRAINT referencing_period_fk;
 INSERT INTO referencing_period_test VALUES ('[2,2]', tsrange('2018-01-02', '2018-04-01'), '[1,1]');
 -- should fail:
 ALTER TABLE referencing_period_test
-  ADD CONSTRAINT referencing_period_fk
-  FOREIGN KEY (parent_id, PERIOD valid_at)
-  REFERENCES without_overlaps_test;
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test;
 -- okay again:
 DELETE FROM referencing_period_test;
 ALTER TABLE referencing_period_test
-  ADD CONSTRAINT referencing_period_fk
-  FOREIGN KEY (parent_id, PERIOD valid_at)
-  REFERENCES without_overlaps_test;
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test;
 
 --
 -- test pg_get_constraintdef
@@ -392,6 +437,7 @@ SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'referencing
 --
 -- test FK child inserts
 --
+
 INSERT INTO referencing_period_test VALUES ('[1,1]', tsrange('2018-01-02', '2018-02-01'), '[1,1]');
 -- should fail:
 INSERT INTO referencing_period_test VALUES ('[2,2]', tsrange('2018-01-02', '2018-04-01'), '[1,1]');
@@ -402,6 +448,7 @@ INSERT INTO referencing_period_test VALUES ('[2,2]', tsrange('2018-01-02', '2018
 --
 -- test FK child updates
 --
+
 UPDATE referencing_period_test SET valid_at = tsrange('2018-01-02', '2018-03-01') WHERE id = '[1,1]';
 -- should fail:
 UPDATE referencing_period_test SET valid_at = tsrange('2018-01-02', '2018-05-01') WHERE id = '[1,1]';
@@ -410,6 +457,7 @@ UPDATE referencing_period_test SET parent_id = '[8,8]' WHERE id = '[1,1]';
 --
 -- test FK parent updates NO ACTION
 --
+
 -- a PK update that succeeds because the numeric id isn't referenced:
 INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
 UPDATE without_overlaps_test SET valid_at = tsrange('2016-01-01', '2016-02-01') WHERE id = '[5,5]';
@@ -419,27 +467,29 @@ INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-01-01', '2018-0
 INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-02-01', '2018-03-01'));
 INSERT INTO referencing_period_test VALUES ('[3,3]', tsrange('2018-01-05', '2018-01-10'), '[5,5]');
 UPDATE without_overlaps_test SET valid_at = tsrange('2016-02-01', '2016-03-01')
-  WHERE id = '[5,5]' AND valid_at = tsrange('2018-02-01', '2018-03-01');
+WHERE id = '[5,5]' AND valid_at = tsrange('2018-02-01', '2018-03-01');
 -- a PK update that fails because both are referenced:
 UPDATE without_overlaps_test SET valid_at = tsrange('2016-01-01', '2016-02-01')
-  WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
 -- then delete the objecting FK record and the same PK update succeeds:
 DELETE FROM referencing_period_test WHERE id = '[3,3]';
 UPDATE without_overlaps_test SET valid_at = tsrange('2016-01-01', '2016-02-01')
-  WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
 -- clean up:
 DELETE FROM referencing_period_test WHERE parent_id = '[5,5]';
 DELETE FROM without_overlaps_test WHERE id = '[5,5]';
+
 --
 -- test FK parent updates RESTRICT
 --
+
 ALTER TABLE referencing_period_test
-  DROP CONSTRAINT referencing_period_fk;
+	DROP CONSTRAINT referencing_period_fk;
 ALTER TABLE referencing_period_test
-  ADD CONSTRAINT referencing_period_fk
-  FOREIGN KEY (parent_id, PERIOD valid_at)
-  REFERENCES without_overlaps_test
-  ON DELETE RESTRICT;
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test
+	ON DELETE RESTRICT;
 -- a PK update that succeeds because the numeric id isn't referenced:
 INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
 UPDATE without_overlaps_test SET valid_at = tsrange('2016-01-01', '2016-02-01') WHERE id = '[5,5]';
@@ -449,14 +499,14 @@ INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-01-01', '2018-0
 INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-02-01', '2018-03-01'));
 INSERT INTO referencing_period_test VALUES ('[3,3]', tsrange('2018-01-05', '2018-01-10'), '[5,5]');
 UPDATE without_overlaps_test SET valid_at = tsrange('2016-02-01', '2016-03-01')
-  WHERE id = '[5,5]' AND valid_at = tsrange('2018-02-01', '2018-03-01');
+WHERE id = '[5,5]' AND valid_at = tsrange('2018-02-01', '2018-03-01');
 -- a PK update that fails because both are referenced:
 UPDATE without_overlaps_test SET valid_at = tsrange('2016-01-01', '2016-02-01')
-  WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
 -- then delete the objecting FK record and the same PK update succeeds:
 DELETE FROM referencing_period_test WHERE id = '[3,3]';
 UPDATE without_overlaps_test SET valid_at = tsrange('2016-01-01', '2016-02-01')
-  WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
 -- clean up:
 DELETE FROM referencing_period_test WHERE parent_id = '[5,5]';
 DELETE FROM without_overlaps_test WHERE id = '[5,5]';
@@ -464,11 +514,11 @@ DELETE FROM without_overlaps_test WHERE id = '[5,5]';
 -- test FK parent deletes NO ACTION
 --
 ALTER TABLE referencing_period_test
-  DROP CONSTRAINT referencing_period_fk;
+	DROP CONSTRAINT referencing_period_fk;
 ALTER TABLE referencing_period_test
-  ADD CONSTRAINT referencing_period_fk
-  FOREIGN KEY (parent_id, PERIOD valid_at)
-  REFERENCES without_overlaps_test;
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test;
 -- a PK delete that succeeds because the numeric id isn't referenced:
 INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
 DELETE FROM without_overlaps_test WHERE id = '[5,5]';
@@ -482,16 +532,18 @@ DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_at = tsrange('201
 -- then delete the objecting FK record and the same PK delete succeeds:
 DELETE FROM referencing_period_test WHERE id = '[3,3]';
 DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+
 --
 -- test FK parent deletes RESTRICT
 --
+
 ALTER TABLE referencing_period_test
-  DROP CONSTRAINT referencing_period_fk;
+	DROP CONSTRAINT referencing_period_fk;
 ALTER TABLE referencing_period_test
-  ADD CONSTRAINT referencing_period_fk
-  FOREIGN KEY (parent_id, PERIOD valid_at)
-  REFERENCES without_overlaps_test
-  ON DELETE RESTRICT;
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test
+	ON DELETE RESTRICT;
 INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
 DELETE FROM without_overlaps_test WHERE id = '[5,5]';
 -- a PK delete that succeeds even though the numeric id is referenced because the range isn't:
@@ -513,11 +565,11 @@ DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_at = tsrange('201
 INSERT INTO without_overlaps_test VALUES ('[6,6]', tsrange('2018-01-01', '2021-01-01'));
 INSERT INTO referencing_period_test VALUES ('[4,4]', tsrange('2018-01-01', '2021-01-01'), '[6,6]');
 ALTER TABLE referencing_period_test
-  DROP CONSTRAINT referencing_period_fk,
-  ADD CONSTRAINT referencing_period_fk
-    FOREIGN KEY (parent_id, PERIOD valid_at)
-    REFERENCES without_overlaps_test
-    ON DELETE CASCADE ON UPDATE CASCADE;
+	DROP CONSTRAINT referencing_period_fk,
+	ADD CONSTRAINT referencing_period_fk
+		FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES without_overlaps_test
+		ON DELETE CASCADE ON UPDATE CASCADE;
 UPDATE without_overlaps_test SET id = '[7,7]';
 SELECT * FROM referencing_period_test WHERE id = '[4,4]';
 -- test FK parent updates SET NULL
@@ -533,3 +585,736 @@ SELECT * FROM referencing_period_test WHERE id = '[4,4]';
 -- TODO
 
 -- test cascades through a FOR PORTION OF
+
+
+
+--
+-- test FOREIGN KEY, range references PERIOD
+--
+
+DROP TABLE without_overlaps_test CASCADE;
+CREATE TABLE without_overlaps_test (
+	id int4range,
+	valid_from timestamp,
+	valid_til timestamp,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT without_overlaps_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+INSERT INTO without_overlaps_test VALUES ('[1,1]', '2018-01-02', '2018-02-03');
+INSERT INTO without_overlaps_test VALUES ('[1,1]', '2018-03-03', '2018-04-04');
+INSERT INTO without_overlaps_test VALUES ('[2,2]', '2018-01-01', '2018-01-05');
+INSERT INTO without_overlaps_test VALUES ('[3,3]', '2018-01-01', NULL);
+
+-- with inferred PK on the referenced table:
+DROP TABLE referencing_period_test;
+CREATE TABLE referencing_period_test (
+	id int4range,
+	valid_at tsrange,
+	parent_id int4range,
+	CONSTRAINT referencing_period_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT referencing_period_fk FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES without_overlaps_test
+);
+DROP TABLE referencing_period_test;
+
+-- should fail because of duplicate referenced columns:
+CREATE TABLE referencing_period_test (
+	id int4range,
+	valid_at tsrange,
+	parent_id int4range,
+	CONSTRAINT referencing_period_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT referencing_period_fk FOREIGN KEY (parent_id, PERIOD parent_id)
+		REFERENCES without_overlaps_test (id, PERIOD id)
+);
+
+--
+-- test ALTER TABLE ADD CONSTRAINT
+--
+
+CREATE TABLE referencing_period_test (
+	id int4range,
+	valid_at tsrange,
+	parent_id int4range,
+	CONSTRAINT referencing_period_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test (id, PERIOD valid_at);
+ALTER TABLE referencing_period_test
+	DROP CONSTRAINT referencing_period_fk;
+-- with inferred PK on the referenced table:
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test;
+
+-- should fail because of duplicate referenced columns:
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk2
+	FOREIGN KEY (parent_id, PERIOD parent_id)
+	REFERENCES without_overlaps_test (id, PERIOD id);
+
+--
+-- test with rows already
+--
+
+DELETE FROM referencing_period_test;
+ALTER TABLE referencing_period_test
+	DROP CONSTRAINT referencing_period_fk;
+INSERT INTO referencing_period_test VALUES ('[1,1]', tsrange('2018-01-02', '2018-02-01'), '[1,1]');
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test;
+ALTER TABLE referencing_period_test
+	DROP CONSTRAINT referencing_period_fk;
+INSERT INTO referencing_period_test VALUES ('[2,2]', tsrange('2018-01-02', '2018-04-01'), '[1,1]');
+-- should fail:
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test;
+-- okay again:
+DELETE FROM referencing_period_test;
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test;
+
+--
+-- test pg_get_constraintdef
+--
+
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'referencing_period_fk';
+
+--
+-- test FK child inserts
+--
+
+INSERT INTO referencing_period_test VALUES ('[1,1]', tsrange('2018-01-02', '2018-02-01'), '[1,1]');
+-- should fail:
+INSERT INTO referencing_period_test VALUES ('[2,2]', tsrange('2018-01-02', '2018-04-01'), '[1,1]');
+-- now it should work:
+INSERT INTO without_overlaps_test VALUES ('[1,1]', '2018-02-03', '2018-03-03');
+INSERT INTO referencing_period_test VALUES ('[2,2]', tsrange('2018-01-02', '2018-04-01'), '[1,1]');
+
+--
+-- test FK child updates
+--
+UPDATE referencing_period_test SET valid_at = tsrange('2018-01-02', '2018-03-01') WHERE id = '[1,1]';
+-- should fail:
+UPDATE referencing_period_test SET valid_at = tsrange('2018-01-02', '2018-05-01') WHERE id = '[1,1]';
+UPDATE referencing_period_test SET parent_id = '[8,8]' WHERE id = '[1,1]';
+
+--
+-- test FK parent updates NO ACTION
+--
+
+-- a PK update that succeeds because the numeric id isn't referenced:
+INSERT INTO without_overlaps_test VALUES ('[5,5]', '2018-01-01', '2018-02-01');
+UPDATE without_overlaps_test SET valid_from = '2016-01-01', valid_til = '2016-02-01' WHERE id = '[5,5]';
+-- a PK update that succeeds even though the numeric id is referenced because the range isn't:
+DELETE FROM without_overlaps_test WHERE id = '[5,5]';
+INSERT INTO without_overlaps_test VALUES ('[5,5]', '2018-01-01', '2018-02-01');
+INSERT INTO without_overlaps_test VALUES ('[5,5]', '2018-02-01', '2018-03-01');
+INSERT INTO referencing_period_test VALUES ('[3,3]', tsrange('2018-01-05', '2018-01-10'), '[5,5]');
+UPDATE without_overlaps_test SET valid_from = '2016-02-01', valid_til = '2016-03-01'
+WHERE id = '[5,5]' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
+-- a PK update that fails because both are referenced:
+UPDATE without_overlaps_test SET valid_from = '2016-01-01', valid_til = '2016-02-01'
+WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+-- then delete the objecting FK record and the same PK update succeeds:
+DELETE FROM referencing_period_test WHERE id = '[3,3]';
+UPDATE without_overlaps_test SET valid_from = '2016-01-01', valid_til = '2016-02-01'
+WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+-- clean up:
+DELETE FROM referencing_period_test WHERE parent_id = '[5,5]';
+DELETE FROM without_overlaps_test WHERE id = '[5,5]';
+
+--
+-- test FK parent updates RESTRICT
+--
+
+ALTER TABLE referencing_period_test
+	DROP CONSTRAINT referencing_period_fk;
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test
+	ON DELETE RESTRICT;
+-- a PK update that succeeds because the numeric id isn't referenced:
+INSERT INTO without_overlaps_test VALUES ('[5,5]', '2018-01-01', '2018-02-01');
+UPDATE without_overlaps_test SET valid_from = '2016-01-01', valid_til = '2016-02-01' WHERE id = '[5,5]';
+-- a PK update that succeeds even though the numeric id is referenced because the range isn't:
+DELETE FROM without_overlaps_test WHERE id = '[5,5]';
+INSERT INTO without_overlaps_test VALUES ('[5,5]', '2018-01-01', '2018-02-01');
+INSERT INTO without_overlaps_test VALUES ('[5,5]', '2018-02-01', '2018-03-01');
+INSERT INTO referencing_period_test VALUES ('[3,3]', tsrange('2018-01-05', '2018-01-10'), '[5,5]');
+UPDATE without_overlaps_test SET valid_from = '2016-02-01', valid_til = '2016-03-01'
+WHERE id = '[5,5]' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
+-- a PK update that fails because both are referenced:
+UPDATE without_overlaps_test SET valid_from = '2016-01-01', valid_til = '2016-02-01'
+WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+-- then delete the objecting FK record and the same PK update succeeds:
+DELETE FROM referencing_period_test WHERE id = '[3,3]';
+UPDATE without_overlaps_test SET valid_from = '2016-01-01', valid_til = '2016-02-01'
+WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+-- clean up:
+DELETE FROM referencing_period_test WHERE parent_id = '[5,5]';
+DELETE FROM without_overlaps_test WHERE id = '[5,5]';
+
+--
+-- test FK parent deletes NO ACTION
+--
+
+ALTER TABLE referencing_period_test
+	DROP CONSTRAINT referencing_period_fk;
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test;
+-- a PK delete that succeeds because the numeric id isn't referenced:
+INSERT INTO without_overlaps_test VALUES ('[5,5]', '2018-01-01', '2018-02-01');
+DELETE FROM without_overlaps_test WHERE id = '[5,5]';
+-- a PK delete that succeeds even though the numeric id is referenced because the range isn't:
+INSERT INTO without_overlaps_test VALUES ('[5,5]', '2018-01-01', '2018-02-01');
+INSERT INTO without_overlaps_test VALUES ('[5,5]', '2018-02-01', '2018-03-01');
+INSERT INTO referencing_period_test VALUES ('[3,3]', tsrange('2018-01-05', '2018-01-10'), '[5,5]');
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
+-- a PK delete that fails because both are referenced:
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+-- then delete the objecting FK record and the same PK delete succeeds:
+DELETE FROM referencing_period_test WHERE id = '[3,3]';
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+
+--
+-- test FK parent deletes RESTRICT
+--
+
+ALTER TABLE referencing_period_test
+	DROP CONSTRAINT referencing_period_fk;
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test
+	ON DELETE RESTRICT;
+INSERT INTO without_overlaps_test VALUES ('[5,5]', '2018-01-01', '2018-02-01');
+DELETE FROM without_overlaps_test WHERE id = '[5,5]';
+-- a PK delete that succeeds even though the numeric id is referenced because the range isn't:
+INSERT INTO without_overlaps_test VALUES ('[5,5]', '2018-01-01', '2018-02-01');
+INSERT INTO without_overlaps_test VALUES ('[5,5]', '2018-02-01', '2018-03-01');
+INSERT INTO referencing_period_test VALUES ('[3,3]', tsrange('2018-01-05', '2018-01-10'), '[5,5]');
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
+-- a PK delete that fails because both are referenced:
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+-- then delete the objecting FK record and the same PK delete succeeds:
+DELETE FROM referencing_period_test WHERE id = '[3,3]';
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+
+--
+-- test ON UPDATE/DELETE options
+--
+
+-- FK parent updates CASCADE
+INSERT INTO without_overlaps_test VALUES ('[6,6]', '2018-01-01', '2021-01-01');
+INSERT INTO referencing_period_test VALUES ('[4,4]', tsrange('2018-01-01', '2021-01-01'), '[6,6]');
+ALTER TABLE referencing_period_test
+	DROP CONSTRAINT referencing_period_fk,
+	ADD CONSTRAINT referencing_period_fk
+		FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES without_overlaps_test
+		ON DELETE CASCADE ON UPDATE CASCADE;
+UPDATE without_overlaps_test SET id = '[7,7]';
+SELECT * FROM referencing_period_test WHERE id = '[4,4]';
+
+--
+-- test FOREIGN KEY, PERIOD references range
+--
+
+DROP TABLE without_overlaps_test CASCADE;
+CREATE TABLE without_overlaps_test (
+	id int4range,
+	valid_at tsrange,
+	CONSTRAINT without_overlaps_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+INSERT INTO without_overlaps_test VALUES ('[1,1]', tsrange('2018-01-02', '2018-02-03'));
+INSERT INTO without_overlaps_test VALUES ('[1,1]', tsrange('2018-03-03', '2018-04-04'));
+INSERT INTO without_overlaps_test VALUES ('[2,2]', tsrange('2018-01-01', '2018-01-05'));
+INSERT INTO without_overlaps_test VALUES ('[3,3]', tsrange('2018-01-01', NULL));
+
+-- with inferred PK on the referenced table:
+DROP TABLE referencing_period_test;
+CREATE TABLE referencing_period_test (
+	id int4range,
+	valid_from timestamp,
+	valid_til timestamp,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	parent_id int4range,
+	CONSTRAINT referencing_period_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT referencing_period_fk FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES without_overlaps_test
+);
+DROP TABLE referencing_period_test;
+
+-- should fail because of duplicate referenced columns:
+CREATE TABLE referencing_period_test (
+	id int4range,
+	valid_from timestamp,
+	valid_til timestamp,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	parent_id int4range,
+	CONSTRAINT referencing_period_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT referencing_period_fk FOREIGN KEY (parent_id, PERIOD parent_id)
+		REFERENCES without_overlaps_test (id, PERIOD id)
+);
+
+--
+-- test ALTER TABLE ADD CONSTRAINT
+--
+
+CREATE TABLE referencing_period_test (
+	id int4range,
+	valid_from timestamp,
+	valid_til timestamp,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	parent_id int4range,
+	CONSTRAINT referencing_period_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test (id, PERIOD valid_at);
+ALTER TABLE referencing_period_test
+	DROP CONSTRAINT referencing_period_fk;
+-- with inferred PK on the referenced table:
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test;
+
+-- should fail because of duplicate referenced columns:
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk2
+	FOREIGN KEY (parent_id, PERIOD parent_id)
+	REFERENCES without_overlaps_test (id, PERIOD id);
+
+--
+-- test with rows already
+--
+
+DELETE FROM referencing_period_test;
+ALTER TABLE referencing_period_test
+	DROP CONSTRAINT referencing_period_fk;
+INSERT INTO referencing_period_test VALUES ('[1,1]', '2018-01-02', '2018-02-01', '[1,1]');
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test;
+ALTER TABLE referencing_period_test
+	DROP CONSTRAINT referencing_period_fk;
+INSERT INTO referencing_period_test VALUES ('[2,2]', '2018-01-02', '2018-04-01', '[1,1]');
+-- should fail:
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test;
+-- okay again:
+DELETE FROM referencing_period_test;
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test;
+
+--
+-- test pg_get_constraintdef
+--
+
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'referencing_period_fk';
+
+--
+-- test FK child inserts
+--
+
+INSERT INTO referencing_period_test VALUES ('[1,1]', '2018-01-02', '2018-02-01', '[1,1]');
+-- should fail:
+INSERT INTO referencing_period_test VALUES ('[2,2]', '2018-01-02', '2018-04-01', '[1,1]');
+-- now it should work:
+INSERT INTO without_overlaps_test VALUES ('[1,1]', tsrange('2018-02-03', '2018-03-03'));
+INSERT INTO referencing_period_test VALUES ('[2,2]', '2018-01-02', '2018-04-01', '[1,1]');
+
+--
+-- test FK child updates
+--
+UPDATE referencing_period_test SET valid_from = '2018-01-02', valid_til = '2018-03-01' WHERE id = '[1,1]';
+-- should fail:
+UPDATE referencing_period_test SET valid_from = '2018-01-02', valid_til = '2018-05-01' WHERE id = '[1,1]';
+UPDATE referencing_period_test SET parent_id = '[8,8]' WHERE id = '[1,1]';
+
+--
+-- test FK parent updates NO ACTION
+--
+
+-- a PK update that succeeds because the numeric id isn't referenced:
+INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
+UPDATE without_overlaps_test SET valid_at = tsrange('2016-01-01', '2016-02-01') WHERE id = '[5,5]';
+-- a PK update that succeeds even though the numeric id is referenced because the range isn't:
+DELETE FROM without_overlaps_test WHERE id = '[5,5]';
+INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
+INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-02-01', '2018-03-01'));
+INSERT INTO referencing_period_test VALUES ('[3,3]', '2018-01-05', '2018-01-10', '[5,5]');
+UPDATE without_overlaps_test SET valid_at = tsrange('2016-02-01', '2016-03-01')
+WHERE id = '[5,5]' AND valid_at = tsrange('2018-02-01', '2018-03-01');
+-- a PK update that fails because both are referenced:
+UPDATE without_overlaps_test SET valid_at = tsrange('2016-01-01', '2016-02-01')
+WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01','2018-02-01');
+-- then delete the objecting FK record and the same PK update succeeds:
+DELETE FROM referencing_period_test WHERE id = '[3,3]';
+UPDATE without_overlaps_test SET valid_at = tsrange('2016-01-01', '2016-02-01')
+WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+-- clean up:
+DELETE FROM referencing_period_test WHERE parent_id = '[5,5]';
+DELETE FROM without_overlaps_test WHERE id = '[5,5]';
+
+--
+-- test FK parent updates RESTRICT
+--
+
+ALTER TABLE referencing_period_test
+	DROP CONSTRAINT referencing_period_fk;
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test
+	ON DELETE RESTRICT;
+-- a PK update that succeeds because the numeric id isn't referenced:
+INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
+UPDATE without_overlaps_test SET valid_at = tsrange('2016-01-01', '2016-02-01') WHERE id = '[5,5]';
+-- a PK update that succeeds even though the numeric id is referenced because the range isn't:
+DELETE FROM without_overlaps_test WHERE id = '[5,5]';
+INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
+INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-02-01', '2018-03-01'));
+INSERT INTO referencing_period_test VALUES ('[3,3]', '2018-01-05', '2018-01-10', '[5,5]');
+UPDATE without_overlaps_test SET valid_at = tsrange('2016-02-01', '2016-03-01')
+WHERE id = '[5,5]' AND valid_at = tsrange('2018-02-01', '2018-03-01');
+-- a PK update that fails because both are referenced:
+UPDATE without_overlaps_test SET valid_at = tsrange('2016-01-01', '2016-02-01')
+WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+-- then delete the objecting FK record and the same PK update succeeds:
+DELETE FROM referencing_period_test WHERE id = '[3,3]';
+UPDATE without_overlaps_test SET valid_at = tsrange('2016-01-01', '2016-02-01')
+WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+-- clean up:
+DELETE FROM referencing_period_test WHERE parent_id = '[5,5]';
+DELETE FROM without_overlaps_test WHERE id = '[5,5]';
+
+--
+-- test FK parent deletes NO ACTION
+--
+
+ALTER TABLE referencing_period_test
+	DROP CONSTRAINT referencing_period_fk;
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test;
+-- a PK delete that succeeds because the numeric id isn't referenced:
+INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
+DELETE FROM without_overlaps_test WHERE id = '[5,5]';
+-- a PK delete that succeeds even though the numeric id is referenced because the range isn't:
+INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
+INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-02-01', '2018-03-01'));
+INSERT INTO referencing_period_test VALUES ('[3,3]', '2018-01-05', '2018-01-10', '[5,5]');
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_at = tsrange('2018-02-01', '2018-03-01');
+-- a PK delete that fails because both are referenced:
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+-- then delete the objecting FK record and the same PK delete succeeds:
+DELETE FROM referencing_period_test WHERE id = '[3,3]';
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+
+--
+-- test FK parent deletes RESTRICT
+--
+
+ALTER TABLE referencing_period_test
+	DROP CONSTRAINT referencing_period_fk;
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test
+	ON DELETE RESTRICT;
+INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
+DELETE FROM without_overlaps_test WHERE id = '[5,5]';
+-- a PK delete that succeeds even though the numeric id is referenced because the range isn't:
+INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
+INSERT INTO without_overlaps_test VALUES ('[5,5]', tsrange('2018-02-01', '2018-03-01'));
+INSERT INTO referencing_period_test VALUES ('[3,3]', '2018-01-05', '2018-01-10', '[5,5]');
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_at = tsrange('2018-02-01', '2018-03-01');
+-- a PK delete that fails because both are referenced:
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+-- then delete the objecting FK record and the same PK delete succeeds:
+DELETE FROM referencing_period_test WHERE id = '[3,3]';
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+
+--
+-- test ON UPDATE/DELETE options
+--
+
+-- FK parent updates CASCADE
+INSERT INTO without_overlaps_test VALUES ('[6,6]', tsrange('2018-01-01', '2021-01-01'));
+INSERT INTO referencing_period_test VALUES ('[4,4]', '2018-01-01', '2021-01-01', '[6,6]');
+ALTER TABLE referencing_period_test
+	DROP CONSTRAINT referencing_period_fk,
+	ADD CONSTRAINT referencing_period_fk
+		FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES without_overlaps_test
+		ON DELETE CASCADE ON UPDATE CASCADE;
+UPDATE without_overlaps_test SET id = '[7,7]';
+SELECT * FROM referencing_period_test WHERE id = '[4,4]';
+
+
+--
+-- test FOREIGN KEY, PERIOD references PERIOD
+--
+
+DROP TABLE without_overlaps_test CASCADE;
+CREATE TABLE without_overlaps_test (
+	id int4range,
+	valid_from timestamp,
+	valid_til timestamp,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT without_overlaps_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+INSERT INTO without_overlaps_test VALUES ('[1,1]', '2018-01-02', '2018-02-03');
+INSERT INTO without_overlaps_test VALUES ('[1,1]', '2018-03-03', '2018-04-04');
+INSERT INTO without_overlaps_test VALUES ('[2,2]', '2018-01-01', '2018-01-05');
+INSERT INTO without_overlaps_test VALUES ('[3,3]', '2018-01-01', NULL);
+
+-- with inferred PK on the referenced table:
+DROP TABLE referencing_period_test;
+CREATE TABLE referencing_period_test (
+	id int4range,
+	valid_from timestamp,
+	valid_til timestamp,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	parent_id int4range,
+	CONSTRAINT referencing_period_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT referencing_period_fk FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES without_overlaps_test
+);
+DROP TABLE referencing_period_test;
+
+-- should fail because of duplicate referenced columns:
+CREATE TABLE referencing_period_test (
+	id int4range,
+	valid_from timestamp,
+	valid_til timestamp,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	parent_id int4range,
+	CONSTRAINT referencing_period_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT referencing_period_fk FOREIGN KEY (parent_id, PERIOD parent_id)
+		REFERENCES without_overlaps_test (id, PERIOD id)
+);
+
+--
+-- test ALTER TABLE ADD CONSTRAINT
+--
+
+CREATE TABLE referencing_period_test (
+	id int4range,
+	valid_from timestamp,
+	valid_til timestamp,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	parent_id int4range,
+	CONSTRAINT referencing_period_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test (id, PERIOD valid_at);
+ALTER TABLE referencing_period_test
+	DROP CONSTRAINT referencing_period_fk;
+-- with inferred PK on the referenced table:
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test;
+
+-- should fail because of duplicate referenced columns:
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk2
+	FOREIGN KEY (parent_id, PERIOD parent_id)
+	REFERENCES without_overlaps_test (id, PERIOD id);
+
+--
+-- test with rows already
+--
+
+DELETE FROM referencing_period_test;
+ALTER TABLE referencing_period_test
+	DROP CONSTRAINT referencing_period_fk;
+INSERT INTO referencing_period_test VALUES ('[1,1]', '2018-01-02', '2018-02-01', '[1,1]');
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test;
+ALTER TABLE referencing_period_test
+	DROP CONSTRAINT referencing_period_fk;
+INSERT INTO referencing_period_test VALUES ('[2,2]', '2018-01-02', '2018-04-01', '[1,1]');
+-- should fail:
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test;
+-- okay again:
+DELETE FROM referencing_period_test;
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test;
+
+--
+-- test pg_get_constraintdef
+--
+
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'referencing_period_fk';
+
+--
+-- test FK child inserts
+--
+
+INSERT INTO referencing_period_test VALUES ('[1,1]', '2018-01-02', '2018-02-01', '[1,1]');
+-- should fail:
+INSERT INTO referencing_period_test VALUES ('[2,2]', '2018-01-02', '2018-04-01', '[1,1]');
+-- now it should work:
+INSERT INTO without_overlaps_test VALUES ('[1,1]', '2018-02-03', '2018-03-03');
+INSERT INTO referencing_period_test VALUES ('[2,2]', '2018-01-02', '2018-04-01', '[1,1]');
+
+--
+-- test FK child updates
+--
+UPDATE referencing_period_test SET valid_from = '2018-01-02', valid_til = '2018-03-01' WHERE id = '[1,1]';
+-- should fail:
+UPDATE referencing_period_test SET valid_from = '2018-01-02', valid_til = '2018-05-01' WHERE id = '[1,1]';
+UPDATE referencing_period_test SET parent_id = '[8,8]' WHERE id = '[1,1]';
+
+--
+-- test FK parent updates NO ACTION
+--
+
+-- a PK update that succeeds because the numeric id isn't referenced:
+INSERT INTO without_overlaps_test VALUES ('[5,5]', '2018-01-01', '2018-02-01');
+UPDATE without_overlaps_test SET valid_from = '2016-01-01', valid_til = '2016-02-01' WHERE id = '[5,5]';
+-- a PK update that succeeds even though the numeric id is referenced because the range isn't:
+DELETE FROM without_overlaps_test WHERE id = '[5,5]';
+INSERT INTO without_overlaps_test VALUES ('[5,5]', '2018-01-01', '2018-02-01');
+INSERT INTO without_overlaps_test VALUES ('[5,5]', '2018-02-01', '2018-03-01');
+INSERT INTO referencing_period_test VALUES ('[3,3]', '2018-01-05', '2018-01-10', '[5,5]');
+UPDATE without_overlaps_test SET valid_from = '2016-02-01', valid_til = '2016-03-01'
+WHERE id = '[5,5]' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
+-- a PK update that fails because both are referenced:
+UPDATE without_overlaps_test SET valid_from = '2016-01-01', valid_til = '2016-02-01'
+WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+-- then delete the objecting FK record and the same PK update succeeds:
+DELETE FROM referencing_period_test WHERE id = '[3,3]';
+UPDATE without_overlaps_test SET valid_from = '2016-01-01', valid_til = '2016-02-01'
+WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+-- clean up:
+DELETE FROM referencing_period_test WHERE parent_id = '[5,5]';
+DELETE FROM without_overlaps_test WHERE id = '[5,5]';
+
+--
+-- test FK parent updates RESTRICT
+--
+
+ALTER TABLE referencing_period_test
+	DROP CONSTRAINT referencing_period_fk;
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test
+	ON DELETE RESTRICT;
+-- a PK update that succeeds because the numeric id isn't referenced:
+INSERT INTO without_overlaps_test VALUES ('[5,5]', '2018-01-01', '2018-02-01');
+UPDATE without_overlaps_test SET valid_from = '2016-01-01', valid_til = '2016-02-01' WHERE id = '[5,5]';
+-- a PK update that succeeds even though the numeric id is referenced because the range isn't:
+DELETE FROM without_overlaps_test WHERE id = '[5,5]';
+INSERT INTO without_overlaps_test VALUES ('[5,5]', '2018-01-01', '2018-02-01');
+INSERT INTO without_overlaps_test VALUES ('[5,5]', '2018-02-01', '2018-03-01');
+INSERT INTO referencing_period_test VALUES ('[3,3]', '2018-01-05', '2018-01-10', '[5,5]');
+UPDATE without_overlaps_test SET valid_from = '2016-02-01', valid_til = '2016-03-01'
+WHERE id = '[5,5]' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
+-- a PK update that fails because both are referenced:
+UPDATE without_overlaps_test SET valid_from = '2016-01-01', valid_til = '2016-02-01'
+WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+-- then delete the objecting FK record and the same PK update succeeds:
+DELETE FROM referencing_period_test WHERE id = '[3,3]';
+UPDATE without_overlaps_test SET valid_from = '2016-01-01', valid_til = '2016-02-01'
+WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+-- clean up:
+DELETE FROM referencing_period_test WHERE parent_id = '[5,5]';
+DELETE FROM without_overlaps_test WHERE id = '[5,5]';
+
+--
+-- test FK parent deletes NO ACTION
+--
+
+ALTER TABLE referencing_period_test
+	DROP CONSTRAINT referencing_period_fk;
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test;
+-- a PK delete that succeeds because the numeric id isn't referenced:
+INSERT INTO without_overlaps_test VALUES ('[5,5]', '2018-01-01', '2018-02-01');
+DELETE FROM without_overlaps_test WHERE id = '[5,5]';
+-- a PK delete that succeeds even though the numeric id is referenced because the range isn't:
+INSERT INTO without_overlaps_test VALUES ('[5,5]', '2018-01-01', '2018-02-01');
+INSERT INTO without_overlaps_test VALUES ('[5,5]', '2018-02-01', '2018-03-01');
+INSERT INTO referencing_period_test VALUES ('[3,3]', '2018-01-05', '2018-01-10', '[5,5]');
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
+-- a PK delete that fails because both are referenced:
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+-- then delete the objecting FK record and the same PK delete succeeds:
+DELETE FROM referencing_period_test WHERE id = '[3,3]';
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+
+--
+-- test FK parent deletes RESTRICT
+--
+
+ALTER TABLE referencing_period_test
+	DROP CONSTRAINT referencing_period_fk;
+ALTER TABLE referencing_period_test
+	ADD CONSTRAINT referencing_period_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES without_overlaps_test
+	ON DELETE RESTRICT;
+INSERT INTO without_overlaps_test VALUES ('[5,5]', '2018-01-01', '2018-02-01');
+DELETE FROM without_overlaps_test WHERE id = '[5,5]';
+-- a PK delete that succeeds even though the numeric id is referenced because the range isn't:
+INSERT INTO without_overlaps_test VALUES ('[5,5]', '2018-01-01', '2018-02-01');
+INSERT INTO without_overlaps_test VALUES ('[5,5]', '2018-02-01', '2018-03-01');
+INSERT INTO referencing_period_test VALUES ('[3,3]', '2018-01-05', '2018-01-10', '[5,5]');
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
+-- a PK delete that fails because both are referenced:
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+-- then delete the objecting FK record and the same PK delete succeeds:
+DELETE FROM referencing_period_test WHERE id = '[3,3]';
+DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+
+--
+-- test ON UPDATE/DELETE options
+--
+
+-- FK parent updates CASCADE
+INSERT INTO without_overlaps_test VALUES ('[6,6]', '2018-01-01', '2021-01-01');
+INSERT INTO referencing_period_test VALUES ('[4,4]', '2018-01-01', '2021-01-01', '[6,6]');
+ALTER TABLE referencing_period_test
+	DROP CONSTRAINT referencing_period_fk,
+	ADD CONSTRAINT referencing_period_fk
+		FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES without_overlaps_test
+		ON DELETE CASCADE ON UPDATE CASCADE;
+UPDATE without_overlaps_test SET id = '[7,7]';
+SELECT * FROM referencing_period_test WHERE id = '[4,4]';
