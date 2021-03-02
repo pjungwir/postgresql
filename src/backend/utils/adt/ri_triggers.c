@@ -31,6 +31,8 @@
 #include "catalog/pg_collation.h"
 #include "catalog/pg_constraint.h"
 #include "catalog/pg_operator.h"
+#include "catalog/pg_period.h"
+#include "catalog/pg_range.h"
 #include "catalog/pg_type.h"
 #include "commands/trigger.h"
 #include "executor/executor.h"
@@ -113,6 +115,16 @@ typedef struct RI_ConstraintInfo
 	char		confmatchtype;	/* foreign key's match type */
 	bool		temporal;		/* if the foreign key is temporal */
 	int			nkeys;			/* number of key columns */
+	Oid			pk_period;		/* set if the temporal primary key has a period */
+	Oid			fk_period;		/* set if the temporal foreign key has a period */
+	Oid			pk_period_rangetype;		/* set if the temporal primary key has a period */
+	Oid			fk_period_rangetype;		/* set if the temporal foreign key has a period */
+	char		pk_period_rangetype_name[NAMEDATALEN];	/* pk period's rangetype's name */
+	char		fk_period_rangetype_name[NAMEDATALEN];	/* fk period's rangetype's name */
+	Oid			pk_period_collation;		/* pk period's rangetype's collation */
+	Oid			fk_period_collation;		/* fk period's rangetype's collation */
+	int16		pk_period_attnums[2];		/* attnums of the referenced period cols */
+	int16		fk_period_attnums[2];		/* attnums of the referencing period cols */
 	int16		pk_attnums[RI_MAX_NUMKEYS]; /* attnums of referenced cols */
 	int16		fk_attnums[RI_MAX_NUMKEYS]; /* attnums of referencing cols */
 	Oid			pf_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (PK = FK) */
@@ -210,6 +222,7 @@ static void ri_CheckTrigger(FunctionCallInfo fcinfo, const char *funcname,
 							int tgkind);
 static const RI_ConstraintInfo *ri_FetchConstraintInfo(Trigger *trigger,
 													   Relation trig_rel, bool rel_is_pk);
+static void DeconstructFkConstraintPeriod(Oid periodid, Oid *rangetypeid, char *rangetypename, Oid *rngcollation, int16 *attnums);
 static const RI_ConstraintInfo *ri_LoadConstraintInfo(Oid constraintOid);
 static Oid	get_ri_constraint_root(Oid constrOid);
 static SPIPlanPtr ri_PlanCheck(const char *querystr, int nargs, Oid *argtypes,
@@ -227,6 +240,85 @@ static void ri_ReportViolation(const RI_ConstraintInfo *riinfo,
 							   TupleTableSlot *violatorslot, TupleDesc tupdesc,
 							   int queryno, bool partgone) pg_attribute_noreturn();
 
+
+/*
+ * query_period_range
+ *
+ * Builds a SQL string to construct a range from a period's start and end columns.
+ */
+static char *
+query_period_range(const RI_ConstraintInfo *riinfo, Relation rel, const char *table_name, bool rel_is_pk)
+{
+	StringInfo str = makeStringInfo();
+	char attname[MAX_QUOTED_NAME_LEN + 3];
+	int table_name_len = strlen(table_name);
+
+	Assert(table_name_len <= 3);
+
+	strcpy(attname, table_name);
+	if (rel_is_pk)
+	{
+		appendStringInfo(str, "%s(", riinfo->pk_period_rangetype_name);
+
+		quoteOneName(attname + table_name_len,
+					 RIAttName(rel, riinfo->pk_period_attnums[0]));
+		appendStringInfo(str, "%s, ", attname);
+
+		quoteOneName(attname + table_name_len,
+					 RIAttName(rel, riinfo->pk_period_attnums[1]));
+		appendStringInfo(str, "%s)", attname);
+	}
+	else
+	{
+		appendStringInfo(str, "%s(", riinfo->fk_period_rangetype_name);
+
+		quoteOneName(attname + table_name_len,
+					 RIAttName(rel, riinfo->fk_period_attnums[0]));
+		appendStringInfo(str, "%s, ", attname);
+
+		quoteOneName(attname + table_name_len,
+					 RIAttName(rel, riinfo->fk_period_attnums[1]));
+		appendStringInfo(str, "%s)", attname);
+	}
+
+	return pstrdup(str->data);
+}
+
+
+static Datum
+build_period_range(const RI_ConstraintInfo *riinfo, TupleTableSlot *slot, bool rel_is_pk)
+{
+	const int16 *period_attnums = rel_is_pk ? riinfo->pk_period_attnums : riinfo->fk_period_attnums;
+	Oid	rangetype = rel_is_pk ? riinfo->pk_period_rangetype : riinfo->fk_period_rangetype;
+	Datum startvalue;
+	Datum endvalue;
+	Datum result;
+	bool	startisnull;
+	bool	endisnull;
+	LOCAL_FCINFO(fcinfo, 2);
+	FmgrInfo	flinfo;
+
+	InitFunctionCallInfoData(*fcinfo, &flinfo, 2, InvalidOid, NULL, NULL);
+	FuncExpr *f = makeNode(FuncExpr);
+	f->funcresulttype = rangetype;
+	flinfo.fn_expr = (Node *) f;
+	flinfo.fn_extra = NULL;
+
+	/* compute oldvalue */
+	startvalue = slot_getattr(slot, period_attnums[0], &startisnull);
+	endvalue = slot_getattr(slot, period_attnums[1], &endisnull);
+
+	fcinfo->args[0].value = startvalue;
+	fcinfo->args[0].isnull = startisnull;
+	fcinfo->args[1].value = endvalue;
+	fcinfo->args[1].isnull = endisnull;
+
+	result = range_constructor2(fcinfo);
+	if (fcinfo->isnull)
+		elog(ERROR, "function %u returned NULL", flinfo.fn_oid);
+
+	return result;
+}
 
 /*
  * RI_FKey_check -
@@ -349,6 +441,7 @@ RI_FKey_check(TriggerData *trigdata)
 		StringInfoData querybuf;
 		char		pkrelname[MAX_QUOTED_REL_NAME_LEN];
 		char		attname[MAX_QUOTED_NAME_LEN];
+		char	   *attstr;
 		char		paramname[16];
 		const char *querysep;
 		Oid			queryoids[RI_MAX_NUMKEYS];
@@ -384,11 +477,18 @@ RI_FKey_check(TriggerData *trigdata)
 		quoteRelationName(pkrelname, pk_rel);
 		if (riinfo->temporal)
 		{
-			quoteOneName(attname,
-					RIAttName(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]));
+			if (riinfo->pk_period == InvalidOid)
+			{
+				quoteOneName(attname,
+						RIAttName(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]));
+				attstr = attname;
+			}
+			else
+				attstr = query_period_range(riinfo, pk_rel, "x.", true);
+
 			appendStringInfo(&querybuf,
 					"SELECT 1 FROM (SELECT %s AS r FROM %s%s x",
-					attname, pk_only, pkrelname);
+					attstr, pk_only, pkrelname);
 		}
 		else {
 			appendStringInfo(&querybuf, "SELECT 1 FROM %s%s x",
@@ -397,14 +497,30 @@ RI_FKey_check(TriggerData *trigdata)
 		querysep = "WHERE";
 		for (int i = 0; i < riinfo->nkeys; i++)
 		{
-			Oid			pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
-			Oid			fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
+			Oid	pk_type;
+			Oid	fk_type;
 
-			quoteOneName(attname,
-						 RIAttName(pk_rel, riinfo->pk_attnums[i]));
+			if (riinfo->pk_attnums[i] == InvalidOid)
+			{
+				pk_type = riinfo->pk_period_rangetype;
+				attstr = query_period_range(riinfo, pk_rel, "x.", true);
+			}
+			else
+			{
+				pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
+				quoteOneName(attname,
+							 RIAttName(pk_rel, riinfo->pk_attnums[i]));
+				attstr = attname;
+			}
+
+			if (riinfo->fk_attnums[i] == InvalidOid)
+				fk_type = riinfo->fk_period_rangetype;
+			else
+				fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
+
 			sprintf(paramname, "$%d", i + 1);
 			ri_GenerateQual(&querybuf, querysep,
-							attname, pk_type,
+							attstr, pk_type,
 							riinfo->pf_eq_oprs[i],
 							paramname, fk_type);
 			querysep = "AND";
@@ -531,13 +647,24 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 		querysep = "WHERE";
 		for (int i = 0; i < riinfo->nkeys; i++)
 		{
-			Oid			pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
+			Oid		pk_type;
+			char   *attstr;
+			if (riinfo->pk_attnums[i] == InvalidOid)
+			{
+				pk_type = riinfo->pk_period_rangetype;
+				attstr = query_period_range(riinfo, pk_rel, "x.", true);
+			}
+			else
+			{
+				pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
+				quoteOneName(attname,
+							 RIAttName(pk_rel, riinfo->pk_attnums[i]));
+				attstr = attname;
+			}
 
-			quoteOneName(attname,
-						 RIAttName(pk_rel, riinfo->pk_attnums[i]));
 			sprintf(paramname, "$%d", i + 1);
 			ri_GenerateQual(&querybuf, querysep,
-							attname, pk_type,
+							attstr, pk_type,
 							riinfo->pp_eq_oprs[i],
 							paramname, pk_type);
 			querysep = "AND";
@@ -696,6 +823,7 @@ ri_restrict(TriggerData *trigdata, bool is_no_action)
 		StringInfoData querybuf;
 		char		fkrelname[MAX_QUOTED_REL_NAME_LEN];
 		char		attname[MAX_QUOTED_NAME_LEN];
+		char	   *attstr;
 		char		paramname[16];
 		const char *querysep;
 		Oid			queryoids[RI_MAX_NUMKEYS];
@@ -718,18 +846,46 @@ ri_restrict(TriggerData *trigdata, bool is_no_action)
 		querysep = "WHERE";
 		for (int i = 0; i < riinfo->nkeys; i++)
 		{
-			Oid			pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
-			Oid			fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
-			Oid			pk_coll = RIAttCollation(pk_rel, riinfo->pk_attnums[i]);
-			Oid			fk_coll = RIAttCollation(fk_rel, riinfo->fk_attnums[i]);
+			Oid		pk_type;
+			Oid		fk_type;
+			Oid		pk_coll;
+			Oid		fk_coll;
 
-			quoteOneName(attname,
-						 RIAttName(fk_rel, riinfo->fk_attnums[i]));
+			if (riinfo->pk_attnums[i] != InvalidOid)
+			{
+				pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
+				pk_coll = RIAttCollation(pk_rel, riinfo->pk_attnums[i]);
+			}
+			else
+			{
+				pk_type = riinfo->pk_period_rangetype;
+				pk_coll = riinfo->pk_period_collation;
+			}
+
+			if (riinfo->fk_attnums[i] != InvalidOid)
+			{
+				fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
+				fk_coll = RIAttCollation(fk_rel, riinfo->fk_attnums[i]);
+			}
+			else
+			{
+				fk_type = riinfo->fk_period_rangetype;
+				fk_coll = riinfo->fk_period_collation;
+			}
+
+			if (riinfo->fk_attnums[i] == InvalidOid)
+				attstr = query_period_range(riinfo, fk_rel, "x.", false);
+			else
+			{
+				quoteOneName(attname,
+							 RIAttName(fk_rel, riinfo->fk_attnums[i]));
+				attstr = attname;
+			}
 			sprintf(paramname, "$%d", i + 1);
 			ri_GenerateQual(&querybuf, querysep,
 							paramname, pk_type,
 							riinfo->pf_eq_oprs[i],
-							attname, fk_type);
+							attstr, fk_type);
 			if (pk_coll != fk_coll && !get_collation_isdeterministic(pk_coll))
 				ri_GenerateQualCollation(&querybuf, pk_coll);
 			querysep = "AND";
@@ -1457,6 +1613,8 @@ RI_Initial_Check(Trigger *trigger, Relation fk_rel, Relation pk_rel)
 	StringInfoData querybuf;
 	char		pkrelname[MAX_QUOTED_REL_NAME_LEN];
 	char		fkrelname[MAX_QUOTED_REL_NAME_LEN];
+	char	   *pkattpart;
+	char	   *fkattpart;
 	char		pkattname[MAX_QUOTED_NAME_LEN + 3];
 	char		fkattname[MAX_QUOTED_NAME_LEN + 3];
 	RangeTblEntry *pkrte;
@@ -1538,10 +1696,24 @@ RI_Initial_Check(Trigger *trigger, Relation fk_rel, Relation pk_rel)
 	sep = "";
 	for (int i = 0; i < riinfo->nkeys; i++)
 	{
-		quoteOneName(fkattname,
-					 RIAttName(fk_rel, riinfo->fk_attnums[i]));
-		appendStringInfo(&querybuf, "%sfk.%s", sep, fkattname);
-		sep = ", ";
+		if (riinfo->fk_attnums[i] != InvalidOid)
+		{
+			quoteOneName(fkattname,
+						 RIAttName(fk_rel, riinfo->fk_attnums[i]));
+			appendStringInfo(&querybuf, "%sfk.%s", sep, fkattname);
+			sep = ", ";
+		}
+		else
+		{
+			quoteOneName(fkattname,
+						 RIAttName(fk_rel, riinfo->fk_period_attnums[0]));
+			appendStringInfo(&querybuf, "%sfk.%s", sep, fkattname);
+			sep = ", ";
+
+			quoteOneName(fkattname,
+						 RIAttName(fk_rel, riinfo->fk_period_attnums[1]));
+			appendStringInfo(&querybuf, "%sfk.%s", sep, fkattname);
+		}
 	}
 
 	quoteRelationName(pkrelname, pk_rel);
@@ -1559,19 +1731,47 @@ RI_Initial_Check(Trigger *trigger, Relation fk_rel, Relation pk_rel)
 	sep = "(";
 	for (int i = 0; i < riinfo->nkeys; i++)
 	{
-		Oid			pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
-		Oid			fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
-		Oid			pk_coll = RIAttCollation(pk_rel, riinfo->pk_attnums[i]);
-		Oid			fk_coll = RIAttCollation(fk_rel, riinfo->fk_attnums[i]);
+		Oid			pk_type;
+		Oid			fk_type;
+		Oid			pk_coll;
+		Oid			fk_coll;
 
-		quoteOneName(pkattname + 3,
-					 RIAttName(pk_rel, riinfo->pk_attnums[i]));
-		quoteOneName(fkattname + 3,
-					 RIAttName(fk_rel, riinfo->fk_attnums[i]));
+		if (riinfo->pk_attnums[i] != InvalidOid)
+		{
+			pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
+			pk_coll = RIAttCollation(pk_rel, riinfo->pk_attnums[i]);
+
+			quoteOneName(pkattname + 3,
+						 RIAttName(pk_rel, riinfo->pk_attnums[i]));
+			pkattpart = pkattname;
+		}
+		else
+		{
+			pk_type = riinfo->pk_period_rangetype;
+			pk_coll = riinfo->pk_period_collation;
+			pkattpart = query_period_range(riinfo, pk_rel, "pk.", true);
+		}
+
+		if (riinfo->fk_attnums[i] != InvalidOid)
+		{
+			fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
+			fk_coll = RIAttCollation(fk_rel, riinfo->fk_attnums[i]);
+
+			quoteOneName(fkattname + 3,
+						 RIAttName(fk_rel, riinfo->fk_attnums[i]));
+			fkattpart = fkattname;
+		}
+		else
+		{
+			fk_type = riinfo->fk_period_rangetype;
+			fk_coll = riinfo->fk_period_collation;
+			fkattpart = query_period_range(riinfo, pk_rel, "fk.", false);
+		}
+
 		ri_GenerateQual(&querybuf, sep,
-						pkattname, pk_type,
+						pkattpart, pk_type,
 						riinfo->pf_eq_oprs[i],
-						fkattname, fk_type);
+						fkattpart, fk_type);
 		if (pk_coll != fk_coll)
 			ri_GenerateQualCollation(&querybuf, pk_coll);
 		sep = "AND";
@@ -2185,6 +2385,37 @@ ri_FetchConstraintInfo(Trigger *trigger, Relation trig_rel, bool rel_is_pk)
 	return riinfo;
 }
 
+static void DeconstructFkConstraintPeriod(Oid periodid, Oid *rangetypeid, char *rangetypename, Oid *rngcollation, int16 *attnums)
+{
+	HeapTuple pertuple = SearchSysCache1(PERIODOID, periodid);
+	if (!HeapTupleIsValid(pertuple))
+		elog(ERROR, "cache lookup failed for period %d", periodid);
+
+	Form_pg_period period = (Form_pg_period) GETSTRUCT(pertuple);
+
+	*rangetypeid = period->perrngtype;
+	attnums[0] = period->perstart;
+	attnums[1] = period->perend;
+	ReleaseSysCache(pertuple);
+
+	HeapTuple rngtuple = SearchSysCache1(RANGETYPE, *rangetypeid);
+	if (!HeapTupleIsValid(rngtuple))
+		elog(ERROR, "cache lookup failed for range %d", *rangetypeid);
+
+	Form_pg_range rangetype = (Form_pg_range) GETSTRUCT(rngtuple);
+
+	*rngcollation = rangetype->rngcollation;
+	ReleaseSysCache(rngtuple);
+
+	HeapTuple typtuple = SearchSysCache1(TYPEOID, ObjectIdGetDatum(*rangetypeid));
+	if (!HeapTupleIsValid(typtuple))
+		elog(ERROR, "cache lookup failed for type %u", *rangetypeid);
+
+	Form_pg_type type = (Form_pg_type) GETSTRUCT(typtuple);
+	strcpy(rangetypename, NameStr(type->typname));
+	ReleaseSysCache(typtuple);
+}
+
 /*
  * Fetch or create the RI_ConstraintInfo struct for an FK constraint.
  */
@@ -2208,6 +2439,7 @@ ri_LoadConstraintInfo(Oid constraintOid)
 	riinfo = (RI_ConstraintInfo *) hash_search(ri_constraint_cache,
 											   (void *) &constraintOid,
 											   HASH_ENTER, &found);
+
 	if (!found)
 		riinfo->valid = false;
 	else if (riinfo->valid)
@@ -2243,6 +2475,24 @@ ri_LoadConstraintInfo(Oid constraintOid)
 	riinfo->confdeltype = conForm->confdeltype;
 	riinfo->confmatchtype = conForm->confmatchtype;
 	riinfo->temporal = conForm->contemporal;
+	riinfo->pk_period = conForm->confperiod;
+	riinfo->pk_period_rangetype = InvalidOid;
+	riinfo->pk_period_collation = InvalidOid;
+	strcpy(riinfo->pk_period_rangetype_name, "");
+	// TODO
+	// riinfo->pk_period_attnums = {0, 0};
+	riinfo->fk_period = conForm->conperiod;
+	riinfo->fk_period_rangetype = InvalidOid;
+	riinfo->fk_period_collation = InvalidOid;
+	strcpy(riinfo->fk_period_rangetype_name, "");
+	// riinfo->fk_period_attnums = {0, 0};
+
+	if (conForm->confperiod != InvalidOid)
+	{
+		DeconstructFkConstraintPeriod(conForm->confperiod, &riinfo->pk_period_rangetype, riinfo->pk_period_rangetype_name, &riinfo->pk_period_collation, riinfo->pk_period_attnums);
+	}
+	if (conForm->conperiod != InvalidOid)
+		DeconstructFkConstraintPeriod(conForm->conperiod, &riinfo->fk_period_rangetype, riinfo->fk_period_rangetype_name, &riinfo->fk_period_collation, riinfo->fk_period_attnums);
 
 	DeconstructFkConstraintRow(tup,
 							   &riinfo->nkeys,
@@ -2541,8 +2791,16 @@ ri_ExtractValues(Relation rel, TupleTableSlot *slot,
 
 	for (int i = 0; i < riinfo->nkeys; i++)
 	{
-		vals[i] = slot_getattr(slot, attnums[i], &isnull);
-		nulls[i] = isnull ? 'n' : ' ';
+		if (attnums[i] != InvalidOid)
+		{
+			vals[i] = slot_getattr(slot, attnums[i], &isnull);
+			nulls[i] = isnull ? 'n' : ' ';
+		}
+		else
+		{
+			vals[i] = build_period_range(riinfo, slot, rel_is_pk);
+			nulls[i] = false;
+		}
 	}
 }
 
@@ -2565,6 +2823,7 @@ ri_ReportViolation(const RI_ConstraintInfo *riinfo,
 	StringInfoData key_values;
 	bool		onfk;
 	const int16 *attnums;
+	const int16 *period_attnums;
 	Oid			rel_oid;
 	AclResult	aclresult;
 	bool		has_perm = true;
@@ -2577,6 +2836,7 @@ ri_ReportViolation(const RI_ConstraintInfo *riinfo,
 	if (onfk)
 	{
 		attnums = riinfo->fk_attnums;
+		period_attnums = riinfo->fk_period_attnums;
 		rel_oid = fk_rel->rd_id;
 		if (tupdesc == NULL)
 			tupdesc = fk_rel->rd_att;
@@ -2584,6 +2844,7 @@ ri_ReportViolation(const RI_ConstraintInfo *riinfo,
 	else
 	{
 		attnums = riinfo->pk_attnums;
+		period_attnums = riinfo->pk_period_attnums;
 		rel_oid = pk_rel->rd_id;
 		if (tupdesc == NULL)
 			tupdesc = pk_rel->rd_att;
@@ -2636,11 +2897,17 @@ ri_ReportViolation(const RI_ConstraintInfo *riinfo,
 		for (int idx = 0; idx < riinfo->nkeys; idx++)
 		{
 			int			fnum = attnums[idx];
-			Form_pg_attribute att = TupleDescAttr(tupdesc, fnum - 1);
+			bool		has_period = fnum == InvalidOid;
 			char	   *name,
 					   *val;
+			Form_pg_attribute att;
 			Datum		datum;
 			bool		isnull;
+
+			if (has_period)
+				fnum = period_attnums[0];
+
+			att = TupleDescAttr(tupdesc, fnum - 1);
 
 			name = NameStr(att->attname);
 
@@ -2663,6 +2930,32 @@ ri_ReportViolation(const RI_ConstraintInfo *riinfo,
 			}
 			appendStringInfoString(&key_names, name);
 			appendStringInfoString(&key_values, val);
+
+			if (has_period)
+			{
+				fnum = period_attnums[1];
+
+				att = TupleDescAttr(tupdesc, fnum - 1);
+
+				name = NameStr(att->attname);
+
+				datum = slot_getattr(violatorslot, fnum, &isnull);
+				if (!isnull)
+				{
+					Oid			foutoid;
+					bool		typisvarlena;
+
+					getTypeOutputInfo(att->atttypid, &foutoid, &typisvarlena);
+					val = OidOutputFunctionCall(foutoid, datum);
+				}
+				else
+					val = "null";
+
+				appendStringInfoString(&key_names, ", ");
+				appendStringInfoString(&key_values, ", ");
+				appendStringInfoString(&key_names, name);
+				appendStringInfoString(&key_values, val);
+			}
 		}
 	}
 
@@ -2729,10 +3022,21 @@ ri_NullCheck(TupleDesc tupDesc,
 
 	for (int i = 0; i < riinfo->nkeys; i++)
 	{
-		if (slot_attisnull(slot, attnums[i]))
-			nonenull = false;
-		else
+		if (attnums[i] == InvalidOid)
+		{
+			/*
+			 * Never treat a period as null, because even if start and end
+			 * are both null, that just signifies an unbounded range.
+			 */
 			allnull = false;
+		}
+		else
+		{
+			if (slot_attisnull(slot, attnums[i]))
+				nonenull = false;
+			else
+				allnull = false;
+		}
 	}
 
 	if (allnull)
@@ -2893,23 +3197,36 @@ ri_KeysStable(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
 		Datum		newvalue;
 		bool		isnull;
 
-		/*
-		 * Get one attribute's oldvalue. If it is NULL - they're not equal.
-		 */
-		oldvalue = slot_getattr(oldslot, attnums[i], &isnull);
-		if (isnull)
-			return false;
+		if (riinfo->temporal && attnums[i] == InvalidOid)
+		{
+			/*
+			 * We have a period, so we have to get the start/end columns
+			 * and build a range.
+			 */
+			oldvalue = build_period_range(riinfo, oldslot, rel_is_pk);
+			newvalue = build_period_range(riinfo, newslot, rel_is_pk);
+		}
+		else
+		{
+			/*
+			 * Get one attribute's oldvalue. If it is NULL - they're not equal.
+			 */
+			oldvalue = slot_getattr(oldslot, attnums[i], &isnull);
+			if (isnull)
+				return false;
 
-		/*
-		 * Get one attribute's newvalue. If it is NULL - they're not equal.
-		 */
-		newvalue = slot_getattr(newslot, attnums[i], &isnull);
-		if (isnull)
-			return false;
+			/*
+			 * Get one attribute's newvalue. If it is NULL - they're not equal.
+			 */
+			newvalue = slot_getattr(newslot, attnums[i], &isnull);
+			if (isnull)
+				return false;
+
+		}
 
 		if (rel_is_pk)
 		{
-			if (riinfo->temporal)
+			if (riinfo->temporal && i == riinfo->nkeys - 1)
 			{
 				return DatumGetBool(DirectFunctionCall2(range_contains, newvalue, oldvalue));
 			}
@@ -2931,7 +3248,7 @@ ri_KeysStable(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
 		}
 		else
 		{
-			if (riinfo->temporal)
+			if (riinfo->temporal && i == riinfo->nkeys - 1)
 			{
 				return DatumGetBool(DirectFunctionCall2(range_contains, oldvalue, newvalue));
 			}
