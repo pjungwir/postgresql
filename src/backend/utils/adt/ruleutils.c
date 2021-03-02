@@ -329,7 +329,7 @@ static char *pg_get_viewdef_worker(Oid viewoid,
 								   int prettyFlags, int wrapColumn);
 static char *pg_get_triggerdef_worker(Oid trigid, bool pretty);
 static int	decompile_column_index_array(Datum column_index_array, Oid relId, Oid indexId,
-										 bool withoutOverlaps, bool withPeriod, StringInfo buf);
+										 bool withoutOverlaps, bool withPeriod, Oid periodid, StringInfo buf);
 static char *pg_get_ruledef_worker(Oid ruleoid, int prettyFlags);
 static char *pg_get_indexdef_worker(Oid indexrelid, int colno,
 									const Oid *excludeOps,
@@ -2008,7 +2008,6 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 			{
 				Datum		val;
 				bool		isnull;
-				bool		hasperiod;
 				const char *string;
 
 				/* Start off the constraint definition */
@@ -2023,11 +2022,10 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 
 				/*
 				 * If it is a temporal foreign key
-				 * then it uses PERIOD.
+				 * then it uses PERIOD (which may be a real range column
+				 * or may be a period).
 				 */
-				hasperiod = DatumGetBool(SysCacheGetAttr(CONSTROID, tup,
-						  Anum_pg_constraint_contemporal, &isnull));
-				decompile_column_index_array(val, conForm->conrelid, conForm->conindid, false, hasperiod, &buf);
+				decompile_column_index_array(val, conForm->conrelid, conForm->conindid, false, conForm->contemporal, conForm->conperiod, &buf);
 
 				/* add foreign relation name */
 				appendStringInfo(&buf, ") REFERENCES %s(",
@@ -2041,7 +2039,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 					elog(ERROR, "null confkey for constraint %u",
 						 constraintId);
 
-				decompile_column_index_array(val, conForm->confrelid, conForm->conindid, false, hasperiod, &buf);
+				decompile_column_index_array(val, conForm->confrelid, conForm->conindid, false, conForm->contemporal, conForm->confperiod, &buf);
 
 				appendStringInfoChar(&buf, ')');
 
@@ -2149,7 +2147,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 				indexId = conForm->conindid;
 				SysCacheGetAttr(CONSTROID, tup,
 						  Anum_pg_constraint_conexclop, &isnull);
-				keyatts = decompile_column_index_array(val, conForm->conrelid, indexId, !isnull, false, &buf);
+				keyatts = decompile_column_index_array(val, conForm->conrelid, indexId, !isnull, false, InvalidOid, &buf);
 
 				appendStringInfoChar(&buf, ')');
 
@@ -2349,7 +2347,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
  */
 static int
 decompile_column_index_array(Datum column_index_array, Oid relId, Oid indexId,
-							 bool withoutOverlaps, bool withPeriod, StringInfo buf)
+							 bool withoutOverlaps, bool withPeriod, Oid periodid, StringInfo buf)
 {
 	Datum	   *keys;
 	int			nKeys;
@@ -2368,21 +2366,26 @@ decompile_column_index_array(Datum column_index_array, Oid relId, Oid indexId,
 		/* The key might contain a PERIOD instead of an attribute */
 		if (colid == 0)
 		{
-			HeapTuple indtup;
-			bool isnull;
-			Datum periodid;
+			/* First try the given periodid, then fall back on the index */
+			if (periodid == InvalidOid)
+			{
+				HeapTuple indtup;
+				bool isnull;
+				Datum periodidDatum;
 
-			indtup = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(indexId));
-			if (!HeapTupleIsValid(indtup))
-				elog(ERROR, "cache lookup failed for index %u", indexId);
+				indtup = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(indexId));
+				if (!HeapTupleIsValid(indtup))
+					elog(ERROR, "cache lookup failed for index %u", indexId);
 
-			periodid = SysCacheGetAttr(INDEXRELID, indtup,
-									   Anum_pg_index_indperiod, &isnull);
-			if (isnull)
-				elog(ERROR, "missing period for index %u", indexId);
+				periodidDatum = SysCacheGetAttr(INDEXRELID, indtup,
+										   Anum_pg_index_indperiod, &isnull);
+				if (isnull)
+					elog(ERROR, "missing period for index %u", indexId);
 
-			colName = get_periodname(DatumGetObjectId(periodid), false);
-			ReleaseSysCache(indtup);
+				periodid = DatumGetObjectId(periodidDatum);
+				ReleaseSysCache(indtup);
+			}
+			colName = get_periodname(periodid, false);
 		}
 		else
 		{

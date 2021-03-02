@@ -49,6 +49,7 @@
 #include "catalog/pg_inherits.h"
 #include "catalog/pg_opclass.h"
 #include "catalog/pg_operator.h"
+#include "catalog/pg_period.h"
 #include "catalog/pg_tablespace.h"
 #include "catalog/pg_trigger.h"
 #include "catalog/pg_type.h"
@@ -1997,6 +1998,7 @@ index_constraint_create(Relation heapRelation,
 	ObjectAddress myself,
 				idxaddr;
 	Oid			conOid;
+	Oid			periodid;
 	bool		deferrable;
 	bool		initdeferred;
 	bool		mark_as_primary;
@@ -2053,6 +2055,11 @@ index_constraint_create(Relation heapRelation,
 		noinherit = true;
 	}
 
+	if (indexInfo->ii_Period != NULL)
+		periodid = ((Period *)indexInfo->ii_Period)->oid;
+	else
+		periodid = InvalidOid;
+
 	/*
 	 * Construct a pg_constraint entry.
 	 */
@@ -2085,6 +2092,8 @@ index_constraint_create(Relation heapRelation,
 								   inhcount,
 								   noinherit,
 								   is_temporal,	/* contemporal */
+								   periodid, /* conperiod */
+								   InvalidOid, /* confperiod */
 								   is_internal);
 
 	/*

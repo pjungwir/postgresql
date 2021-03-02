@@ -108,6 +108,9 @@ CATALOG(pg_constraint,2606,ConstraintRelationId)
 	 */
 	bool		contemporal;
 
+	Oid			conperiod;		/* local PERIOD used in PK/FK constraint */
+	Oid			confperiod;		/* referenced foreign PERIOD */
+
 #ifdef CATALOG_VARLEN			/* variable-length fields start here */
 
 	/*
@@ -230,6 +233,8 @@ extern Oid	CreateConstraintEntry(const char *constraintName,
 								  int conInhCount,
 								  bool conNoInherit,
 								  bool conTemporal,
+								  Oid period,
+								  Oid fperiod,
 								  bool is_internal);
 
 extern void RemoveConstraintById(Oid conId);
