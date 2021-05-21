@@ -3049,7 +3049,9 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 		bool	isNull;
 
 		/* Eval the FOR PORTION OF target */
-		ExprContext *econtext = CreateStandaloneExprContext();
+		if (mtstate->ps.ps_ExprContext == NULL)
+			ExecAssignExprContext(estate, &mtstate->ps);
+		ExprContext *econtext = mtstate->ps.ps_ExprContext;
 
 		ExprState *exprState = ExecPrepareExpr((Expr *) forPortionOf->targetRange, estate);
 		targetRange = ExecEvalExpr(exprState, econtext, &isNull);
@@ -3064,26 +3066,6 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 		resultRelInfo->ri_forPortionOf->fp_rangeType = forPortionOf->rangeType;
 
 		/* Don't free the ExprContext here because the result must last for the whole query */
-		/*
-		int16		typlen;
-		bool		typbyval;
-		char		typalign;
-		char		typdelim;
-		Oid typioparam;
-		Oid range_out_oid;
-		get_type_io_data(
-				RangeTypeGetOid(DatumGetRangeTypeP(targetRange)),
-				IOFunc_output,
-				&typlen,
-				&typbyval,
-				&typalign,
-				&typdelim,
-				&typioparam,
-				&range_out_oid);
-		char *rangeStr = OidOutputFunctionCall(range_out_oid, targetRange);
-		// char *rangeStr = OutputFunctionCall(range_out, targetRange);
-		ereport(NOTICE, (errmsg("targeting range %s", rangeStr)));
-		*/
 	}
 
 	/*

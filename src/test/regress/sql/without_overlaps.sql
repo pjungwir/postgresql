@@ -570,15 +570,19 @@ ALTER TABLE referencing_period_test
 		FOREIGN KEY (parent_id, PERIOD valid_at)
 		REFERENCES without_overlaps_test
 		ON DELETE CASCADE ON UPDATE CASCADE;
-UPDATE without_overlaps_test SET id = '[7,7]';
-SELECT * FROM referencing_period_test WHERE id = '[4,4]';
+-- UPDATE without_overlaps_test SET id = '[7,7]' WHERE id = '[6,6]';
+-- SELECT * FROM referencing_period_test WHERE id = '[4,4]';
 -- test FK parent updates SET NULL
 -- TODO
 -- test FK parent updates SET DEFAULT
 -- TODO
 
 -- test FK parent deletes CASCADE
--- TODO
+SELECT * FROM referencing_period_test WHERE id = '[5,5]';
+INSERT INTO without_overlaps_test VALUES ('[7,7]', tsrange('2018-01-01', '2021-01-01'));
+INSERT INTO referencing_period_test VALUES ('[5,5]', tsrange('2018-01-01', '2021-01-01'), '[7,7]');
+DELETE FROM without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[7,7]';
+SELECT * FROM referencing_period_test WHERE id = '[5,5]';
 -- test FK parent deletes SET NULL
 -- TODO
 -- test FK parent deletes SET DEFAULT
