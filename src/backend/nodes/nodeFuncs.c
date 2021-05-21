@@ -2195,6 +2195,14 @@ expression_tree_walker(Node *node,
 					return true;
 			}
 			break;
+		case T_ForPortionOfExpr:
+			{
+				ForPortionOfExpr *forPortionOf = (ForPortionOfExpr *) node;
+
+				if (walker((Node *) forPortionOf->targetRange, context))
+					return true;
+			}
+			break;
 		case T_PartitionPruneStepOp:
 			{
 				PartitionPruneStepOp *opstep = (PartitionPruneStepOp *) node;
@@ -2330,6 +2338,8 @@ query_tree_walker(Query *query,
 	if (walker((Node *) query->targetList, context))
 		return true;
 	if (walker((Node *) query->withCheckOptions, context))
+		return true;
+	if (walker((Node *) query->forPortionOf, context))
 		return true;
 	if (walker((Node *) query->onConflict, context))
 		return true;
