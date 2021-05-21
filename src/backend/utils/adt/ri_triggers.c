@@ -1604,6 +1604,7 @@ TRI_FKey_cascade_del(PG_FUNCTION_ARGS)
 		StringInfoData querybuf;
 		char		fkrelname[MAX_QUOTED_REL_NAME_LEN];
 		char		attname[MAX_QUOTED_NAME_LEN];
+		char	   *attstr;
 		char		paramname[16];
 		const char *querysep;
 		Oid			queryoids[RI_MAX_NUMKEYS];
@@ -1641,18 +1642,46 @@ TRI_FKey_cascade_del(PG_FUNCTION_ARGS)
 		for (int i = 0; i < riinfo->nkeys; i++)
 		{
 			// TODO: Need to handle an attnum of InvalidOid I think? For PERIODs?
-			Oid			pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
-			Oid			fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
-			Oid			pk_coll = RIAttCollation(pk_rel, riinfo->pk_attnums[i]);
-			Oid			fk_coll = RIAttCollation(fk_rel, riinfo->fk_attnums[i]);
+			Oid		pk_type;
+			Oid		fk_type;
+			Oid		pk_coll;
+			Oid		fk_coll;
 
-			quoteOneName(attname,
-						 RIAttName(fk_rel, riinfo->fk_attnums[i]));
+			if (riinfo->pk_attnums[i] != InvalidOid)
+			{
+				pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
+				pk_coll = RIAttCollation(pk_rel, riinfo->pk_attnums[i]);
+			}
+			else
+			{
+				pk_type = riinfo->pk_period_rangetype;
+				pk_coll = riinfo->pk_period_collation;
+			}
+
+			if (riinfo->fk_attnums[i] != InvalidOid)
+			{
+				fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
+				fk_coll = RIAttCollation(fk_rel, riinfo->fk_attnums[i]);
+			}
+			else
+			{
+				fk_type = riinfo->fk_period_rangetype;
+				fk_coll = riinfo->fk_period_collation;
+			}
+
+			if (riinfo->fk_attnums[i] == InvalidOid)
+				attstr = query_period_range(riinfo, fk_rel, "", false);
+			else
+			{
+				quoteOneName(attname,
+							 RIAttName(fk_rel, riinfo->fk_attnums[i]));
+				attstr = attname;
+			}
 			sprintf(paramname, "$%d", i + 1);
 			ri_GenerateQual(&querybuf, querysep,
 							paramname, pk_type,
 							riinfo->pf_eq_oprs[i],
-							attname, fk_type);
+							attstr, fk_type);
 			if (pk_coll != fk_coll && !get_collation_isdeterministic(pk_coll))
 				ri_GenerateQualCollation(&querybuf, pk_coll);
 			querysep = "AND";

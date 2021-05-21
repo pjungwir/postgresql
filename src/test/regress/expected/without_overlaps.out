@@ -558,17 +558,7 @@ DELETE FROM without_overlaps_test WHERE id = '[5,5]' AND valid_at = tsrange('201
 -- test ON UPDATE/DELETE options
 --
 -- FK parent updates CASCADE
--- TODO
--- test FK parent updates SET NULL
--- TODO
--- test FK parent updates SET DEFAULT
--- TODO
 -- test FK parent deletes CASCADE
-SELECT * FROM referencing_period_test WHERE id = '[5,5]';
- id | valid_at | parent_id 
-----+----------+-----------
-(0 rows)
-
 INSERT INTO without_overlaps_test VALUES ('[7,7]', tsrange('2018-01-01', '2021-01-01'));
 INSERT INTO referencing_period_test VALUES ('[5,5]', tsrange('2018-01-01', '2021-01-01'), '[7,7]');
 DELETE FROM without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[7,7]';
@@ -579,6 +569,10 @@ SELECT * FROM referencing_period_test WHERE id = '[5,5]';
  [5,6) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [7,8)
 (2 rows)
 
+-- test FK parent updates SET NULL
+-- test FK parent deletes SET NULL
+-- test FK parent updates SET DEFAULT
+-- test FK parent deletes SET DEFAULT
 -- test FOREIGN KEY, range references PERIOD
 --
 DROP TABLE without_overlaps_test CASCADE;
@@ -816,16 +810,21 @@ ALTER TABLE referencing_period_test
 		FOREIGN KEY (parent_id, PERIOD valid_at)
 		REFERENCES without_overlaps_test
 		ON DELETE CASCADE ON UPDATE CASCADE;
-ERROR:  unrecognized FK action type: 99
-UPDATE without_overlaps_test SET id = '[7,7]';
-ERROR:  conflicting key value violates exclusion constraint "without_overlaps_pk"
-DETAIL:  Key (id, tsrange(valid_from, valid_til))=([7,8), ["Mon Jan 01 00:00:00 2018","Fri Jan 05 00:00:00 2018")) conflicts with existing key (id, tsrange(valid_from, valid_til))=([7,8), ["Tue Jan 02 00:00:00 2018","Sat Feb 03 00:00:00 2018")).
-SELECT * FROM referencing_period_test WHERE id = '[4,4]';
+-- test FK parent deletes CASCADE
+INSERT INTO without_overlaps_test VALUES ('[7,7]', '2018-01-01', '2021-01-01');
+INSERT INTO referencing_period_test VALUES ('[5,5]', tsrange('2018-01-01', '2021-01-01'), '[7,7]');
+DELETE FROM without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[7,7]';
+SELECT * FROM referencing_period_test WHERE id = '[5,5]';
   id   |                        valid_at                         | parent_id 
 -------+---------------------------------------------------------+-----------
- [4,5) | ["Mon Jan 01 00:00:00 2018","Fri Jan 01 00:00:00 2021") | [6,7)
-(1 row)
+ [5,6) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [7,8)
+ [5,6) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [7,8)
+(2 rows)
 
+-- test FK parent updates SET NULL
+-- test FK parent deletes SET NULL
+-- test FK parent updates SET DEFAULT
+-- test FK parent deletes SET DEFAULT
 --
 -- test FOREIGN KEY, PERIOD references range
 --
@@ -1068,6 +1067,22 @@ ALTER TABLE referencing_period_test
 		FOREIGN KEY (parent_id, PERIOD valid_at)
 		REFERENCES without_overlaps_test
 		ON DELETE CASCADE ON UPDATE CASCADE;
+-- test FK parent deletes CASCADE
+INSERT INTO without_overlaps_test VALUES ('[7,7]', tsrange('2018-01-01', '2021-01-01'));
+INSERT INTO referencing_period_test VALUES ('[5,5]', '2018-01-01', '2021-01-01', '[7,7]');
+DELETE FROM without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[7,7]';
+SELECT * FROM referencing_period_test WHERE id = '[5,5]';
+  id   |        valid_from        |        valid_til         | parent_id 
+-------+--------------------------+--------------------------+-----------
+ [5,6) | Mon Jan 01 00:00:00 2018 | Tue Jan 01 00:00:00 2019 | [7,8)
+ [5,6) | Wed Jan 01 00:00:00 2020 | Fri Jan 01 00:00:00 2021 | [7,8)
+(2 rows)
+
+-- test FK parent updates SET NULL
+-- test FK parent deletes SET NULL
+-- test FK parent updates SET DEFAULT
+-- test FK parent deletes SET DEFAULT
+-- test cascades through a FOR PORTION OF
 --
 -- test FOREIGN KEY, PERIOD references PERIOD
 --
@@ -1312,3 +1327,18 @@ ALTER TABLE referencing_period_test
 		FOREIGN KEY (parent_id, PERIOD valid_at)
 		REFERENCES without_overlaps_test
 		ON DELETE CASCADE ON UPDATE CASCADE;
+-- test FK parent deletes CASCADE
+INSERT INTO without_overlaps_test VALUES ('[7,7]', '2018-01-01', '2021-01-01');
+INSERT INTO referencing_period_test VALUES ('[5,5]', '2018-01-01', '2021-01-01', '[7,7]');
+DELETE FROM without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[7,7]';
+SELECT * FROM referencing_period_test WHERE id = '[5,5]';
+  id   |        valid_from        |        valid_til         | parent_id 
+-------+--------------------------+--------------------------+-----------
+ [5,6) | Mon Jan 01 00:00:00 2018 | Tue Jan 01 00:00:00 2019 | [7,8)
+ [5,6) | Wed Jan 01 00:00:00 2020 | Fri Jan 01 00:00:00 2021 | [7,8)
+(2 rows)
+
+-- test FK parent updates SET NULL
+-- test FK parent deletes SET NULL
+-- test FK parent updates SET DEFAULT
+-- test FK parent deletes SET DEFAULT
