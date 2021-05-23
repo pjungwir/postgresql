@@ -82,6 +82,8 @@
 #define RI_PLAN_SETDEFAULT_DOUPDATE		7
 #define TRI_PLAN_CASCADE_DEL_DODELETE	8
 #define TRI_PLAN_CASCADE_UPD_DOUPDATE	9
+#define TRI_PLAN_SETNULL_DOUPDATE		10
+#define TRI_PLAN_SETDEFAULT_DOUPDATE	11
 
 #define MAX_QUOTED_NAME_LEN  (NAMEDATALEN*2+3)
 #define MAX_QUOTED_REL_NAME_LEN  (MAX_QUOTED_NAME_LEN*2)
@@ -193,6 +195,7 @@ static bool ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 							  const RI_ConstraintInfo *riinfo);
 static Datum ri_restrict(TriggerData *trigdata, bool is_no_action);
 static Datum ri_set(TriggerData *trigdata, bool is_set_null);
+static Datum tri_set(TriggerData *trigdata, bool is_set_null);
 static void quoteOneName(char *buffer, const char *name);
 static void quoteRelationName(char *buffer, Relation rel);
 static void ri_GenerateQual(StringInfo buf,
@@ -1603,9 +1606,9 @@ TRI_FKey_cascade_del(PG_FUNCTION_ARGS)
 
 	/* Fetch or prepare a saved plan for the cascaded delete */
 	ri_BuildQueryKey(&qkey, riinfo,
-					 hasForPortionOf ?
-						TRI_PLAN_CASCADE_DEL_DODELETE :
-						RI_PLAN_CASCADE_DEL_DODELETE);
+					 (hasForPortionOf
+					  ? TRI_PLAN_CASCADE_DEL_DODELETE
+					  : RI_PLAN_CASCADE_DEL_DODELETE));
 
 	if ((qplan = ri_FetchPreparedPlan(&qkey)) == NULL)
 	{
@@ -1626,7 +1629,7 @@ TRI_FKey_cascade_del(PG_FUNCTION_ARGS)
 		/* ----------
 		 * The query string built is
 		 *	DELETE FROM [ONLY] <fktable>
-		 *	FOR PORTION OF $fkatt FROM $n TO $n+1
+		 *	FOR PORTION OF $fkatt FROM lower($n+1) TO upper($n+1)
 		 *	WHERE $1 = fkatt1 [AND ...]
 		 * The type id's for the $ parameters are those of the
 		 * corresponding PK attributes.
@@ -1822,9 +1825,9 @@ TRI_FKey_cascade_upd(PG_FUNCTION_ARGS)
 
 	/* Fetch or prepare a saved plan for the cascaded update */
 	ri_BuildQueryKey(&qkey, riinfo,
-					 hasForPortionOf ?
-						TRI_PLAN_CASCADE_UPD_DOUPDATE :
-						RI_PLAN_CASCADE_UPD_DOUPDATE);
+					 (hasForPortionOf
+					  ? TRI_PLAN_CASCADE_UPD_DOUPDATE
+					  : RI_PLAN_CASCADE_UPD_DOUPDATE));
 
 	if ((qplan = ri_FetchPreparedPlan(&qkey)) == NULL)
 	{
@@ -1847,7 +1850,7 @@ TRI_FKey_cascade_upd(PG_FUNCTION_ARGS)
 		/* ----------
 		 * The query string built is
 		 *	UPDATE [ONLY] <fktable>
-		 *	        FOR PORTION OF $fkatt FROM $n TO $n+1
+		 *	        FOR PORTION OF $fkatt FROM lower($n+1) TO upper($n+1)
 		 *	        SET fkatt1 = $1, [, ...]
 		 *	        WHERE $n = fkatt1 [AND ...]
 		 * The type id's for the $ parameters are those of the
@@ -1965,6 +1968,282 @@ TRI_FKey_cascade_upd(PG_FUNCTION_ARGS)
 	table_close(fk_rel, RowExclusiveLock);
 
 	return PointerGetDatum(NULL);
+}
+
+/*
+ * TRI_FKey_setnull_del -
+ *
+ * Set foreign key references to NULL values at delete event on PK table.
+ */
+Datum
+TRI_FKey_setnull_del(PG_FUNCTION_ARGS)
+{
+	/* Check that this is a valid trigger call on the right time and event. */
+	ri_CheckTrigger(fcinfo, "TRI_FKey_setnull_del", RI_TRIGTYPE_DELETE);
+
+	/* Share code with UPDATE case */
+	return tri_set((TriggerData *) fcinfo->context, true);
+}
+
+/*
+ * TRI_FKey_setnull_upd -
+ *
+ * Set foreign key references to NULL at update event on PK table.
+ */
+Datum
+TRI_FKey_setnull_upd(PG_FUNCTION_ARGS)
+{
+	/* Check that this is a valid trigger call on the right time and event. */
+	ri_CheckTrigger(fcinfo, "TRI_FKey_setnull_upd", RI_TRIGTYPE_UPDATE);
+
+	/* Share code with DELETE case */
+	return tri_set((TriggerData *) fcinfo->context, true);
+}
+
+/*
+ * TRI_FKey_setdefault_del -
+ *
+ * Set foreign key references to defaults at delete event on PK table.
+ */
+Datum
+TRI_FKey_setdefault_del(PG_FUNCTION_ARGS)
+{
+	/* Check that this is a valid trigger call on the right time and event. */
+	ri_CheckTrigger(fcinfo, "TRI_FKey_setdefault_del", RI_TRIGTYPE_DELETE);
+
+	/* Share code with UPDATE case */
+	return tri_set((TriggerData *) fcinfo->context, false);
+}
+
+/*
+ * TRI_FKey_setdefault_upd -
+ *
+ * Set foreign key references to defaults at update event on PK table.
+ */
+Datum
+TRI_FKey_setdefault_upd(PG_FUNCTION_ARGS)
+{
+	/* Check that this is a valid trigger call on the right time and event. */
+	ri_CheckTrigger(fcinfo, "TRI_FKey_setdefault_upd", RI_TRIGTYPE_UPDATE);
+
+	/* Share code with DELETE case */
+	return tri_set((TriggerData *) fcinfo->context, false);
+}
+
+
+/*
+ * tri_set -
+ *
+ * Common code for temporal ON DELETE SET NULL, ON DELETE SET DEFAULT, ON 
+ * UPDATE SET NULL, and ON UPDATE SET DEFAULT.
+ */
+static Datum
+tri_set(TriggerData *trigdata, bool is_set_null)
+{
+	const RI_ConstraintInfo *riinfo;
+	Relation	fk_rel;
+	Relation	pk_rel;
+	TupleTableSlot *oldslot;
+	RI_QueryKey qkey;
+	SPIPlanPtr	qplan;
+	bool hasForPortionOf;
+	Datum targetRange;
+
+	riinfo = ri_FetchConstraintInfo(trigdata->tg_trigger,
+									trigdata->tg_relation, true);
+
+	/*
+	 * Get the relation descriptors of the FK and PK tables and the old tuple.
+	 *
+	 * fk_rel is opened in RowExclusiveLock mode since that's what our
+	 * eventual UPDATE will get on it.
+	 */
+	fk_rel = table_open(riinfo->fk_relid, RowExclusiveLock);
+	pk_rel = trigdata->tg_relation;
+	oldslot = trigdata->tg_trigslot;
+
+	if (trigdata->tg_temporal)
+	{
+		hasForPortionOf = true;
+		targetRange = trigdata->tg_temporal->fp_targetRange;
+	}
+	else
+	{
+		hasForPortionOf = false;
+		targetRange = 0;
+	}
+
+	if (SPI_connect() != SPI_OK_CONNECT)
+		elog(ERROR, "SPI_connect failed");
+
+	/*
+	 * Fetch or prepare a saved plan for the set null/default operation (it's
+	 * the same query for delete and update cases)
+	 */
+	ri_BuildQueryKey(&qkey, riinfo,
+					 (hasForPortionOf
+					  ? (is_set_null
+						 ? TRI_PLAN_SETNULL_DOUPDATE
+						 : TRI_PLAN_SETDEFAULT_DOUPDATE)
+					  : (is_set_null
+						 ? RI_PLAN_SETNULL_DOUPDATE
+						 : RI_PLAN_SETDEFAULT_DOUPDATE)));
+
+	if ((qplan = ri_FetchPreparedPlan(&qkey)) == NULL)
+	{
+		bool		pkHasRange;
+		bool		fkHasRange;
+		StringInfoData querybuf;
+		StringInfoData qualbuf;
+		char		fkrelname[MAX_QUOTED_REL_NAME_LEN];
+		char		attname[MAX_QUOTED_NAME_LEN];
+		char	   *attstr;
+		char		paramname[16];
+		const char *querysep;
+		const char *qualsep;
+		Oid			queryoids[RI_MAX_NUMKEYS];
+		const char *fk_only;
+
+		pkHasRange = riinfo->pk_period == InvalidOid;
+		fkHasRange = riinfo->fk_period == InvalidOid;
+
+		/* ----------
+		 * The query string built is
+		 *	UPDATE [ONLY] <fktable>
+		 *			FOR PORTION OF $fkatt FROM lower($n+1) TO upper($n+1)
+		 *			SET fkatt1 = {NULL|DEFAULT} [, ...]
+		 *			WHERE $1 = fkatt1 [AND ...]
+		 * The type id's for the $ parameters are those of the
+		 * corresponding PK attributes.
+		 * ----------
+		 */
+		initStringInfo(&querybuf);
+		initStringInfo(&qualbuf);
+		fk_only = fk_rel->rd_rel->relkind == RELKIND_PARTITIONED_TABLE ?
+			"" : "ONLY ";
+		quoteRelationName(fkrelname, fk_rel);
+		if (fkHasRange)
+			quoteOneName(attname, RIAttName(fk_rel, riinfo->fk_attnums[riinfo->nkeys - 1]));
+		else
+			quoteOneName(attname, get_periodname(riinfo->fk_period, false));
+
+		if (hasForPortionOf)
+			appendStringInfo(&querybuf, "UPDATE %s%s FOR PORTION OF %s FROM lower($%d) TO upper($%d) SET",
+							 fk_only, fkrelname, attname, riinfo->nkeys + 1, riinfo->nkeys + 1);
+		else
+			appendStringInfo(&querybuf, "UPDATE %s%s SET",
+							 fk_only, fkrelname);
+
+		querysep = "";
+		qualsep = "WHERE";
+		for (int i = 0; i < riinfo->nkeys; i++)
+		{
+			Oid		pk_type;
+			Oid		fk_type;
+			Oid		pk_coll;
+			Oid		fk_coll;
+
+			if (riinfo->pk_attnums[i] != InvalidOid)
+			{
+				pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
+				pk_coll = RIAttCollation(pk_rel, riinfo->pk_attnums[i]);
+			}
+			else
+			{
+				pk_type = riinfo->pk_period_rangetype;
+				pk_coll = riinfo->pk_period_collation;
+			}
+
+			if (riinfo->fk_attnums[i] != InvalidOid)
+			{
+				fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
+				fk_coll = RIAttCollation(fk_rel, riinfo->fk_attnums[i]);
+			}
+			else
+			{
+				fk_type = riinfo->fk_period_rangetype;
+				fk_coll = riinfo->fk_period_collation;
+			}
+
+			if (riinfo->fk_attnums[i] == InvalidOid)
+				attstr = query_period_range(riinfo, fk_rel, "", false);
+			else
+			{
+				quoteOneName(attname,
+							 RIAttName(fk_rel, riinfo->fk_attnums[i]));
+				attstr = attname;
+			}
+
+			/*
+			 * Don't set the temporal column(s).
+			 * FOR PORTION OF will take care of that.
+			 * TODO: I guess I could omit it from the qual too, right? And likewise with cascade deletes?
+			 */
+			if (i < riinfo->nkeys - 1)
+				appendStringInfo(&querybuf,
+								 "%s %s = %s",
+								 querysep, attstr,
+								 is_set_null ? "NULL" : "DEFAULT");
+			sprintf(paramname, "$%d", i + 1);
+			ri_GenerateQual(&qualbuf, qualsep,
+							paramname, pk_type,
+							riinfo->pf_eq_oprs[i],
+							attstr, fk_type);
+			if (pk_coll != fk_coll && !get_collation_isdeterministic(pk_coll))
+				ri_GenerateQualCollation(&querybuf, pk_coll);
+			querysep = ",";
+			qualsep = "AND";
+			queryoids[i] = pk_type;
+		}
+		appendBinaryStringInfo(&querybuf, qualbuf.data, qualbuf.len);
+
+		if (hasForPortionOf)
+		{
+			if (pkHasRange)
+				queryoids[riinfo->nkeys] = RIAttType(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]);
+			else
+				queryoids[riinfo->nkeys] = riinfo->pk_period_rangetype;
+		}
+
+		/* Prepare and save the plan */
+		qplan = ri_PlanCheck(querybuf.data, riinfo->nkeys + (hasForPortionOf ? 1 : 0), queryoids,
+							 &qkey, fk_rel, pk_rel);
+	}
+
+	/*
+	 * We have a plan now. Run it to update the existing references.
+	 */
+	ri_PerformCheck(riinfo, &qkey, qplan,
+					fk_rel, pk_rel,
+					oldslot, NULL,
+					hasForPortionOf, targetRange,
+					true,		/* must detect new rows */
+					SPI_OK_UPDATE);
+
+	if (SPI_finish() != SPI_OK_FINISH)
+		elog(ERROR, "SPI_finish failed");
+
+	table_close(fk_rel, RowExclusiveLock);
+
+	if (is_set_null)
+		return PointerGetDatum(NULL);
+	else
+	{
+		/*
+		 * If we just deleted or updated the PK row whose key was equal to the
+		 * FK columns' default values, and a referencing row exists in the FK
+		 * table, we would have updated that row to the same values it already
+		 * had --- and RI_FKey_fk_upd_check_required would hence believe no
+		 * check is necessary.  So we need to do another lookup now and in
+		 * case a reference still exists, abort the operation.  That is
+		 * already implemented in the NO ACTION trigger, so just run it. (This
+		 * recheck is only needed in the SET DEFAULT case, since CASCADE would
+		 * remove such rows in case of a DELETE operation or would change the
+		 * FK key values in case of an UPDATE, while SET NULL is certain to
+		 * result in rows that satisfy the FK constraint.)
+		 */
+		return ri_restrict(trigdata, true);
+	}
 }
 
 
