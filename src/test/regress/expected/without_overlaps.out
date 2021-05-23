@@ -602,9 +602,103 @@ SELECT * FROM referencing_period_test WHERE id = '[5,5]';
 (0 rows)
 
 -- test FK parent updates SET NULL
+INSERT INTO without_overlaps_test VALUES ('[9,9]', tsrange('2018-01-01', '2021-01-01'));
+INSERT INTO referencing_period_test VALUES ('[6,6]', tsrange('2018-01-01', '2021-01-01'), '[9,9]');
+ALTER TABLE referencing_period_test
+	DROP CONSTRAINT referencing_period_fk,
+	ADD CONSTRAINT referencing_period_fk
+		FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES without_overlaps_test
+		ON DELETE SET NULL ON UPDATE SET NULL;
+UPDATE without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id = '[10,10]' WHERE id = '[9,9]';
+SELECT * FROM referencing_period_test WHERE id = '[6,6]';
+  id   |                        valid_at                         | parent_id 
+-------+---------------------------------------------------------+-----------
+ [6,7) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | 
+ [6,7) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [9,10)
+ [6,7) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [9,10)
+(3 rows)
+
+UPDATE without_overlaps_test SET id = '[10,10]' WHERE id = '[9,9]';
+SELECT * FROM referencing_period_test WHERE id = '[6,6]';
+  id   |                        valid_at                         | parent_id 
+-------+---------------------------------------------------------+-----------
+ [6,7) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | 
+ [6,7) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | 
+ [6,7) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | 
+(3 rows)
+
 -- test FK parent deletes SET NULL
+INSERT INTO without_overlaps_test VALUES ('[11,11]', tsrange('2018-01-01', '2021-01-01'));
+INSERT INTO referencing_period_test VALUES ('[7,7]', tsrange('2018-01-01', '2021-01-01'), '[11,11]');
+DELETE FROM without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[11,11]';
+SELECT * FROM referencing_period_test WHERE id = '[7,7]';
+  id   |                        valid_at                         | parent_id 
+-------+---------------------------------------------------------+-----------
+ [7,8) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | 
+ [7,8) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [11,12)
+ [7,8) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [11,12)
+(3 rows)
+
+DELETE FROM without_overlaps_test WHERE id = '[11,11]';
+SELECT * FROM referencing_period_test WHERE id = '[7,7]';
+  id   |                        valid_at                         | parent_id 
+-------+---------------------------------------------------------+-----------
+ [7,8) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | 
+ [7,8) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | 
+ [7,8) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | 
+(3 rows)
+
 -- test FK parent updates SET DEFAULT
+INSERT INTO without_overlaps_test VALUES ('[-1,-1]', tsrange(null, null));
+INSERT INTO without_overlaps_test VALUES ('[12,12]', tsrange('2018-01-01', '2021-01-01'));
+INSERT INTO referencing_period_test VALUES ('[8,8]', tsrange('2018-01-01', '2021-01-01'), '[12,12]');
+ALTER TABLE referencing_period_test
+  ALTER COLUMN parent_id SET DEFAULT '[-1,-1]',
+	DROP CONSTRAINT referencing_period_fk,
+	ADD CONSTRAINT referencing_period_fk
+		FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES without_overlaps_test
+		ON DELETE SET DEFAULT ON UPDATE SET DEFAULT;
+UPDATE without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id = '[13,13]' WHERE id = '[12,12]';
+SELECT * FROM referencing_period_test WHERE id = '[8,8]';
+  id   |                        valid_at                         | parent_id 
+-------+---------------------------------------------------------+-----------
+ [8,9) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)
+ [8,9) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [12,13)
+ [8,9) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [12,13)
+(3 rows)
+
+UPDATE without_overlaps_test SET id = '[13,13]' WHERE id = '[12,12]';
+SELECT * FROM referencing_period_test WHERE id = '[8,8]';
+  id   |                        valid_at                         | parent_id 
+-------+---------------------------------------------------------+-----------
+ [8,9) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)
+ [8,9) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [-1,0)
+ [8,9) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [-1,0)
+(3 rows)
+
 -- test FK parent deletes SET DEFAULT
+INSERT INTO without_overlaps_test VALUES ('[14,14]', tsrange('2018-01-01', '2021-01-01'));
+INSERT INTO referencing_period_test VALUES ('[9,9]', tsrange('2018-01-01', '2021-01-01'), '[14,14]');
+DELETE FROM without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[14,14]';
+SELECT * FROM referencing_period_test WHERE id = '[9,9]';
+   id   |                        valid_at                         | parent_id 
+--------+---------------------------------------------------------+-----------
+ [9,10) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)
+ [9,10) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [14,15)
+ [9,10) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [14,15)
+(3 rows)
+
+DELETE FROM without_overlaps_test WHERE id = '[14,14]';
+SELECT * FROM referencing_period_test WHERE id = '[9,9]';
+   id   |                        valid_at                         | parent_id 
+--------+---------------------------------------------------------+-----------
+ [9,10) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)
+ [9,10) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [-1,0)
+ [9,10) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [-1,0)
+(3 rows)
+
 -- test FOREIGN KEY, range references PERIOD
 --
 DROP TABLE without_overlaps_test CASCADE;
