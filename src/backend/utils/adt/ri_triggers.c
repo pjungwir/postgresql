@@ -80,6 +80,8 @@
 #define RI_PLAN_RESTRICT_CHECKREF		5
 #define RI_PLAN_SETNULL_DOUPDATE		6
 #define RI_PLAN_SETDEFAULT_DOUPDATE		7
+#define TRI_PLAN_CASCADE_DEL_DODELETE	8
+#define TRI_PLAN_CASCADE_UPD_DOUPDATE	9
 
 #define MAX_QUOTED_NAME_LEN  (NAMEDATALEN*2+3)
 #define MAX_QUOTED_REL_NAME_LEN  (MAX_QUOTED_NAME_LEN*2)
@@ -1574,6 +1576,8 @@ TRI_FKey_cascade_del(PG_FUNCTION_ARGS)
 	TupleTableSlot *oldslot;
 	RI_QueryKey qkey;
 	SPIPlanPtr	qplan;
+	bool hasForPortionOf;
+	Datum targetRange;
 
 	/* Check that this is a valid trigger call on the right time and event. */
 	ri_CheckTrigger(fcinfo, "TRI_FKey_cascade_del", RI_TRIGTYPE_DELETE);
@@ -1591,11 +1595,25 @@ TRI_FKey_cascade_del(PG_FUNCTION_ARGS)
 	pk_rel = trigdata->tg_relation;
 	oldslot = trigdata->tg_trigslot;
 
+	if (trigdata->tg_temporal)
+	{
+		hasForPortionOf = true;
+		targetRange = trigdata->tg_temporal->fp_targetRange;
+	}
+	else
+	{
+		hasForPortionOf = false;
+		targetRange = 0;
+	}
+
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "SPI_connect failed");
 
 	/* Fetch or prepare a saved plan for the cascaded delete */
-	ri_BuildQueryKey(&qkey, riinfo, RI_PLAN_CASCADE_DEL_DODELETE);
+	ri_BuildQueryKey(&qkey, riinfo,
+					 hasForPortionOf ?
+						TRI_PLAN_CASCADE_DEL_DODELETE :
+						RI_PLAN_CASCADE_DEL_DODELETE);
 
 	if ((qplan = ri_FetchPreparedPlan(&qkey)) == NULL)
 	{
@@ -1634,14 +1652,15 @@ TRI_FKey_cascade_del(PG_FUNCTION_ARGS)
 		// TODO: Better to find the greater of lower($n+1) and lower($1)
 		// and the lesser for upper($n+1) and upper($1),
 		// so we only delete what is being deleted from the pk table.
-		appendStringInfo(&querybuf, "DELETE FROM %s%s FOR PORTION OF %s FROM lower($%d) TO upper($%d)",
-						 fk_only, fkrelname, attname, riinfo->nkeys + 1, riinfo->nkeys + 1);
-		// appendStringInfo(&querybuf, "DELETE FROM %s%s FOR PORTION OF %s FROM '2019-01-01' TO '2020-01-01'",
-						 // fk_only, fkrelname, attname);
+		if (hasForPortionOf)
+			appendStringInfo(&querybuf, "DELETE FROM %s%s FOR PORTION OF %s FROM lower($%d) TO upper($%d)",
+							 fk_only, fkrelname, attname, riinfo->nkeys + 1, riinfo->nkeys + 1);
+		else
+			appendStringInfo(&querybuf, "DELETE FROM %s%s",
+							 fk_only, fkrelname);
 		querysep = "WHERE";
 		for (int i = 0; i < riinfo->nkeys; i++)
 		{
-			// TODO: Need to handle an attnum of InvalidOid I think? For PERIODs?
 			Oid		pk_type;
 			Oid		fk_type;
 			Oid		pk_coll;
@@ -1687,13 +1706,17 @@ TRI_FKey_cascade_del(PG_FUNCTION_ARGS)
 			querysep = "AND";
 			queryoids[i] = pk_type;
 		}
-		if (pkHasRange)
-			queryoids[riinfo->nkeys] = RIAttType(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]);
-		else
-			queryoids[riinfo->nkeys] = riinfo->pk_period_rangetype;
+
+		if (hasForPortionOf)
+		{
+			if (pkHasRange)
+				queryoids[riinfo->nkeys] = RIAttType(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]);
+			else
+				queryoids[riinfo->nkeys] = riinfo->pk_period_rangetype;
+		}
 
 		/* Prepare and save the plan */
-		qplan = ri_PlanCheck(querybuf.data, riinfo->nkeys + 1, queryoids,
+		qplan = ri_PlanCheck(querybuf.data, riinfo->nkeys + (hasForPortionOf ? 1 : 0), queryoids,
 							 &qkey, fk_rel, pk_rel);
 	}
 
@@ -1704,7 +1727,7 @@ TRI_FKey_cascade_del(PG_FUNCTION_ARGS)
 	ri_PerformCheck(riinfo, &qkey, qplan,
 					fk_rel, pk_rel,
 					oldslot, NULL,
-					true, trigdata->tg_temporal->fp_targetRange,
+					hasForPortionOf, targetRange,
 					true,		/* must detect new rows */
 					SPI_OK_DELETE);
 
@@ -1767,104 +1790,169 @@ TRI_FKey_cascade_upd(PG_FUNCTION_ARGS)
 	Relation	fk_rel;
 	Relation	pk_rel;
 	TupleTableSlot *oldslot;
+	TupleTableSlot *newslot;
 	RI_QueryKey qkey;
 	SPIPlanPtr	qplan;
+	bool hasForPortionOf;
+	Datum targetRange;
 
 	/* Check that this is a valid trigger call on the right time and event. */
 	ri_CheckTrigger(fcinfo, "TRI_FKey_cascade_upd", RI_TRIGTYPE_UPDATE);
 
 	riinfo = ri_FetchConstraintInfo(trigdata->tg_trigger,
 									trigdata->tg_relation, true);
-	ereport(NOTICE, (errmsg("TRI_FKey_cascade_upd")));
 
 	/*
-	 * Get the relation descriptors of the FK and PK tables and the old tuple.
+	 * Get the relation descriptors of the FK and PK tables and the new and
+	 * old tuple.
 	 *
 	 * fk_rel is opened in RowExclusiveLock mode since that's what our
-	 * eventual DELETE will get on it.
+	 * eventual UPDATE will get on it.
 	 */
 	fk_rel = table_open(riinfo->fk_relid, RowExclusiveLock);
 	pk_rel = trigdata->tg_relation;
+	newslot = trigdata->tg_newslot;
 	oldslot = trigdata->tg_trigslot;
+
+	if (trigdata->tg_temporal)
+	{
+		hasForPortionOf = true;
+		targetRange = trigdata->tg_temporal->fp_targetRange;
+	}
+	else
+	{
+		hasForPortionOf = false;
+		targetRange = 0;
+	}
 
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "SPI_connect failed");
 
 	/* Fetch or prepare a saved plan for the cascaded update */
-	ri_BuildQueryKey(&qkey, riinfo, RI_PLAN_CASCADE_UPD_DOUPDATE);
+	ri_BuildQueryKey(&qkey, riinfo,
+					 hasForPortionOf ?
+						TRI_PLAN_CASCADE_UPD_DOUPDATE :
+						RI_PLAN_CASCADE_UPD_DOUPDATE);
 
 	if ((qplan = ri_FetchPreparedPlan(&qkey)) == NULL)
 	{
-		bool		hasRange;
-		int			from_attnum;
-		int			to_attnum;
+		bool		pkHasRange;
+		bool		fkHasRange;
 		StringInfoData querybuf;
-		char	   *forPortionOf;
+		StringInfoData qualbuf;
 		char		fkrelname[MAX_QUOTED_REL_NAME_LEN];
 		char		attname[MAX_QUOTED_NAME_LEN];
+		char	   *attstr;
 		char		paramname[16];
 		const char *querysep;
+		const char *qualsep;
 		Oid			queryoids[RI_MAX_NUMKEYS];
 		const char *fk_only;
 
-		hasRange = riinfo->pk_period == InvalidOid;
+		pkHasRange = riinfo->pk_period == InvalidOid;
+		fkHasRange = riinfo->fk_period == InvalidOid;
 
-		// TODO: This is based on a copy/paste of TRI_FKey_cascade_del
-		// but it should probably be based on RI_FKey_cascade_upd instead.
 		/* ----------
 		 * The query string built is
 		 *	UPDATE [ONLY] <fktable>
-		 *	FOR PORTION OF $fkatt FROM $n TO $n+1
-		 *	SET ....
-		 *	WHERE $1 = fkatt1 [AND ...]
+		 *	        FOR PORTION OF $fkatt FROM $n TO $n+1
+		 *	        SET fkatt1 = $1, [, ...]
+		 *	        WHERE $n = fkatt1 [AND ...]
 		 * The type id's for the $ parameters are those of the
-		 * corresponding PK attributes.
+		 * corresponding PK attributes.  Note that we are assuming
+		 * there is an assignment cast from the PK to the FK type;
+		 * else the parser will fail.
 		 * ----------
 		 */
 		initStringInfo(&querybuf);
+		initStringInfo(&qualbuf);
 		fk_only = fk_rel->rd_rel->relkind == RELKIND_PARTITIONED_TABLE ?
 			"" : "ONLY ";
 		quoteRelationName(fkrelname, fk_rel);
-		if (hasRange)
-		{
-			forPortionOf = "UPDATE %s%s FOR PORTION OF lower($%d) TO upper($%d)";
-			from_attnum = to_attnum = riinfo->pk_attnums[riinfo->nkeys - 1];
-		}
+		if (fkHasRange)
+			quoteOneName(attname, RIAttName(fk_rel, riinfo->fk_attnums[riinfo->nkeys - 1]));
 		else
-		{
-			forPortionOf = "UPDATE %s%s FOR PORTION OF $%d TO $%d";
-			from_attnum = riinfo->pk_period_attnums[0];
-			to_attnum = riinfo->pk_period_attnums[1];
-		}
-		for (int i = 0; i < riinfo->nkeys; i++)
-		{
-		}
+			quoteOneName(attname, get_periodname(riinfo->fk_period, false));
 
-		appendStringInfo(&querybuf, forPortionOf,
-						 fk_only, fkrelname, from_attnum, to_attnum);
-		querysep = "WHERE";
-		for (int i = 0; i < riinfo->nkeys; i++)
-		{
-			Oid			pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
-			Oid			fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
-			Oid			pk_coll = RIAttCollation(pk_rel, riinfo->pk_attnums[i]);
-			Oid			fk_coll = RIAttCollation(fk_rel, riinfo->fk_attnums[i]);
+		if (hasForPortionOf)
+			appendStringInfo(&querybuf, "UPDATE %s%s FOR PORTION OF %s FROM lower($%d) TO upper($%d) SET",
+							 fk_only, fkrelname, attname, 2 * riinfo->nkeys + 1, 2 * riinfo->nkeys + 1);
+		else
+			appendStringInfo(&querybuf, "UPDATE %s%s SET",
+							 fk_only, fkrelname);
 
-			quoteOneName(attname,
-						 RIAttName(fk_rel, riinfo->fk_attnums[i]));
-			sprintf(paramname, "$%d", i + 1);
-			ri_GenerateQual(&querybuf, querysep,
+		querysep = "";
+		qualsep = "WHERE";
+		for (int i = 0, j = riinfo->nkeys; i < riinfo->nkeys; i++, j++)
+		{
+			Oid		pk_type;
+			Oid		fk_type;
+			Oid		pk_coll;
+			Oid		fk_coll;
+
+			if (riinfo->pk_attnums[i] != InvalidOid)
+			{
+				pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
+				pk_coll = RIAttCollation(pk_rel, riinfo->pk_attnums[i]);
+			}
+			else
+			{
+				pk_type = riinfo->pk_period_rangetype;
+				pk_coll = riinfo->pk_period_collation;
+			}
+
+			if (riinfo->fk_attnums[i] != InvalidOid)
+			{
+				fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
+				fk_coll = RIAttCollation(fk_rel, riinfo->fk_attnums[i]);
+			}
+			else
+			{
+				fk_type = riinfo->fk_period_rangetype;
+				fk_coll = riinfo->fk_period_collation;
+			}
+
+			if (riinfo->fk_attnums[i] == InvalidOid)
+				attstr = query_period_range(riinfo, fk_rel, "", false);
+			else
+			{
+				quoteOneName(attname,
+							 RIAttName(fk_rel, riinfo->fk_attnums[i]));
+				attstr = attname;
+			}
+			/*
+			 * Don't set the temporal column(s).
+			 * FOR PORTION OF will take care of that.
+			 * TODO: I guess I could omit it from the qual too, right? And likewise with cascade deletes?
+			 */
+			if (i < riinfo->nkeys - 1)
+				appendStringInfo(&querybuf,
+								 "%s %s = $%d",
+								 querysep, attstr, i + 1);
+			sprintf(paramname, "$%d", j + 1);
+			ri_GenerateQual(&qualbuf, qualsep,
 							paramname, pk_type,
 							riinfo->pf_eq_oprs[i],
-							attname, fk_type);
+							attstr, fk_type);
 			if (pk_coll != fk_coll && !get_collation_isdeterministic(pk_coll))
 				ri_GenerateQualCollation(&querybuf, pk_coll);
-			querysep = "AND";
+			querysep = ",";
+			qualsep = "AND";
 			queryoids[i] = pk_type;
+			queryoids[j] = pk_type;
+		}
+		appendBinaryStringInfo(&querybuf, qualbuf.data, qualbuf.len);
+
+		if (hasForPortionOf)
+		{
+			if (pkHasRange)
+				queryoids[2 * riinfo->nkeys] = RIAttType(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]);
+			else
+				queryoids[2 * riinfo->nkeys] = riinfo->pk_period_rangetype;
 		}
 
 		/* Prepare and save the plan */
-		qplan = ri_PlanCheck(querybuf.data, riinfo->nkeys, queryoids,
+		qplan = ri_PlanCheck(querybuf.data, 2 * riinfo->nkeys + (hasForPortionOf ? 1 : 0), queryoids,
 							 &qkey, fk_rel, pk_rel);
 	}
 
@@ -1874,8 +1962,8 @@ TRI_FKey_cascade_upd(PG_FUNCTION_ARGS)
 	 */
 	ri_PerformCheck(riinfo, &qkey, qplan,
 					fk_rel, pk_rel,
-					oldslot, NULL,
-					true, trigdata->tg_temporal->fp_targetRange,
+					oldslot, newslot,
+					hasForPortionOf, targetRange,
 					true,		/* must detect new rows */
 					SPI_OK_UPDATE);
 
