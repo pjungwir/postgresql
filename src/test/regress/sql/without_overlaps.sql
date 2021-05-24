@@ -882,13 +882,49 @@ SELECT * FROM referencing_period_test WHERE id = '[5,5]';
 DELETE FROM without_overlaps_test WHERE id = '[8,8]';
 SELECT * FROM referencing_period_test WHERE id = '[5,5]';
 -- test FK parent updates SET NULL
--- TODO
+INSERT INTO without_overlaps_test VALUES ('[9,9]', '2018-01-01', '2021-01-01');
+INSERT INTO referencing_period_test VALUES ('[6,6]', tsrange('2018-01-01', '2021-01-01'), '[9,9]');
+ALTER TABLE referencing_period_test
+	DROP CONSTRAINT referencing_period_fk,
+	ADD CONSTRAINT referencing_period_fk
+		FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES without_overlaps_test
+		ON DELETE SET NULL ON UPDATE SET NULL;
+UPDATE without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id = '[10,10]' WHERE id = '[9,9]';
+SELECT * FROM referencing_period_test WHERE id = '[6,6]';
+UPDATE without_overlaps_test SET id = '[10,10]' WHERE id = '[9,9]';
+SELECT * FROM referencing_period_test WHERE id = '[6,6]';
 -- test FK parent deletes SET NULL
--- TODO
+INSERT INTO without_overlaps_test VALUES ('[11,11]', '2018-01-01', '2021-01-01');
+INSERT INTO referencing_period_test VALUES ('[7,7]', tsrange('2018-01-01', '2021-01-01'), '[11,11]');
+DELETE FROM without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[11,11]';
+SELECT * FROM referencing_period_test WHERE id = '[7,7]';
+DELETE FROM without_overlaps_test WHERE id = '[11,11]';
+SELECT * FROM referencing_period_test WHERE id = '[7,7]';
+
 -- test FK parent updates SET DEFAULT
--- TODO
+INSERT INTO without_overlaps_test VALUES ('[-1,-1]', null, null);
+INSERT INTO without_overlaps_test VALUES ('[12,12]', '2018-01-01', '2021-01-01');
+INSERT INTO referencing_period_test VALUES ('[8,8]', tsrange('2018-01-01', '2021-01-01'), '[12,12]');
+ALTER TABLE referencing_period_test
+  ALTER COLUMN parent_id SET DEFAULT '[-1,-1]',
+	DROP CONSTRAINT referencing_period_fk,
+	ADD CONSTRAINT referencing_period_fk
+		FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES without_overlaps_test
+		ON DELETE SET DEFAULT ON UPDATE SET DEFAULT;
+UPDATE without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id = '[13,13]' WHERE id = '[12,12]';
+SELECT * FROM referencing_period_test WHERE id = '[8,8]';
+UPDATE without_overlaps_test SET id = '[13,13]' WHERE id = '[12,12]';
+SELECT * FROM referencing_period_test WHERE id = '[8,8]';
 -- test FK parent deletes SET DEFAULT
--- TODO
+INSERT INTO without_overlaps_test VALUES ('[14,14]', '2018-01-01', '2021-01-01');
+INSERT INTO referencing_period_test VALUES ('[9,9]', tsrange('2018-01-01', '2021-01-01'), '[14,14]');
+DELETE FROM without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[14,14]';
+SELECT * FROM referencing_period_test WHERE id = '[9,9]';
+DELETE FROM without_overlaps_test WHERE id = '[14,14]';
+SELECT * FROM referencing_period_test WHERE id = '[9,9]';
+
 
 -- test cascades through a FOR PORTION OF
 
@@ -1148,13 +1184,48 @@ DELETE FROM without_overlaps_test WHERE id = '[8,8]';
 SELECT * FROM referencing_period_test WHERE id = '[5,5]';
 
 -- test FK parent updates SET NULL
--- TODO
+INSERT INTO without_overlaps_test VALUES ('[9,9]', tsrange('2018-01-01', '2021-01-01'));
+INSERT INTO referencing_period_test VALUES ('[6,6]', '2018-01-01', '2021-01-01', '[9,9]');
+ALTER TABLE referencing_period_test
+	DROP CONSTRAINT referencing_period_fk,
+	ADD CONSTRAINT referencing_period_fk
+		FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES without_overlaps_test
+		ON DELETE SET NULL ON UPDATE SET NULL;
+UPDATE without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id = '[10,10]' WHERE id = '[9,9]';
+SELECT * FROM referencing_period_test WHERE id = '[6,6]';
+UPDATE without_overlaps_test SET id = '[10,10]' WHERE id = '[9,9]';
+SELECT * FROM referencing_period_test WHERE id = '[6,6]';
 -- test FK parent deletes SET NULL
--- TODO
+INSERT INTO without_overlaps_test VALUES ('[11,11]', tsrange('2018-01-01', '2021-01-01'));
+INSERT INTO referencing_period_test VALUES ('[7,7]', '2018-01-01', '2021-01-01', '[11,11]');
+DELETE FROM without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[11,11]';
+SELECT * FROM referencing_period_test WHERE id = '[7,7]';
+DELETE FROM without_overlaps_test WHERE id = '[11,11]';
+SELECT * FROM referencing_period_test WHERE id = '[7,7]';
+
 -- test FK parent updates SET DEFAULT
--- TODO
+INSERT INTO without_overlaps_test VALUES ('[-1,-1]', tsrange(null, null));
+INSERT INTO without_overlaps_test VALUES ('[12,12]', tsrange('2018-01-01', '2021-01-01'));
+INSERT INTO referencing_period_test VALUES ('[8,8]', '2018-01-01', '2021-01-01', '[12,12]');
+ALTER TABLE referencing_period_test
+  ALTER COLUMN parent_id SET DEFAULT '[-1,-1]',
+	DROP CONSTRAINT referencing_period_fk,
+	ADD CONSTRAINT referencing_period_fk
+		FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES without_overlaps_test
+		ON DELETE SET DEFAULT ON UPDATE SET DEFAULT;
+UPDATE without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id = '[13,13]' WHERE id = '[12,12]';
+SELECT * FROM referencing_period_test WHERE id = '[8,8]';
+UPDATE without_overlaps_test SET id = '[13,13]' WHERE id = '[12,12]';
+SELECT * FROM referencing_period_test WHERE id = '[8,8]';
 -- test FK parent deletes SET DEFAULT
--- TODO
+INSERT INTO without_overlaps_test VALUES ('[14,14]', tsrange('2018-01-01', '2021-01-01'));
+INSERT INTO referencing_period_test VALUES ('[9,9]', '2018-01-01', '2021-01-01', '[14,14]');
+DELETE FROM without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[14,14]';
+SELECT * FROM referencing_period_test WHERE id = '[9,9]';
+DELETE FROM without_overlaps_test WHERE id = '[14,14]';
+SELECT * FROM referencing_period_test WHERE id = '[9,9]';
 -- test cascades through a FOR PORTION OF
 
 
@@ -1416,12 +1487,47 @@ DELETE FROM without_overlaps_test WHERE id = '[8,8]';
 SELECT * FROM referencing_period_test WHERE id = '[5,5]';
 
 -- test FK parent updates SET NULL
--- TODO
+INSERT INTO without_overlaps_test VALUES ('[9,9]', '2018-01-01', '2021-01-01');
+INSERT INTO referencing_period_test VALUES ('[6,6]', '2018-01-01', '2021-01-01', '[9,9]');
+ALTER TABLE referencing_period_test
+	DROP CONSTRAINT referencing_period_fk,
+	ADD CONSTRAINT referencing_period_fk
+		FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES without_overlaps_test
+		ON DELETE SET NULL ON UPDATE SET NULL;
+UPDATE without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id = '[10,10]' WHERE id = '[9,9]';
+SELECT * FROM referencing_period_test WHERE id = '[6,6]';
+UPDATE without_overlaps_test SET id = '[10,10]' WHERE id = '[9,9]';
+SELECT * FROM referencing_period_test WHERE id = '[6,6]';
 -- test FK parent deletes SET NULL
--- TODO
+INSERT INTO without_overlaps_test VALUES ('[11,11]', '2018-01-01', '2021-01-01');
+INSERT INTO referencing_period_test VALUES ('[7,7]', '2018-01-01', '2021-01-01', '[11,11]');
+DELETE FROM without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[11,11]';
+SELECT * FROM referencing_period_test WHERE id = '[7,7]';
+DELETE FROM without_overlaps_test WHERE id = '[11,11]';
+SELECT * FROM referencing_period_test WHERE id = '[7,7]';
+
 -- test FK parent updates SET DEFAULT
--- TODO
+INSERT INTO without_overlaps_test VALUES ('[-1,-1]', null, null);
+INSERT INTO without_overlaps_test VALUES ('[12,12]', '2018-01-01', '2021-01-01');
+INSERT INTO referencing_period_test VALUES ('[8,8]', '2018-01-01', '2021-01-01', '[12,12]');
+ALTER TABLE referencing_period_test
+  ALTER COLUMN parent_id SET DEFAULT '[-1,-1]',
+	DROP CONSTRAINT referencing_period_fk,
+	ADD CONSTRAINT referencing_period_fk
+		FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES without_overlaps_test
+		ON DELETE SET DEFAULT ON UPDATE SET DEFAULT;
+UPDATE without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id = '[13,13]' WHERE id = '[12,12]';
+SELECT * FROM referencing_period_test WHERE id = '[8,8]';
+UPDATE without_overlaps_test SET id = '[13,13]' WHERE id = '[12,12]';
+SELECT * FROM referencing_period_test WHERE id = '[8,8]';
 -- test FK parent deletes SET DEFAULT
--- TODO
+INSERT INTO without_overlaps_test VALUES ('[14,14]', '2018-01-01', '2021-01-01');
+INSERT INTO referencing_period_test VALUES ('[9,9]', '2018-01-01', '2021-01-01', '[14,14]');
+DELETE FROM without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[14,14]';
+SELECT * FROM referencing_period_test WHERE id = '[9,9]';
+DELETE FROM without_overlaps_test WHERE id = '[14,14]';
+SELECT * FROM referencing_period_test WHERE id = '[9,9]';
 -- test cascades through a FOR PORTION OF
 
