@@ -3114,13 +3114,14 @@ ri_LoadConstraintInfo(Oid constraintOid)
 	riinfo->pk_period_rangetype = InvalidOid;
 	riinfo->pk_period_collation = InvalidOid;
 	strcpy(riinfo->pk_period_rangetype_name, "");
-	// TODO
-	// riinfo->pk_period_attnums = {0, 0};
+	//eriinfo->pk_period_attnums = (int16[]){0, 0};
+	memset(riinfo->pk_period_attnums, 0, sizeof(riinfo->pk_period_attnums));
 	riinfo->fk_period = conForm->conperiod;
 	riinfo->fk_period_rangetype = InvalidOid;
 	riinfo->fk_period_collation = InvalidOid;
 	strcpy(riinfo->fk_period_rangetype_name, "");
 	// riinfo->fk_period_attnums = {0, 0};
+	memset(riinfo->fk_period_attnums, 0, sizeof(riinfo->fk_period_attnums));
 
 	if (conForm->confperiod != InvalidOid)
 	{
