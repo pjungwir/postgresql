@@ -182,7 +182,7 @@ DECLARE_INDEX(pg_constraint_conparentid_index, 2579, on pg_constraint using btre
 
 /* conkey can contain zero (InvalidAttrNumber) if a whole-row Var is used */
 DECLARE_ARRAY_FOREIGN_KEY_OPT((conrelid, conkey), pg_attribute, (attrelid, attnum));
-DECLARE_ARRAY_FOREIGN_KEY((confrelid, confkey), pg_attribute, (attrelid, attnum));
+DECLARE_ARRAY_FOREIGN_KEY_OPT((confrelid, confkey), pg_attribute, (attrelid, attnum));
 
 #ifdef EXPOSE_TO_CLIENT_CODE
 
