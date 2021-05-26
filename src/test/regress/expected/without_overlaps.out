@@ -699,6 +699,7 @@ SELECT * FROM referencing_period_test WHERE id = '[9,9]';
  [9,10) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [-1,0)
 (3 rows)
 
+--
 -- test FOREIGN KEY, range references PERIOD
 --
 DROP TABLE without_overlaps_test CASCADE;
