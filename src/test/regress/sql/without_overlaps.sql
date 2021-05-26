@@ -583,7 +583,6 @@ SELECT * FROM referencing_period_test WHERE id = '[5,5]';
 DELETE FROM without_overlaps_test WHERE id = '[8,8]';
 SELECT * FROM referencing_period_test WHERE id = '[5,5]';
 
--- TODO: Need a delete without a FOR PORTION OF too, and make sure the whole child row is deleted.
 -- test FK parent updates SET NULL
 INSERT INTO without_overlaps_test VALUES ('[9,9]', tsrange('2018-01-01', '2021-01-01'));
 INSERT INTO referencing_period_test VALUES ('[6,6]', tsrange('2018-01-01', '2021-01-01'), '[9,9]');
@@ -627,8 +626,6 @@ DELETE FROM without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '
 SELECT * FROM referencing_period_test WHERE id = '[9,9]';
 DELETE FROM without_overlaps_test WHERE id = '[14,14]';
 SELECT * FROM referencing_period_test WHERE id = '[9,9]';
-
--- test cascades through a FOR PORTION OF
 
 
 

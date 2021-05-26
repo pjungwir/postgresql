@@ -45,7 +45,7 @@ CATALOG(pg_period,8000,PeriodRelationId)
  */
 typedef FormData_pg_period *Form_pg_period;
 
-DECLARE_UNIQUE_INDEX(pg_period_oid_index, 8001, on pg_period using btree(oid oid_ops));
+DECLARE_UNIQUE_INDEX_PKEY(pg_period_oid_index, 8001, on pg_period using btree(oid oid_ops));
 #define PeriodObjectIndexId 8001
 DECLARE_UNIQUE_INDEX(pg_period_perrelid_pername_index, 8002, on pg_period using btree(perrelid oid_ops, pername name_ops));
 #define PeriodRelidNameIndexId 8002
