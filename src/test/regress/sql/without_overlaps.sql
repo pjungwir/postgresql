@@ -923,9 +923,6 @@ DELETE FROM without_overlaps_test WHERE id = '[14,14]';
 SELECT * FROM referencing_period_test WHERE id = '[9,9]';
 
 
--- test cascades through a FOR PORTION OF
-
-
 --
 -- test FOREIGN KEY, PERIOD references range
 --
@@ -1223,8 +1220,6 @@ DELETE FROM without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '
 SELECT * FROM referencing_period_test WHERE id = '[9,9]';
 DELETE FROM without_overlaps_test WHERE id = '[14,14]';
 SELECT * FROM referencing_period_test WHERE id = '[9,9]';
--- test cascades through a FOR PORTION OF
-
 
 
 --
@@ -1526,5 +1521,3 @@ DELETE FROM without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '
 SELECT * FROM referencing_period_test WHERE id = '[9,9]';
 DELETE FROM without_overlaps_test WHERE id = '[14,14]';
 SELECT * FROM referencing_period_test WHERE id = '[9,9]';
--- test cascades through a FOR PORTION OF
-
