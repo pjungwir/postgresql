@@ -1070,7 +1070,6 @@ SELECT * FROM referencing_period_test WHERE id = '[9,9]';
  [9,10) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [-1,0)
 (3 rows)
 
--- test cascades through a FOR PORTION OF
 --
 -- test FOREIGN KEY, PERIOD references range
 --
@@ -1446,7 +1445,6 @@ SELECT * FROM referencing_period_test WHERE id = '[9,9]';
  [9,10) | Wed Jan 01 00:00:00 2020 | Fri Jan 01 00:00:00 2021 | [-1,0)
 (3 rows)
 
--- test cascades through a FOR PORTION OF
 --
 -- test FOREIGN KEY, PERIOD references PERIOD
 --

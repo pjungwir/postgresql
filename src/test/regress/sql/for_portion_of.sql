@@ -153,7 +153,6 @@ UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM '2030-01-01' TO NULL
 SET name = name || '*';
 
--- TODO: UPDATE with generated columns too
 SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
 
 --
