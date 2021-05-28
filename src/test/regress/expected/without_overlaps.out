@@ -327,7 +327,7 @@ CREATE TABLE referencing_period_test2 (
 );
 ALTER TABLE without_overlaps_test2 DROP PERIOD FOR valid_at;
 ERROR:  cannot drop period valid_at on table without_overlaps_test2 because other objects depend on it
-DETAIL:  constraint referencing_period2_fk on table referencing_period_test2 depends on index without_overlaps2_pk
+DETAIL:  constraint referencing_period2_fk on table referencing_period_test2 depends on period valid_at on table without_overlaps_test2
 HINT:  Use DROP ... CASCADE to drop the dependent objects too.
 ALTER TABLE without_overlaps_test2 DROP PERIOD FOR valid_at CASCADE;
 NOTICE:  drop cascades to constraint referencing_period2_fk on table referencing_period_test2
