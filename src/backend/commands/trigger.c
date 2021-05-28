@@ -5444,6 +5444,8 @@ CopyForPortionOfState(ForPortionOfState *src)
 	ForPortionOfState *dst = NULL;
 	if (src) {
 		MemoryContext oldctx;
+		RangeType *r;
+		TypeCacheEntry *typcache;
 
 		/*
 		 * Need to lift the FOR PORTION OF details into a higher memory context
@@ -5468,8 +5470,8 @@ CopyForPortionOfState(ForPortionOfState *src)
 		else
 			dst->fp_periodEndName = NULL;
 
-		RangeType *r = DatumGetRangeTypeP(src->fp_targetRange);
-		TypeCacheEntry *typcache = lookup_type_cache(RangeTypeGetOid(r), TYPECACHE_RANGE_INFO);
+		r = DatumGetRangeTypeP(src->fp_targetRange);
+		typcache = lookup_type_cache(RangeTypeGetOid(r), TYPECACHE_RANGE_INFO);
 		dst->fp_targetRange = datumCopy(src->fp_targetRange, typcache->typbyval, typcache->typlen);
 		MemoryContextSwitchTo(oldctx);
 	}

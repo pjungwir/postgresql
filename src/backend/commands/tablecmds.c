@@ -1339,6 +1339,8 @@ AddRelationNewPeriod(Relation rel, Period *period)
 	Form_pg_attribute	startatttuple, endatttuple;
 	AttrNumber	startattnum, endattnum;
 	Oid			conoid;
+	Constraint *constr;
+	List	   *newconstrs;
 
 	/* The period name must not already exist */
 	(void) check_for_period_name_collision(rel, period->periodname, false);
@@ -1403,8 +1405,8 @@ AddRelationNewPeriod(Relation rel, Period *period)
 													  NIL);
 	}
 
-	Constraint *constr = make_period_not_backward(rel, period, period->constraintname);
-	List *newconstrs = AddRelationNewConstraints(rel, NIL, list_make1(constr), false, true, true, NULL);
+	constr = make_period_not_backward(rel, period, period->constraintname);
+	newconstrs = AddRelationNewConstraints(rel, NIL, list_make1(constr), false, true, true, NULL);
 	conoid = ((CookedConstraint *) linitial(newconstrs))->conoid;
 
 	/* Save it */
@@ -11370,6 +11372,8 @@ transformPeriodName(Oid relId, Node *periodName,
 	HeapTuple pertuple = SearchSysCache2(PERIODNAME,
 					   ObjectIdGetDatum(relId),
 					   PointerGetDatum(periodStr));
+	Form_pg_period period;
+
 	if (!HeapTupleIsValid(pertuple))
 	{
 		attnums[0] = InvalidOid;
@@ -11378,7 +11382,7 @@ transformPeriodName(Oid relId, Node *periodName,
 		return;
 	}
 
-	Form_pg_period period = (Form_pg_period) GETSTRUCT(pertuple);
+	period = (Form_pg_period) GETSTRUCT(pertuple);
 
 	attnums[0] = InvalidOid;
 	atttypids[0] = period->perrngtype;
@@ -11529,9 +11533,12 @@ transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 			{
 				/* we have a period */
 				HeapTuple periodTuple = SearchSysCache1(PERIODOID, ObjectIdGetDatum(indexStruct->indperiod));
+				Form_pg_period period;
+
 				if (!HeapTupleIsValid(periodTuple))
 					elog(ERROR, "cache lookup failed for period %u", indexStruct->indperiod);
-				Form_pg_period period = (Form_pg_period) GETSTRUCT(periodTuple);
+
+				period = (Form_pg_period) GETSTRUCT(periodTuple);
 				attnums[i] = InvalidOid;
 				periodattnums[0] = period->perstart;
 				periodattnums[1] = period->perend;

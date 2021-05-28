@@ -932,6 +932,10 @@ transformPeriodOptions(Period *period)
 static void
 transformTablePeriod(CreateStmtContext *cxt, Period *period)
 {
+	Oid			coltypid;
+	ColumnDef  *col;
+	ListCell   *columns;
+
 	if (strcmp(period->periodname, "system_time") == 0)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -950,9 +954,7 @@ transformTablePeriod(CreateStmtContext *cxt, Period *period)
 	 * Use the rangetype option if provided, otherwise try to find a
 	 * non-ambiguous existing type.
 	 */
-	Oid			coltypid = InvalidOid;
-	ColumnDef  *col;
-	ListCell   *columns;
+	coltypid = InvalidOid;
 
 	/* First find out the type of the period's columns */
 	period->rngtypid = InvalidOid;
@@ -1680,6 +1682,7 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 	Oid			keycoltype;
 	Datum		datum;
 	bool		isnull;
+	Period	   *period;
 
 	if (constraintOid)
 		*constraintOid = InvalidOid;
@@ -1740,9 +1743,9 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 	index->reset_default_tblspc = false;
 
 	/* Copy the period */
-	Period *p = makeNode(Period);
-	p->oid = idxrec->indperiod;
-	index->period = p;
+	period = makeNode(Period);
+	period->oid = idxrec->indperiod;
+	index->period = period;
 
 	/*
 	 * We don't try to preserve the name of the source index; instead, just
@@ -2742,6 +2745,8 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 			// char *without_overlaps_str = nodeToString(constraint->without_overlaps);
 			char *without_overlaps_str = strVal(constraint->without_overlaps);
 			IndexElem *iparam = makeNode(IndexElem);
+			char   *typname;
+			Oid		typid;
 
 			/*
 			 * Iterate through the table's columns
@@ -2755,22 +2760,20 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 			 *
 			 * Otherwise report an error.
 			 */
-			bool	found = false;
-			char   *typname;
-			Oid		typid;
 
 			if (findNewOrOldColumn(cxt, without_overlaps_str, &typname, &typid))
 			{
 				if (type_is_range(typid))
 				{
-					found = true;
+					AlterTableCmd *notnullcmd;
+
 					iparam->name = pstrdup(without_overlaps_str);
 					iparam->expr = NULL;
 
 					/*
 					 * Force the column to NOT NULL since it is part of the primary key.
 					 */
-					AlterTableCmd *notnullcmd = makeNode(AlterTableCmd);
+					notnullcmd = makeNode(AlterTableCmd);
 
 					notnullcmd->subtype = AT_SetNotNull;
 					notnullcmd->name = pstrdup(without_overlaps_str);
@@ -2793,7 +2796,6 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 					Period *period = castNode(Period, lfirst(periods));
 					if (strcmp(period->periodname, without_overlaps_str) == 0)
 					{
-						found = true;
 						startcolname = period->startcolname;
 						endcolname = period->endcolname;
 						/* The period has no oid yet, but transformIndexStmt will look it up */
@@ -2827,6 +2829,10 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 				}
 				if (startcolname != NULL)
 				{
+					ColumnRef *start, *end;
+					Oid rngtypid;
+					char *range_type_name;
+
 					if (!findNewOrOldColumn(cxt, startcolname, &typname, &typid))
 						elog(ERROR, "Missing startcol %s for period %s",
 							 startcolname, without_overlaps_str);
@@ -2836,22 +2842,22 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 
 					/* Use the start/end columns */
 
-					ColumnRef *start = makeNode(ColumnRef);
+					start = makeNode(ColumnRef);
 					start->fields = list_make1(makeString(startcolname));
 					start->location = constraint->location;
 
-					ColumnRef *end = makeNode(ColumnRef);
+					end = makeNode(ColumnRef);
 					end->fields = list_make1(makeString(endcolname));
 					end->location = constraint->location;
 
-					Oid rngtypid = get_subtype_range(typid);
+					rngtypid = get_subtype_range(typid);
 					if (rngtypid == InvalidOid)
 						ereport(ERROR,
 								(errcode(ERRCODE_UNDEFINED_OBJECT),
 								 errmsg("PERIOD \"%s\" cannot be used in a constraint without a corresponding range type",
 										without_overlaps_str)));
 
-					char *range_type_name = get_typname(rngtypid);
+					range_type_name = get_typname(rngtypid);
 
 					/* Build a range to represent the PERIOD. */
 					iparam->name = NULL;
@@ -3036,8 +3042,8 @@ findNewOrOldColumn(CreateStmtContext *cxt, char *colname, char **typname, Oid *t
 			const char *attname = NameStr(attr->attname);
 			if (strcmp(attname, colname) == 0)
 			{
-				*typid = attr->atttypid;
 				Type type = typeidType(attr->atttypid);
+				*typid = attr->atttypid;
 				*typname = pstrdup(typeTypeName(type));
 				ReleaseSysCache(type);
 				return true;

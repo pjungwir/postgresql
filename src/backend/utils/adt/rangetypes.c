@@ -2137,8 +2137,10 @@ range_as_string(RangeType *r)
   bool        typbyval;
   char        typalign;
   char        typdelim;
+  char		 *rangeStr;
   Oid typioparam;
   Oid range_out_oid;
+
   get_type_io_data(
 		  RangeTypeGetOid(r),
 		  IOFunc_output,
@@ -2148,7 +2150,8 @@ range_as_string(RangeType *r)
 		  &typdelim,
 		  &typioparam,
 		  &range_out_oid);
-  char *rangeStr = OidOutputFunctionCall(range_out_oid, RangeTypePGetDatum(r));
+  rangeStr = OidOutputFunctionCall(range_out_oid, RangeTypePGetDatum(r));
+
   return rangeStr;
 }
 
