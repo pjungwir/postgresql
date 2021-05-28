@@ -317,7 +317,7 @@ CreateConstraintEntry(const char *constraintName,
 			ObjectAddress periodobject;
 
 			ObjectAddressSet(periodobject, PeriodRelationId, fperiod);
-			add_exact_object_address(&relobject, addrs_normal);
+			add_exact_object_address(&periodobject, addrs_normal);
 		}
 	}
 
