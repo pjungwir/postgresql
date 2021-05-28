@@ -304,9 +304,10 @@ build_period_range(const RI_ConstraintInfo *riinfo, TupleTableSlot *slot, bool r
 	bool	endisnull;
 	LOCAL_FCINFO(fcinfo, 2);
 	FmgrInfo	flinfo;
+	FuncExpr   *f;
 
 	InitFunctionCallInfoData(*fcinfo, &flinfo, 2, InvalidOid, NULL, NULL);
-	FuncExpr *f = makeNode(FuncExpr);
+	f = makeNode(FuncExpr);
 	f->funcresulttype = rangetype;
 	flinfo.fn_expr = (Node *) f;
 	flinfo.fn_extra = NULL;
@@ -3055,30 +3056,36 @@ ri_FetchConstraintInfo(Trigger *trigger, Relation trig_rel, bool rel_is_pk)
 static void DeconstructFkConstraintPeriod(Oid periodid, Oid *rangetypeid, char *rangetypename, Oid *rngcollation, int16 *attnums)
 {
 	HeapTuple pertuple = SearchSysCache1(PERIODOID, periodid);
+	Form_pg_period period;
+	Form_pg_range rangetype;
+	Form_pg_type type;
+	HeapTuple rngtuple;
+	HeapTuple typtuple;
+
 	if (!HeapTupleIsValid(pertuple))
 		elog(ERROR, "cache lookup failed for period %d", periodid);
 
-	Form_pg_period period = (Form_pg_period) GETSTRUCT(pertuple);
+	period = (Form_pg_period) GETSTRUCT(pertuple);
 
 	*rangetypeid = period->perrngtype;
 	attnums[0] = period->perstart;
 	attnums[1] = period->perend;
 	ReleaseSysCache(pertuple);
 
-	HeapTuple rngtuple = SearchSysCache1(RANGETYPE, *rangetypeid);
+	rngtuple = SearchSysCache1(RANGETYPE, *rangetypeid);
 	if (!HeapTupleIsValid(rngtuple))
 		elog(ERROR, "cache lookup failed for range %d", *rangetypeid);
 
-	Form_pg_range rangetype = (Form_pg_range) GETSTRUCT(rngtuple);
+	rangetype = (Form_pg_range) GETSTRUCT(rngtuple);
 
 	*rngcollation = rangetype->rngcollation;
 	ReleaseSysCache(rngtuple);
 
-	HeapTuple typtuple = SearchSysCache1(TYPEOID, ObjectIdGetDatum(*rangetypeid));
+	typtuple = SearchSysCache1(TYPEOID, ObjectIdGetDatum(*rangetypeid));
 	if (!HeapTupleIsValid(typtuple))
 		elog(ERROR, "cache lookup failed for type %u", *rangetypeid);
 
-	Form_pg_type type = (Form_pg_type) GETSTRUCT(typtuple);
+	type = (Form_pg_type) GETSTRUCT(typtuple);
 	strcpy(rangetypename, NameStr(type->typname));
 	ReleaseSysCache(typtuple);
 }

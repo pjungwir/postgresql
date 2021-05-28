@@ -1169,19 +1169,24 @@ transformForPortionOfClause(ParseState *pstate,
 	RangeTblEntry *target_rte = pstate->p_target_nsitem->p_rte;
 	char *range_name = forPortionOf->range_name;
 	char *range_type_name;
-	int	range_attno = InvalidOid;
+	int range_attno = InvalidOid;
 	int start_attno = InvalidOid;
-	int	end_attno = InvalidOid;
+	int end_attno = InvalidOid;
 	char *startcolname = NULL;
 	char *endcolname = NULL;
 	ForPortionOfExpr *result;
 	List *targetList;
+	Oid pkoid;
+	HeapTuple indexTuple;
+	Form_pg_index pk;
+	Node *target_start, *target_end;
+	FuncCall *fc;
 
 	result = makeNode(ForPortionOfExpr);
 	result->range = NULL;
 
 	/* Make sure the table has a primary key */
-	Oid pkoid = RelationGetPrimaryKeyIndex(targetrel);
+	pkoid = RelationGetPrimaryKeyIndex(targetrel);
 	if (pkoid == InvalidOid)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
@@ -1191,10 +1196,10 @@ transformForPortionOfClause(ParseState *pstate,
 
 	/* Make sure the primary key is a temporal key */
 	// TODO: need a lock here?
-	HeapTuple indexTuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(pkoid));
+	indexTuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(pkoid));
 	if (!HeapTupleIsValid(indexTuple))	/* should not happen */
 		elog(ERROR, "cache lookup failed for index %u", pkoid);
-	Form_pg_index pk = (Form_pg_index) GETSTRUCT(indexTuple);
+	pk = (Form_pg_index) GETSTRUCT(indexTuple);
 
 	/*
 	 * Only temporal pkey indexes have both isprimary and isexclusion.
@@ -1215,6 +1220,7 @@ transformForPortionOfClause(ParseState *pstate,
 	if (range_attno != InvalidAttrNumber)
 	{
 		Form_pg_attribute attr = TupleDescAttr(targetrel->rd_att, range_attno - 1);
+		Var *v;
 
 		// TODO: check attr->attisdropped ?
 
@@ -1238,7 +1244,7 @@ transformForPortionOfClause(ParseState *pstate,
 					 parser_errposition(pstate, forPortionOf->range_name_location)));
 		}
 
-		Var *v = makeVar(
+		v = makeVar(
 				rtindex,
 				range_attno,
 				attr->atttypid,
@@ -1258,14 +1264,19 @@ transformForPortionOfClause(ParseState *pstate,
 		if (HeapTupleIsValid(perTuple))
 		{
 			Form_pg_period per = (Form_pg_period) GETSTRUCT(perTuple);
+			Form_pg_attribute startattr, endattr;
+			bool pkeyIncludesPeriod = false;
+			Var *startvar, *endvar;
+			FuncCall *periodRange;
+
 			Type rngtype = typeidType(per->perrngtype);
 			range_type_name = typeTypeName(rngtype);
 			ReleaseSysCache(rngtype);
 			start_attno = per->perstart;
 			end_attno = per->perend;
 
-			Form_pg_attribute startattr = TupleDescAttr(targetrel->rd_att, start_attno - 1);
-			Form_pg_attribute endattr = TupleDescAttr(targetrel->rd_att, end_attno - 1);
+			startattr = TupleDescAttr(targetrel->rd_att, start_attno - 1);
+			endattr = TupleDescAttr(targetrel->rd_att, end_attno - 1);
 
 			startcolname = NameStr(startattr->attname);
 			endcolname = NameStr(endattr->attname);
@@ -1273,7 +1284,6 @@ transformForPortionOfClause(ParseState *pstate,
 			result->period_end_name = endcolname;
 
 			/* Make sure the period is the last part of the pkey. */
-			bool pkeyIncludesPeriod = false;
 			if (pk->indkey.values[pk->indnkeyatts - 1] == InvalidOid)
 			{
 				/*
@@ -1291,7 +1301,7 @@ transformForPortionOfClause(ParseState *pstate,
 								RelationGetRelationName(pstate->p_target_relation)),
 						 parser_errposition(pstate, forPortionOf->range_name_location)));
 
-			Var	*startvar = makeVar(
+			startvar = makeVar(
 					rtindex,
 					per->perstart,
 					startattr->atttypid,
@@ -1300,7 +1310,7 @@ transformForPortionOfClause(ParseState *pstate,
 					0);
 			startvar->location = forPortionOf->range_name_location;
 
-			Var *endvar = makeVar(
+			endvar = makeVar(
 					rtindex,
 					per->perend,
 					endattr->atttypid,
@@ -1311,7 +1321,7 @@ transformForPortionOfClause(ParseState *pstate,
 
 			ReleaseSysCache(perTuple);
 
-			FuncCall *periodRange = makeFuncCall(SystemFuncName(range_type_name),
+			periodRange = makeFuncCall(SystemFuncName(range_type_name),
 								list_make2(startvar, endvar),
 								COERCE_EXPLICIT_CALL,
 								forPortionOf->range_name_location);
@@ -1336,9 +1346,9 @@ transformForPortionOfClause(ParseState *pstate,
 	 *
 	 * It also permits MINVALUE and MAXVALUE like declarative partitions.
 	 */
-	Node *target_start = transformForPortionOfBound(forPortionOf->target_start);
-	Node *target_end   = transformForPortionOfBound(forPortionOf->target_end);
-	FuncCall *fc = makeFuncCall(SystemFuncName(range_type_name),
+	target_start = transformForPortionOfBound(forPortionOf->target_start);
+	target_end   = transformForPortionOfBound(forPortionOf->target_end);
+	fc = makeFuncCall(SystemFuncName(range_type_name),
 								list_make2(target_start, target_end),
 								COERCE_EXPLICIT_CALL,
 								forPortionOf->range_name_location);
@@ -1368,9 +1378,10 @@ transformForPortionOfClause(ParseState *pstate,
 				// TODO: Maybe need a copy here?:
 				(Node *) result->range, (Node *) fc,
 				forPortionOf->range_name_location);
+		TargetEntry *tle;
 
 		rangeSetExpr = (Expr *) transformExpr(pstate, (Node *) rangeSetExpr, EXPR_KIND_UPDATE_PORTION);
-		TargetEntry *tle = makeTargetEntry(rangeSetExpr,
+		tle = makeTargetEntry(rangeSetExpr,
 							  range_attno,
 							  range_name,
 							  false);
