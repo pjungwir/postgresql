@@ -584,6 +584,17 @@ SELECT * FROM referencing_period_test WHERE id = '[4,4]';
  [4,5) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [7,8)
 (3 rows)
 
+INSERT INTO without_overlaps_test VALUES ('[15,15]', tsrange('2018-01-01', '2020-01-01'));
+INSERT INTO without_overlaps_test VALUES ('[15,15]', tsrange('2020-01-01', '2021-01-01'));
+INSERT INTO referencing_period_test VALUES ('[10,10]', tsrange('2018-01-01', '2021-01-01'), '[15,15]');
+UPDATE without_overlaps_test SET id = '[16,16]' WHERE id = '[15,15]' AND valid_at @> '2019-01-01'::timestamp;
+SELECT * FROM referencing_period_test WHERE id = '[10,10]';
+   id    |                        valid_at                         | parent_id 
+---------+---------------------------------------------------------+-----------
+ [10,11) | ["Mon Jan 01 00:00:00 2018","Wed Jan 01 00:00:00 2020") | [16,17)
+ [10,11) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [15,16)
+(2 rows)
+
 -- test FK parent deletes CASCADE
 INSERT INTO without_overlaps_test VALUES ('[8,8]', tsrange('2018-01-01', '2021-01-01'));
 INSERT INTO referencing_period_test VALUES ('[5,5]', tsrange('2018-01-01', '2021-01-01'), '[8,8]');
@@ -954,6 +965,17 @@ SELECT * FROM referencing_period_test WHERE id = '[4,4]';
  [4,5) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [7,8)
  [4,5) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [7,8)
 (3 rows)
+
+INSERT INTO without_overlaps_test VALUES ('[15,15]', '2018-01-01', '2020-01-01');
+INSERT INTO without_overlaps_test VALUES ('[15,15]', '2020-01-01', '2021-01-01');
+INSERT INTO referencing_period_test VALUES ('[10,10]', tsrange('2018-01-01', '2021-01-01'), '[15,15]');
+UPDATE without_overlaps_test SET id = '[16,16]' WHERE id = '[15,15]' AND tsrange(valid_from, valid_til) @> '2019-01-01'::timestamp;
+SELECT * FROM referencing_period_test WHERE id = '[10,10]';
+   id    |                        valid_at                         | parent_id 
+---------+---------------------------------------------------------+-----------
+ [10,11) | ["Mon Jan 01 00:00:00 2018","Wed Jan 01 00:00:00 2020") | [16,17)
+ [10,11) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [15,16)
+(2 rows)
 
 -- test FK parent deletes CASCADE
 INSERT INTO without_overlaps_test VALUES ('[8,8]', '2018-01-01', '2021-01-01');
@@ -1329,6 +1351,17 @@ SELECT * FROM referencing_period_test WHERE id = '[4,4]';
  [4,5) | Mon Jan 01 00:00:00 2018 | Tue Jan 01 00:00:00 2019 | [7,8)
  [4,5) | Wed Jan 01 00:00:00 2020 | Fri Jan 01 00:00:00 2021 | [7,8)
 (3 rows)
+
+INSERT INTO without_overlaps_test VALUES ('[15,15]', tsrange('2018-01-01', '2020-01-01'));
+INSERT INTO without_overlaps_test VALUES ('[15,15]', tsrange('2020-01-01', '2021-01-01'));
+INSERT INTO referencing_period_test VALUES ('[10,10]', '2018-01-01', '2021-01-01', '[15,15]');
+UPDATE without_overlaps_test SET id = '[16,16]' WHERE id = '[15,15]' AND valid_at @> '2019-01-01'::timestamp;
+SELECT * FROM referencing_period_test WHERE id = '[10,10]';
+   id    |        valid_from        |        valid_til         | parent_id 
+---------+--------------------------+--------------------------+-----------
+ [10,11) | Mon Jan 01 00:00:00 2018 | Wed Jan 01 00:00:00 2020 | [16,17)
+ [10,11) | Wed Jan 01 00:00:00 2020 | Fri Jan 01 00:00:00 2021 | [15,16)
+(2 rows)
 
 -- test FK parent deletes CASCADE
 INSERT INTO without_overlaps_test VALUES ('[8,8]', tsrange('2018-01-01', '2021-01-01'));
@@ -1706,6 +1739,17 @@ SELECT * FROM referencing_period_test WHERE id = '[4,4]';
  [4,5) | Mon Jan 01 00:00:00 2018 | Tue Jan 01 00:00:00 2019 | [7,8)
  [4,5) | Wed Jan 01 00:00:00 2020 | Fri Jan 01 00:00:00 2021 | [7,8)
 (3 rows)
+
+INSERT INTO without_overlaps_test VALUES ('[15,15]', '2018-01-01', '2020-01-01');
+INSERT INTO without_overlaps_test VALUES ('[15,15]', '2020-01-01', '2021-01-01');
+INSERT INTO referencing_period_test VALUES ('[10,10]', '2018-01-01', '2021-01-01', '[15,15]');
+UPDATE without_overlaps_test SET id = '[16,16]' WHERE id = '[15,15]' AND tsrange(valid_from, valid_til) @> '2019-01-01'::timestamp;
+SELECT * FROM referencing_period_test WHERE id = '[10,10]';
+   id    |        valid_from        |        valid_til         | parent_id 
+---------+--------------------------+--------------------------+-----------
+ [10,11) | Mon Jan 01 00:00:00 2018 | Wed Jan 01 00:00:00 2020 | [16,17)
+ [10,11) | Wed Jan 01 00:00:00 2020 | Fri Jan 01 00:00:00 2021 | [15,16)
+(2 rows)
 
 -- test FK parent deletes CASCADE
 INSERT INTO without_overlaps_test VALUES ('[8,8]', '2018-01-01', '2021-01-01');

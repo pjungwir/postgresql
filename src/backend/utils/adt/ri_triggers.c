@@ -246,6 +246,7 @@ static void ri_ReportViolation(const RI_ConstraintInfo *riinfo,
 							   Relation pk_rel, Relation fk_rel,
 							   TupleTableSlot *violatorslot, TupleDesc tupdesc,
 							   int queryno, bool partgone) pg_attribute_noreturn();
+static Datum tupleRange(TupleTableSlot *slot, const RI_ConstraintInfo *riinfo);
 
 
 /*
@@ -1580,7 +1581,6 @@ TRI_FKey_cascade_del(PG_FUNCTION_ARGS)
 	TupleTableSlot *oldslot;
 	RI_QueryKey qkey;
 	SPIPlanPtr	qplan;
-	bool hasForPortionOf;
 	Datum targetRange;
 
 	/* Check that this is a valid trigger call on the right time and event. */
@@ -1600,24 +1600,15 @@ TRI_FKey_cascade_del(PG_FUNCTION_ARGS)
 	oldslot = trigdata->tg_trigslot;
 
 	if (trigdata->tg_temporal)
-	{
-		hasForPortionOf = true;
 		targetRange = trigdata->tg_temporal->fp_targetRange;
-	}
 	else
-	{
-		hasForPortionOf = false;
-		targetRange = 0;
-	}
+		targetRange = tupleRange(oldslot, riinfo);
 
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "SPI_connect failed");
 
 	/* Fetch or prepare a saved plan for the cascaded delete */
-	ri_BuildQueryKey(&qkey, riinfo,
-					 (hasForPortionOf
-					  ? TRI_PLAN_CASCADE_DEL_DODELETE
-					  : RI_PLAN_CASCADE_DEL_DODELETE));
+	ri_BuildQueryKey(&qkey, riinfo, TRI_PLAN_CASCADE_DEL_DODELETE);
 
 	if ((qplan = ri_FetchPreparedPlan(&qkey)) == NULL)
 	{
@@ -1656,12 +1647,8 @@ TRI_FKey_cascade_del(PG_FUNCTION_ARGS)
 		// TODO: Better to find the greater of lower($n+1) and lower($1)
 		// and the lesser for upper($n+1) and upper($1),
 		// so we only delete what is being deleted from the pk table.
-		if (hasForPortionOf)
-			appendStringInfo(&querybuf, "DELETE FROM %s%s FOR PORTION OF %s FROM lower($%d) TO upper($%d)",
-							 fk_only, fkrelname, attname, riinfo->nkeys + 1, riinfo->nkeys + 1);
-		else
-			appendStringInfo(&querybuf, "DELETE FROM %s%s",
-							 fk_only, fkrelname);
+		appendStringInfo(&querybuf, "DELETE FROM %s%s FOR PORTION OF %s FROM lower($%d) TO upper($%d)",
+						 fk_only, fkrelname, attname, riinfo->nkeys + 1, riinfo->nkeys + 1);
 		querysep = "WHERE";
 		for (int i = 0; i < riinfo->nkeys; i++)
 		{
@@ -1711,16 +1698,13 @@ TRI_FKey_cascade_del(PG_FUNCTION_ARGS)
 			queryoids[i] = pk_type;
 		}
 
-		if (hasForPortionOf)
-		{
-			if (pkHasRange)
-				queryoids[riinfo->nkeys] = RIAttType(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]);
-			else
-				queryoids[riinfo->nkeys] = riinfo->pk_period_rangetype;
-		}
+		if (pkHasRange)
+			queryoids[riinfo->nkeys] = RIAttType(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]);
+		else
+			queryoids[riinfo->nkeys] = riinfo->pk_period_rangetype;
 
 		/* Prepare and save the plan */
-		qplan = ri_PlanCheck(querybuf.data, riinfo->nkeys + (hasForPortionOf ? 1 : 0), queryoids,
+		qplan = ri_PlanCheck(querybuf.data, riinfo->nkeys + 1, queryoids,
 							 &qkey, fk_rel, pk_rel);
 	}
 
@@ -1731,7 +1715,7 @@ TRI_FKey_cascade_del(PG_FUNCTION_ARGS)
 	ri_PerformCheck(riinfo, &qkey, qplan,
 					fk_rel, pk_rel,
 					oldslot, NULL,
-					hasForPortionOf, targetRange,
+					true, targetRange,
 					true,		/* must detect new rows */
 					SPI_OK_DELETE);
 
@@ -1797,7 +1781,6 @@ TRI_FKey_cascade_upd(PG_FUNCTION_ARGS)
 	TupleTableSlot *newslot;
 	RI_QueryKey qkey;
 	SPIPlanPtr	qplan;
-	bool hasForPortionOf;
 	Datum targetRange;
 
 	/* Check that this is a valid trigger call on the right time and event. */
@@ -1819,24 +1802,15 @@ TRI_FKey_cascade_upd(PG_FUNCTION_ARGS)
 	oldslot = trigdata->tg_trigslot;
 
 	if (trigdata->tg_temporal)
-	{
-		hasForPortionOf = true;
 		targetRange = trigdata->tg_temporal->fp_targetRange;
-	}
 	else
-	{
-		hasForPortionOf = false;
-		targetRange = 0;
-	}
+		targetRange = tupleRange(oldslot, riinfo);
 
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "SPI_connect failed");
 
 	/* Fetch or prepare a saved plan for the cascaded update */
-	ri_BuildQueryKey(&qkey, riinfo,
-					 (hasForPortionOf
-					  ? TRI_PLAN_CASCADE_UPD_DOUPDATE
-					  : RI_PLAN_CASCADE_UPD_DOUPDATE));
+	ri_BuildQueryKey(&qkey, riinfo, TRI_PLAN_CASCADE_UPD_DOUPDATE);
 
 	if ((qplan = ri_FetchPreparedPlan(&qkey)) == NULL)
 	{
@@ -1878,12 +1852,8 @@ TRI_FKey_cascade_upd(PG_FUNCTION_ARGS)
 		else
 			quoteOneName(attname, get_periodname(riinfo->fk_period, false));
 
-		if (hasForPortionOf)
-			appendStringInfo(&querybuf, "UPDATE %s%s FOR PORTION OF %s FROM lower($%d) TO upper($%d) SET",
-							 fk_only, fkrelname, attname, 2 * riinfo->nkeys + 1, 2 * riinfo->nkeys + 1);
-		else
-			appendStringInfo(&querybuf, "UPDATE %s%s SET",
-							 fk_only, fkrelname);
+		appendStringInfo(&querybuf, "UPDATE %s%s FOR PORTION OF %s FROM lower($%d) TO upper($%d) SET",
+						 fk_only, fkrelname, attname, 2 * riinfo->nkeys + 1, 2 * riinfo->nkeys + 1);
 
 		querysep = "";
 		qualsep = "WHERE";
@@ -1947,16 +1917,13 @@ TRI_FKey_cascade_upd(PG_FUNCTION_ARGS)
 		}
 		appendBinaryStringInfo(&querybuf, qualbuf.data, qualbuf.len);
 
-		if (hasForPortionOf)
-		{
-			if (pkHasRange)
-				queryoids[2 * riinfo->nkeys] = RIAttType(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]);
-			else
-				queryoids[2 * riinfo->nkeys] = riinfo->pk_period_rangetype;
-		}
+		if (pkHasRange)
+			queryoids[2 * riinfo->nkeys] = RIAttType(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]);
+		else
+			queryoids[2 * riinfo->nkeys] = riinfo->pk_period_rangetype;
 
 		/* Prepare and save the plan */
-		qplan = ri_PlanCheck(querybuf.data, 2 * riinfo->nkeys + (hasForPortionOf ? 1 : 0), queryoids,
+		qplan = ri_PlanCheck(querybuf.data, 2 * riinfo->nkeys + 1, queryoids,
 							 &qkey, fk_rel, pk_rel);
 	}
 
@@ -1967,7 +1934,7 @@ TRI_FKey_cascade_upd(PG_FUNCTION_ARGS)
 	ri_PerformCheck(riinfo, &qkey, qplan,
 					fk_rel, pk_rel,
 					oldslot, newslot,
-					hasForPortionOf, targetRange,
+					true, targetRange,
 					true,		/* must detect new rows */
 					SPI_OK_UPDATE);
 
@@ -4119,4 +4086,18 @@ RI_FKey_trigger_type(Oid tgfoid)
 	}
 
 	return RI_TRIGGER_NONE;
+}
+
+static Datum
+tupleRange(TupleTableSlot *slot, const RI_ConstraintInfo *riinfo)
+{
+	bool	isnull;
+	int16	attnum = riinfo->pk_attnums[riinfo->nkeys - 1];
+
+	if (attnum == InvalidOid)
+		/* Build a range from the PERIOD start and end columns */
+		return build_period_range(riinfo, slot, true);
+	else
+		/* Get the range from the range column */
+		return slot_getattr(slot, attnum, &isnull);
 }
