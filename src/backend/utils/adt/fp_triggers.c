@@ -131,7 +131,7 @@ static void fp_ExtractValues(TupleTableSlot *slot,
 /*
  * FP_insert_leftovers -
  *
- * Insert leftovers from a temporal UPDATE
+ * Insert leftovers from a temporal UPDATE/DELETE
  */
 Datum
 FP_insert_leftovers(PG_FUNCTION_ARGS)
@@ -156,6 +156,9 @@ FP_insert_leftovers(PG_FUNCTION_ARGS)
 	/* Only do something if the statement has FOR PORTION OF */
 	if (!trigdata->tg_temporal)
 		return PointerGetDatum(NULL);
+
+	if (!trigdata->tg_temporal->fp_targetRange)
+		elog(ERROR, "No target range found for temporal query");
 
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "SPI_connect failed");
@@ -219,18 +222,11 @@ FP_insert_leftovers(PG_FUNCTION_ARGS)
 			Form_pg_attribute attr = TupleDescAttr(rel->rd_att, i);
 			const char *colname = NameStr(attr->attname);
 			if (!usingPeriod && strcmp(colname, trigdata->tg_temporal->fp_rangeName) == 0)
-			{
 				rangeAttNum = i + 1;
-				// queryoids[natts] = attr->atttypid;
-			}
 			else if (usingPeriod && strcmp(colname, trigdata->tg_temporal->fp_periodStartName) == 0)
-			{
 				periodStartAttNum = i + 1;
-			}
 			else if (usingPeriod && strcmp(colname, trigdata->tg_temporal->fp_periodEndName) == 0)
-			{
 				periodEndAttNum = i + 1;
-			}
 			else
 			{
 				quoteOneName(attname, colname);
@@ -385,7 +381,7 @@ fp_PlanInserts(const char *querystr, int nargs, Oid *argtypes,
 }
 
 /*
- * Perform a query to enforce an RI restriction
+ * Perform a query to enforce a temporal PK restriction
  */
 static bool
 fp_PerformInserts(FP_QueryKey *qkey, SPIPlanPtr qplan,

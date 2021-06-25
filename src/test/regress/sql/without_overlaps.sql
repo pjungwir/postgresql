@@ -574,6 +574,11 @@ UPDATE without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-
 SELECT * FROM referencing_period_test WHERE id = '[4,4]';
 UPDATE without_overlaps_test SET id = '[7,7]' WHERE id = '[6,6]';
 SELECT * FROM referencing_period_test WHERE id = '[4,4]';
+INSERT INTO without_overlaps_test VALUES ('[15,15]', tsrange('2018-01-01', '2020-01-01'));
+INSERT INTO without_overlaps_test VALUES ('[15,15]', tsrange('2020-01-01', '2021-01-01'));
+INSERT INTO referencing_period_test VALUES ('[10,10]', tsrange('2018-01-01', '2021-01-01'), '[15,15]');
+UPDATE without_overlaps_test SET id = '[16,16]' WHERE id = '[15,15]' AND valid_at @> '2019-01-01'::timestamp;
+SELECT * FROM referencing_period_test WHERE id = '[10,10]';
 
 -- test FK parent deletes CASCADE
 INSERT INTO without_overlaps_test VALUES ('[8,8]', tsrange('2018-01-01', '2021-01-01'));
@@ -870,6 +875,11 @@ UPDATE without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-
 SELECT * FROM referencing_period_test WHERE id = '[4,4]';
 UPDATE without_overlaps_test SET id = '[7,7]' WHERE id = '[6,6]';
 SELECT * FROM referencing_period_test WHERE id = '[4,4]';
+INSERT INTO without_overlaps_test VALUES ('[15,15]', '2018-01-01', '2020-01-01');
+INSERT INTO without_overlaps_test VALUES ('[15,15]', '2020-01-01', '2021-01-01');
+INSERT INTO referencing_period_test VALUES ('[10,10]', tsrange('2018-01-01', '2021-01-01'), '[15,15]');
+UPDATE without_overlaps_test SET id = '[16,16]' WHERE id = '[15,15]' AND tsrange(valid_from, valid_til) @> '2019-01-01'::timestamp;
+SELECT * FROM referencing_period_test WHERE id = '[10,10]';
 
 -- test FK parent deletes CASCADE
 INSERT INTO without_overlaps_test VALUES ('[8,8]', '2018-01-01', '2021-01-01');
@@ -1168,6 +1178,11 @@ UPDATE without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-
 SELECT * FROM referencing_period_test WHERE id = '[4,4]';
 UPDATE without_overlaps_test SET id = '[7,7]' WHERE id = '[6,6]';
 SELECT * FROM referencing_period_test WHERE id = '[4,4]';
+INSERT INTO without_overlaps_test VALUES ('[15,15]', tsrange('2018-01-01', '2020-01-01'));
+INSERT INTO without_overlaps_test VALUES ('[15,15]', tsrange('2020-01-01', '2021-01-01'));
+INSERT INTO referencing_period_test VALUES ('[10,10]', '2018-01-01', '2021-01-01', '[15,15]');
+UPDATE without_overlaps_test SET id = '[16,16]' WHERE id = '[15,15]' AND valid_at @> '2019-01-01'::timestamp;
+SELECT * FROM referencing_period_test WHERE id = '[10,10]';
 
 -- test FK parent deletes CASCADE
 INSERT INTO without_overlaps_test VALUES ('[8,8]', tsrange('2018-01-01', '2021-01-01'));
@@ -1469,6 +1484,11 @@ UPDATE without_overlaps_test FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-
 SELECT * FROM referencing_period_test WHERE id = '[4,4]';
 UPDATE without_overlaps_test SET id = '[7,7]' WHERE id = '[6,6]';
 SELECT * FROM referencing_period_test WHERE id = '[4,4]';
+INSERT INTO without_overlaps_test VALUES ('[15,15]', '2018-01-01', '2020-01-01');
+INSERT INTO without_overlaps_test VALUES ('[15,15]', '2020-01-01', '2021-01-01');
+INSERT INTO referencing_period_test VALUES ('[10,10]', '2018-01-01', '2021-01-01', '[15,15]');
+UPDATE without_overlaps_test SET id = '[16,16]' WHERE id = '[15,15]' AND tsrange(valid_from, valid_til) @> '2019-01-01'::timestamp;
+SELECT * FROM referencing_period_test WHERE id = '[10,10]';
 
 -- test FK parent deletes CASCADE
 INSERT INTO without_overlaps_test VALUES ('[8,8]', '2018-01-01', '2021-01-01');

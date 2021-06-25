@@ -2433,7 +2433,7 @@ BuildIndexInfo(Relation index)
 					   RelationGetIndexExpressions(index),
 					   RelationGetIndexPredicate(index),
 					   indexStruct->indisunique,
-					   false,	// TODO
+					   false,
 					   indexStruct->indisready,
 					   false);
 

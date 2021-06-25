@@ -3737,6 +3737,7 @@ afterTriggerAddEvent(AfterTriggerEventList *events,
 			newshared->ats_relid == evtshared->ats_relid &&
 			newshared->ats_event == evtshared->ats_event &&
 			newshared->ats_table == evtshared->ats_table &&
+			newshared->for_portion_of == evtshared->for_portion_of &&
 			newshared->ats_firing_id == 0)
 			break;
 	}
