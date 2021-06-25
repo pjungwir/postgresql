@@ -342,6 +342,16 @@ DROP TABLE without_overlaps_test2;
 -- test FOREIGN KEY, range references range
 --
 
+-- Can't create a FK with a mismatched range type
+CREATE TABLE referencing_period_test2 (
+	id int4range,
+	valid_at int4range,
+	parent_id int4range,
+	CONSTRAINT referencing_period_pk2 PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT referencing_period_fk2 FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES without_overlaps_test (id, PERIOD valid_at)
+);
+
 CREATE TABLE referencing_period_test (
 	id int4range,
 	valid_at tsrange,
@@ -679,6 +689,16 @@ INSERT INTO without_overlaps_test VALUES ('[1,1]', '2018-03-03', '2018-04-04');
 INSERT INTO without_overlaps_test VALUES ('[2,2]', '2018-01-01', '2018-01-05');
 INSERT INTO without_overlaps_test VALUES ('[3,3]', '2018-01-01', NULL);
 
+-- Can't create a FK with a mismatched range type
+CREATE TABLE referencing_period_test2 (
+	id int4range,
+	valid_at int4range,
+	parent_id int4range,
+	CONSTRAINT referencing_period_pk2 PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT referencing_period_fk2 FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES without_overlaps_test (id, PERIOD valid_at)
+);
+
 -- with inferred PK on the referenced table:
 DROP TABLE referencing_period_test;
 CREATE TABLE referencing_period_test (
@@ -1003,6 +1023,18 @@ INSERT INTO without_overlaps_test VALUES ('[1,1]', tsrange('2018-01-02', '2018-0
 INSERT INTO without_overlaps_test VALUES ('[1,1]', tsrange('2018-03-03', '2018-04-04'));
 INSERT INTO without_overlaps_test VALUES ('[2,2]', tsrange('2018-01-01', '2018-01-05'));
 INSERT INTO without_overlaps_test VALUES ('[3,3]', tsrange('2018-01-01', NULL));
+
+-- Can't create a FK with a mismatched range type
+CREATE TABLE referencing_period_test2 (
+	id int4range,
+	valid_from int4,
+  valid_til int4,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	parent_id int4range,
+	CONSTRAINT referencing_period_pk2 PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT referencing_period_fk2 FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES without_overlaps_test (id, PERIOD valid_at)
+);
 
 -- with inferred PK on the referenced table:
 DROP TABLE referencing_period_test;
@@ -1336,6 +1368,18 @@ INSERT INTO without_overlaps_test VALUES ('[1,1]', '2018-01-02', '2018-02-03');
 INSERT INTO without_overlaps_test VALUES ('[1,1]', '2018-03-03', '2018-04-04');
 INSERT INTO without_overlaps_test VALUES ('[2,2]', '2018-01-01', '2018-01-05');
 INSERT INTO without_overlaps_test VALUES ('[3,3]', '2018-01-01', NULL);
+
+-- Can't create a FK with a mismatched range type
+CREATE TABLE referencing_period_test2 (
+	id int4range,
+	valid_from int4,
+  valid_til int4,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	parent_id int4range,
+	CONSTRAINT referencing_period_pk2 PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT referencing_period_fk2 FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES without_overlaps_test (id, PERIOD valid_at)
+);
 
 -- with inferred PK on the referenced table:
 DROP TABLE referencing_period_test;
