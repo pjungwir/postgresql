@@ -10656,16 +10656,32 @@ FindFKComparisonOperators(Constraint *fkconstraint,
 	}
 
 	if (!(OidIsValid(pfeqop) && OidIsValid(ffeqop)))
+	{
+		char *fkattr_name;
+		char *pkattr_name;
+
+		if (for_overlaps)
+		{
+			fkattr_name = strVal(fkconstraint->fk_period);
+			pkattr_name = strVal(fkconstraint->pk_period);
+		}
+		else
+		{
+			fkattr_name = strVal(list_nth(fkconstraint->fk_attrs, i));
+			pkattr_name = strVal(list_nth(fkconstraint->pk_attrs, i));
+		}
+
 		ereport(ERROR,
 				(errcode(ERRCODE_DATATYPE_MISMATCH),
 				 errmsg("foreign key constraint \"%s\" cannot be implemented",
 						fkconstraint->conname),
 				 errdetail("Key columns \"%s\" and \"%s\" "
 						   "are of incompatible types: %s and %s.",
-						   strVal(list_nth(fkconstraint->fk_attrs, i)),
-						   strVal(list_nth(fkconstraint->pk_attrs, i)),
+						   fkattr_name,
+						   pkattr_name,
 						   format_type_be(fktype),
 						   format_type_be(pktype))));
+	}
 
 	if (*old_check_ok)
 	{
