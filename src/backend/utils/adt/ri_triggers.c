@@ -2022,7 +2022,6 @@ tri_set(TriggerData *trigdata, bool is_set_null)
 	TupleTableSlot *oldslot;
 	RI_QueryKey qkey;
 	SPIPlanPtr	qplan;
-	bool hasForPortionOf;
 	Datum targetRange;
 
 	riinfo = ri_FetchConstraintInfo(trigdata->tg_trigger,
@@ -2038,16 +2037,14 @@ tri_set(TriggerData *trigdata, bool is_set_null)
 	pk_rel = trigdata->tg_relation;
 	oldslot = trigdata->tg_trigslot;
 
+	// TODO: It would be more correct to take the range from oldslot,
+	// and then take its intersection with the tg_temporal range (if any):
+	// Likewise for cascade_upd and cascade_del.
+	// But I don't think this does any harm:
 	if (trigdata->tg_temporal)
-	{
-		hasForPortionOf = true;
 		targetRange = trigdata->tg_temporal->fp_targetRange;
-	}
 	else
-	{
-		hasForPortionOf = false;
-		targetRange = 0;
-	}
+		targetRange = tupleRange(oldslot, riinfo);
 
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "SPI_connect failed");
@@ -2057,13 +2054,9 @@ tri_set(TriggerData *trigdata, bool is_set_null)
 	 * the same query for delete and update cases)
 	 */
 	ri_BuildQueryKey(&qkey, riinfo,
-					 (hasForPortionOf
-					  ? (is_set_null
-						 ? TRI_PLAN_SETNULL_DOUPDATE
-						 : TRI_PLAN_SETDEFAULT_DOUPDATE)
-					  : (is_set_null
-						 ? RI_PLAN_SETNULL_DOUPDATE
-						 : RI_PLAN_SETDEFAULT_DOUPDATE)));
+					  is_set_null
+						? TRI_PLAN_SETNULL_DOUPDATE
+						: TRI_PLAN_SETDEFAULT_DOUPDATE);
 
 	if ((qplan = ri_FetchPreparedPlan(&qkey)) == NULL)
 	{
@@ -2103,12 +2096,8 @@ tri_set(TriggerData *trigdata, bool is_set_null)
 		else
 			quoteOneName(attname, get_periodname(riinfo->fk_period, false));
 
-		if (hasForPortionOf)
-			appendStringInfo(&querybuf, "UPDATE %s%s FOR PORTION OF %s FROM lower($%d) TO upper($%d) SET",
-							 fk_only, fkrelname, attname, riinfo->nkeys + 1, riinfo->nkeys + 1);
-		else
-			appendStringInfo(&querybuf, "UPDATE %s%s SET",
-							 fk_only, fkrelname);
+		appendStringInfo(&querybuf, "UPDATE %s%s FOR PORTION OF %s FROM lower($%d) TO upper($%d) SET",
+						 fk_only, fkrelname, attname, riinfo->nkeys + 1, riinfo->nkeys + 1);
 
 		querysep = "";
 		qualsep = "WHERE";
@@ -2173,16 +2162,13 @@ tri_set(TriggerData *trigdata, bool is_set_null)
 		}
 		appendBinaryStringInfo(&querybuf, qualbuf.data, qualbuf.len);
 
-		if (hasForPortionOf)
-		{
-			if (pkHasRange)
-				queryoids[riinfo->nkeys] = RIAttType(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]);
-			else
-				queryoids[riinfo->nkeys] = riinfo->pk_period_rangetype;
-		}
+		if (pkHasRange)
+			queryoids[riinfo->nkeys] = RIAttType(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]);
+		else
+			queryoids[riinfo->nkeys] = riinfo->pk_period_rangetype;
 
 		/* Prepare and save the plan */
-		qplan = ri_PlanCheck(querybuf.data, riinfo->nkeys + (hasForPortionOf ? 1 : 0), queryoids,
+		qplan = ri_PlanCheck(querybuf.data, riinfo->nkeys + 1, queryoids,
 							 &qkey, fk_rel, pk_rel);
 	}
 
@@ -2192,7 +2178,7 @@ tri_set(TriggerData *trigdata, bool is_set_null)
 	ri_PerformCheck(riinfo, &qkey, qplan,
 					fk_rel, pk_rel,
 					oldslot, NULL,
-					hasForPortionOf, targetRange,
+					true, targetRange,
 					true,		/* must detect new rows */
 					SPI_OK_UPDATE);
 
