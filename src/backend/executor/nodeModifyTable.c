@@ -58,9 +58,12 @@
 #include "rewrite/rewriteHandler.h"
 #include "storage/bufmgr.h"
 #include "storage/lmgr.h"
+#include "utils/array.h"
 #include "utils/builtins.h"
 #include "utils/datum.h"
 #include "utils/memutils.h"
+#include "utils/period.h"
+#include "utils/lsyscache.h"
 #include "utils/rel.h"
 
 
@@ -141,6 +144,10 @@ static bool ExecOnConflictUpdate(ModifyTableContext *context,
 								 TupleTableSlot *excludedSlot,
 								 bool canSetTag,
 								 TupleTableSlot **returning);
+static void ExecForPortionOfLeftovers(ModifyTableContext *context,
+									  EState *estate,
+									  ResultRelInfo *resultRelInfo,
+									  ItemPointer tupleid);
 static TupleTableSlot *ExecPrepareTupleRouting(ModifyTableState *mtstate,
 											   EState *estate,
 											   PartitionTupleRouting *proute,
@@ -1206,6 +1213,115 @@ ExecInsert(ModifyTableContext *context,
 }
 
 /* ----------------------------------------------------------------
+ *		set_leftover_tuple_bounds
+ *
+ *		Saves the new bounds into the range attribute
+ * ----------------------------------------------------------------
+ */
+static void set_leftover_tuple_bounds(TupleTableSlot *leftoverTuple,
+									  ForPortionOfExpr *forPortionOf,
+									  TypeCacheEntry *typcache,
+									  Datum leftover)
+{
+	/* Store the range directly */
+
+	leftoverTuple->tts_values[forPortionOf->rangeVar->varattno - 1] = leftover;
+	leftoverTuple->tts_isnull[forPortionOf->rangeVar->varattno - 1] = false;
+}
+
+/* ----------------------------------------------------------------
+ *		ExecForPortionOfLeftovers
+ *
+ *		Insert tuples for the untouched timestamp of a row in a FOR
+ *		PORTION OF UPDATE/DELETE
+ * ----------------------------------------------------------------
+ */
+static void
+ExecForPortionOfLeftovers(ModifyTableContext *context,
+						  EState *estate,
+						  ResultRelInfo *resultRelInfo,
+						  ItemPointer tupleid)
+{
+	ModifyTableState *mtstate = context->mtstate;
+	ModifyTable *node = (ModifyTable *) mtstate->ps.plan;
+	ForPortionOfExpr *forPortionOf = (ForPortionOfExpr *) node->forPortionOf;
+	Datum	oldRange;
+	Datum	allLeftovers;
+	Datum	*leftovers;
+	int		nleftovers;
+	bool isNull = false;
+	TypeCacheEntry *typcache;
+	ForPortionOfState *fpoState = resultRelInfo->ri_forPortionOf;
+	TupleTableSlot *oldtupleSlot = fpoState->fp_Existing;
+	TupleTableSlot *leftoverTuple = fpoState->fp_Leftover;
+
+	/*
+	 * Get the range of the old pre-UPDATE/DELETE tuple,
+	 * so we can intersect it with the FOR PORTION OF target
+	 * and see if there are any "leftovers" to insert.
+	 *
+	 * We have already locked the tuple in ExecUpdate/ExecDelete
+	 * (TODO: if it was *not* concurrently updated, does table_tuple_update lock the tuple itself?
+	 * I don't found the code for that yet, and maybe it depends on the AM?)
+	 * and it has passed EvalPlanQual.
+	 * Make sure we're looking at the most recent version.
+	 * Otherwise concurrent updates of the same tuple in READ COMMITTED
+	 * could insert conflicting "leftovers".
+	 */
+	if (!table_tuple_fetch_row_version(resultRelInfo->ri_RelationDesc, tupleid, SnapshotAny, oldtupleSlot))
+		elog(ERROR, "failed to fetch tuple for FOR PORTION OF");
+
+	oldRange = slot_getattr(oldtupleSlot, forPortionOf->rangeVar->varattno, &isNull);
+
+	if (isNull)
+		elog(ERROR, "found a NULL range in a temporal table");
+
+	/*
+	 * Get the range's type cache entry. This is worth caching for the whole UPDATE
+	 * as range functions do.
+	 */
+
+	typcache = fpoState->fp_leftoverstypcache;
+	if (typcache == NULL)
+	{
+		typcache = lookup_type_cache(forPortionOf->rangeType, 0);
+		fpoState->fp_leftoverstypcache = typcache;
+	}
+
+	/* Get the ranges to the left/right of the targeted range. */
+
+	allLeftovers = OidFunctionCall2Coll(forPortionOf->withoutPortionProc,
+										InvalidOid, oldRange, fpoState->fp_targetRange);
+
+	deconstruct_array(DatumGetArrayTypeP(allLeftovers), typcache->type_id, typcache->typlen,
+					  typcache->typbyval, typcache->typalign, &leftovers, NULL, &nleftovers);
+
+	if (nleftovers > 0)
+	{
+		bool shouldFree;
+		HeapTuple oldtuple = ExecFetchSlotHeapTuple(oldtupleSlot, false, &shouldFree);
+		int i;
+		// TupleDesc tupDesc = resultRelInfo->ri_RelationDesc->rd_att;
+
+		for (i = 0; i < nleftovers; i++)
+		{
+			// TODO: okay to keep re-using the same leftoverTuple TTS every iteration?:
+			// leftoverTuple = ExecInitExtraTupleSlot(mtstate->ps.state, tupDesc, &TTSOpsVirtual);
+			ExecForceStoreHeapTuple(oldtuple, leftoverTuple, false);
+
+			set_leftover_tuple_bounds(leftoverTuple, forPortionOf, typcache, leftovers[i]);
+			ExecMaterializeSlot(leftoverTuple);
+
+			// TODO: Need to save context->mtstate->mt_transition_capture? (See comment on ExecInsert)
+			ExecInsert(context, resultRelInfo, leftoverTuple, node->canSetTag, NULL, NULL);
+		}
+
+		if (shouldFree)
+			heap_freetuple(oldtuple);
+	}
+}
+
+/* ----------------------------------------------------------------
  *		ExecBatchInsert
  *
  *		Insert multiple tuples in an efficient way.
@@ -1357,7 +1473,8 @@ ExecDeleteAct(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
  *
  * Closing steps of tuple deletion; this invokes AFTER FOR EACH ROW triggers,
  * including the UPDATE triggers if the deletion is being done as part of a
- * cross-partition tuple move.
+ * cross-partition tuple move. It also inserts leftovers from a FOR PORTION OF
+ * delete.
  */
 static void
 ExecDeleteEpilogue(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
@@ -1389,6 +1506,11 @@ ExecDeleteEpilogue(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 		 */
 		ar_delete_trig_tcs = NULL;
 	}
+
+	/* Compute leftovers in FOR PORTION OF */
+	// TODO: Skip this for FDW deletes?
+	if (((ModifyTable *) context->mtstate->ps.plan)->forPortionOf)
+		ExecForPortionOfLeftovers(context, estate, resultRelInfo, tupleid);
 
 	/* AFTER ROW DELETE Triggers */
 	ExecARDeleteTriggers(estate, resultRelInfo, tupleid, oldtuple,
@@ -2138,6 +2260,11 @@ ExecUpdateEpilogue(ModifyTableContext *context, UpdateContext *updateCxt,
 											   true, false,
 											   NULL, NIL,
 											   (updateCxt->updateIndexes == TU_Summarizing));
+
+	/* Compute leftovers in FOR PORTION OF */
+	// TODO: Skip this for FDW updates?
+	if (((ModifyTable *) context->mtstate->ps.plan)->forPortionOf)
+		ExecForPortionOfLeftovers(context, context->estate, resultRelInfo, tupleid);
 
 	/* AFTER ROW UPDATE Triggers */
 	ExecARUpdateTriggers(context->estate, resultRelInfo,
@@ -3630,6 +3757,7 @@ ExecModifyTable(PlanState *pstate)
 		 * Reset per-tuple memory context used for processing on conflict and
 		 * returning clauses, to free any expression evaluation storage
 		 * allocated in the previous cycle.
+		 * TODO: It sounds like FOR PORTION OF might need to do something here too?
 		 */
 		if (pstate->ps_ExprContext)
 			ResetExprContext(pstate->ps_ExprContext);
@@ -4301,6 +4429,75 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 									&mtstate->ps);
 			onconfl->oc_WhereClause = qualexpr;
 		}
+	}
+
+	/*
+	 * If needed, initialize the target range for FOR PORTION OF.
+	 */
+	if (node->forPortionOf)
+	{
+		TupleDesc tupDesc;
+		ForPortionOfExpr *forPortionOf;
+		Datum	targetRange;
+		bool	isNull;
+		ExprContext *econtext;
+		ExprState *exprState;
+		ForPortionOfState *fpoState;
+
+		resultRelInfo = mtstate->resultRelInfo;
+		tupDesc = resultRelInfo->ri_RelationDesc->rd_att;
+		forPortionOf = (ForPortionOfExpr *) node->forPortionOf;
+
+		/* Eval the FOR PORTION OF target */
+		if (mtstate->ps.ps_ExprContext == NULL)
+			ExecAssignExprContext(estate, &mtstate->ps);
+		econtext = mtstate->ps.ps_ExprContext;
+
+		exprState = ExecPrepareExpr((Expr *) forPortionOf->targetRange, estate);
+		targetRange = ExecEvalExpr(exprState, econtext, &isNull);
+		if (isNull)
+			elog(ERROR, "Got a NULL FOR PORTION OF target range");
+
+		/* Create state for FOR PORTION OF operation */
+
+		fpoState = makeNode(ForPortionOfState);
+		fpoState->fp_rangeName = forPortionOf->range_name;
+		fpoState->fp_rangeType = forPortionOf->rangeType;
+		fpoState->fp_rangeAttno = forPortionOf->rangeVar->varattno;
+		fpoState->fp_targetRange = targetRange;
+
+		/* Initialize slot for the existing tuple */
+
+		fpoState->fp_Existing =
+			table_slot_create(resultRelInfo->ri_RelationDesc,
+							  &mtstate->ps.state->es_tupleTable);
+
+		/* Create the tuple slot for INSERTing the leftovers */
+
+		fpoState->fp_Leftover =
+			ExecInitExtraTupleSlot(mtstate->ps.state, tupDesc, &TTSOpsVirtual);
+
+		/*
+		 * We must attach the ForPortionOfState to all result rels,
+		 * in case of a cross-partition update or triggers firing
+		 * on partitions.
+		 *
+		 * They should all have the same tupledesc, so it's okay
+		 * that any one of them can use the tuple table slots there.
+		 * TODO: This is wrong if a column was dropped then added again!
+		 * We should use execute_attr_map_slot to use the correct attnums.
+		 */
+		for (i = 0; i < nrels; i++)
+		{
+			resultRelInfo = &mtstate->resultRelInfo[i];
+			resultRelInfo->ri_forPortionOf = fpoState;
+		}
+
+		/* Make sure the root relation has the FOR PORTION OF clause too. */
+		if (node->rootRelation > 0)
+			mtstate->rootResultRelInfo->ri_forPortionOf = fpoState;
+
+		/* Don't free the ExprContext here because the result must last for the whole query */
 	}
 
 	/*

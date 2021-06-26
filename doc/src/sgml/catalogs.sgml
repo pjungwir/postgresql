@@ -757,12 +757,14 @@
    The catalog <structname>pg_amop</structname> stores information about
    operators associated with access method operator families.  There is one
    row for each operator that is a member of an operator family.  A family
-   member can be either a <firstterm>search</firstterm> operator or an
-   <firstterm>ordering</firstterm> operator.  An operator
-   can appear in more than one family, but cannot appear in more than one
-   search position nor more than one ordering position within a family.
-   (It is allowed, though unlikely, for an operator to be used for both
-   search and ordering purposes.)
+   member can be either a <firstterm>search</firstterm> operator, an
+   <firstterm>ordering</firstterm> operator, or a
+   <firstterm>portion</firstterm> operator. A
+   <firstterm>portion</firstterm> operator is used for computing
+   <literal>FOR PORTION OF</literal> results. An operator can appear in more
+   than one family, but cannot appear in more than one search, ordering, or
+   portion position within a family. (It is allowed, though unlikely, for an
+   operator to be used for more than one purpose.)
   </para>
 
   <table>
@@ -833,8 +835,9 @@
        <structfield>amoppurpose</structfield> <type>char</type>
       </para>
       <para>
-       Operator purpose, either <literal>s</literal> for search or
-       <literal>o</literal> for ordering
+       Operator purpose, either <literal>s</literal> for search,
+       <literal>o</literal> for ordering,
+       or <literal>p</literal> for portion
       </para></entry>
      </row>
 
