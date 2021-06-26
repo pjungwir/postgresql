@@ -290,6 +290,7 @@ extern void FindFKPeriodOpersAndProcs(Oid opclass,
 									  Oid *containedbyoperoid,
 									  Oid *aggedcontainedbyoperoid,
 									  Oid *intersectoperoid,
+									  Oid *intersectprocoid,
 									  Oid *withoutportionoid);
 
 extern bool check_functional_grouping(Oid relid,

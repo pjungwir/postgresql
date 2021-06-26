@@ -1620,6 +1620,7 @@ FindFKPeriodOpersAndProcs(Oid opclass,
 						  Oid *containedbyoperoid,
 						  Oid *aggedcontainedbyoperoid,
 						  Oid *intersectoperoid,
+						  Oid *intersectprocoid,
 						  Oid *withoutportionoid)
 {
 	Oid			opfamily = InvalidOid;
@@ -1673,6 +1674,19 @@ FindFKPeriodOpersAndProcs(Oid opclass,
 			elog(ERROR, "Unexpected opcintype: %u", opcintype);
 	}
 
+	/*
+	 * Look up the intersect proc. We use this for FOR PORTION OF
+	 * (both the operation itself and when checking foreign keys).
+	 * If this is missing we don't need to complain here,
+	 * because FOR PORTION OF will not be allowed.
+	 */
+	*intersectprocoid = InvalidOid;
+	*intersectprocoid = get_opfamily_proc(opfamily, opcintype, opcintype, GIST_INTERSECT_PROC);
+
+	/*
+	 * Look up the without_portion func. We need this for RESTRICT
+	 * foreign keys and also FOR PORTION OF.
+	 */
 	*withoutportionoid = InvalidOid;
 	*withoutportionoid = get_opfamily_proc(opfamily, opcintype, opcintype, GIST_WITHOUT_PORTION_PROC);
 	if (!OidIsValid(*withoutportionoid))

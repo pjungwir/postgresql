@@ -114,6 +114,12 @@ is( $stderr,
 	qq(psql:<stdin>:1: ERROR:  cannot update table "temporal_no_key" because it does not have a replica identity and publishes updates
 HINT:  To enable updating the table, set REPLICA IDENTITY using ALTER TABLE.),
 	"can't UPDATE temporal_no_key DEFAULT");
+($result, $stdout, $stderr) = $node_publisher->psql('postgres',
+	"UPDATE temporal_no_key FOR PORTION OF valid_at FROM '2001-01-01' TO '2002-01-01' SET a = 'c' WHERE id = '[2,3)'");
+is( $stderr,
+	qq(psql:<stdin>:1: ERROR:  cannot update table "temporal_no_key" because it does not have a replica identity and publishes updates
+HINT:  To enable updating the table, set REPLICA IDENTITY using ALTER TABLE.),
+	"can't UPDATE FOR PORTION OF temporal_no_key DEFAULT");
 
 ($result, $stdout, $stderr) = $node_publisher->psql('postgres',
 	"DELETE FROM temporal_no_key WHERE id = '[3,4)'");
@@ -121,6 +127,12 @@ is( $stderr,
 	qq(psql:<stdin>:1: ERROR:  cannot delete from table "temporal_no_key" because it does not have a replica identity and publishes deletes
 HINT:  To enable deleting from the table, set REPLICA IDENTITY using ALTER TABLE.),
 	"can't DELETE temporal_no_key DEFAULT");
+($result, $stdout, $stderr) = $node_publisher->psql('postgres',
+	"DELETE FROM temporal_no_key FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01' WHERE id = '[2,3)'");
+is( $stderr,
+	qq(psql:<stdin>:1: ERROR:  cannot delete from table "temporal_no_key" because it does not have a replica identity and publishes deletes
+HINT:  To enable deleting from the table, set REPLICA IDENTITY using ALTER TABLE.),
+	"can't DELETE FOR PORTION OF temporal_no_key DEFAULT");
 
 $node_publisher->wait_for_catchup('sub1');
 
@@ -142,16 +154,22 @@ $node_publisher->safe_psql(
 
 $node_publisher->safe_psql('postgres',
 	"UPDATE temporal_pk SET a = 'b' WHERE id = '[2,3)'");
+$node_publisher->safe_psql('postgres',
+	"UPDATE temporal_pk FOR PORTION OF valid_at FROM '2001-01-01' TO '2002-01-01' SET a = 'c' WHERE id = '[2,3)'");
 
 $node_publisher->safe_psql('postgres',
 	"DELETE FROM temporal_pk WHERE id = '[3,4)'");
+$node_publisher->safe_psql('postgres',
+	"DELETE FROM temporal_pk FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01' WHERE id = '[2,3)'");
 
 $node_publisher->wait_for_catchup('sub1');
 
 $result = $node_subscriber->safe_psql('postgres',
 	"SELECT * FROM temporal_pk ORDER BY id, valid_at");
 is( $result, qq{[1,2)|[2000-01-01,2010-01-01)|a
-[2,3)|[2000-01-01,2010-01-01)|b
+[2,3)|[2000-01-01,2001-01-01)|b
+[2,3)|[2001-01-01,2002-01-01)|c
+[2,3)|[2003-01-01,2010-01-01)|b
 [4,5)|[2000-01-01,2010-01-01)|a}, 'replicated temporal_pk DEFAULT');
 
 # replicate with a unique key:
@@ -169,6 +187,12 @@ is( $stderr,
 	qq(psql:<stdin>:1: ERROR:  cannot update table "temporal_unique" because it does not have a replica identity and publishes updates
 HINT:  To enable updating the table, set REPLICA IDENTITY using ALTER TABLE.),
 	"can't UPDATE temporal_unique DEFAULT");
+($result, $stdout, $stderr) = $node_publisher->psql('postgres',
+	"UPDATE temporal_unique FOR PORTION OF valid_at FROM '2001-01-01' TO '2002-01-01' SET a = 'c' WHERE id = '[2,3)'");
+is( $stderr,
+	qq(psql:<stdin>:1: ERROR:  cannot update table "temporal_unique" because it does not have a replica identity and publishes updates
+HINT:  To enable updating the table, set REPLICA IDENTITY using ALTER TABLE.),
+	"can't UPDATE FOR PORTION OF temporal_unique DEFAULT");
 
 ($result, $stdout, $stderr) = $node_publisher->psql('postgres',
 	"DELETE FROM temporal_unique WHERE id = '[3,4)'");
@@ -176,6 +200,12 @@ is( $stderr,
 	qq(psql:<stdin>:1: ERROR:  cannot delete from table "temporal_unique" because it does not have a replica identity and publishes deletes
 HINT:  To enable deleting from the table, set REPLICA IDENTITY using ALTER TABLE.),
 	"can't DELETE temporal_unique DEFAULT");
+($result, $stdout, $stderr) = $node_publisher->psql('postgres',
+	"DELETE FROM temporal_unique FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01' WHERE id = '[2,3)'");
+is( $stderr,
+	qq(psql:<stdin>:1: ERROR:  cannot delete from table "temporal_unique" because it does not have a replica identity and publishes deletes
+HINT:  To enable deleting from the table, set REPLICA IDENTITY using ALTER TABLE.),
+	"can't DELETE FOR PORTION OF temporal_unique DEFAULT");
 
 $node_publisher->wait_for_catchup('sub1');
 
@@ -291,16 +321,22 @@ $node_publisher->safe_psql(
 
 $node_publisher->safe_psql('postgres',
 	"UPDATE temporal_no_key SET a = 'b' WHERE id = '[2,3)'");
+$node_publisher->safe_psql('postgres',
+	"UPDATE temporal_no_key FOR PORTION OF valid_at FROM '2001-01-01' TO '2002-01-01' SET a = 'c' WHERE id = '[2,3)'");
 
 $node_publisher->safe_psql('postgres',
 	"DELETE FROM temporal_no_key WHERE id = '[3,4)'");
+$node_publisher->safe_psql('postgres',
+	"DELETE FROM temporal_no_key FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01' WHERE id = '[2,3)'");
 
 $node_publisher->wait_for_catchup('sub1');
 
 $result = $node_subscriber->safe_psql('postgres',
 	"SELECT * FROM temporal_no_key ORDER BY id, valid_at");
 is( $result, qq{[1,2)|[2000-01-01,2010-01-01)|a
-[2,3)|[2000-01-01,2010-01-01)|b
+[2,3)|[2000-01-01,2001-01-01)|b
+[2,3)|[2001-01-01,2002-01-01)|c
+[2,3)|[2003-01-01,2010-01-01)|b
 [4,5)|[2000-01-01,2010-01-01)|a}, 'replicated temporal_no_key FULL');
 
 # replicate with a primary key:
@@ -314,16 +350,22 @@ $node_publisher->safe_psql(
 
 $node_publisher->safe_psql('postgres',
 	"UPDATE temporal_pk SET a = 'b' WHERE id = '[2,3)'");
+$node_publisher->safe_psql('postgres',
+	"UPDATE temporal_pk FOR PORTION OF valid_at FROM '2001-01-01' TO '2002-01-01' SET a = 'c' WHERE id = '[2,3)'");
 
 $node_publisher->safe_psql('postgres',
 	"DELETE FROM temporal_pk WHERE id = '[3,4)'");
+$node_publisher->safe_psql('postgres',
+	"DELETE FROM temporal_pk FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01' WHERE id = '[2,3)'");
 
 $node_publisher->wait_for_catchup('sub1');
 
 $result = $node_subscriber->safe_psql('postgres',
 	"SELECT * FROM temporal_pk ORDER BY id, valid_at");
 is( $result, qq{[1,2)|[2000-01-01,2010-01-01)|a
-[2,3)|[2000-01-01,2010-01-01)|b
+[2,3)|[2000-01-01,2001-01-01)|b
+[2,3)|[2001-01-01,2002-01-01)|c
+[2,3)|[2003-01-01,2010-01-01)|b
 [4,5)|[2000-01-01,2010-01-01)|a}, 'replicated temporal_pk FULL');
 
 # replicate with a unique key:
@@ -337,17 +379,23 @@ $node_publisher->safe_psql(
 
 $node_publisher->safe_psql('postgres',
 	"UPDATE temporal_unique SET a = 'b' WHERE id = '[2,3)'");
+$node_publisher->safe_psql('postgres',
+	"UPDATE temporal_unique FOR PORTION OF valid_at FROM '2001-01-01' TO '2002-01-01' SET a = 'c' WHERE id = '[2,3)'");
 
 $node_publisher->safe_psql('postgres',
 	"DELETE FROM temporal_unique WHERE id = '[3,4)'");
+$node_publisher->safe_psql('postgres',
+	"DELETE FROM temporal_unique FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01' WHERE id = '[2,3)'");
 
 $node_publisher->wait_for_catchup('sub1');
 
 $result = $node_subscriber->safe_psql('postgres',
 	"SELECT * FROM temporal_unique ORDER BY id, valid_at");
 is( $result, qq{[1,2)|[2000-01-01,2010-01-01)|a
-[2,3)|[2000-01-01,2010-01-01)|b
-[4,5)|[2000-01-01,2010-01-01)|a}, 'replicated temporal_unique FULL');
+[2,3)|[2000-01-01,2001-01-01)|b
+[2,3)|[2001-01-01,2002-01-01)|c
+[2,3)|[2003-01-01,2010-01-01)|b
+[4,5)|[2000-01-01,2010-01-01)|a}, 'replicated temporal_unique DEFAULT');
 
 # cleanup
 
@@ -436,16 +484,22 @@ $node_publisher->safe_psql(
 
 $node_publisher->safe_psql('postgres',
 	"UPDATE temporal_pk SET a = 'b' WHERE id = '[2,3)'");
+$node_publisher->safe_psql('postgres',
+	"UPDATE temporal_pk FOR PORTION OF valid_at FROM '2001-01-01' TO '2002-01-01' SET a = 'c' WHERE id = '[2,3)'");
 
 $node_publisher->safe_psql('postgres',
 	"DELETE FROM temporal_pk WHERE id = '[3,4)'");
+$node_publisher->safe_psql('postgres',
+	"DELETE FROM temporal_pk FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01' WHERE id = '[2,3)'");
 
 $node_publisher->wait_for_catchup('sub1');
 
 $result = $node_subscriber->safe_psql('postgres',
 	"SELECT * FROM temporal_pk ORDER BY id, valid_at");
 is( $result, qq{[1,2)|[2000-01-01,2010-01-01)|a
-[2,3)|[2000-01-01,2010-01-01)|b
+[2,3)|[2000-01-01,2001-01-01)|b
+[2,3)|[2001-01-01,2002-01-01)|c
+[2,3)|[2003-01-01,2010-01-01)|b
 [4,5)|[2000-01-01,2010-01-01)|a}, 'replicated temporal_pk USING INDEX');
 
 # replicate with a unique key:
@@ -459,16 +513,22 @@ $node_publisher->safe_psql(
 
 $node_publisher->safe_psql('postgres',
 	"UPDATE temporal_unique SET a = 'b' WHERE id = '[2,3)'");
+$node_publisher->safe_psql('postgres',
+	"UPDATE temporal_unique FOR PORTION OF valid_at FROM '2001-01-01' TO '2002-01-01' SET a = 'c' WHERE id = '[2,3)'");
 
 $node_publisher->safe_psql('postgres',
 	"DELETE FROM temporal_unique WHERE id = '[3,4)'");
+$node_publisher->safe_psql('postgres',
+	"DELETE FROM temporal_unique FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01' WHERE id = '[2,3)'");
 
 $node_publisher->wait_for_catchup('sub1');
 
 $result = $node_subscriber->safe_psql('postgres',
 	"SELECT * FROM temporal_unique ORDER BY id, valid_at");
 is( $result, qq{[1,2)|[2000-01-01,2010-01-01)|a
-[2,3)|[2000-01-01,2010-01-01)|b
+[2,3)|[2000-01-01,2001-01-01)|b
+[2,3)|[2001-01-01,2002-01-01)|c
+[2,3)|[2003-01-01,2010-01-01)|b
 [4,5)|[2000-01-01,2010-01-01)|a}, 'replicated temporal_unique USING INDEX');
 
 # cleanup
@@ -579,9 +639,21 @@ is( $stderr,
 	qq(psql:<stdin>:1: ERROR:  cannot update table "temporal_no_key" because it does not have a replica identity and publishes updates
 HINT:  To enable updating the table, set REPLICA IDENTITY using ALTER TABLE.),
 	"can't UPDATE temporal_no_key NOTHING");
+($result, $stdout, $stderr) = $node_publisher->psql('postgres',
+	"UPDATE temporal_no_key FOR PORTION OF valid_at FROM '2001-01-01' TO '2002-01-01' SET a = 'c' WHERE id = '[2,3)'");
+is( $stderr,
+	qq(psql:<stdin>:1: ERROR:  cannot update table "temporal_no_key" because it does not have a replica identity and publishes updates
+HINT:  To enable updating the table, set REPLICA IDENTITY using ALTER TABLE.),
+	"can't UPDATE temporal_no_key NOTHING");
 
 ($result, $stdout, $stderr) = $node_publisher->psql('postgres',
 	"DELETE FROM temporal_no_key WHERE id = '[3,4)'");
+is( $stderr,
+	qq(psql:<stdin>:1: ERROR:  cannot delete from table "temporal_no_key" because it does not have a replica identity and publishes deletes
+HINT:  To enable deleting from the table, set REPLICA IDENTITY using ALTER TABLE.),
+	"can't DELETE temporal_no_key NOTHING");
+($result, $stdout, $stderr) = $node_publisher->psql('postgres',
+	"DELETE FROM temporal_no_key FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01' WHERE id = '[2,3)'");
 is( $stderr,
 	qq(psql:<stdin>:1: ERROR:  cannot delete from table "temporal_no_key" because it does not have a replica identity and publishes deletes
 HINT:  To enable deleting from the table, set REPLICA IDENTITY using ALTER TABLE.),
@@ -611,9 +683,21 @@ is( $stderr,
 	qq(psql:<stdin>:1: ERROR:  cannot update table "temporal_pk" because it does not have a replica identity and publishes updates
 HINT:  To enable updating the table, set REPLICA IDENTITY using ALTER TABLE.),
 	"can't UPDATE temporal_pk NOTHING");
+($result, $stdout, $stderr) = $node_publisher->psql('postgres',
+	"UPDATE temporal_pk FOR PORTION OF valid_at FROM '2001-01-01' TO '2002-01-01' SET a = 'c' WHERE id = '[2,3)'");
+is( $stderr,
+	qq(psql:<stdin>:1: ERROR:  cannot update table "temporal_pk" because it does not have a replica identity and publishes updates
+HINT:  To enable updating the table, set REPLICA IDENTITY using ALTER TABLE.),
+	"can't UPDATE temporal_pk NOTHING");
 
 ($result, $stdout, $stderr) = $node_publisher->psql('postgres',
 	"DELETE FROM temporal_pk WHERE id = '[3,4)'");
+is( $stderr,
+	qq(psql:<stdin>:1: ERROR:  cannot delete from table "temporal_pk" because it does not have a replica identity and publishes deletes
+HINT:  To enable deleting from the table, set REPLICA IDENTITY using ALTER TABLE.),
+	"can't DELETE temporal_pk NOTHING");
+($result, $stdout, $stderr) = $node_publisher->psql('postgres',
+	"DELETE FROM temporal_pk FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01' WHERE id = '[2,3)'");
 is( $stderr,
 	qq(psql:<stdin>:1: ERROR:  cannot delete from table "temporal_pk" because it does not have a replica identity and publishes deletes
 HINT:  To enable deleting from the table, set REPLICA IDENTITY using ALTER TABLE.),
@@ -643,6 +727,12 @@ is( $stderr,
 	qq(psql:<stdin>:1: ERROR:  cannot update table "temporal_unique" because it does not have a replica identity and publishes updates
 HINT:  To enable updating the table, set REPLICA IDENTITY using ALTER TABLE.),
 	"can't UPDATE temporal_unique NOTHING");
+($result, $stdout, $stderr) = $node_publisher->psql('postgres',
+	"UPDATE temporal_unique FOR PORTION OF valid_at FROM '2001-01-01' TO '2002-01-01' SET a = 'c' WHERE id = '[2,3)'");
+is( $stderr,
+	qq(psql:<stdin>:1: ERROR:  cannot update table "temporal_unique" because it does not have a replica identity and publishes updates
+HINT:  To enable updating the table, set REPLICA IDENTITY using ALTER TABLE.),
+	"can't UPDATE FOR PORTION OF temporal_unique NOTHING");
 
 ($result, $stdout, $stderr) = $node_publisher->psql('postgres',
 	"DELETE FROM temporal_unique WHERE id = '[3,4)'");
@@ -650,6 +740,12 @@ is( $stderr,
 	qq(psql:<stdin>:1: ERROR:  cannot delete from table "temporal_unique" because it does not have a replica identity and publishes deletes
 HINT:  To enable deleting from the table, set REPLICA IDENTITY using ALTER TABLE.),
 	"can't DELETE temporal_unique NOTHING");
+($result, $stdout, $stderr) = $node_publisher->psql('postgres',
+	"DELETE FROM temporal_unique FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01' WHERE id = '[2,3)'");
+is( $stderr,
+	qq(psql:<stdin>:1: ERROR:  cannot delete from table "temporal_unique" because it does not have a replica identity and publishes deletes
+HINT:  To enable deleting from the table, set REPLICA IDENTITY using ALTER TABLE.),
+	"can't DELETE FOR PORTION OF temporal_unique NOTHING");
 
 $node_publisher->wait_for_catchup('sub1');
 
