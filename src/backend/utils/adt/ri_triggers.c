@@ -48,6 +48,7 @@
 #include "utils/inval.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
+#include "utils/period.h"
 #include "utils/rel.h"
 #include "utils/rls.h"
 #include "utils/ruleutils.h"
@@ -2463,8 +2464,22 @@ ri_ExtractValues(Relation rel, TupleTableSlot *slot,
 
 	for (int i = 0; i < riinfo->nkeys; i++)
 	{
-		vals[i] = slot_getattr(slot, attnums[i], &isnull);
-		nulls[i] = isnull ? 'n' : ' ';
+		if (attnums[i] != InvalidAttrNumber)
+		{
+			vals[i] = slot_getattr(slot, attnums[i], &isnull);
+			nulls[i] = isnull ? 'n' : ' ';
+		}
+		else
+		{
+			vals[i] = build_period_range(riinfo, slot, rel_is_pk);
+			nulls[i] = ' ';
+		}
+	}
+
+	if (hasForPortionOf)
+	{
+		vals[riinfo->nkeys] = forPortionOf;
+		nulls[riinfo->nkeys] = ' ';
 	}
 }
 
