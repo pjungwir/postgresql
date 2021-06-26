@@ -2561,6 +2561,14 @@ expression_tree_walker_impl(Node *node,
 					return true;
 			}
 			break;
+		case T_ForPortionOfExpr:
+			{
+				ForPortionOfExpr *forPortionOf = (ForPortionOfExpr *) node;
+
+				if (WALK(forPortionOf->targetRange))
+					return true;
+			}
+			break;
 		case T_PartitionPruneStepOp:
 			{
 				PartitionPruneStepOp *opstep = (PartitionPruneStepOp *) node;
@@ -2700,6 +2708,8 @@ query_tree_walker_impl(Query *query,
 	if (WALK(query->onConflict))
 		return true;
 	if (WALK(query->mergeActionList))
+		return true;
+	if (WALK(query->forPortionOf))
 		return true;
 	if (WALK(query->returningList))
 		return true;
@@ -3574,6 +3584,19 @@ expression_tree_mutator_impl(Node *node,
 				return (Node *) newnode;
 			}
 			break;
+		case T_ForPortionOfExpr:
+			{
+				ForPortionOfExpr *fpo = (ForPortionOfExpr *) node;
+				ForPortionOfExpr *newnode;
+
+				FLATCOPY(newnode, fpo, ForPortionOfExpr);
+				MUTATE(newnode->rangeVar, fpo->rangeVar, Var *);
+				MUTATE(newnode->targetRange, fpo->targetRange, Node *);
+				MUTATE(newnode->rangeTargetList, fpo->rangeTargetList, List *);
+
+				return (Node *) newnode;
+			}
+			break;
 		case T_PartitionPruneStepOp:
 			{
 				PartitionPruneStepOp *opstep = (PartitionPruneStepOp *) node;
@@ -3752,6 +3775,7 @@ query_tree_mutator_impl(Query *query,
 	MUTATE(query->withCheckOptions, query->withCheckOptions, List *);
 	MUTATE(query->onConflict, query->onConflict, OnConflictExpr *);
 	MUTATE(query->mergeActionList, query->mergeActionList, List *);
+	MUTATE(query->forPortionOf, query->forPortionOf, ForPortionOfExpr *);
 	MUTATE(query->returningList, query->returningList, List *);
 	MUTATE(query->jointree, query->jointree, FromExpr *);
 	MUTATE(query->setOperations, query->setOperations, Node *);
