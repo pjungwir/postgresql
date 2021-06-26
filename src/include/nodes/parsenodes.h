@@ -147,6 +147,9 @@ typedef struct Query
 	 */
 	int			resultRelation pg_node_attr(query_jumble_ignore);
 
+	/* FOR PORTION OF clause for UPDATE/DELETE */
+	ForPortionOfExpr *forPortionOf;
+
 	/* has aggregates in tlist or havingQual */
 	bool		hasAggs pg_node_attr(query_jumble_ignore);
 	/* has window functions in tlist */
@@ -1641,6 +1644,21 @@ typedef struct RowMarkClause
 } RowMarkClause;
 
 /*
+ * ForPortionOfClause
+ *		representation of FOR PORTION OF <range-name> FROM <target-start> TO
+ *		<target-end> or FOR PORTION OF <range-name> (<target>)
+ */
+typedef struct ForPortionOfClause
+{
+	NodeTag		type;
+	char	   *range_name;
+	ParseLoc	location;
+	Node	   *target;
+	Node	   *target_start;
+	Node	   *target_end;
+} ForPortionOfClause;
+
+/*
  * WithClause -
  *	   representation of WITH clause
  *
@@ -2153,6 +2171,7 @@ typedef struct DeleteStmt
 	Node	   *whereClause;	/* qualifications */
 	ReturningClause *returningClause;	/* RETURNING clause */
 	WithClause *withClause;		/* WITH clause */
+	ForPortionOfClause *forPortionOf;	/* FOR PORTION OF clause */
 } DeleteStmt;
 
 /* ----------------------
@@ -2168,6 +2187,7 @@ typedef struct UpdateStmt
 	List	   *fromClause;		/* optional from clause for more tables */
 	ReturningClause *returningClause;	/* RETURNING clause */
 	WithClause *withClause;		/* WITH clause */
+	ForPortionOfClause *forPortionOf;	/* FOR PORTION OF clause */
 } UpdateStmt;
 
 /* ----------------------
