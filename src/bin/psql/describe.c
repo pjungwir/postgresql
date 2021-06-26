@@ -2521,7 +2521,7 @@ describeOneTableDetails(const char *schemaname,
 		int			tuples = 0;
 
 		/* print periods */
-		if (pset.sversion >= 130000)
+		if (pset.sversion >= 140000)
 		{
 			printfPQExpBuffer(&buf,
 							  "SELECT quote_ident(p.pername), quote_ident(s.attname) AS startatt, quote_ident(e.attname) AS endatt\n"
@@ -2625,6 +2625,8 @@ describeOneTableDetails(const char *schemaname,
 						}
 
 						/* Everything after "USING" is echoed verbatim */
+						// TODO: Show WITHOUT OVERLAPS info here?
+						// It is not really part of the *index*.
 						indexdef = PQgetvalue(result, i, 5);
 						usingpos = strstr(indexdef, " USING ");
 						if (usingpos)
