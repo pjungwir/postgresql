@@ -275,7 +275,7 @@ DETAIL:  Failing row contains ([3,4), null).
 --
 CREATE TABLE without_overlaps_test2 (
   id int4range,
-  valid_at tsrange,
+  valid_at daterange,
   id2 int8range,
   name TEXT,
   CONSTRAINT without_overlaps_test2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
@@ -283,8 +283,8 @@ CREATE TABLE without_overlaps_test2 (
 );
 INSERT INTO without_overlaps_test2 (id, valid_at, id2, name)
   VALUES
-  ('[1,1]', tsrange('2000-01-01', '2010-01-01'), '[7,7]', 'foo'),
-  ('[2,2]', tsrange('2000-01-01', '2010-01-01'), '[9,9]', 'bar')
+  ('[1,1]', daterange('2000-01-01', '2010-01-01'), '[7,7]', 'foo'),
+  ('[2,2]', daterange('2000-01-01', '2010-01-01'), '[9,9]', 'bar')
 ;
 UPDATE without_overlaps_test2 FOR PORTION OF valid_at FROM '2000-05-01' TO '2000-07-01'
   SET name = name || '1';
@@ -292,39 +292,39 @@ UPDATE without_overlaps_test2 FOR PORTION OF valid_at FROM '2000-04-01' TO '2000
   SET name = name || '2'
   WHERE id = '[2,2]';
 SELECT * FROM without_overlaps_test2 ORDER BY id, valid_at;
-  id   |                        valid_at                         |  id2   | name  
--------+---------------------------------------------------------+--------+-------
- [1,2) | ["Sat Jan 01 00:00:00 2000","Mon May 01 00:00:00 2000") | [7,8)  | foo
- [1,2) | ["Mon May 01 00:00:00 2000","Sat Jul 01 00:00:00 2000") | [7,8)  | foo1
- [1,2) | ["Sat Jul 01 00:00:00 2000","Fri Jan 01 00:00:00 2010") | [7,8)  | foo
- [2,3) | ["Sat Jan 01 00:00:00 2000","Sat Apr 01 00:00:00 2000") | [9,10) | bar
- [2,3) | ["Sat Apr 01 00:00:00 2000","Mon May 01 00:00:00 2000") | [9,10) | bar2
- [2,3) | ["Mon May 01 00:00:00 2000","Thu Jun 01 00:00:00 2000") | [9,10) | bar12
- [2,3) | ["Thu Jun 01 00:00:00 2000","Sat Jul 01 00:00:00 2000") | [9,10) | bar1
- [2,3) | ["Sat Jul 01 00:00:00 2000","Fri Jan 01 00:00:00 2010") | [9,10) | bar
+  id   |        valid_at         |  id2   | name  
+-------+-------------------------+--------+-------
+ [1,2) | [01-01-2000,05-01-2000) | [7,8)  | foo
+ [1,2) | [05-01-2000,07-01-2000) | [7,8)  | foo1
+ [1,2) | [07-01-2000,01-01-2010) | [7,8)  | foo
+ [2,3) | [01-01-2000,04-01-2000) | [9,10) | bar
+ [2,3) | [04-01-2000,05-01-2000) | [9,10) | bar2
+ [2,3) | [05-01-2000,06-01-2000) | [9,10) | bar12
+ [2,3) | [06-01-2000,07-01-2000) | [9,10) | bar1
+ [2,3) | [07-01-2000,01-01-2010) | [9,10) | bar
 (8 rows)
 
 -- conflicting id only:
 INSERT INTO without_overlaps_test2 (id, valid_at, id2, name)
   VALUES
-  ('[1,1]', tsrange('2005-01-01', '2006-01-01'), '[8,8]', 'foo3');
+  ('[1,1]', daterange('2005-01-01', '2006-01-01'), '[8,8]', 'foo3');
 ERROR:  conflicting key value violates exclusion constraint "without_overlaps_test2_pk"
-DETAIL:  Key (id, valid_at)=([1,2), ["Sat Jan 01 00:00:00 2005","Sun Jan 01 00:00:00 2006")) conflicts with existing key (id, valid_at)=([1,2), ["Sat Jul 01 00:00:00 2000","Fri Jan 01 00:00:00 2010")).
+DETAIL:  Key (id, valid_at)=([1,2), [01-01-2005,01-01-2006)) conflicts with existing key (id, valid_at)=([1,2), [07-01-2000,01-01-2010)).
 -- conflicting id2 only:
 INSERT INTO without_overlaps_test2 (id, valid_at, id2, name)
   VALUES
-  ('[3,3]', tsrange('2005-01-01', '2010-01-01'), '[9,9]', 'bar3')
+  ('[3,3]', daterange('2005-01-01', '2010-01-01'), '[9,9]', 'bar3')
 ;
 ERROR:  conflicting key value violates exclusion constraint "without_overlaps_test2_uniq"
-DETAIL:  Key (id2, valid_at)=([9,10), ["Sat Jan 01 00:00:00 2005","Fri Jan 01 00:00:00 2010")) conflicts with existing key (id2, valid_at)=([9,10), ["Sat Jul 01 00:00:00 2000","Fri Jan 01 00:00:00 2010")).
+DETAIL:  Key (id2, valid_at)=([9,10), [01-01-2005,01-01-2010)) conflicts with existing key (id2, valid_at)=([9,10), [07-01-2000,01-01-2010)).
 DROP TABLE without_overlaps_test2;
 --
 -- test a PERIOD with both a PK and a UNIQUE constraint
 --
 CREATE TABLE without_overlaps_test2 (
   id int4range,
-	valid_from timestamp,
-	valid_til timestamp,
+	valid_from date,
+	valid_til date,
 	PERIOD FOR valid_at (valid_from, valid_til),
   id2 int8range,
   name TEXT,
@@ -342,16 +342,16 @@ UPDATE without_overlaps_test2 FOR PORTION OF valid_at FROM '2000-04-01' TO '2000
   SET name = name || '2'
   WHERE id = '[2,2]';
 SELECT * FROM without_overlaps_test2 ORDER BY id, valid_from, valid_til;
-  id   |        valid_from        |        valid_til         |  id2   | name  
--------+--------------------------+--------------------------+--------+-------
- [1,2) | Sat Jan 01 00:00:00 2000 | Mon May 01 00:00:00 2000 | [7,8)  | foo
- [1,2) | Mon May 01 00:00:00 2000 | Sat Jul 01 00:00:00 2000 | [7,8)  | foo1
- [1,2) | Sat Jul 01 00:00:00 2000 | Fri Jan 01 00:00:00 2010 | [7,8)  | foo
- [2,3) | Sat Jan 01 00:00:00 2000 | Sat Apr 01 00:00:00 2000 | [9,10) | bar
- [2,3) | Sat Apr 01 00:00:00 2000 | Mon May 01 00:00:00 2000 | [9,10) | bar2
- [2,3) | Mon May 01 00:00:00 2000 | Thu Jun 01 00:00:00 2000 | [9,10) | bar12
- [2,3) | Thu Jun 01 00:00:00 2000 | Sat Jul 01 00:00:00 2000 | [9,10) | bar1
- [2,3) | Sat Jul 01 00:00:00 2000 | Fri Jan 01 00:00:00 2010 | [9,10) | bar
+  id   | valid_from | valid_til  |  id2   | name  
+-------+------------+------------+--------+-------
+ [1,2) | 01-01-2000 | 05-01-2000 | [7,8)  | foo
+ [1,2) | 05-01-2000 | 07-01-2000 | [7,8)  | foo1
+ [1,2) | 07-01-2000 | 01-01-2010 | [7,8)  | foo
+ [2,3) | 01-01-2000 | 04-01-2000 | [9,10) | bar
+ [2,3) | 04-01-2000 | 05-01-2000 | [9,10) | bar2
+ [2,3) | 05-01-2000 | 06-01-2000 | [9,10) | bar12
+ [2,3) | 06-01-2000 | 07-01-2000 | [9,10) | bar1
+ [2,3) | 07-01-2000 | 01-01-2010 | [9,10) | bar
 (8 rows)
 
 -- conflicting id only:
@@ -359,14 +359,14 @@ INSERT INTO without_overlaps_test2 (id, valid_from, valid_til, id2, name)
   VALUES
   ('[1,1]', '2005-01-01', '2006-01-01', '[8,8]', 'foo3');
 ERROR:  conflicting key value violates exclusion constraint "without_overlaps_test2_pk"
-DETAIL:  Key (id, tsrange(valid_from, valid_til))=([1,2), ["Sat Jan 01 00:00:00 2005","Sun Jan 01 00:00:00 2006")) conflicts with existing key (id, tsrange(valid_from, valid_til))=([1,2), ["Sat Jul 01 00:00:00 2000","Fri Jan 01 00:00:00 2010")).
+DETAIL:  Key (id, daterange(valid_from, valid_til))=([1,2), [01-01-2005,01-01-2006)) conflicts with existing key (id, daterange(valid_from, valid_til))=([1,2), [07-01-2000,01-01-2010)).
 -- conflicting id2 only:
 INSERT INTO without_overlaps_test2 (id, valid_from, valid_til, id2, name)
   VALUES
   ('[3,3]', '2005-01-01', '2010-01-01', '[9,9]', 'bar3')
 ;
 ERROR:  conflicting key value violates exclusion constraint "without_overlaps_test2_uniq"
-DETAIL:  Key (id2, tsrange(valid_from, valid_til))=([9,10), ["Sat Jan 01 00:00:00 2005","Fri Jan 01 00:00:00 2010")) conflicts with existing key (id2, tsrange(valid_from, valid_til))=([9,10), ["Sat Jul 01 00:00:00 2000","Fri Jan 01 00:00:00 2010")).
+DETAIL:  Key (id2, daterange(valid_from, valid_til))=([9,10), [01-01-2005,01-01-2010)) conflicts with existing key (id2, daterange(valid_from, valid_til))=([9,10), [07-01-2000,01-01-2010)).
 DROP TABLE without_overlaps_test2;
 --
 -- test changing the PK's dependencies
