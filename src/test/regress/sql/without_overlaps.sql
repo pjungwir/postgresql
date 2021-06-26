@@ -192,7 +192,7 @@ INSERT INTO temporal_rng VALUES ('[3,3]', NULL);
 
 CREATE TABLE temporal3 (
   id int4range,
-  valid_at tsrange,
+  valid_at daterange,
   id2 int8range,
   name TEXT,
   CONSTRAINT temporal3_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
@@ -200,8 +200,23 @@ CREATE TABLE temporal3 (
 );
 INSERT INTO temporal3 (id, valid_at, id2, name)
   VALUES
-  ('[1,1]', tsrange('2000-01-01', '2010-01-01'), '[7,7]', 'foo'),
-  ('[2,2]', tsrange('2000-01-01', '2010-01-01'), '[9,9]', 'bar')
+  ('[1,1]', daterange('2000-01-01', '2010-01-01'), '[7,7]', 'foo'),
+  ('[2,2]', daterange('2000-01-01', '2010-01-01'), '[9,9]', 'bar')
+;
+UPDATE temporal3 FOR PORTION OF valid_at FROM '2000-05-01' TO '2000-07-01'
+  SET name = name || '1';
+UPDATE temporal3 FOR PORTION OF valid_at FROM '2000-04-01' TO '2000-06-01'
+  SET name = name || '2'
+  WHERE id = '[2,2]';
+SELECT * FROM temporal3 ORDER BY id, valid_at;
+-- conflicting id only:
+INSERT INTO temporal3 (id, valid_at, id2, name)
+  VALUES
+  ('[1,1]', daterange('2005-01-01', '2006-01-01'), '[8,8]', 'foo3');
+-- conflicting id2 only:
+INSERT INTO temporal3 (id, valid_at, id2, name)
+  VALUES
+  ('[3,3]', daterange('2005-01-01', '2010-01-01'), '[9,9]', 'bar3')
 ;
 DROP TABLE temporal3;
 
@@ -209,17 +224,17 @@ DROP TABLE temporal3;
 -- test changing the PK's dependencies
 --
 
-CREATE TABLE without_overlaps_test2 (
+CREATE TABLE temporal3 (
 	id int4range,
 	valid_at tsrange,
 	CONSTRAINT temporal3_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
 
-ALTER TABLE without_overlaps_test2 ALTER COLUMN valid_at DROP NOT NULL;
-ALTER TABLE without_overlaps_test2 ALTER COLUMN valid_at TYPE tstzrange USING tstzrange(lower(valid_at), upper(valid_at));
-ALTER TABLE without_overlaps_test2 RENAME COLUMN valid_at TO valid_thru;
-ALTER TABLE without_overlaps_test2 DROP COLUMN valid_thru;
-DROP TABLE without_overlaps_test2;
+ALTER TABLE temporal3 ALTER COLUMN valid_at DROP NOT NULL;
+ALTER TABLE temporal3 ALTER COLUMN valid_at TYPE tstzrange USING tstzrange(lower(valid_at), upper(valid_at));
+ALTER TABLE temporal3 RENAME COLUMN valid_at TO valid_thru;
+ALTER TABLE temporal3 DROP COLUMN valid_thru;
+DROP TABLE temporal3;
 
 --
 -- test PARTITION BY for ranges
