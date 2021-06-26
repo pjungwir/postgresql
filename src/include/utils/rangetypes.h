@@ -166,5 +166,8 @@ extern bool range_split_internal(TypeCacheEntry *typcache, const RangeType *r1,
 								 RangeType **output2);
 extern void range_without_portion_internal(TypeCacheEntry *typcache, RangeType *r1,
 									RangeType *r2, RangeType **outputs, int *outputn);
+extern void range_leftover_internal(TypeCacheEntry *typcache, const RangeType *r1,
+									const RangeType *r2, RangeType **output1,
+									RangeType **output2);
 
 #endif							/* RANGETYPES_H */
