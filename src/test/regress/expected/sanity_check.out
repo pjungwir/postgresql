@@ -48,6 +48,7 @@ f_star|f
 fast_emp4000|t
 float4_tbl|f
 float8_tbl|f
+for_portion_of_test|t
 func_index_heap|t
 hash_f8_heap|t
 hash_i4_heap|t
@@ -220,6 +221,7 @@ trigger_parted_p1|t
 trigger_parted_p1_1|t
 trigger_parted_p2|t
 trigger_parted_p2_2|t
+uv_fpo_tab|t
 varchar_tbl|f
 view_base_table|t
 without_overlaps_test|t

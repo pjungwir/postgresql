@@ -1591,6 +1591,7 @@ rewriteValuesRTE(Query *parsetree, RangeTblEntry *rte, int rti,
 /*
  * Record in target_rte->extraUpdatedCols the indexes of any generated columns
  * that depend on any columns mentioned in target_rte->updatedCols.
+ * If the update uses FOR PORTION OF, include the PK range.
  */
 void
 fill_extraUpdatedCols(RangeTblEntry *target_rte, Relation target_relation)
@@ -3094,7 +3095,7 @@ rewriteTargetView(Query *parsetree, Relation view)
 	 * we get the modified columns from the query's targetlist, not from the
 	 * result RTE's insertedCols and/or updatedCols set, since
 	 * rewriteTargetListIU may have added additional targetlist entries for
-	 * view defaults, and these must also be updatable.
+	 * view defaults and FOR PORTION OF, and these must also be updatable.
 	 */
 	if (parsetree->commandType != CMD_DELETE)
 	{
@@ -3121,6 +3122,22 @@ rewriteTargetView(Query *parsetree, Relation view)
 												   tle->resno - FirstLowInvalidHeapAttributeNumber);
 			}
 		}
+
+#ifdef false
+		// We don't need this because we already added them to the targetList
+		if (parsetree->forPortionOf)
+		{
+			/* Mark the columns as modified. */
+			foreach(lc, parsetree->forPortionOf->rangeSet)
+			{
+				TargetEntry *tle = (TargetEntry *) lfirst(lc);
+
+				if (!tle->resjunk)
+					modified_cols = bms_add_member(modified_cols,
+												   tle->resno - FirstLowInvalidHeapAttributeNumber);
+			}
+		}
+#endif
 
 		auto_update_detail = view_cols_are_auto_updatable(viewquery,
 														  modified_cols,
@@ -3437,6 +3454,30 @@ rewriteTargetView(Query *parsetree, Relation view)
 									  REPLACEVARS_REPORT_ERROR,
 									  0,
 									  &parsetree->hasSubLinks);
+	}
+
+	if (parsetree->forPortionOf && parsetree->commandType == CMD_UPDATE)
+	{
+		/*
+		 * Like the INSERT/UPDATE code above, update the resnos in the
+		 * auxiliary UPDATE targetlist to refer to columns of the base
+		 * relation.
+		 */
+		foreach(lc, parsetree->forPortionOf->rangeSet)
+		{
+			TargetEntry *tle = (TargetEntry *) lfirst(lc);
+			TargetEntry *view_tle;
+
+			if (tle->resjunk)
+				continue;
+
+			view_tle = get_tle_by_resno(view_targetlist, tle->resno);
+			if (view_tle != NULL && !view_tle->resjunk && IsA(view_tle->expr, Var))
+				tle->resno = ((Var *) view_tle->expr)->varattno;
+			else
+				elog(ERROR, "attribute number %d not found in view targetlist",
+					 tle->resno);
+		}
 	}
 
 	/*
@@ -3764,6 +3805,21 @@ RewriteQuery(Query *parsetree, List *rewrite_events)
 		}
 		else if (event == CMD_UPDATE)
 		{
+			/*
+			 * Update FOR PORTION OF column(s) automatically. Don't
+			 * do this until we're done rewriting a view update, so
+			 * that we don't add the same update on the recursion.
+			 */
+			if (parsetree->forPortionOf &&
+				rt_entry_relation->rd_rel->relkind != RELKIND_VIEW)
+			{
+				ListCell *tl;
+				foreach(tl, parsetree->forPortionOf->rangeSet)
+				{
+					TargetEntry *tle = (TargetEntry *) lfirst(tl);
+					parsetree->targetList = lappend(parsetree->targetList, tle);
+				}
+			}
 			parsetree->targetList =
 				rewriteTargetListIU(parsetree->targetList,
 									parsetree->commandType,
