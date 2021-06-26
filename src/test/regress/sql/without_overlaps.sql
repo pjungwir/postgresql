@@ -303,7 +303,7 @@ INSERT INTO temporal_rng VALUES ('[3,3]', NULL);
 
 CREATE TABLE temporal3 (
   id int4range,
-  valid_at tsrange,
+  valid_at daterange,
   id2 int8range,
   name TEXT,
   CONSTRAINT temporal3_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
@@ -311,77 +311,77 @@ CREATE TABLE temporal3 (
 );
 INSERT INTO temporal3 (id, valid_at, id2, name)
   VALUES
-  ('[1,1]', tsrange('2000-01-01', '2010-01-01'), '[7,7]', 'foo'),
-  ('[2,2]', tsrange('2000-01-01', '2010-01-01'), '[9,9]', 'bar')
+  ('[1,1]', daterange('2000-01-01', '2010-01-01'), '[7,7]', 'foo'),
+  ('[2,2]', daterange('2000-01-01', '2010-01-01'), '[9,9]', 'bar')
 ;
-UPDATE without_overlaps_test2 FOR PORTION OF valid_at FROM '2000-05-01' TO '2000-07-01'
+UPDATE temporal3 FOR PORTION OF valid_at FROM '2000-05-01' TO '2000-07-01'
   SET name = name || '1';
-UPDATE without_overlaps_test2 FOR PORTION OF valid_at FROM '2000-04-01' TO '2000-06-01'
+UPDATE temporal3 FOR PORTION OF valid_at FROM '2000-04-01' TO '2000-06-01'
   SET name = name || '2'
   WHERE id = '[2,2]';
-SELECT * FROM without_overlaps_test2 ORDER BY id, valid_at;
+SELECT * FROM temporal3 ORDER BY id, valid_at;
 -- conflicting id only:
-INSERT INTO without_overlaps_test2 (id, valid_at, id2, name)
+INSERT INTO temporal3 (id, valid_at, id2, name)
   VALUES
-  ('[1,1]', tsrange('2005-01-01', '2006-01-01'), '[8,8]', 'foo3');
+  ('[1,1]', daterange('2005-01-01', '2006-01-01'), '[8,8]', 'foo3');
 -- conflicting id2 only:
-INSERT INTO without_overlaps_test2 (id, valid_at, id2, name)
+INSERT INTO temporal3 (id, valid_at, id2, name)
   VALUES
-  ('[3,3]', tsrange('2005-01-01', '2010-01-01'), '[9,9]', 'bar3')
+  ('[3,3]', daterange('2005-01-01', '2010-01-01'), '[9,9]', 'bar3')
 ;
-DROP TABLE without_overlaps_test2;
+DROP TABLE temporal3;
 
 --
 -- test a PERIOD with both a PK and a UNIQUE constraint
 --
 
-CREATE TABLE without_overlaps_test2 (
+CREATE TABLE temporal3 (
   id int4range,
-	valid_from timestamp,
-	valid_til timestamp,
+	valid_from date,
+	valid_til date,
 	PERIOD FOR valid_at (valid_from, valid_til),
   id2 int8range,
   name TEXT,
-  CONSTRAINT without_overlaps_test2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
-  CONSTRAINT without_overlaps_test2_uniq UNIQUE (id2, valid_at WITHOUT OVERLAPS)
+  CONSTRAINT temporal3_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+  CONSTRAINT temporal3_uniq UNIQUE (id2, valid_at WITHOUT OVERLAPS)
 );
-INSERT INTO without_overlaps_test2 (id, valid_from, valid_til, id2, name)
+INSERT INTO temporal3 (id, valid_from, valid_til, id2, name)
   VALUES
   ('[1,1]', '2000-01-01', '2010-01-01', '[7,7]', 'foo'),
   ('[2,2]', '2000-01-01', '2010-01-01', '[9,9]', 'bar')
 ;
-UPDATE without_overlaps_test2 FOR PORTION OF valid_at FROM '2000-05-01' TO '2000-07-01'
+UPDATE temporal3 FOR PORTION OF valid_at FROM '2000-05-01' TO '2000-07-01'
   SET name = name || '1';
-UPDATE without_overlaps_test2 FOR PORTION OF valid_at FROM '2000-04-01' TO '2000-06-01'
+UPDATE temporal3 FOR PORTION OF valid_at FROM '2000-04-01' TO '2000-06-01'
   SET name = name || '2'
   WHERE id = '[2,2]';
-SELECT * FROM without_overlaps_test2 ORDER BY id, valid_from, valid_til;
+SELECT * FROM temporal3 ORDER BY id, valid_from, valid_til;
 -- conflicting id only:
-INSERT INTO without_overlaps_test2 (id, valid_from, valid_til, id2, name)
+INSERT INTO temporal3 (id, valid_from, valid_til, id2, name)
   VALUES
   ('[1,1]', '2005-01-01', '2006-01-01', '[8,8]', 'foo3');
 -- conflicting id2 only:
-INSERT INTO without_overlaps_test2 (id, valid_from, valid_til, id2, name)
+INSERT INTO temporal3 (id, valid_from, valid_til, id2, name)
   VALUES
   ('[3,3]', '2005-01-01', '2010-01-01', '[9,9]', 'bar3')
 ;
-DROP TABLE without_overlaps_test2;
+DROP TABLE temporal3;
 
 --
 -- test changing the PK's dependencies
 --
 
-CREATE TABLE without_overlaps_test2 (
+CREATE TABLE temporal3 (
 	id int4range,
 	valid_at tsrange,
-	CONSTRAINT without_overlaps2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+	CONSTRAINT temporal3_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
 
-ALTER TABLE without_overlaps_test2 ALTER COLUMN valid_at DROP NOT NULL;
-ALTER TABLE without_overlaps_test2 ALTER COLUMN valid_at TYPE tstzrange USING tstzrange(lower(valid_at), upper(valid_at));
-ALTER TABLE without_overlaps_test2 RENAME COLUMN valid_at TO valid_thru;
-ALTER TABLE without_overlaps_test2 DROP COLUMN valid_thru;
-DROP TABLE without_overlaps_test2;
+ALTER TABLE temporal3 ALTER COLUMN valid_at DROP NOT NULL;
+ALTER TABLE temporal3 ALTER COLUMN valid_at TYPE tstzrange USING tstzrange(lower(valid_at), upper(valid_at));
+ALTER TABLE temporal3 RENAME COLUMN valid_at TO valid_thru;
+ALTER TABLE temporal3 DROP COLUMN valid_thru;
+DROP TABLE temporal3;
 
 --
 -- test PARTITION BY for ranges
