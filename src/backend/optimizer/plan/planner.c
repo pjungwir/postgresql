@@ -2065,6 +2065,7 @@ grouping_planner(PlannerInfo *root, double tuple_fraction,
 										parse->onConflict,
 										mergeActionLists,
 										mergeJoinConditions,
+										parse->forPortionOf,
 										assign_special_exec_param(root));
 		}
 
