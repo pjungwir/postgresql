@@ -292,6 +292,36 @@ INSERT INTO temporal3 (id, valid_at, id2, name)
   ('[1,1]', daterange('2000-01-01', '2010-01-01'), '[7,7]', 'foo'),
   ('[2,2]', daterange('2000-01-01', '2010-01-01'), '[9,9]', 'bar')
 ;
+UPDATE temporal3 FOR PORTION OF valid_at FROM '2000-05-01' TO '2000-07-01'
+  SET name = name || '1';
+UPDATE temporal3 FOR PORTION OF valid_at FROM '2000-04-01' TO '2000-06-01'
+  SET name = name || '2'
+  WHERE id = '[2,2]';
+SELECT * FROM temporal3 ORDER BY id, valid_at;
+  id   |        valid_at         |  id2   | name  
+-------+-------------------------+--------+-------
+ [1,2) | [01-01-2000,05-01-2000) | [7,8)  | foo
+ [1,2) | [05-01-2000,07-01-2000) | [7,8)  | foo1
+ [1,2) | [07-01-2000,01-01-2010) | [7,8)  | foo
+ [2,3) | [01-01-2000,04-01-2000) | [9,10) | bar
+ [2,3) | [04-01-2000,05-01-2000) | [9,10) | bar2
+ [2,3) | [05-01-2000,06-01-2000) | [9,10) | bar12
+ [2,3) | [06-01-2000,07-01-2000) | [9,10) | bar1
+ [2,3) | [07-01-2000,01-01-2010) | [9,10) | bar
+(8 rows)
+
+-- conflicting id only:
+INSERT INTO temporal3 (id, valid_at, id2, name)
+  VALUES
+  ('[1,1]', daterange('2005-01-01', '2006-01-01'), '[8,8]', 'foo3');
+ERROR:  conflicting key value violates exclusion constraint "temporal3_pk"
+DETAIL:  Key (id, valid_at)=([1,2), [01-01-2005,01-01-2006)) conflicts with existing key (id, valid_at)=([1,2), [07-01-2000,01-01-2010)).
+-- conflicting id2 only:
+INSERT INTO temporal3 (id, valid_at, id2, name)
+  VALUES
+  ('[3,3]', daterange('2005-01-01', '2010-01-01'), '[9,9]', 'bar3');
+ERROR:  conflicting key value violates exclusion constraint "temporal3_uniq"
+DETAIL:  Key (id2, valid_at)=([9,10), [01-01-2005,01-01-2010)) conflicts with existing key (id2, valid_at)=([9,10), [07-01-2000,01-01-2010)).
 DROP TABLE temporal3;
 --
 -- test changing the PK's dependencies
@@ -344,6 +374,36 @@ SELECT * FROM tp2 ORDER BY id, valid_at;
  [3,4) | [01-01-2000,01-01-2010) | three
 (1 row)
 
+UPDATE  temporal_partitioned
+  FOR PORTION OF valid_at FROM '2000-01-15' TO '2000-02-15'
+  SET name = 'one2'
+  WHERE id = '[1,1]';
+UPDATE  temporal_partitioned
+  FOR PORTION OF valid_at FROM '2000-02-20' TO '2000-02-25'
+  SET id = '[4,4]'
+  WHERE name = 'one';
+UPDATE  temporal_partitioned
+  FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01'
+  SET id = '[2,2]'
+  WHERE name = 'three';
+DELETE FROM temporal_partitioned
+  FOR PORTION OF valid_at FROM '2000-01-15' TO '2000-02-15'
+  WHERE id = '[3,3]';
+SELECT * FROM temporal_partitioned ORDER BY id, valid_at;
+  id   |        valid_at         | name  
+-------+-------------------------+-------
+ [1,2) | [01-01-2000,01-15-2000) | one
+ [1,2) | [01-15-2000,02-01-2000) | one2
+ [1,2) | [02-01-2000,02-15-2000) | one2
+ [1,2) | [02-15-2000,02-20-2000) | one
+ [1,2) | [02-25-2000,03-01-2000) | one
+ [2,3) | [01-01-2002,01-01-2003) | three
+ [3,4) | [01-01-2000,01-15-2000) | three
+ [3,4) | [02-15-2000,01-01-2002) | three
+ [3,4) | [01-01-2003,01-01-2010) | three
+ [4,5) | [02-20-2000,02-25-2000) | one
+(10 rows)
+
 DROP TABLE temporal_partitioned;
 -- temporal UNIQUE:
 CREATE TABLE temporal_partitioned (
@@ -378,6 +438,36 @@ SELECT * FROM tp2 ORDER BY id, valid_at;
 -------+-------------------------+-------
  [3,4) | [01-01-2000,01-01-2010) | three
 (1 row)
+
+UPDATE  temporal_partitioned
+  FOR PORTION OF valid_at FROM '2000-01-15' TO '2000-02-15'
+  SET name = 'one2'
+  WHERE id = '[1,1]';
+UPDATE  temporal_partitioned
+  FOR PORTION OF valid_at FROM '2000-02-20' TO '2000-02-25'
+  SET id = '[4,4]'
+  WHERE name = 'one';
+UPDATE  temporal_partitioned
+  FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01'
+  SET id = '[2,2]'
+  WHERE name = 'three';
+DELETE FROM temporal_partitioned
+  FOR PORTION OF valid_at FROM '2000-01-15' TO '2000-02-15'
+  WHERE id = '[3,3]';
+SELECT * FROM temporal_partitioned ORDER BY id, valid_at;
+  id   |        valid_at         | name  
+-------+-------------------------+-------
+ [1,2) | [01-01-2000,01-15-2000) | one
+ [1,2) | [01-15-2000,02-01-2000) | one2
+ [1,2) | [02-01-2000,02-15-2000) | one2
+ [1,2) | [02-15-2000,02-20-2000) | one
+ [1,2) | [02-25-2000,03-01-2000) | one
+ [2,3) | [01-01-2002,01-01-2003) | three
+ [3,4) | [01-01-2000,01-15-2000) | three
+ [3,4) | [02-15-2000,01-01-2002) | three
+ [3,4) | [01-01-2003,01-01-2010) | three
+ [4,5) | [02-20-2000,02-25-2000) | one
+(10 rows)
 
 DROP TABLE temporal_partitioned;
 --
@@ -669,13 +759,25 @@ UPDATE temporal_rng SET id = '[7,7]'
 WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
 ERROR:  update or delete on table "temporal_rng" violates foreign key constraint "temporal_fk_rng2rng_fk" on table "temporal_fk_rng2rng"
 DETAIL:  Key (id, valid_at)=([5,6), ["Mon Jan 01 00:00:00 2018","Thu Feb 01 00:00:00 2018")) is still referenced from table "temporal_fk_rng2rng".
+-- changing an unreferenced part is okay:
+UPDATE temporal_rng
+FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
+SET id = '[7,7]'
+WHERE id = '[5,5]';
+-- changing just a part fails:
+UPDATE temporal_rng
+FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
+SET id = '[7,7]'
+WHERE id = '[5,5]';
+ERROR:  update or delete on table "temporal_rng" violates foreign key constraint "temporal_fk_rng2rng_fk" on table "temporal_fk_rng2rng"
+DETAIL:  Key (id, valid_at)=([5,6), ["Wed Jan 03 00:00:00 2018","Thu Feb 01 00:00:00 2018")) is still referenced from table "temporal_fk_rng2rng".
 -- then delete the objecting FK record and the same PK update succeeds:
 DELETE FROM temporal_fk_rng2rng WHERE id = '[3,3]';
 UPDATE temporal_rng SET valid_at = tsrange('2016-01-01', '2016-02-01')
 WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
 -- clean up:
 DELETE FROM temporal_fk_rng2rng WHERE parent_id = '[5,5]';
-DELETE FROM temporal_rng WHERE id = '[5,5]';
+DELETE FROM temporal_rng WHERE id IN ('[5,5]', '[7,7]');
 --
 -- test FK parent updates RESTRICT
 --
@@ -706,13 +808,25 @@ UPDATE temporal_rng SET id = '[7,7]'
 WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
 ERROR:  update or delete on table "temporal_rng" violates foreign key constraint "temporal_fk_rng2rng_fk" on table "temporal_fk_rng2rng"
 DETAIL:  Key (id, valid_at)=([5,6), ["Mon Jan 01 00:00:00 2018","Thu Feb 01 00:00:00 2018")) is still referenced from table "temporal_fk_rng2rng".
+-- changing an unreferenced part is okay:
+UPDATE temporal_rng
+FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
+SET id = '[7,7]'
+WHERE id = '[5,5]';
+-- changing just a part fails:
+UPDATE temporal_rng
+FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
+SET id = '[7,7]'
+WHERE id = '[5,5]';
+ERROR:  update or delete on table "temporal_rng" violates foreign key constraint "temporal_fk_rng2rng_fk" on table "temporal_fk_rng2rng"
+DETAIL:  Key (id, valid_at)=([5,6), ["Wed Jan 03 00:00:00 2018","Thu Feb 01 00:00:00 2018")) is still referenced from table "temporal_fk_rng2rng".
 -- then delete the objecting FK record and the same PK update succeeds:
 DELETE FROM temporal_fk_rng2rng WHERE id = '[3,3]';
 UPDATE temporal_rng SET valid_at = tsrange('2016-01-01', '2016-02-01')
 WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
 -- clean up:
 DELETE FROM temporal_fk_rng2rng WHERE parent_id = '[5,5]';
-DELETE FROM temporal_rng WHERE id = '[5,5]';
+DELETE FROM temporal_rng WHERE id IN ('[5,5]', '[7,7]');
 --
 -- test FK parent deletes NO ACTION
 --
@@ -734,9 +848,22 @@ DELETE FROM temporal_rng WHERE id = '[5,5]' AND valid_at = tsrange('2018-02-01',
 DELETE FROM temporal_rng WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
 ERROR:  update or delete on table "temporal_rng" violates foreign key constraint "temporal_fk_rng2rng_fk" on table "temporal_fk_rng2rng"
 DETAIL:  Key (id, valid_at)=([5,6), ["Mon Jan 01 00:00:00 2018","Thu Feb 01 00:00:00 2018")) is still referenced from table "temporal_fk_rng2rng".
+-- deleting an unreferenced part is okay:
+DELETE FROM temporal_rng
+FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
+WHERE id = '[5,5]';
+-- deleting just a part fails:
+DELETE FROM temporal_rng
+FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
+WHERE id = '[5,5]';
+ERROR:  update or delete on table "temporal_rng" violates foreign key constraint "temporal_fk_rng2rng_fk" on table "temporal_fk_rng2rng"
+DETAIL:  Key (id, valid_at)=([5,6), ["Wed Jan 03 00:00:00 2018","Thu Feb 01 00:00:00 2018")) is still referenced from table "temporal_fk_rng2rng".
 -- then delete the objecting FK record and the same PK delete succeeds:
 DELETE FROM temporal_fk_rng2rng WHERE id = '[3,3]';
 DELETE FROM temporal_rng WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+-- clean up:
+DELETE FROM temporal_fk_rng2rng WHERE parent_id = '[5,5]';
+DELETE FROM temporal_rng WHERE id IN ('[5,5]');
 --
 -- test FK parent deletes RESTRICT
 --
@@ -758,9 +885,22 @@ DELETE FROM temporal_rng WHERE id = '[5,5]' AND valid_at = tsrange('2018-02-01',
 DELETE FROM temporal_rng WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
 ERROR:  update or delete on table "temporal_rng" violates foreign key constraint "temporal_fk_rng2rng_fk" on table "temporal_fk_rng2rng"
 DETAIL:  Key (id, valid_at)=([5,6), ["Mon Jan 01 00:00:00 2018","Thu Feb 01 00:00:00 2018")) is still referenced from table "temporal_fk_rng2rng".
+-- deleting an unreferenced part is okay:
+DELETE FROM temporal_rng
+FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
+WHERE id = '[5,5]';
+-- deleting just a part fails:
+DELETE FROM temporal_rng
+FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
+WHERE id = '[5,5]';
+ERROR:  update or delete on table "temporal_rng" violates foreign key constraint "temporal_fk_rng2rng_fk" on table "temporal_fk_rng2rng"
+DETAIL:  Key (id, valid_at)=([5,6), ["Wed Jan 03 00:00:00 2018","Thu Feb 01 00:00:00 2018")) is still referenced from table "temporal_fk_rng2rng".
 -- then delete the objecting FK record and the same PK delete succeeds:
 DELETE FROM temporal_fk_rng2rng WHERE id = '[3,3]';
 DELETE FROM temporal_rng WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+-- clean up:
+DELETE FROM temporal_fk_rng2rng WHERE parent_id = '[5,5]';
+DELETE FROM temporal_rng WHERE id IN ('[5,5]');
 --
 -- test ON UPDATE/DELETE options
 --
