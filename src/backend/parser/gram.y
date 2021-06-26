@@ -258,6 +258,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 	RangeVar   *range;
 	IntoClause *into;
 	WithClause *with;
+	ForPortionOfClause *forportionof;
 	InferClause	*infer;
 	OnConflictClause *onconflict;
 	A_Indices  *aind;
@@ -550,6 +551,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 %type <range>	relation_expr
 %type <range>	extended_relation_expr
 %type <range>	relation_expr_opt_alias
+%type <forportionof> for_portion_of_clause
 %type <node>	tablesample_clause opt_repeatable_clause
 %type <target>	target_el set_target insert_column_item
 
@@ -746,7 +748,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 
 	PARALLEL PARAMETER PARSER PARTIAL PARTITION PASSING PASSWORD
 	PERIOD PLACING PLANS POLICY
-	POSITION PRECEDING PRECISION PRESERVE PREPARE PREPARED PRIMARY
+	PORTION POSITION PRECEDING PRECISION PRESERVE PREPARE PREPARED PRIMARY
 	PRIOR PRIVILEGES PROCEDURAL PROCEDURE PROCEDURES PROGRAM PUBLICATION
 
 	QUOTE
@@ -864,6 +866,17 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
  * json_predicate_type_constraint and json_key_uniqueness_constraint_opt
  * productions (see comments there).
  */
+/*
+ * We need to handle this shift/reduce conflict:
+ * FOR PORTION OF valid_at FROM INTERVAL YEAR TO MONTH TO foo.
+ * This is basically the classic "dangling else" problem, and we want a
+ * similar resolution: treat the TO as part of the INTERVAL, not as part of
+ * the FROM ... TO .... Users can add parentheses if that's a problem.
+ * TO just needs to be higher precedence than YEAR_P etc.
+ * TODO: I need to figure out a %prec solution before this gets committed!
+ */
+%nonassoc YEAR_P MONTH_P DAY_P HOUR_P MINUTE_P
+%nonassoc TO
 %nonassoc	UNBOUNDED		/* ideally would have same precedence as IDENT */
 %nonassoc	IDENT PARTITION RANGE ROWS GROUPS PRECEDING FOLLOWING CUBE ROLLUP
 			SET KEYS OBJECT_P SCALAR VALUE_P WITH WITHOUT
@@ -12215,14 +12228,16 @@ returning_clause:
  *****************************************************************************/
 
 DeleteStmt: opt_with_clause DELETE_P FROM relation_expr_opt_alias
+			for_portion_of_clause
 			using_clause where_or_current_clause returning_clause
 				{
 					DeleteStmt *n = makeNode(DeleteStmt);
 
 					n->relation = $4;
-					n->usingClause = $5;
-					n->whereClause = $6;
-					n->returningList = $7;
+					n->forPortionOf = $5;
+					n->usingClause = $6;
+					n->whereClause = $7;
+					n->returningList = $8;
 					n->withClause = $1;
 					$$ = (Node *) n;
 				}
@@ -12285,6 +12300,7 @@ opt_nowait_or_skip:
  *****************************************************************************/
 
 UpdateStmt: opt_with_clause UPDATE relation_expr_opt_alias
+			for_portion_of_clause
 			SET set_clause_list
 			from_clause
 			where_or_current_clause
@@ -12293,10 +12309,11 @@ UpdateStmt: opt_with_clause UPDATE relation_expr_opt_alias
 					UpdateStmt *n = makeNode(UpdateStmt);
 
 					n->relation = $3;
-					n->targetList = $5;
-					n->fromClause = $6;
-					n->whereClause = $7;
-					n->returningList = $8;
+					n->forPortionOf = $4;
+					n->targetList = $6;
+					n->fromClause = $7;
+					n->whereClause = $8;
+					n->returningList = $9;
 					n->withClause = $1;
 					$$ = (Node *) n;
 				}
@@ -13730,6 +13747,19 @@ relation_expr_opt_alias: relation_expr					%prec UMINUS
 					$1->alias = alias;
 					$$ = $1;
 				}
+		;
+
+for_portion_of_clause:
+			FOR PORTION OF ColId FROM a_expr TO a_expr
+				{
+					ForPortionOfClause *n = makeNode(ForPortionOfClause);
+					n->range_name = $4;
+					n->range_name_location = @4;
+					n->target_start = $6;
+					n->target_end = $8;
+					$$ = n;
+				}
+			| /*EMPTY*/					{ $$ = NULL; }
 		;
 
 /*
@@ -17325,6 +17355,7 @@ unreserved_keyword:
 			| PASSWORD
 			| PLANS
 			| POLICY
+			| PORTION
 			| PRECEDING
 			| PREPARE
 			| PREPARED
@@ -17929,6 +17960,7 @@ bare_label_keyword:
 			| PLACING
 			| PLANS
 			| POLICY
+			| PORTION
 			| POSITION
 			| PRECEDING
 			| PREPARE
