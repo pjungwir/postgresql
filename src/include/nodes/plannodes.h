@@ -321,6 +321,8 @@ typedef struct ModifyTable
 	List	   *onConflictCols;
 	/* WHERE for ON CONFLICT UPDATE */
 	Node	   *onConflictWhere;
+	/* FOR PORTION OF clause for UPDATE/DELETE */
+	Node	   *forPortionOf;
 	/* RTI of the EXCLUDED pseudo relation */
 	Index		exclRelRTI;
 	/* tlist of the EXCLUDED pseudo relation */

@@ -10537,9 +10537,12 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 		Oid			periodoperoid;
 		Oid			aggedperiodoperoid;
 		Oid			intersectoperoid;
+		Oid			intersectprocoid;
+		Oid			withoutoverlapsoid;
 
-		FindFKPeriodOpers(opclasses[numpks - 1], &periodoperoid, &aggedperiodoperoid,
-						  &intersectoperoid);
+		FindFKPeriodOpersAndProcs(opclasses[numpks - 1], &periodoperoid,
+								  &aggedperiodoperoid, &intersectoperoid,
+								  &intersectprocoid, &withoutoverlapsoid);
 	}
 
 	/* First, create the constraint catalog entry itself. */
@@ -13732,6 +13735,7 @@ validateForeignKeyConstraint(char *conname,
 		trigdata.tg_trigtuple = ExecFetchSlotHeapTuple(slot, false, NULL);
 		trigdata.tg_trigslot = slot;
 		trigdata.tg_trigger = &trig;
+		trigdata.tg_temporal = NULL;
 
 		fcinfo->context = (Node *) &trigdata;
 
