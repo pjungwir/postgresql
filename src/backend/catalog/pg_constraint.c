@@ -1644,12 +1644,19 @@ DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
  * That way foreign keys can compare fkattr <@ range_agg(pkattr).
  * intersectoperoid is used by NO ACTION constraints to trim the range being considered
  * to just what was updated/deleted.
+ * intersectprocoid is used to limit the effect of CASCADE/SET NULL/SET DEFAULT
+ * when the PK record is changed with FOR PORTION OF.
+ * withoutportionoid is a set-returning function computing
+ * the difference between one range and another,
+ * returning each result range in a separate row.
  */
 void
-FindFKPeriodOpers(Oid opclass,
-				  Oid *containedbyoperoid,
-				  Oid *aggedcontainedbyoperoid,
-				  Oid *intersectoperoid)
+FindFKPeriodOpersAndProcs(Oid opclass,
+						  Oid *containedbyoperoid,
+						  Oid *aggedcontainedbyoperoid,
+						  Oid *intersectoperoid,
+						  Oid *intersectprocoid,
+						  Oid *withoutportionoid)
 {
 	Oid			opfamily = InvalidOid;
 	Oid			opcintype = InvalidOid;
@@ -1691,6 +1698,17 @@ FindFKPeriodOpers(Oid opclass,
 							   aggedcontainedbyoperoid,
 							   &strat);
 
+	/*
+	 * Hardcode intersect operators for ranges and multiranges,
+	 * because we don't have a better way to look up operators
+	 * that aren't used in indexes.
+	 *
+	 * If you change this code, you must change the code in
+	 * transformForPortionOfClause.
+	 *
+	 * XXX: Find a more extensible way to look up the operator,
+	 * permitting user-defined types.
+	 */
 	switch (opcintype)
 	{
 		case ANYRANGEOID:
@@ -1702,6 +1720,27 @@ FindFKPeriodOpers(Oid opclass,
 		default:
 			elog(ERROR, "unexpected opcintype: %u", opcintype);
 	}
+
+	/*
+	 * Look up the intersect proc. We use this for FOR PORTION OF
+	 * (both the operation itself and when checking foreign keys).
+	 * If this is missing we don't need to complain here,
+	 * because FOR PORTION OF will not be allowed.
+	 */
+	*intersectprocoid = get_opcode(*intersectoperoid);
+
+	/*
+	 * Look up the without_portion func. We need this for RESTRICT
+	 * foreign keys and also FOR PORTION OF.
+	 */
+	*withoutportionoid = InvalidOid;
+	*withoutportionoid = get_opfamily_proc(opfamily, opcintype, opcintype, GIST_WITHOUT_PORTION_PROC);
+	if (!OidIsValid(*withoutportionoid))
+		ereport(ERROR,
+				errcode(ERRCODE_UNDEFINED_OBJECT),
+				errmsg("could not identify a without_overlaps support function for type %s", format_type_be(opcintype)),
+				errhint("Define a without_overlaps support function for operator class \"%d\" for access method \"%s\".",
+						opclass, "gist"));
 }
 
 /*
