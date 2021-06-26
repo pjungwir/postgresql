@@ -129,7 +129,8 @@ typedef struct RI_ConstraintInfo
 	Oid			ff_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (FK = FK) */
 	Oid			period_contained_by_oper;	/* anyrange <@ anyrange */
 	Oid			agged_period_contained_by_oper; /* fkattr <@ range_agg(pkattr) */
-	Oid			period_intersect_oper;	/* anyrange * anyrange */
+	Oid			period_intersect_oper;	/* anyrange * anyrange (or multirange) */
+	Oid			period_intersect_proc;	/* anyrange * anyrange (or multirange) */
 	Oid			without_portion_proc;	/* anyrange - anyrange SRF */
 	dlist_node	valid_link;		/* Link in list of valid entries */
 } RI_ConstraintInfo;
@@ -240,6 +241,11 @@ static void ri_ReportViolation(const RI_ConstraintInfo *riinfo,
 							   Relation pk_rel, Relation fk_rel,
 							   TupleTableSlot *violatorslot, TupleDesc tupdesc,
 							   int queryno, bool is_restrict, bool partgone) pg_attribute_noreturn();
+static bool fpo_targets_pk_range(const ForPortionOfState *tg_temporal,
+								 const RI_ConstraintInfo *riinfo);
+static Datum restrict_enforced_range(const ForPortionOfState *tg_temporal,
+									 const RI_ConstraintInfo *riinfo,
+									 TupleTableSlot *oldslot);
 
 
 /*
@@ -943,11 +949,34 @@ ri_restrict(TriggerData *trigdata, bool is_no_action)
 	 *
 	 * For a DELETE, oldslot.pkperiod was lost,
 	 * which is what we check for by default.
+	 *
+	 * In an UPDATE t FOR PORTION OF, if the scalar key part changed,
+	 * then only newslot.pkperiod was lost. Otherwise nothing was lost.
+	 *
+	 * In a DELETE FROM t FOR PORTION OF, only newslot.pkperiod was lost.
+	 * But there is no newslot, so we have to calculate the intersection
+	 * of oldslot.pkperiod and the range targeted by FOR PORTION OF.
 	 */
 	if (riinfo->hasperiod && !is_no_action)
 	{
-		if (TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event)
-			&& ri_KeysEqual(pk_rel, oldslot, newslot, riinfo, true, true))
+		/* Don't treat leftovers of FOR PORTION OF as lost */
+		if (trigdata->tg_temporal)
+		{
+			bool	isnull;
+			targetRangeParam = riinfo->nkeys;
+			if (TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event))
+			{
+				if (!ri_KeysEqual(pk_rel, oldslot, newslot, riinfo, true, true))
+					targetRange = slot_getattr(newslot, pkperiodattno, &isnull);
+				else
+					/* nothing to do */
+					finished = true;
+			}
+			else
+				targetRange = restrict_enforced_range(trigdata->tg_temporal, riinfo, oldslot);
+		}
+		else if (TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event)
+				 && ri_KeysEqual(pk_rel, oldslot, newslot, riinfo, true, true))
 		{
 			multiplelost = true;
 
@@ -2453,6 +2482,7 @@ ri_LoadConstraintInfo(Oid constraintOid)
 								  &riinfo->period_contained_by_oper,
 								  &riinfo->agged_period_contained_by_oper,
 								  &riinfo->period_intersect_oper,
+								  &riinfo->period_intersect_proc,
 								  &riinfo->without_portion_proc);
 	}
 
@@ -3352,4 +3382,51 @@ RI_FKey_trigger_type(Oid tgfoid)
 	}
 
 	return RI_TRIGGER_NONE;
+}
+
+/*
+ * fpo_targets_pk_range
+ *
+ * Returns true iff the primary key referenced by riinfo includes the range
+ * column targeted by the FOR PORTION OF clause (according to tg_temporal).
+ */
+static bool
+fpo_targets_pk_range(const ForPortionOfState *tg_temporal, const RI_ConstraintInfo *riinfo)
+{
+	if (tg_temporal == NULL)
+		return false;
+
+	return riinfo->pk_attnums[riinfo->nkeys - 1] == tg_temporal->fp_rangeAttno;
+}
+
+/*
+ * restrict_enforced_range -
+ *
+ * Returns a Datum of RangeTypeP holding the appropriate timespan
+ * to target child records when we RESTRICT/CASCADE/SET NULL/SET DEFAULT.
+ *
+ * In a normal UPDATE/DELETE this should be the referenced row's own valid time,
+ * but if there was a FOR PORTION OF clause, then we should use that to
+ * trim down the span further.
+ */
+static Datum
+restrict_enforced_range(const ForPortionOfState *tg_temporal, const RI_ConstraintInfo *riinfo, TupleTableSlot *oldslot)
+{
+	Datum		pkRecordRange;
+	bool		isnull;
+	AttrNumber	attno = riinfo->pk_attnums[riinfo->nkeys - 1];
+
+	pkRecordRange = slot_getattr(oldslot, attno, &isnull);
+	if (isnull)
+		elog(ERROR, "application time should not be null");
+
+	if (fpo_targets_pk_range(tg_temporal, riinfo))
+	{
+		if (!OidIsValid(riinfo->period_intersect_proc))
+			elog(ERROR, "invalid intersect support function");
+
+		return OidFunctionCall2(riinfo->period_intersect_proc, pkRecordRange, tg_temporal->fp_targetRange);
+	}
+	else
+		return pkRecordRange;
 }
