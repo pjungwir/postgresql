@@ -3887,6 +3887,12 @@
   prorettype => 'trigger', proargtypes => '',
   prosrc => 'RI_FKey_noaction_upd' },
 
+# Temporal leftovers triggers
+{ oid => '8157', descr => 'temporal leftovers trigger function',
+  proname => 'FP_insert_leftovers', provolatile => 'v',
+  prorettype => 'trigger', proargtypes => '',
+  prosrc => 'FP_insert_leftovers' },
+
 { oid => '1666',
   proname => 'varbiteq', proleakproof => 't', prorettype => 'bool',
   proargtypes => 'varbit varbit', prosrc => 'biteq' },
