@@ -1259,6 +1259,10 @@ CREATE TABLE billing_addresses (
     and second a period (or range column) that qualifies when the row applies. So a temporal primary permits multiple rows with equal values in the ordinary key parts, as long as those rows don't have overlapping periods. Each row makes a statement about the entity identified by the ordinary key parts, but applying only to the span given by the period.
     Temporal primary keys are essentially <link linkend="sql-createtable-exclude">exclusion constraints</link> where the first key parts are compared for equality and the last part for overlaps.
    </para>
+
+   <para>
+    Any table with a temporal primary key supports temporal <literal>UPDATE</literal> and <literal>DELETE</literal> using <literal>FOR PORTION OF</literal> syntax. See <xref linkend="sql-update"/> and <xref linkend="sql-delete"/> for details.
+   </para>
   </sect2>
 
   <sect2 id="ddl-periods-system-periods">

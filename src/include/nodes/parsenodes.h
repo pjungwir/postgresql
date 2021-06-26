@@ -138,6 +138,8 @@ typedef struct Query
 	int			resultRelation; /* rtable index of target relation for
 								 * INSERT/UPDATE/DELETE/MERGE; 0 for SELECT */
 
+	ForPortionOfExpr *forPortionOf;	/* FOR PORTION OF clause for UPDATE/DELETE */
+
 	bool		hasAggs;		/* has aggregates in tlist or havingQual */
 	bool		hasWindowFuncs; /* has window functions in tlist */
 	bool		hasTargetSRFs;	/* has set-returning functions in tlist */
@@ -1476,6 +1478,19 @@ typedef struct RowMarkClause
 } RowMarkClause;
 
 /*
+ * ForPortionOfClause
+ *		representation of FOR PORTION OF <period-name> FROM <t1> TO <t2>
+ */
+typedef struct ForPortionOfClause
+{
+	NodeTag		type;
+	char	   *range_name;
+	int			range_name_location;
+	Node	   *target_start;
+	Node	   *target_end;
+} ForPortionOfClause;
+
+/*
  * WithClause -
  *	   representation of WITH clause
  *
@@ -1689,12 +1704,13 @@ typedef struct InsertStmt
  */
 typedef struct DeleteStmt
 {
-	NodeTag		type;
-	RangeVar   *relation;		/* relation to delete from */
-	List	   *usingClause;	/* optional using clause for more tables */
-	Node	   *whereClause;	/* qualifications */
-	List	   *returningList;	/* list of expressions to return */
-	WithClause *withClause;		/* WITH clause */
+	NodeTag				type;
+	RangeVar		   *relation;		/* relation to delete from */
+	ForPortionOfClause *forPortionOf;	/* FOR PORTION OF clause */
+	List			   *usingClause;	/* optional using clause for more tables */
+	Node			   *whereClause;	/* qualifications */
+	List			   *returningList;	/* list of expressions to return */
+	WithClause		   *withClause;		/* WITH clause */
 } DeleteStmt;
 
 /* ----------------------
@@ -1703,13 +1719,14 @@ typedef struct DeleteStmt
  */
 typedef struct UpdateStmt
 {
-	NodeTag		type;
-	RangeVar   *relation;		/* relation to update */
-	List	   *targetList;		/* the target list (of ResTarget) */
-	Node	   *whereClause;	/* qualifications */
-	List	   *fromClause;		/* optional from clause for more tables */
-	List	   *returningList;	/* list of expressions to return */
-	WithClause *withClause;		/* WITH clause */
+	NodeTag				type;
+	RangeVar		   *relation;		/* relation to update */
+	ForPortionOfClause *forPortionOf;	/* FOR PORTION OF clause */
+	List			   *targetList;		/* the target list (of ResTarget) */
+	Node			   *whereClause;	/* qualifications */
+	List			   *fromClause;		/* optional from clause for more tables */
+	List			   *returningList;	/* list of expressions to return */
+	WithClause		   *withClause;		/* WITH clause */
 } UpdateStmt;
 
 /* ----------------------
