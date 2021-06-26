@@ -223,6 +223,20 @@ INSERT INTO temporal3 (id, valid_at, id2, name)
   ('[1,1]', daterange('2000-01-01', '2010-01-01'), '[7,7]', 'foo'),
   ('[2,2]', daterange('2000-01-01', '2010-01-01'), '[9,9]', 'bar')
 ;
+UPDATE temporal3 FOR PORTION OF valid_at FROM '2000-05-01' TO '2000-07-01'
+  SET name = name || '1';
+UPDATE temporal3 FOR PORTION OF valid_at FROM '2000-04-01' TO '2000-06-01'
+  SET name = name || '2'
+  WHERE id = '[2,2]';
+SELECT * FROM temporal3 ORDER BY id, valid_at;
+-- conflicting id only:
+INSERT INTO temporal3 (id, valid_at, id2, name)
+  VALUES
+  ('[1,1]', daterange('2005-01-01', '2006-01-01'), '[8,8]', 'foo3');
+-- conflicting id2 only:
+INSERT INTO temporal3 (id, valid_at, id2, name)
+  VALUES
+  ('[3,3]', daterange('2005-01-01', '2010-01-01'), '[9,9]', 'bar3');
 DROP TABLE temporal3;
 
 --
