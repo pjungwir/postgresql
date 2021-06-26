@@ -840,6 +840,9 @@ ForBothState
 ForEachState
 ForFiveState
 ForFourState
+ForPortionOfClause
+ForPortionOfExpr
+ForPortionOfState
 ForThreeState
 ForeignAsyncConfigureWait_function
 ForeignAsyncNotify_function
@@ -973,6 +976,7 @@ Form_pg_ts_template
 Form_pg_type
 Form_pg_user_mapping
 FormatNode
+FPO_QueryHashEntry
 FreeBlockNumberArray
 FreeListData
 FreePageBtree
