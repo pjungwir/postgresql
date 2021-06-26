@@ -284,7 +284,7 @@ INSERT INTO without_overlaps_test VALUES ('[3,3]', NULL);
 
 CREATE TABLE without_overlaps_test2 (
   id int4range,
-  valid_at tsrange,
+  valid_at daterange,
   id2 int8range,
   name TEXT,
   CONSTRAINT without_overlaps_test2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
@@ -292,8 +292,8 @@ CREATE TABLE without_overlaps_test2 (
 );
 INSERT INTO without_overlaps_test2 (id, valid_at, id2, name)
   VALUES
-  ('[1,1]', tsrange('2000-01-01', '2010-01-01'), '[7,7]', 'foo'),
-  ('[2,2]', tsrange('2000-01-01', '2010-01-01'), '[9,9]', 'bar')
+  ('[1,1]', daterange('2000-01-01', '2010-01-01'), '[7,7]', 'foo'),
+  ('[2,2]', daterange('2000-01-01', '2010-01-01'), '[9,9]', 'bar')
 ;
 UPDATE without_overlaps_test2 FOR PORTION OF valid_at FROM '2000-05-01' TO '2000-07-01'
   SET name = name || '1';
@@ -304,11 +304,11 @@ SELECT * FROM without_overlaps_test2 ORDER BY id, valid_at;
 -- conflicting id only:
 INSERT INTO without_overlaps_test2 (id, valid_at, id2, name)
   VALUES
-  ('[1,1]', tsrange('2005-01-01', '2006-01-01'), '[8,8]', 'foo3');
+  ('[1,1]', daterange('2005-01-01', '2006-01-01'), '[8,8]', 'foo3');
 -- conflicting id2 only:
 INSERT INTO without_overlaps_test2 (id, valid_at, id2, name)
   VALUES
-  ('[3,3]', tsrange('2005-01-01', '2010-01-01'), '[9,9]', 'bar3')
+  ('[3,3]', daterange('2005-01-01', '2010-01-01'), '[9,9]', 'bar3')
 ;
 DROP TABLE without_overlaps_test2;
 
@@ -318,8 +318,8 @@ DROP TABLE without_overlaps_test2;
 
 CREATE TABLE without_overlaps_test2 (
   id int4range,
-	valid_from timestamp,
-	valid_til timestamp,
+	valid_from date,
+	valid_til date,
 	PERIOD FOR valid_at (valid_from, valid_til),
   id2 int8range,
   name TEXT,
