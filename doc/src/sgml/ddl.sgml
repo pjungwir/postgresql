@@ -1263,6 +1263,10 @@ CREATE TABLE billing_addresses (
    <para>
     Any table with a temporal primary key supports temporal <literal>UPDATE</literal> and <literal>DELETE</literal> using <literal>FOR PORTION OF</literal> syntax. See <xref linkend="sql-update"/> and <xref linkend="sql-delete"/> for details.
    </para>
+
+   <para>
+    Temporal foreign keys have the same structure as temporal primary keys and must reference temporal primary keys. The referenced entity specified by the ordinary key parts must exist for at least as long as the value in the referencing row. Note that several rows in the referenced table may be required to completely satisfy a referencing value.
+   </para>
   </sect2>
 
   <sect2 id="ddl-periods-system-periods">
