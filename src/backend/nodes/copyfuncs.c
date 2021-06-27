@@ -3118,7 +3118,9 @@ _copyConstraint(const Constraint *from)
 	COPY_NODE_FIELD(where_clause);
 	COPY_NODE_FIELD(pktable);
 	COPY_NODE_FIELD(fk_attrs);
+	COPY_NODE_FIELD(fk_period);
 	COPY_NODE_FIELD(pk_attrs);
+	COPY_NODE_FIELD(pk_period);
 	COPY_SCALAR_FIELD(fk_matchtype);
 	COPY_SCALAR_FIELD(fk_upd_action);
 	COPY_SCALAR_FIELD(fk_del_action);
@@ -3220,6 +3222,7 @@ _copyQuery(const Query *from)
 	COPY_SCALAR_FIELD(canSetTag);
 	COPY_NODE_FIELD(utilityStmt);
 	COPY_SCALAR_FIELD(resultRelation);
+	COPY_NODE_FIELD(forPortionOf);
 	COPY_SCALAR_FIELD(hasAggs);
 	COPY_SCALAR_FIELD(hasWindowFuncs);
 	COPY_SCALAR_FIELD(hasTargetSRFs);

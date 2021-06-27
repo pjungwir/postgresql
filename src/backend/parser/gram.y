@@ -499,11 +499,12 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 %type <node>	TableElement TypedTableElement ConstraintElem TableFuncElement
 %type <node>	columnDef columnOptions
 %type <defelt>	def_elem reloption_elem old_aggr_elem operator_def_elem
-%type <node>	def_arg columnElem withoutOverlapsClause
+%type <node>	def_arg columnElem withoutOverlapsClause optionalPeriodName
 				where_clause where_or_current_clause
 				a_expr b_expr c_expr AexprConst indirection_el opt_slice_bound
 				columnref in_expr having_clause func_table xmltable array_expr
 				OptWhereClause operator_def_arg
+%type <list>	opt_column_and_period_list
 %type <list>	rowsfrom_item rowsfrom_list opt_col_def_list
 %type <boolean> opt_ordinality
 %type <list>	ExclusionConstraintList ExclusionConstraintElem
@@ -3941,19 +3942,21 @@ ConstraintElem:
 								   NULL, yyscanner);
 					$$ = (Node *)n;
 				}
-			| FOREIGN KEY '(' columnList ')' REFERENCES qualified_name
-				opt_column_list key_match key_actions ConstraintAttributeSpec
+			| FOREIGN KEY '(' columnList optionalPeriodName ')' REFERENCES qualified_name
+				opt_column_and_period_list key_match key_actions ConstraintAttributeSpec
 				{
 					Constraint *n = makeNode(Constraint);
 					n->contype = CONSTR_FOREIGN;
 					n->location = @1;
-					n->pktable = $7;
+					n->pktable = $8;
 					n->fk_attrs = $4;
-					n->pk_attrs = $8;
-					n->fk_matchtype = $9;
-					n->fk_upd_action = (char) ($10 >> 8);
-					n->fk_del_action = (char) ($10 & 0xFF);
-					processCASbits($11, @11, "FOREIGN KEY",
+					n->fk_period = $5;
+					n->pk_attrs = linitial($9);
+					n->pk_period = lsecond($9);
+					n->fk_matchtype = $10;
+					n->fk_upd_action = (char) ($11 >> 8);
+					n->fk_del_action = (char) ($11 & 0xFF);
+					processCASbits($12, @12, "FOREIGN KEY",
 								   &n->deferrable, &n->initdeferred,
 								   &n->skip_validation, NULL,
 								   yyscanner);
@@ -3980,6 +3983,16 @@ withoutOverlapsClause:
 			',' columnElem WITHOUT OVERLAPS { $$ = $2; }
 			| /*EMPTY*/               { $$ = NULL; }
 	;
+
+optionalPeriodName:
+			',' PERIOD columnElem { $$ = $3; }
+			| /*EMPTY*/               { $$ = NULL; }
+	;
+
+opt_column_and_period_list:
+			'(' columnList optionalPeriodName ')'			{ $$ = list_make2($2, $3); }
+			| /*EMPTY*/								{ $$ = list_make2(NIL, NULL); }
+		;
 
 columnElem: ColId
 				{
