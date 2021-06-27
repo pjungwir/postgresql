@@ -2563,6 +2563,10 @@ typedef enum ConstrType			/* types of constraints */
 #define FKCONSTR_MATCH_PARTIAL		'p'
 #define FKCONSTR_MATCH_SIMPLE		's'
 
+/* Foreign key with PERIOD positions */
+#define FKCONSTR_PERIOD_OP_CONTAINED_BY	0
+#define FKCONSTR_PERIOD_PROC_REFERENCED_AGG 0
+
 typedef struct Constraint
 {
 	pg_node_attr(custom_read_write)
@@ -2609,7 +2613,9 @@ typedef struct Constraint
 	/* Fields used for FOREIGN KEY constraints: */
 	RangeVar   *pktable;		/* Primary key table */
 	List	   *fk_attrs;		/* Attributes of foreign key */
+	Node	   *fk_period;		/* String node naming Period or range column */
 	List	   *pk_attrs;		/* Corresponding attrs in PK table */
+	Node	   *pk_period;		/* String node naming Period or range column */
 	char		fk_matchtype;	/* FULL, PARTIAL, SIMPLE */
 	char		fk_upd_action;	/* ON UPDATE action */
 	char		fk_del_action;	/* ON DELETE action */
