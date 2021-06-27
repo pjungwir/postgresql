@@ -3926,19 +3926,21 @@ ConstraintElem:
 								   NULL, yyscanner);
 					$$ = (Node *)n;
 				}
-			| FOREIGN KEY '(' columnList ')' REFERENCES qualified_name
-				opt_column_list key_match key_actions ConstraintAttributeSpec
+			| FOREIGN KEY '(' columnList optionalPeriodName ')' REFERENCES qualified_name
+				opt_column_and_period_list key_match key_actions ConstraintAttributeSpec
 				{
 					Constraint *n = makeNode(Constraint);
 					n->contype = CONSTR_FOREIGN;
 					n->location = @1;
-					n->pktable			= $7;
+					n->pktable			= $8;
 					n->fk_attrs			= $4;
-					n->pk_attrs			= $8;
-					n->fk_matchtype		= $9;
-					n->fk_upd_action	= (char) ($10 >> 8);
-					n->fk_del_action	= (char) ($10 & 0xFF);
-					processCASbits($11, @11, "FOREIGN KEY",
+					n->fk_period		= $5;
+					n->pk_attrs			= linitial($9);
+					n->pk_period		= lsecond($9);
+					n->fk_matchtype		= $10;
+					n->fk_upd_action	= (char) ($11 >> 8);
+					n->fk_del_action	= (char) ($11 & 0xFF);
+					processCASbits($12, @12, "FOREIGN KEY",
 								   &n->deferrable, &n->initdeferred,
 								   &n->skip_validation, NULL,
 								   yyscanner);

@@ -48,6 +48,12 @@ FOR PORTION OF valid_at FROM '2018-06-01' TO MAXVALUE
 SET valid_at = '[1990-01-01,1999-01-01)'
 WHERE id = '[5,6)';
 
+-- The wrong type fails
+UPDATE for_portion_of_test
+FOR PORTION OF valid_at FROM 1 TO 4
+SET name = 'nope'
+WHERE id = '[3,4)';
+
 -- Setting with timestamps reversed fails
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM '2018-06-01' TO '2018-01-01'

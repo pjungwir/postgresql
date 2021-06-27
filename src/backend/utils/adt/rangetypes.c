@@ -2130,6 +2130,31 @@ make_empty_range(TypeCacheEntry *typcache)
 	return make_range(typcache, &lower, &upper, true);
 }
 
+char *
+range_as_string(RangeType *r)
+{
+  int16       typlen;
+  bool        typbyval;
+  char        typalign;
+  char        typdelim;
+  char		 *rangeStr;
+  Oid typioparam;
+  Oid range_out_oid;
+
+  get_type_io_data(
+		  RangeTypeGetOid(r),
+		  IOFunc_output,
+		  &typlen,
+		  &typbyval,
+		  &typalign,
+		  &typdelim,
+		  &typioparam,
+		  &range_out_oid);
+  rangeStr = OidOutputFunctionCall(range_out_oid, RangeTypePGetDatum(r));
+
+  return rangeStr;
+}
+
 
 /*
  *----------------------------------------------------------
