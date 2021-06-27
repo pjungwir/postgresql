@@ -16,6 +16,7 @@
 
 #include "access/attmap.h"
 #include "access/genam.h"
+#include "access/gist.h"
 #include "access/heapam.h"
 #include "access/heapam_xlog.h"
 #include "access/multixact.h"
@@ -212,6 +213,7 @@ typedef struct NewConstraint
 	ConstrType	contype;		/* CHECK or FOREIGN */
 	Oid			refrelid;		/* PK rel, if FOREIGN */
 	Oid			refindid;		/* OID of PK's index, if FOREIGN */
+	bool		conwithperiod;	/* Whether the new FOREIGN KEY uses PERIOD */
 	Oid			conid;			/* OID of pg_constraint entry, if FOREIGN */
 	Node	   *qual;			/* Check expr or CONSTR_FOREIGN Constraint */
 	ExprState  *qualstate;		/* Execution state for CHECK expr */
@@ -387,16 +389,16 @@ static int	transformColumnNameList(Oid relId, List *colList,
 static int	transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 									   List **attnamelist,
 									   int16 *attnums, Oid *atttypids,
-									   Oid *opclasses);
+									   Oid *opclasses, bool *pk_period);
 static Oid	transformFkeyCheckAttrs(Relation pkrel,
 									int numattrs, int16 *attnums,
-									Oid *opclasses);
+									bool is_temporal, Oid *opclasses);
 static void checkFkeyPermissions(Relation rel, int16 *attnums, int natts);
 static CoercionPathType findFkeyCast(Oid targetTypeId, Oid sourceTypeId,
 									 Oid *funcid);
 static void validateForeignKeyConstraint(char *conname,
 										 Relation rel, Relation pkrel,
-										 Oid pkindOid, Oid constraintOid);
+										 Oid pkindOid, Oid constraintOid, bool temporal);
 static void ATController(AlterTableStmt *parsetree,
 						 Relation rel, List *cmds, bool recurse, LOCKMODE lockmode,
 						 AlterTableUtilityContext *context);
@@ -509,7 +511,8 @@ static ObjectAddress addFkRecurseReferenced(List **wqueue, Constraint *fkconstra
 											Oid *pfeqoperators, Oid *ppeqoperators, Oid *ffeqoperators,
 											int numfkdelsetcols, int16 *fkdelsetcols,
 											bool old_check_ok,
-											Oid parentDelTrigger, Oid parentUpdTrigger);
+											Oid parentDelTrigger, Oid parentUpdTrigger,
+											bool is_temporal);
 static void validateFkOnDeleteSetColumns(int numfks, const int16 *fkattnums,
 										 int numfksetcols, const int16 *fksetcolsattnums,
 										 List *fksetcols);
@@ -519,7 +522,9 @@ static void addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint,
 									Oid *pfeqoperators, Oid *ppeqoperators, Oid *ffeqoperators,
 									int numfkdelsetcols, int16 *fkdelsetcols,
 									bool old_check_ok, LOCKMODE lockmode,
-									Oid parentInsTrigger, Oid parentUpdTrigger);
+									Oid parentInsTrigger, Oid parentUpdTrigger,
+									bool is_temporal);
+
 static void CloneForeignKeyConstraints(List **wqueue, Relation parentRel,
 									   Relation partitionRel);
 static void CloneFkReferenced(Relation parentRel, Relation partitionRel);
@@ -558,6 +563,7 @@ static void FindFKComparisonOperators(Constraint *fkconstraint,
 									  bool *old_check_ok,
 									  ListCell **old_pfeqop_item,
 									  Oid pktype, Oid fktype, Oid opclass,
+									  bool is_temporal, bool for_overlaps,
 									  Oid *pfeqopOut, Oid *ppeqopOut, Oid *ffeqopOut);
 static void ATExecDropConstraint(Relation rel, const char *constrName,
 								 DropBehavior behavior, bool recurse,
@@ -5973,7 +5979,8 @@ ATRewriteTables(AlterTableStmt *parsetree, List **wqueue, LOCKMODE lockmode,
 
 				validateForeignKeyConstraint(fkconstraint->conname, rel, refrel,
 											 con->refindid,
-											 con->conid);
+											 con->conid,
+											 con->conwithperiod);
 
 				/*
 				 * No need to mark the constraint row as validated, we did
@@ -9823,6 +9830,8 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	Oid			ppeqoperators[INDEX_MAX_KEYS] = {0};
 	Oid			ffeqoperators[INDEX_MAX_KEYS] = {0};
 	int16		fkdelsetcols[INDEX_MAX_KEYS] = {0};
+	bool		is_temporal;
+	bool		pk_with_period;
 	int			i;
 	int			numfks,
 				numpks,
@@ -9917,6 +9926,14 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	numfks = transformColumnNameList(RelationGetRelid(rel),
 									 fkconstraint->fk_attrs,
 									 fkattnum, fktypoid);
+	is_temporal = fkconstraint->fk_with_period || fkconstraint->pk_with_period;
+	if (is_temporal)
+	{
+		if (!fkconstraint->fk_with_period)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_FOREIGN_KEY),
+					errmsg("foreign key uses PERIOD on the referenced table but not the referencing table")));
+	}
 
 	numfkdelsetcols = transformColumnNameList(RelationGetRelid(rel),
 											  fkconstraint->fk_del_set_cols,
@@ -9936,16 +9953,32 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 		numpks = transformFkeyGetPrimaryKey(pkrel, &indexOid,
 											&fkconstraint->pk_attrs,
 											pkattnum, pktypoid,
-											opclasses);
+											opclasses, &pk_with_period);
+
+		/* If the primary key uses WITHOUT OVERLAPS, the fk must use PERIOD */
+		if (pk_with_period && !fkconstraint->fk_with_period)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_FOREIGN_KEY),
+					errmsg("foreign key uses PERIOD on the referenced table but not the referencing table")));
 	}
 	else
 	{
 		numpks = transformColumnNameList(RelationGetRelid(pkrel),
 										 fkconstraint->pk_attrs,
 										 pkattnum, pktypoid);
+
+		if (is_temporal)
+		{
+			if (!fkconstraint->pk_with_period)
+				/* Since we got pk_attrs, one should be a period. */
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_FOREIGN_KEY),
+						errmsg("foreign key uses PERIOD on the referencing table but not the referenced table")));
+		}
+
 		/* Look for an index matching the column list */
 		indexOid = transformFkeyCheckAttrs(pkrel, numpks, pkattnum,
-										   opclasses);
+										   is_temporal, opclasses);
 	}
 
 	/*
@@ -10006,8 +10039,26 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 		FindFKComparisonOperators(fkconstraint, tab, i, fkattnum,
 								  &old_check_ok, &old_pfeqop_item,
 								  pktypoid[i], fktypoid[i], opclasses[i],
+								  is_temporal, is_temporal && i == numpks - 1,
 								  &pfeqoperators[i], &ppeqoperators[i],
 								  &ffeqoperators[i]);
+	}
+
+	/*
+	 * For FKs with PERIOD we need an operator and aggregate function
+	 * to check whether the referencing row's range is contained
+	 * by the aggregated ranges of the referenced row(s).
+	 * For rangetypes this is fk.periodatt <@ range_agg(pk.periodatt).
+	 * FKs will look these up at "runtime", but we should make sure
+	 * the lookup works here, even if we don't use the values.
+	 */
+	if (is_temporal)
+	{
+		Oid			periodoperoid;
+		Oid			aggedperiodoperoid;
+		Oid			periodprocoid;
+
+		FindFKPeriodOpersAndProcs(opclasses[numpks - 1], &periodoperoid, &aggedperiodoperoid, &periodprocoid);
 	}
 
 	/*
@@ -10026,7 +10077,8 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 									 numfkdelsetcols,
 									 fkdelsetcols,
 									 old_check_ok,
-									 InvalidOid, InvalidOid);
+									 InvalidOid, InvalidOid,
+									 is_temporal);
 
 	/* Now handle the referencing side. */
 	addFkRecurseReferencing(wqueue, fkconstraint, rel, pkrel,
@@ -10042,7 +10094,8 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 							fkdelsetcols,
 							old_check_ok,
 							lockmode,
-							InvalidOid, InvalidOid);
+							InvalidOid, InvalidOid,
+							is_temporal);
 
 	/*
 	 * Done.  Close pk table, but keep lock until we've committed.
@@ -10127,7 +10180,8 @@ addFkRecurseReferenced(List **wqueue, Constraint *fkconstraint, Relation rel,
 					   Oid *ppeqoperators, Oid *ffeqoperators,
 					   int numfkdelsetcols, int16 *fkdelsetcols,
 					   bool old_check_ok,
-					   Oid parentDelTrigger, Oid parentUpdTrigger)
+					   Oid parentDelTrigger, Oid parentUpdTrigger,
+					   bool is_temporal)
 {
 	ObjectAddress address;
 	Oid			constrOid;
@@ -10213,7 +10267,7 @@ addFkRecurseReferenced(List **wqueue, Constraint *fkconstraint, Relation rel,
 									  conislocal,	/* islocal */
 									  coninhcount,	/* inhcount */
 									  connoinherit, /* conNoInherit */
-									  false,	/* conWithoutOverlaps */
+									  is_temporal,	/* conWithoutOverlaps */
 									  false);	/* is_internal */
 
 	ObjectAddressSet(address, ConstraintRelationId, constrOid);
@@ -10289,7 +10343,8 @@ addFkRecurseReferenced(List **wqueue, Constraint *fkconstraint, Relation rel,
 								   pfeqoperators, ppeqoperators, ffeqoperators,
 								   numfkdelsetcols, fkdelsetcols,
 								   old_check_ok,
-								   deleteTriggerOid, updateTriggerOid);
+								   deleteTriggerOid, updateTriggerOid,
+								   is_temporal);
 
 			/* Done -- clean up (but keep the lock) */
 			table_close(partRel, NoLock);
@@ -10347,7 +10402,8 @@ addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint, Relation rel,
 						Oid *pfeqoperators, Oid *ppeqoperators, Oid *ffeqoperators,
 						int numfkdelsetcols, int16 *fkdelsetcols,
 						bool old_check_ok, LOCKMODE lockmode,
-						Oid parentInsTrigger, Oid parentUpdTrigger)
+						Oid parentInsTrigger, Oid parentUpdTrigger,
+						bool is_temporal)
 {
 	Oid			insertTriggerOid,
 				updateTriggerOid;
@@ -10395,6 +10451,7 @@ addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint, Relation rel,
 			newcon->refrelid = RelationGetRelid(pkrel);
 			newcon->refindid = indexOid;
 			newcon->conid = parentConstr;
+			newcon->conwithperiod = fkconstraint->fk_with_period;
 			newcon->qual = (Node *) fkconstraint;
 
 			tab->constraints = lappend(tab->constraints, newcon);
@@ -10512,7 +10569,7 @@ addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint, Relation rel,
 									  false,
 									  1,
 									  false,
-									  false,	/* conWithoutOverlaps */
+									  is_temporal,	/* conWithoutOverlaps */
 									  false);
 
 			/*
@@ -10543,7 +10600,8 @@ addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint, Relation rel,
 									old_check_ok,
 									lockmode,
 									insertTriggerOid,
-									updateTriggerOid);
+									updateTriggerOid,
+									is_temporal);
 
 			table_close(partition, NoLock);
 		}
@@ -10779,7 +10837,8 @@ CloneFkReferenced(Relation parentRel, Relation partitionRel)
 							   confdelsetcols,
 							   true,
 							   deleteTriggerOid,
-							   updateTriggerOid);
+							   updateTriggerOid,
+							   constrForm->conperiod);
 
 		table_close(fkRel, NoLock);
 		ReleaseSysCache(tuple);
@@ -10872,6 +10931,7 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 		ListCell   *lc;
 		Oid			insertTriggerOid,
 					updateTriggerOid;
+		bool		is_temporal;
 
 		tuple = SearchSysCache1(CONSTROID, ObjectIdGetDatum(parentConstrOid));
 		if (!HeapTupleIsValid(tuple))
@@ -10987,6 +11047,7 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 			fkconstraint->conname = pstrdup(NameStr(constrForm->conname));
 
 		indexOid = constrForm->conindid;
+		is_temporal = constrForm->conperiod;
 		constrOid =
 			CreateConstraintEntry(fkconstraint->conname,
 								  constrForm->connamespace,
@@ -11018,7 +11079,7 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 								  false,	/* islocal */
 								  1,	/* inhcount */
 								  false,	/* conNoInherit */
-								  false,	/* conWithoutOverlaps */
+								  is_temporal,	/* conWithoutOverlaps */
 								  true);
 
 		/* Set up partition dependencies for the new constraint */
@@ -11052,7 +11113,8 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 								false,	/* no old check exists */
 								AccessExclusiveLock,
 								insertTriggerOid,
-								updateTriggerOid);
+								updateTriggerOid,
+								is_temporal);
 		table_close(pkrel, NoLock);
 	}
 
@@ -11074,6 +11136,7 @@ FindFKComparisonOperators(Constraint *fkconstraint,
 						  bool *old_check_ok,
 						  ListCell **old_pfeqop_item,
 						  Oid pktype, Oid fktype, Oid opclass,
+						  bool is_temporal, bool for_overlaps,
 						  Oid *pfeqopOut, Oid *ppeqopOut, Oid *ffeqopOut)
 {
 	Oid			fktyped;
@@ -11085,8 +11148,10 @@ FindFKComparisonOperators(Constraint *fkconstraint,
 	Oid			pfeqop;
 	Oid			ppeqop;
 	Oid			ffeqop;
+	StrategyNumber	rtstrategy;
 	int16		eqstrategy;
 	Oid			pfeqop_right;
+	char	   *stratname;
 
 	/* We need several fields out of the pg_opclass entry */
 	cla_ht = SearchSysCache1(CLAOID, ObjectIdGetDatum(opclass));
@@ -11098,16 +11163,51 @@ FindFKComparisonOperators(Constraint *fkconstraint,
 	opcintype = cla_tup->opcintype;
 	ReleaseSysCache(cla_ht);
 
-	/*
-	 * Check it's a btree; currently this can never fail since no other
-	 * index AMs support unique indexes.  If we ever did have other types
-	 * of unique indexes, we'd need a way to determine which operator
-	 * strategy number is equality.  (Is it reasonable to insist that
-	 * every such index AM use btree's number for equality?)
-	 */
-	if (amid != BTREE_AM_OID)
-		elog(ERROR, "only b-tree indexes are supported for foreign keys");
-	eqstrategy = BTEqualStrategyNumber;
+	if (is_temporal)
+	{
+		/*
+		 * GiST indexes are required to support temporal foreign keys
+		 * because they combine equals and overlaps.
+		 */
+		if (amid != GIST_AM_OID)
+			elog(ERROR, "only GiST indexes are supported for temporal foreign keys");
+		if (for_overlaps)
+		{
+			stratname = "overlaps";
+			rtstrategy = RTOverlapStrategyNumber;
+		}
+		else
+		{
+			stratname = "equality";
+			rtstrategy = RTEqualStrategyNumber;
+		}
+		/*
+		 * An opclass can use whatever strategy numbers it wants, so we ask
+		 * the opclass what number it actually uses instead of our
+		 * RT* constants.
+		 */
+		eqstrategy = GistTranslateStratnum(opclass, rtstrategy);
+		if (eqstrategy == InvalidStrategy)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("no %s operator found for foreign key", stratname),
+					 errdetail("Could not translate strategy number %d for opclass %d.",
+						 rtstrategy, opclass),
+					 errhint("Define a stratnum support function for your GiST opclass.")));
+	}
+	else
+	{
+		/*
+		 * Check it's a btree; currently this can never fail since no other
+		 * index AMs support unique indexes.  If we ever did have other types
+		 * of unique indexes, we'd need a way to determine which operator
+		 * strategy number is equality.  (Is it reasonable to insist that
+		 * every such index AM use btree's number for equality?)
+		 */
+		if (amid != BTREE_AM_OID)
+			elog(ERROR, "only b-tree indexes are supported for foreign keys");
+		eqstrategy = BTEqualStrategyNumber;
+	}
 
 	/*
 	 * There had better be a primary equality operator for the index.
@@ -11763,7 +11863,11 @@ ATExecAlterConstrRecurse(Constraint *cmdcon, Relation conrel, Relation tgrel,
 			if (tgform->tgfoid != F_RI_FKEY_NOACTION_DEL &&
 				tgform->tgfoid != F_RI_FKEY_NOACTION_UPD &&
 				tgform->tgfoid != F_RI_FKEY_CHECK_INS &&
-				tgform->tgfoid != F_RI_FKEY_CHECK_UPD)
+				tgform->tgfoid != F_RI_FKEY_CHECK_UPD &&
+				tgform->tgfoid != F_RI_FKEY_PERIOD_NOACTION_DEL &&
+				tgform->tgfoid != F_RI_FKEY_PERIOD_NOACTION_UPD &&
+				tgform->tgfoid != F_RI_FKEY_PERIOD_CHECK_INS &&
+				tgform->tgfoid != F_RI_FKEY_PERIOD_CHECK_UPD)
 				continue;
 
 			tgCopyTuple = heap_copytuple(tgtuple);
@@ -12077,7 +12181,7 @@ static int
 transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 						   List **attnamelist,
 						   int16 *attnums, Oid *atttypids,
-						   Oid *opclasses)
+						   Oid *opclasses, bool *pk_period)
 {
 	List	   *indexoidlist;
 	ListCell   *indexoidscan;
@@ -12141,7 +12245,8 @@ transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 
 	/*
 	 * Now build the list of PK attributes from the indkey definition (we
-	 * assume a primary key cannot have expressional elements)
+	 * assume a primary key cannot have expressional elements, unless it
+	 * has a PERIOD)
 	 */
 	*attnamelist = NIL;
 	for (i = 0; i < indexStruct->indnkeyatts; i++)
@@ -12154,6 +12259,8 @@ transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 		*attnamelist = lappend(*attnamelist,
 							   makeString(pstrdup(NameStr(*attnumAttName(pkrel, pkattno)))));
 	}
+
+	*pk_period = (indexStruct->indisexclusion);
 
 	ReleaseSysCache(indexTuple);
 
@@ -12175,7 +12282,7 @@ transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 static Oid
 transformFkeyCheckAttrs(Relation pkrel,
 						int numattrs, int16 *attnums,
-						Oid *opclasses)
+						bool is_temporal, Oid *opclasses)
 {
 	Oid			indexoid = InvalidOid;
 	bool		found = false;
@@ -12222,12 +12329,13 @@ transformFkeyCheckAttrs(Relation pkrel,
 		indexStruct = (Form_pg_index) GETSTRUCT(indexTuple);
 
 		/*
-		 * Must have the right number of columns; must be unique and not a
+		 * Must have the right number of columns; must be unique
+		 * (or if temporal then exclusion instead) and not a
 		 * partial index; forget it if there are any expressions, too. Invalid
 		 * indexes are out as well.
 		 */
 		if (indexStruct->indnkeyatts == numattrs &&
-			indexStruct->indisunique &&
+			(is_temporal ? indexStruct->indisexclusion : indexStruct->indisunique) &&
 			indexStruct->indisvalid &&
 			heap_attisnull(indexTuple, Anum_pg_index_indpred, NULL) &&
 			heap_attisnull(indexTuple, Anum_pg_index_indexprs, NULL))
@@ -12264,6 +12372,13 @@ transformFkeyCheckAttrs(Relation pkrel,
 				}
 				if (!found)
 					break;
+			}
+			/* The last attribute in the index must be the PERIOD FK part */
+			if (found && is_temporal)
+			{
+				int16 periodattnum = attnums[numattrs - 1];
+
+				found = (periodattnum == indexStruct->indkey.values[numattrs - 1]);
 			}
 
 			/*
@@ -12374,7 +12489,8 @@ validateForeignKeyConstraint(char *conname,
 							 Relation rel,
 							 Relation pkrel,
 							 Oid pkindOid,
-							 Oid constraintOid)
+							 Oid constraintOid,
+							 bool temporal)
 {
 	TupleTableSlot *slot;
 	TableScanDesc scan;
@@ -12403,8 +12519,10 @@ validateForeignKeyConstraint(char *conname,
 	/*
 	 * See if we can do it with a single LEFT JOIN query.  A false result
 	 * indicates we must proceed with the fire-the-trigger method.
+	 * We can't do a LEFT JOIN for temporal FKs yet,
+	 * but we can once we support temporal left joins.
 	 */
-	if (RI_Initial_Check(&trig, rel, pkrel))
+	if (!temporal && RI_Initial_Check(&trig, rel, pkrel))
 		return;
 
 	/*
@@ -12473,6 +12591,7 @@ CreateFKCheckTrigger(Oid myRelOid, Oid refRelOid, Constraint *fkconstraint,
 {
 	ObjectAddress trigAddress;
 	CreateTrigStmt *fk_trigger;
+	bool is_temporal = fkconstraint->fk_with_period;
 
 	/*
 	 * Note: for a self-referential FK (referencing and referenced tables are
@@ -12492,12 +12611,18 @@ CreateFKCheckTrigger(Oid myRelOid, Oid refRelOid, Constraint *fkconstraint,
 	/* Either ON INSERT or ON UPDATE */
 	if (on_insert)
 	{
-		fk_trigger->funcname = SystemFuncName("RI_FKey_check_ins");
+		if (is_temporal)
+			fk_trigger->funcname = SystemFuncName("RI_FKey_period_check_ins");
+		else
+			fk_trigger->funcname = SystemFuncName("RI_FKey_check_ins");
 		fk_trigger->events = TRIGGER_TYPE_INSERT;
 	}
 	else
 	{
-		fk_trigger->funcname = SystemFuncName("RI_FKey_check_upd");
+		if (is_temporal)
+			fk_trigger->funcname = SystemFuncName("RI_FKey_period_check_upd");
+		else
+			fk_trigger->funcname = SystemFuncName("RI_FKey_check_upd");
 		fk_trigger->events = TRIGGER_TYPE_UPDATE;
 	}
 
@@ -12555,37 +12680,69 @@ createForeignKeyActionTriggers(Relation rel, Oid refRelOid, Constraint *fkconstr
 	fk_trigger->whenClause = NULL;
 	fk_trigger->transitionRels = NIL;
 	fk_trigger->constrrel = NULL;
-	switch (fkconstraint->fk_del_action)
+	if (fkconstraint->fk_with_period)
 	{
-		case FKCONSTR_ACTION_NOACTION:
-			fk_trigger->deferrable = fkconstraint->deferrable;
-			fk_trigger->initdeferred = fkconstraint->initdeferred;
-			fk_trigger->funcname = SystemFuncName("RI_FKey_noaction_del");
-			break;
-		case FKCONSTR_ACTION_RESTRICT:
-			fk_trigger->deferrable = false;
-			fk_trigger->initdeferred = false;
-			fk_trigger->funcname = SystemFuncName("RI_FKey_restrict_del");
-			break;
-		case FKCONSTR_ACTION_CASCADE:
-			fk_trigger->deferrable = false;
-			fk_trigger->initdeferred = false;
-			fk_trigger->funcname = SystemFuncName("RI_FKey_cascade_del");
-			break;
-		case FKCONSTR_ACTION_SETNULL:
-			fk_trigger->deferrable = false;
-			fk_trigger->initdeferred = false;
-			fk_trigger->funcname = SystemFuncName("RI_FKey_setnull_del");
-			break;
-		case FKCONSTR_ACTION_SETDEFAULT:
-			fk_trigger->deferrable = false;
-			fk_trigger->initdeferred = false;
-			fk_trigger->funcname = SystemFuncName("RI_FKey_setdefault_del");
-			break;
-		default:
-			elog(ERROR, "unrecognized FK action type: %d",
-				 (int) fkconstraint->fk_del_action);
-			break;
+		/* Temporal foreign keys */
+		switch (fkconstraint->fk_del_action)
+		{
+			case FKCONSTR_ACTION_NOACTION:
+				fk_trigger->deferrable = fkconstraint->deferrable;
+				fk_trigger->initdeferred = fkconstraint->initdeferred;
+				fk_trigger->funcname = SystemFuncName("RI_FKey_period_noaction_del");
+				break;
+			case FKCONSTR_ACTION_RESTRICT:
+				fk_trigger->deferrable = false;
+				fk_trigger->initdeferred = false;
+				fk_trigger->funcname = SystemFuncName("RI_FKey_period_restrict_del");
+				break;
+			case FKCONSTR_ACTION_CASCADE:
+			case FKCONSTR_ACTION_SETNULL:
+			case FKCONSTR_ACTION_SETDEFAULT:
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("invalid %s action for foreign key constraint using PERIOD",
+								"ON DELETE")));
+				break;
+			default:
+				elog(ERROR, "unrecognized FK action type: %d",
+					 (int) fkconstraint->fk_del_action);
+				break;
+		}
+	}
+	else
+	{
+		switch (fkconstraint->fk_del_action)
+		{
+			case FKCONSTR_ACTION_NOACTION:
+				fk_trigger->deferrable = fkconstraint->deferrable;
+				fk_trigger->initdeferred = fkconstraint->initdeferred;
+				fk_trigger->funcname = SystemFuncName("RI_FKey_noaction_del");
+				break;
+			case FKCONSTR_ACTION_RESTRICT:
+				fk_trigger->deferrable = false;
+				fk_trigger->initdeferred = false;
+				fk_trigger->funcname = SystemFuncName("RI_FKey_restrict_del");
+				break;
+			case FKCONSTR_ACTION_CASCADE:
+				fk_trigger->deferrable = false;
+				fk_trigger->initdeferred = false;
+				fk_trigger->funcname = SystemFuncName("RI_FKey_cascade_del");
+				break;
+			case FKCONSTR_ACTION_SETNULL:
+				fk_trigger->deferrable = false;
+				fk_trigger->initdeferred = false;
+				fk_trigger->funcname = SystemFuncName("RI_FKey_setnull_del");
+				break;
+			case FKCONSTR_ACTION_SETDEFAULT:
+				fk_trigger->deferrable = false;
+				fk_trigger->initdeferred = false;
+				fk_trigger->funcname = SystemFuncName("RI_FKey_setdefault_del");
+				break;
+			default:
+				elog(ERROR, "unrecognized FK action type: %d",
+					 (int) fkconstraint->fk_del_action);
+				break;
+		}
 	}
 
 	trigAddress = CreateTrigger(fk_trigger, NULL, refRelOid,
@@ -12615,37 +12772,69 @@ createForeignKeyActionTriggers(Relation rel, Oid refRelOid, Constraint *fkconstr
 	fk_trigger->whenClause = NULL;
 	fk_trigger->transitionRels = NIL;
 	fk_trigger->constrrel = NULL;
-	switch (fkconstraint->fk_upd_action)
+	if (fkconstraint->fk_with_period)
 	{
-		case FKCONSTR_ACTION_NOACTION:
-			fk_trigger->deferrable = fkconstraint->deferrable;
-			fk_trigger->initdeferred = fkconstraint->initdeferred;
-			fk_trigger->funcname = SystemFuncName("RI_FKey_noaction_upd");
-			break;
-		case FKCONSTR_ACTION_RESTRICT:
-			fk_trigger->deferrable = false;
-			fk_trigger->initdeferred = false;
-			fk_trigger->funcname = SystemFuncName("RI_FKey_restrict_upd");
-			break;
-		case FKCONSTR_ACTION_CASCADE:
-			fk_trigger->deferrable = false;
-			fk_trigger->initdeferred = false;
-			fk_trigger->funcname = SystemFuncName("RI_FKey_cascade_upd");
-			break;
-		case FKCONSTR_ACTION_SETNULL:
-			fk_trigger->deferrable = false;
-			fk_trigger->initdeferred = false;
-			fk_trigger->funcname = SystemFuncName("RI_FKey_setnull_upd");
-			break;
-		case FKCONSTR_ACTION_SETDEFAULT:
-			fk_trigger->deferrable = false;
-			fk_trigger->initdeferred = false;
-			fk_trigger->funcname = SystemFuncName("RI_FKey_setdefault_upd");
-			break;
-		default:
-			elog(ERROR, "unrecognized FK action type: %d",
-				 (int) fkconstraint->fk_upd_action);
-			break;
+		/* Temporal foreign keys */
+		switch (fkconstraint->fk_upd_action)
+		{
+			case FKCONSTR_ACTION_NOACTION:
+				fk_trigger->deferrable = fkconstraint->deferrable;
+				fk_trigger->initdeferred = fkconstraint->initdeferred;
+				fk_trigger->funcname = SystemFuncName("RI_FKey_period_noaction_upd");
+				break;
+			case FKCONSTR_ACTION_RESTRICT:
+				fk_trigger->deferrable = false;
+				fk_trigger->initdeferred = false;
+				fk_trigger->funcname = SystemFuncName("RI_FKey_period_restrict_upd");
+				break;
+			case FKCONSTR_ACTION_CASCADE:
+			case FKCONSTR_ACTION_SETNULL:
+			case FKCONSTR_ACTION_SETDEFAULT:
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("invalid %s action for foreign key constraint using PERIOD",
+								"ON UPDATE")));
+				break;
+			default:
+				elog(ERROR, "unrecognized FK action type: %d",
+					 (int) fkconstraint->fk_upd_action);
+				break;
+		}
+	}
+	else
+	{
+		switch (fkconstraint->fk_upd_action)
+		{
+			case FKCONSTR_ACTION_NOACTION:
+				fk_trigger->deferrable = fkconstraint->deferrable;
+				fk_trigger->initdeferred = fkconstraint->initdeferred;
+				fk_trigger->funcname = SystemFuncName("RI_FKey_noaction_upd");
+				break;
+			case FKCONSTR_ACTION_RESTRICT:
+				fk_trigger->deferrable = false;
+				fk_trigger->initdeferred = false;
+				fk_trigger->funcname = SystemFuncName("RI_FKey_restrict_upd");
+				break;
+			case FKCONSTR_ACTION_CASCADE:
+				fk_trigger->deferrable = false;
+				fk_trigger->initdeferred = false;
+				fk_trigger->funcname = SystemFuncName("RI_FKey_cascade_upd");
+				break;
+			case FKCONSTR_ACTION_SETNULL:
+				fk_trigger->deferrable = false;
+				fk_trigger->initdeferred = false;
+				fk_trigger->funcname = SystemFuncName("RI_FKey_setnull_upd");
+				break;
+			case FKCONSTR_ACTION_SETDEFAULT:
+				fk_trigger->deferrable = false;
+				fk_trigger->initdeferred = false;
+				fk_trigger->funcname = SystemFuncName("RI_FKey_setdefault_upd");
+				break;
+			default:
+				elog(ERROR, "unrecognized FK action type: %d",
+					 (int) fkconstraint->fk_upd_action);
+				break;
+		}
 	}
 
 	trigAddress = CreateTrigger(fk_trigger, NULL, refRelOid,
