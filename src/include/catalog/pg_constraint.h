@@ -114,6 +114,7 @@ CATALOG(pg_constraint,2606,ConstraintRelationId)
 	bool		contemporal;
 
 	Oid			conperiod;		/* local PERIOD used in PK/FK constraint */
+	Oid			confperiod;		/* referenced foreign PERIOD */
 
 #ifdef CATALOG_VARLEN			/* variable-length fields start here */
 
@@ -129,19 +130,19 @@ CATALOG(pg_constraint,2606,ConstraintRelationId)
 	int16		confkey[1];
 
 	/*
-	 * If a foreign key, the OIDs of the PK = FK equality operators for each
+	 * If a foreign key, the OIDs of the PK = FK comparison operators for each
 	 * column of the constraint
 	 */
 	Oid			conpfeqop[1] BKI_LOOKUP(pg_operator);
 
 	/*
-	 * If a foreign key, the OIDs of the PK = PK equality operators for each
+	 * If a foreign key, the OIDs of the PK = PK comparison operators for each
 	 * column of the constraint (i.e., equality for the referenced columns)
 	 */
 	Oid			conppeqop[1] BKI_LOOKUP(pg_operator);
 
 	/*
-	 * If a foreign key, the OIDs of the FK = FK equality operators for each
+	 * If a foreign key, the OIDs of the FK = FK comparison operators for each
 	 * column of the constraint (i.e., equality for the referencing columns)
 	 */
 	Oid			conffeqop[1] BKI_LOOKUP(pg_operator);
@@ -182,7 +183,7 @@ DECLARE_INDEX(pg_constraint_conparentid_index, 2579, ConstraintParentIndexId, on
 
 /* conkey can contain zero (InvalidAttrNumber) if a whole-row Var is used */
 DECLARE_ARRAY_FOREIGN_KEY_OPT((conrelid, conkey), pg_attribute, (attrelid, attnum));
-DECLARE_ARRAY_FOREIGN_KEY((confrelid, confkey), pg_attribute, (attrelid, attnum));
+DECLARE_ARRAY_FOREIGN_KEY_OPT((confrelid, confkey), pg_attribute, (attrelid, attnum));
 
 #ifdef EXPOSE_TO_CLIENT_CODE
 
@@ -245,6 +246,7 @@ extern Oid	CreateConstraintEntry(const char *constraintName,
 								  bool conNoInherit,
 								  bool conTemporal,
 								  Oid period,
+								  Oid fperiod,
 								  bool is_internal);
 
 extern void RemoveConstraintById(Oid conId);
