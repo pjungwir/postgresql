@@ -339,7 +339,7 @@ static char *pg_get_viewdef_worker(Oid viewoid,
 								   int prettyFlags, int wrapColumn);
 static char *pg_get_triggerdef_worker(Oid trigid, bool pretty);
 static int	decompile_column_index_array(Datum column_index_array, Oid relId,
-										 Datum conoverlaps, StringInfo buf);
+										 Datum conoverlaps, bool foreignKey, StringInfo buf);
 static char *pg_get_ruledef_worker(Oid ruleoid, int prettyFlags);
 static char *pg_get_indexdef_worker(Oid indexrelid, int colno,
 									const Oid *excludeOps,
@@ -2247,7 +2247,9 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 				val = SysCacheGetAttrNotNull(CONSTROID, tup,
 											 Anum_pg_constraint_conkey);
 
-				decompile_column_index_array(val, conForm->conrelid, 0, &buf);
+				/* If it is a temporal foreign key then it uses PERIOD. */
+				decompile_column_index_array(val, conForm->conrelid, 0,
+											 true, &buf);
 
 				/* add foreign relation name */
 				appendStringInfo(&buf, ") REFERENCES %s(",
@@ -2258,7 +2260,8 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 				val = SysCacheGetAttrNotNull(CONSTROID, tup,
 											 Anum_pg_constraint_confkey);
 
-				decompile_column_index_array(val, conForm->confrelid, 0, &buf);
+				decompile_column_index_array(val, conForm->confrelid, 0,
+											 true, &buf);
 
 				appendStringInfoChar(&buf, ')');
 
@@ -2344,7 +2347,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 				if (!isnull)
 				{
 					appendStringInfoString(&buf, " (");
-					decompile_column_index_array(val, conForm->conrelid, 0, &buf);
+					decompile_column_index_array(val, conForm->conrelid, 0, false, &buf);
 					appendStringInfoChar(&buf, ')');
 				}
 
@@ -2385,7 +2388,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 											  Anum_pg_constraint_conoverlaps, &isnull);
 				if (isnull)
 					conoverlaps = 0;
-				keyatts = decompile_column_index_array(val, conForm->conrelid, conoverlaps, &buf);
+				keyatts = decompile_column_index_array(val, conForm->conrelid, conoverlaps, true, &buf);
 
 				appendStringInfoChar(&buf, ')');
 
@@ -2580,7 +2583,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
  * of keys.
  */
 static int
-decompile_column_index_array(Datum column_index_array, Oid relId, Datum conoverlaps, StringInfo buf)
+decompile_column_index_array(Datum column_index_array, Oid relId, Datum conoverlaps, bool foreignKey, StringInfo buf)
 {
 	Datum	   *keys;
 	Datum	   *overlaps = NULL;
@@ -2609,11 +2612,15 @@ decompile_column_index_array(Datum column_index_array, Oid relId, Datum conoverl
 		colName = get_attname(relId, colid, false);
 
 		if (j > 0)
-			appendStringInfo(buf, ", ");
+			appendStringInfoString(buf, ", ");
+
+		if (foreignKey && j == nKeys - 1)
+			appendStringInfoString(buf, "PERIOD ");
+
 		appendStringInfoString(buf, quote_identifier(colName));
 
 		if (nOverlaps && DatumGetBool(overlaps[j]))
-			appendStringInfo(buf, " WITHOUT OVERLAPS");
+			appendStringInfoString(buf, " WITHOUT OVERLAPS");
 	}
 
 	return nKeys;
