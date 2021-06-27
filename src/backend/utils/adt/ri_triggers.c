@@ -31,6 +31,7 @@
 #include "catalog/pg_collation.h"
 #include "catalog/pg_constraint.h"
 #include "catalog/pg_operator.h"
+#include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "commands/trigger.h"
 #include "executor/executor.h"
@@ -48,6 +49,7 @@
 #include "utils/inval.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
+#include "utils/rangetypes.h"
 #include "utils/rel.h"
 #include "utils/rls.h"
 #include "utils/ruleutils.h"
@@ -118,12 +120,17 @@ typedef struct RI_ConstraintInfo
 	int16		confdelsetcols[RI_MAX_NUMKEYS]; /* attnums of cols to set on
 												 * delete */
 	char		confmatchtype;	/* foreign key's match type */
+	bool		temporal;		/* if the foreign key is temporal */
 	int			nkeys;			/* number of key columns */
 	int16		pk_attnums[RI_MAX_NUMKEYS]; /* attnums of referenced cols */
 	int16		fk_attnums[RI_MAX_NUMKEYS]; /* attnums of referencing cols */
 	Oid			pf_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (PK = FK) */
 	Oid			pp_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (PK = PK) */
 	Oid			ff_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (FK = FK) */
+	Oid			period_contained_by_oper;	/* operator for PERIOD SQL */
+	Oid			agged_period_contained_by_oper;	/* operator for PERIOD SQL */
+	Oid			period_referenced_agg_proc;	/* proc for PERIOD SQL */
+	Oid			period_referenced_agg_rettype;	/* rettype for previous */
 	dlist_node	valid_link;		/* Link in list of valid entries */
 } RI_ConstraintInfo;
 
@@ -231,6 +238,7 @@ static void ri_ReportViolation(const RI_ConstraintInfo *riinfo,
 							   Relation pk_rel, Relation fk_rel,
 							   TupleTableSlot *violatorslot, TupleDesc tupdesc,
 							   int queryno, bool partgone) pg_attribute_noreturn();
+static void lookupPeriodRIProc(const RI_ConstraintInfo *riinfo, char **aggname);
 
 
 /*
@@ -365,14 +373,41 @@ RI_FKey_check(TriggerData *trigdata)
 		 *		   FOR KEY SHARE OF x
 		 * The type id's for the $ parameters are those of the
 		 * corresponding FK attributes.
+		 *
+		 * But for temporal FKs we need to make sure
+		 * the FK's range is completely covered.
+		 * So we use this query instead:
+		 *  SELECT 1
+		 *	FROM	(
+		 *		SELECT pkperiodatt AS r
+		 *		FROM   [ONLY] pktable x
+		 *		WHERE  pkatt1 = $1 [AND ...]
+		 *		AND    pkperiodatt && $n
+		 *		FOR KEY SHARE OF x
+		 *	) x1
+		 *  HAVING $n <@ range_agg(x1.r)
+		 * Note if FOR KEY SHARE ever allows GROUP BY and HAVING
+		 * we can make this a bit simpler.
 		 * ----------
 		 */
 		initStringInfo(&querybuf);
 		pk_only = pk_rel->rd_rel->relkind == RELKIND_PARTITIONED_TABLE ?
 			"" : "ONLY ";
 		quoteRelationName(pkrelname, pk_rel);
-		appendStringInfo(&querybuf, "SELECT 1 FROM %s%s x",
-						 pk_only, pkrelname);
+		if (riinfo->temporal)
+		{
+			quoteOneName(attname,
+					RIAttName(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]));
+
+			appendStringInfo(&querybuf,
+					"SELECT 1 FROM (SELECT %s AS r FROM %s%s x",
+					attname, pk_only, pkrelname);
+		}
+		else
+		{
+			appendStringInfo(&querybuf, "SELECT 1 FROM %s%s x",
+							 pk_only, pkrelname);
+		}
 		querysep = "WHERE";
 		for (int i = 0; i < riinfo->nkeys; i++)
 		{
@@ -390,6 +425,21 @@ RI_FKey_check(TriggerData *trigdata)
 			queryoids[i] = fk_type;
 		}
 		appendStringInfoString(&querybuf, " FOR KEY SHARE OF x");
+		if (riinfo->temporal)
+		{
+			char   *aggname;
+			Oid		fk_type = RIAttType(fk_rel, riinfo->fk_attnums[riinfo->nkeys - 1]);
+			Oid		agg_rettype = riinfo->period_referenced_agg_rettype;
+
+			lookupPeriodRIProc(riinfo, &aggname);
+			appendStringInfo(&querybuf, ") x1 HAVING ");
+			sprintf(paramname, "$%d", riinfo->nkeys);
+			ri_GenerateQual(&querybuf, "",
+							paramname, fk_type,
+							riinfo->agged_period_contained_by_oper,
+							aggname, agg_rettype);
+			appendStringInfo(&querybuf, "(x1.r)");
+		}
 
 		/* Prepare and save the plan */
 		qplan = ri_PlanCheck(querybuf.data, riinfo->nkeys, queryoids,
@@ -497,14 +547,40 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 		 *		   FOR KEY SHARE OF x
 		 * The type id's for the $ parameters are those of the
 		 * PK attributes themselves.
+		 * But for temporal FKs we need to make sure
+		 * the FK's range is completely covered.
+		 * So we use this query instead:
+		 *  SELECT 1
+		 *  FROM    (
+		 *	  SELECT pkperiodatt AS r
+		 *	  FROM   [ONLY] pktable x
+		 *	  WHERE  pkatt1 = $1 [AND ...]
+		 *	  AND    pkperiodatt && $n
+		 *	  FOR KEY SHARE OF x
+		 *  ) x1
+		 *  HAVING $n <@ range_agg(x1.r)
+		 * Note if FOR KEY SHARE ever allows GROUP BY and HAVING
+		 * we can make this a bit simpler.
 		 * ----------
 		 */
 		initStringInfo(&querybuf);
 		pk_only = pk_rel->rd_rel->relkind == RELKIND_PARTITIONED_TABLE ?
 			"" : "ONLY ";
 		quoteRelationName(pkrelname, pk_rel);
-		appendStringInfo(&querybuf, "SELECT 1 FROM %s%s x",
-						 pk_only, pkrelname);
+		if (riinfo->temporal)
+		{
+			quoteOneName(attname, RIAttName(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]));
+
+			appendStringInfo(&querybuf,
+					"SELECT 1 FROM (SELECT %s AS r FROM %s%s x",
+					attname, pk_only, pkrelname);
+		}
+		else
+		{
+			appendStringInfo(&querybuf, "SELECT 1 FROM %s%s x",
+					pk_only, pkrelname);
+		}
+
 		querysep = "WHERE";
 		for (int i = 0; i < riinfo->nkeys; i++)
 		{
@@ -521,6 +597,21 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 			queryoids[i] = pk_type;
 		}
 		appendStringInfoString(&querybuf, " FOR KEY SHARE OF x");
+		if (riinfo->temporal)
+		{
+			char   *aggname;
+			Oid		fk_type = RIAttType(fk_rel, riinfo->fk_attnums[riinfo->nkeys - 1]);
+			Oid		agg_rettype = riinfo->period_referenced_agg_rettype;
+
+			lookupPeriodRIProc(riinfo, &aggname);
+			appendStringInfo(&querybuf, ") x1 HAVING ");
+			sprintf(paramname, "$%d", riinfo->nkeys);
+			ri_GenerateQual(&querybuf, "",
+							paramname, fk_type,
+							riinfo->agged_period_contained_by_oper,
+							aggname, agg_rettype);
+			appendStringInfo(&querybuf, "(x1.r)");
+		}
 
 		/* Prepare and save the plan */
 		qplan = ri_PlanCheck(querybuf.data, riinfo->nkeys, queryoids,
@@ -1213,6 +1304,126 @@ ri_set(TriggerData *trigdata, bool is_set_null, int tgkind)
 	}
 }
 
+/* ----------
+ * RI_FKey_period_check_ins -
+ *
+ *	Check temporal foreign key existence at insert event on FK table.
+ * ----------
+ */
+Datum
+RI_FKey_period_check_ins(PG_FUNCTION_ARGS)
+{
+	/*
+	 * Check that this is a valid trigger call on the right time and event.
+	 */
+	ri_CheckTrigger(fcinfo, "RI_FKey_check_ins", RI_TRIGTYPE_INSERT);
+
+	/*
+	 * Share code with UPDATE case.
+	 */
+	return RI_FKey_check((TriggerData *) fcinfo->context);
+}
+
+
+/* ----------
+ * RI_FKey_period_check_upd -
+ *
+ *	Check temporal foreign key existence at update event on FK table.
+ * ----------
+ */
+Datum
+RI_FKey_period_check_upd(PG_FUNCTION_ARGS)
+{
+	/*
+	 * Check that this is a valid trigger call on the right time and event.
+	 */
+	ri_CheckTrigger(fcinfo, "RI_FKey_check_upd", RI_TRIGTYPE_UPDATE);
+
+	/*
+	 * Share code with INSERT case.
+	 */
+	return RI_FKey_check((TriggerData *) fcinfo->context);
+}
+
+
+/* ----------
+ * RI_FKey_period_noaction_del -
+ *
+ *	Give an error and roll back the current transaction if the
+ *	delete has resulted in a violation of the given temporal
+ *	referential integrity constraint.
+ * ----------
+ */
+Datum
+RI_FKey_period_noaction_del(PG_FUNCTION_ARGS)
+{
+	/*
+	 * Check that this is a valid trigger call on the right time and event.
+	 */
+	ri_CheckTrigger(fcinfo, "RI_FKey_period_noaction_del", RI_TRIGTYPE_DELETE);
+
+	/*
+	 * Share code with RESTRICT/UPDATE cases.
+	 */
+	return ri_restrict((TriggerData *) fcinfo->context, true);
+}
+
+/*
+ * RI_FKey_period_restrict_del -
+ *
+ * Restrict delete from PK table to rows unreferenced by foreign key.
+ *
+ * The SQL standard intends that this referential action occur exactly when
+ * the delete is performed, rather than after.  This appears to be
+ * the only difference between "NO ACTION" and "RESTRICT".  In Postgres
+ * we still implement this as an AFTER trigger, but it's non-deferrable.
+ */
+Datum
+RI_FKey_period_restrict_del(PG_FUNCTION_ARGS)
+{
+	/* Check that this is a valid trigger call on the right time and event. */
+	ri_CheckTrigger(fcinfo, "RI_FKey_period_restrict_del", RI_TRIGTYPE_DELETE);
+
+	/* Share code with NO ACTION/UPDATE cases. */
+	return ri_restrict((TriggerData *) fcinfo->context, false);
+}
+
+/*
+ * TRI_FKey_noaction_upd -
+ *
+ * Give an error and roll back the current transaction if the
+ * update has resulted in a violation of the given referential
+ * integrity constraint.
+ */
+Datum
+RI_FKey_period_noaction_upd(PG_FUNCTION_ARGS)
+{
+	/* Check that this is a valid trigger call on the right time and event. */
+	ri_CheckTrigger(fcinfo, "RI_FKey_period_noaction_upd", RI_TRIGTYPE_UPDATE);
+
+	/* Share code with RESTRICT/DELETE cases. */
+	return ri_restrict((TriggerData *) fcinfo->context, true);
+}
+
+/*
+ * RI_FKey_period_restrict_upd -
+ *
+ * Restrict update of PK to rows unreferenced by foreign key.
+ *
+ * The SQL standard intends that this referential action occur exactly when
+ * the update is performed, rather than after.  This appears to be
+ * the only difference between "NO ACTION" and "RESTRICT".  In Postgres
+ * we still implement this as an AFTER trigger, but it's non-deferrable.
+ */
+Datum
+RI_FKey_period_restrict_upd(PG_FUNCTION_ARGS)
+{
+	/* Check that this is a valid trigger call on the right time and event. */
+	ri_CheckTrigger(fcinfo, "RI_FKey_period_restrict_upd", RI_TRIGTYPE_UPDATE);
+
+	/* Share code with NO ACTION/DELETE cases. */
+	return ri_restrict((TriggerData *) fcinfo->context, false);
+}
 
 /*
  * RI_FKey_pk_upd_check_required -
@@ -2171,6 +2382,7 @@ ri_LoadConstraintInfo(Oid constraintOid)
 	riinfo->confupdtype = conForm->confupdtype;
 	riinfo->confdeltype = conForm->confdeltype;
 	riinfo->confmatchtype = conForm->confmatchtype;
+	riinfo->temporal = conForm->conperiod;
 
 	DeconstructFkConstraintRow(tup,
 							   &riinfo->nkeys,
@@ -2181,6 +2393,22 @@ ri_LoadConstraintInfo(Oid constraintOid)
 							   riinfo->ff_eq_oprs,
 							   &riinfo->ndelsetcols,
 							   riinfo->confdelsetcols);
+
+	/*
+	 * For temporal FKs, get the operators and functions we need.
+	 * We ask the opclass of the PK element for these.
+	 * This all gets cached (as does the generated plan),
+	 * so there's no performance issue.
+	 */
+	if (riinfo->temporal)
+	{
+		Oid	opclass = get_index_column_opclass(conForm->conindid, riinfo->nkeys);
+		FindFKPeriodOpersAndProcs(opclass,
+								  &riinfo->period_contained_by_oper,
+								  &riinfo->agged_period_contained_by_oper,
+								  &riinfo->period_referenced_agg_proc);
+		riinfo->period_referenced_agg_rettype = get_func_rettype(riinfo->period_referenced_agg_proc);
+	}
 
 	ReleaseSysCache(tup);
 
@@ -2793,7 +3021,10 @@ ri_HashPreparedPlan(RI_QueryKey *key, SPIPlanPtr plan)
 /*
  * ri_KeysEqual -
  *
- * Check if all key values in OLD and NEW are equal.
+ * Check if all key values in OLD and NEW are "equivalent":
+ * For normal FKs we check for equality.
+ * For temporal FKs we check that the PK side is a superset of its old value,
+ * or the FK side is a subset of its old value.
  *
  * Note: at some point we might wish to redefine this as checking for
  * "IS NOT DISTINCT" rather than "=", that is, allow two nulls to be
@@ -2849,20 +3080,29 @@ ri_KeysEqual(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
 		}
 		else
 		{
+			Oid eq_opr = riinfo->ff_eq_oprs[i];
+
+			/*
+			 * When comparing the PERIOD columns we can skip the check
+			 * whenever the referencing column stayed equal or shrank,
+			 * so test with the contained-by operator instead.
+			 */
+			if (riinfo->temporal && i == riinfo->nkeys - 1)
+				eq_opr = riinfo->period_contained_by_oper;
+
 			/*
 			 * For the FK table, compare with the appropriate equality
 			 * operator.  Changes that compare equal will still satisfy the
 			 * constraint after the update.
 			 */
-			if (!ri_AttributesEqual(riinfo->ff_eq_oprs[i], RIAttType(rel, attnums[i]),
-									oldvalue, newvalue))
+			if (!ri_AttributesEqual(eq_opr, RIAttType(rel, attnums[i]),
+									newvalue, oldvalue))
 				return false;
 		}
 	}
 
 	return true;
 }
-
 
 /*
  * ri_AttributesEqual -
@@ -3021,12 +3261,56 @@ RI_FKey_trigger_type(Oid tgfoid)
 		case F_RI_FKEY_SETDEFAULT_UPD:
 		case F_RI_FKEY_NOACTION_DEL:
 		case F_RI_FKEY_NOACTION_UPD:
+		case F_RI_FKEY_PERIOD_RESTRICT_DEL:
+		case F_RI_FKEY_PERIOD_RESTRICT_UPD:
+		case F_RI_FKEY_PERIOD_NOACTION_DEL:
+		case F_RI_FKEY_PERIOD_NOACTION_UPD:
 			return RI_TRIGGER_PK;
 
 		case F_RI_FKEY_CHECK_INS:
 		case F_RI_FKEY_CHECK_UPD:
+		case F_RI_FKEY_PERIOD_CHECK_INS:
+		case F_RI_FKEY_PERIOD_CHECK_UPD:
 			return RI_TRIGGER_FK;
 	}
 
 	return RI_TRIGGER_NONE;
+}
+
+/*
+ * lookupPeriodRIProc -
+ *
+ * Gets the name of the aggregate function
+ * used to build the SQL for temporal RI constraints.
+ * Raises an error if not found.
+ */
+static void
+lookupPeriodRIProc(const RI_ConstraintInfo *riinfo, char **aggname)
+{
+	Oid			oid = riinfo->period_referenced_agg_proc;
+	HeapTuple	tp;
+	Form_pg_proc functup;
+	char	   *namesp;
+	char	   *func;
+
+
+	if (!OidIsValid(oid))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("no referencedagg support function for foreign key constraint \"%s\"",
+						NameStr(riinfo->conname)),
+				 errhint("You must use an operator class with a referencedagg support function.")));
+
+	tp = SearchSysCache1(PROCOID, ObjectIdGetDatum(riinfo->period_referenced_agg_proc));
+	if (!HeapTupleIsValid(tp))
+		elog(ERROR, "cache lookup failed for function %u", oid);
+
+	functup = (Form_pg_proc) GETSTRUCT(tp);
+	namesp = get_namespace_name(functup->pronamespace);
+	func = NameStr(functup->proname);
+
+	*aggname = psprintf("%s.%s", quote_identifier(namesp), quote_identifier(func));
+
+	pfree(namesp);
+	ReleaseSysCache(tp);
 }
