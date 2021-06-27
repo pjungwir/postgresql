@@ -2038,6 +2038,7 @@ index_constraint_create(Relation heapRelation,
 								   noinherit,
 								   is_temporal,	/* contemporal */
 								   periodid, /* conperiod */
+								   InvalidOid, /* confperiod */
 								   is_internal);
 
 	/*
