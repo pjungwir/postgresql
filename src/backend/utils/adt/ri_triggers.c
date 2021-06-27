@@ -31,6 +31,7 @@
 #include "catalog/pg_collation.h"
 #include "catalog/pg_constraint.h"
 #include "catalog/pg_operator.h"
+#include "catalog/pg_range.h"
 #include "catalog/pg_type.h"
 #include "commands/trigger.h"
 #include "executor/executor.h"
@@ -48,6 +49,7 @@
 #include "utils/inval.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
+#include "utils/rangetypes.h"
 #include "utils/rel.h"
 #include "utils/rls.h"
 #include "utils/ruleutils.h"
@@ -118,6 +120,7 @@ typedef struct RI_ConstraintInfo
 	int16		confdelsetcols[RI_MAX_NUMKEYS]; /* attnums of cols to set on
 												 * delete */
 	char		confmatchtype;	/* foreign key's match type */
+	bool		temporal;		/* if the foreign key is temporal */
 	int			nkeys;			/* number of key columns */
 	int16		pk_attnums[RI_MAX_NUMKEYS]; /* attnums of referenced cols */
 	int16		fk_attnums[RI_MAX_NUMKEYS]; /* attnums of referencing cols */
@@ -200,8 +203,9 @@ static int	ri_NullCheck(TupleDesc tupDesc, TupleTableSlot *slot,
 static void ri_BuildQueryKey(RI_QueryKey *key,
 							 const RI_ConstraintInfo *riinfo,
 							 int32 constr_queryno);
-static bool ri_KeysEqual(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
+static bool ri_KeysStable(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
 						 const RI_ConstraintInfo *riinfo, bool rel_is_pk);
+static bool ri_RangeAttributeNeedsCheck(bool rel_is_pk, Datum oldvalue, Datum newvalue);
 static bool ri_AttributesEqual(Oid eq_opr, Oid typeid,
 							   Datum oldvalue, Datum newvalue);
 
@@ -361,26 +365,58 @@ RI_FKey_check(TriggerData *trigdata)
 
 		/* ----------
 		 * The query string built is
-		 *	SELECT 1 FROM [ONLY] <pktable> x WHERE pkatt1 = $1 [AND ...]
-		 *		   FOR KEY SHARE OF x
+		 *	SELECT 1
+		 *	FROM [ONLY] <pktable> x WHERE pkatt1 = $1 [AND ...]
+		 *	FOR KEY SHARE OF x
 		 * The type id's for the $ parameters are those of the
 		 * corresponding FK attributes.
+		 *
+		 * But for temporal FKs we need to make sure
+		 * the FK's range is completely covered.
+		 * So we use this query instead:
+		 *  SELECT 1
+		 *	FROM	(
+		 *		SELECT pkperiodatt AS r
+		 *		FROM   [ONLY] pktable x
+		 *		WHERE  pkatt1 = $1 [AND ...]
+		 *		AND    pkperiodatt && $n
+		 *		FOR KEY SHARE OF x
+		 *	) x1
+		 *  HAVING $n <@ range_agg(x1.r)
+		 * Note if FOR KEY SHARE ever allows GROUP BY and HAVING
+		 * we can make this a bit simpler.
 		 * ----------
 		 */
 		initStringInfo(&querybuf);
 		pk_only = pk_rel->rd_rel->relkind == RELKIND_PARTITIONED_TABLE ?
 			"" : "ONLY ";
 		quoteRelationName(pkrelname, pk_rel);
-		appendStringInfo(&querybuf, "SELECT 1 FROM %s%s x",
-						 pk_only, pkrelname);
+		if (riinfo->temporal)
+		{
+			quoteOneName(attname,
+					RIAttName(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]));
+
+			appendStringInfo(&querybuf,
+					"SELECT 1 FROM (SELECT %s AS r FROM %s%s x",
+					attname, pk_only, pkrelname);
+		}
+		else
+		{
+			appendStringInfo(&querybuf, "SELECT 1 FROM %s%s x",
+							 pk_only, pkrelname);
+		}
 		querysep = "WHERE";
 		for (int i = 0; i < riinfo->nkeys; i++)
 		{
-			Oid			pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
-			Oid			fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
+			Oid	pk_type;
+			Oid	fk_type;
 
+			pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
 			quoteOneName(attname,
 						 RIAttName(pk_rel, riinfo->pk_attnums[i]));
+
+			fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
+
 			sprintf(paramname, "$%d", i + 1);
 			ri_GenerateQual(&querybuf, querysep,
 							attname, pk_type,
@@ -390,6 +426,8 @@ RI_FKey_check(TriggerData *trigdata)
 			queryoids[i] = fk_type;
 		}
 		appendStringInfoString(&querybuf, " FOR KEY SHARE OF x");
+		if (riinfo->temporal)
+			appendStringInfo(&querybuf, ") x1 HAVING $%d <@ pg_catalog.range_agg(x1.r)", riinfo->nkeys);
 
 		/* Prepare and save the plan */
 		qplan = ri_PlanCheck(querybuf.data, riinfo->nkeys, queryoids,
@@ -497,21 +535,49 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 		 *		   FOR KEY SHARE OF x
 		 * The type id's for the $ parameters are those of the
 		 * PK attributes themselves.
+		 * But for temporal FKs we need to make sure
+		 * the FK's range is completely covered.
+		 * So we use this query instead:
+		 *  SELECT 1
+		 *  FROM    (
+		 *	  SELECT pkperiodatt AS r
+		 *	  FROM   [ONLY] pktable x
+		 *	  WHERE  pkatt1 = $1 [AND ...]
+		 *	  AND    pkperiodatt && $n
+		 *	  FOR KEY SHARE OF x
+		 *  ) x1
+		 *  HAVING $n <@ range_agg(x1.r)
+		 * Note if FOR KEY SHARE ever allows GROUP BY and HAVING
+		 * we can make this a bit simpler.
 		 * ----------
 		 */
 		initStringInfo(&querybuf);
 		pk_only = pk_rel->rd_rel->relkind == RELKIND_PARTITIONED_TABLE ?
 			"" : "ONLY ";
 		quoteRelationName(pkrelname, pk_rel);
-		appendStringInfo(&querybuf, "SELECT 1 FROM %s%s x",
-						 pk_only, pkrelname);
+		if (riinfo->temporal)
+		{
+			quoteOneName(attname, RIAttName(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]));
+
+			appendStringInfo(&querybuf,
+					"SELECT 1 FROM (SELECT %s AS r FROM %s%s x",
+					attname, pk_only, pkrelname);
+		}
+		else
+		{
+			appendStringInfo(&querybuf, "SELECT 1 FROM %s%s x",
+					pk_only, pkrelname);
+		}
+
 		querysep = "WHERE";
 		for (int i = 0; i < riinfo->nkeys; i++)
 		{
-			Oid			pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
+			Oid		pk_type;
 
+			pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
 			quoteOneName(attname,
 						 RIAttName(pk_rel, riinfo->pk_attnums[i]));
+
 			sprintf(paramname, "$%d", i + 1);
 			ri_GenerateQual(&querybuf, querysep,
 							attname, pk_type,
@@ -521,6 +587,8 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 			queryoids[i] = pk_type;
 		}
 		appendStringInfoString(&querybuf, " FOR KEY SHARE OF x");
+		if (riinfo->temporal)
+			appendStringInfo(&querybuf, ") x1 HAVING $%d <@ pg_catalog.range_agg(x1.r)", riinfo->nkeys);
 
 		/* Prepare and save the plan */
 		qplan = ri_PlanCheck(querybuf.data, riinfo->nkeys, queryoids,
@@ -695,10 +763,16 @@ ri_restrict(TriggerData *trigdata, bool is_no_action)
 		querysep = "WHERE";
 		for (int i = 0; i < riinfo->nkeys; i++)
 		{
-			Oid			pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
-			Oid			fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
-			Oid			pk_coll = RIAttCollation(pk_rel, riinfo->pk_attnums[i]);
-			Oid			fk_coll = RIAttCollation(fk_rel, riinfo->fk_attnums[i]);
+			Oid		pk_type;
+			Oid		fk_type;
+			Oid		pk_coll;
+			Oid		fk_coll;
+
+			pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
+			pk_coll = RIAttCollation(pk_rel, riinfo->pk_attnums[i]);
+
+			fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
+			fk_coll = RIAttCollation(fk_rel, riinfo->fk_attnums[i]);
 
 			quoteOneName(attname,
 						 RIAttName(fk_rel, riinfo->fk_attnums[i]));
@@ -1213,6 +1287,126 @@ ri_set(TriggerData *trigdata, bool is_set_null, int tgkind)
 	}
 }
 
+/* ----------
+ * TRI_FKey_check_ins -
+ *
+ *	Check temporal foreign key existence at insert event on FK table.
+ * ----------
+ */
+Datum
+TRI_FKey_check_ins(PG_FUNCTION_ARGS)
+{
+	/*
+	 * Check that this is a valid trigger call on the right time and event.
+	 */
+	ri_CheckTrigger(fcinfo, "RI_FKey_check_ins", RI_TRIGTYPE_INSERT);
+
+	/*
+	 * Share code with UPDATE case.
+	 */
+	return RI_FKey_check((TriggerData *) fcinfo->context);
+}
+
+
+/* ----------
+ * TRI_FKey_check_upd -
+ *
+ *	Check temporal foreign key existence at update event on FK table.
+ * ----------
+ */
+Datum
+TRI_FKey_check_upd(PG_FUNCTION_ARGS)
+{
+	/*
+	 * Check that this is a valid trigger call on the right time and event.
+	 */
+	ri_CheckTrigger(fcinfo, "RI_FKey_check_upd", RI_TRIGTYPE_UPDATE);
+
+	/*
+	 * Share code with INSERT case.
+	 */
+	return RI_FKey_check((TriggerData *) fcinfo->context);
+}
+
+
+/* ----------
+ * TRI_FKey_noaction_del -
+ *
+ *	Give an error and roll back the current transaction if the
+ *	delete has resulted in a violation of the given temporal
+ *	referential integrity constraint.
+ * ----------
+ */
+Datum
+TRI_FKey_noaction_del(PG_FUNCTION_ARGS)
+{
+	/*
+	 * Check that this is a valid trigger call on the right time and event.
+	 */
+	ri_CheckTrigger(fcinfo, "TRI_FKey_noaction_del", RI_TRIGTYPE_DELETE);
+
+	/*
+	 * Share code with RESTRICT/UPDATE cases.
+	 */
+	return ri_restrict((TriggerData *) fcinfo->context, true);
+}
+
+/*
+ * TRI_FKey_restrict_del -
+ *
+ * Restrict delete from PK table to rows unreferenced by foreign key.
+ *
+ * The SQL standard intends that this referential action occur exactly when
+ * the delete is performed, rather than after.  This appears to be
+ * the only difference between "NO ACTION" and "RESTRICT".  In Postgres
+ * we still implement this as an AFTER trigger, but it's non-deferrable.
+ */
+Datum
+TRI_FKey_restrict_del(PG_FUNCTION_ARGS)
+{
+	/* Check that this is a valid trigger call on the right time and event. */
+	ri_CheckTrigger(fcinfo, "TRI_FKey_restrict_del", RI_TRIGTYPE_DELETE);
+
+	/* Share code with NO ACTION/UPDATE cases. */
+	return ri_restrict((TriggerData *) fcinfo->context, false);
+}
+
+/*
+ * TRI_FKey_noaction_upd -
+ *
+ * Give an error and roll back the current transaction if the
+ * update has resulted in a violation of the given referential
+ * integrity constraint.
+ */
+Datum
+TRI_FKey_noaction_upd(PG_FUNCTION_ARGS)
+{
+	/* Check that this is a valid trigger call on the right time and event. */
+	ri_CheckTrigger(fcinfo, "TRI_FKey_noaction_upd", RI_TRIGTYPE_UPDATE);
+
+	/* Share code with RESTRICT/DELETE cases. */
+	return ri_restrict((TriggerData *) fcinfo->context, true);
+}
+
+/*
+ * TRI_FKey_restrict_upd -
+ *
+ * Restrict update of PK to rows unreferenced by foreign key.
+ *
+ * The SQL standard intends that this referential action occur exactly when
+ * the update is performed, rather than after.  This appears to be
+ * the only difference between "NO ACTION" and "RESTRICT".  In Postgres
+ * we still implement this as an AFTER trigger, but it's non-deferrable.
+ */
+Datum
+TRI_FKey_restrict_upd(PG_FUNCTION_ARGS)
+{
+	/* Check that this is a valid trigger call on the right time and event. */
+	ri_CheckTrigger(fcinfo, "TRI_FKey_restrict_upd", RI_TRIGTYPE_UPDATE);
+
+	/* Share code with NO ACTION/DELETE cases. */
+	return ri_restrict((TriggerData *) fcinfo->context, false);
+}
 
 /*
  * RI_FKey_pk_upd_check_required -
@@ -1241,7 +1435,7 @@ RI_FKey_pk_upd_check_required(Trigger *trigger, Relation pk_rel,
 		return false;
 
 	/* If all old and new key values are equal, no check is needed */
-	if (newslot && ri_KeysEqual(pk_rel, oldslot, newslot, riinfo, true))
+	if (newslot && ri_KeysStable(pk_rel, oldslot, newslot, riinfo, true))
 		return false;
 
 	/* Else we need to fire the trigger. */
@@ -1340,7 +1534,7 @@ RI_FKey_fk_upd_check_required(Trigger *trigger, Relation fk_rel,
 		return true;
 
 	/* If all old and new key values are equal, no check is needed */
-	if (ri_KeysEqual(fk_rel, oldslot, newslot, riinfo, false))
+	if (ri_KeysStable(fk_rel, oldslot, newslot, riinfo, false))
 		return false;
 
 	/* Else we need to fire the trigger. */
@@ -1488,15 +1682,17 @@ RI_Initial_Check(Trigger *trigger, Relation fk_rel, Relation pk_rel)
 	sep = "(";
 	for (int i = 0; i < riinfo->nkeys; i++)
 	{
-		Oid			pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
-		Oid			fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
-		Oid			pk_coll = RIAttCollation(pk_rel, riinfo->pk_attnums[i]);
-		Oid			fk_coll = RIAttCollation(fk_rel, riinfo->fk_attnums[i]);
+		Oid	pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
+		Oid	fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
+		Oid	pk_coll = RIAttCollation(pk_rel, riinfo->pk_attnums[i]);
+		Oid	fk_coll = RIAttCollation(fk_rel, riinfo->fk_attnums[i]);
 
 		quoteOneName(pkattname + 3,
 					 RIAttName(pk_rel, riinfo->pk_attnums[i]));
+
 		quoteOneName(fkattname + 3,
 					 RIAttName(fk_rel, riinfo->fk_attnums[i]));
+
 		ri_GenerateQual(&querybuf, sep,
 						pkattname, pk_type,
 						riinfo->pf_eq_oprs[i],
@@ -2137,6 +2333,7 @@ ri_LoadConstraintInfo(Oid constraintOid)
 	riinfo = (RI_ConstraintInfo *) hash_search(ri_constraint_cache,
 											   &constraintOid,
 											   HASH_ENTER, &found);
+
 	if (!found)
 		riinfo->valid = false;
 	else if (riinfo->valid)
@@ -2171,6 +2368,7 @@ ri_LoadConstraintInfo(Oid constraintOid)
 	riinfo->confupdtype = conForm->confupdtype;
 	riinfo->confdeltype = conForm->confdeltype;
 	riinfo->confmatchtype = conForm->confmatchtype;
+	riinfo->temporal = conForm->contemporal;
 
 	DeconstructFkConstraintRow(tup,
 							   &riinfo->nkeys,
@@ -2791,9 +2989,12 @@ ri_HashPreparedPlan(RI_QueryKey *key, SPIPlanPtr plan)
 
 
 /*
- * ri_KeysEqual -
+ * ri_KeysStable -
  *
- * Check if all key values in OLD and NEW are equal.
+ * Check if all key values in OLD and NEW are "equivalent":
+ * For normal FKs we check for equality.
+ * For temporal FKs we check that the PK side is a superset of its old value,
+ * or the FK side is a subset.
  *
  * Note: at some point we might wish to redefine this as checking for
  * "IS NOT DISTINCT" rather than "=", that is, allow two nulls to be
@@ -2801,7 +3002,7 @@ ri_HashPreparedPlan(RI_QueryKey *key, SPIPlanPtr plan)
  * previously found at least one of the rows to contain no nulls.
  */
 static bool
-ri_KeysEqual(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
+ri_KeysStable(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
 			 const RI_ConstraintInfo *riinfo, bool rel_is_pk)
 {
 	const int16 *attnums;
@@ -2834,35 +3035,86 @@ ri_KeysEqual(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
 
 		if (rel_is_pk)
 		{
-			/*
-			 * If we are looking at the PK table, then do a bytewise
-			 * comparison.  We must propagate PK changes if the value is
-			 * changed to one that "looks" different but would compare as
-			 * equal using the equality operator.  This only makes a
-			 * difference for ON UPDATE CASCADE, but for consistency we treat
-			 * all changes to the PK the same.
-			 */
-			Form_pg_attribute att = TupleDescAttr(oldslot->tts_tupleDescriptor, attnums[i] - 1);
+			if (riinfo->temporal && i == riinfo->nkeys - 1)
+			{
+				if (ri_RangeAttributeNeedsCheck(true, oldvalue, newvalue))
+					return false;
+			}
+			else
+			{
+				/*
+				 * If we are looking at the PK table, then do a bytewise
+				 * comparison.  We must propagate PK changes if the value is
+				 * changed to one that "looks" different but would compare as
+				 * equal using the equality operator.  This only makes a
+				 * difference for ON UPDATE CASCADE, but for consistency we treat
+				 * all changes to the PK the same.
+				 */
+				Form_pg_attribute att = TupleDescAttr(oldslot->tts_tupleDescriptor, attnums[i] - 1);
 
-			if (!datum_image_eq(oldvalue, newvalue, att->attbyval, att->attlen))
-				return false;
+				if (!datum_image_eq(oldvalue, newvalue, att->attbyval, att->attlen))
+					return false;
+			}
 		}
 		else
 		{
-			/*
-			 * For the FK table, compare with the appropriate equality
-			 * operator.  Changes that compare equal will still satisfy the
-			 * constraint after the update.
-			 */
-			if (!ri_AttributesEqual(riinfo->ff_eq_oprs[i], RIAttType(rel, attnums[i]),
-									oldvalue, newvalue))
-				return false;
+			if (riinfo->temporal && i == riinfo->nkeys - 1)
+			{
+				if (ri_RangeAttributeNeedsCheck(false, oldvalue, newvalue))
+					return false;
+			}
+			else
+			{
+				/*
+				 * For the FK table, compare with the appropriate equality
+				 * operator.  Changes that compare equal will still satisfy the
+				 * constraint after the update.
+				 */
+				if (!ri_AttributesEqual(riinfo->ff_eq_oprs[i], RIAttType(rel, attnums[i]),
+										oldvalue, newvalue))
+					return false;
+			}
 		}
 	}
 
 	return true;
 }
 
+/*
+ * ri_RangeAttributeNeedsCheck -
+ *
+ * Compare old and new values, and return true if we need to check the FK.
+ *
+ * NB: we have already checked that neither value is null.
+ */
+static bool
+ri_RangeAttributeNeedsCheck(bool rel_is_pk, Datum oldvalue, Datum newvalue)
+{
+	RangeType *oldrange, *newrange;
+	Oid oldrngtype, newrngtype;
+	TypeCacheEntry *typcache;
+
+	oldrange = DatumGetRangeTypeP(oldvalue);
+	newrange = DatumGetRangeTypeP(newvalue);
+	oldrngtype = RangeTypeGetOid(oldrange);
+	newrngtype = RangeTypeGetOid(newrange);
+
+	if (oldrngtype != newrngtype)
+		elog(ERROR, "range types are inconsistent");
+
+	typcache = lookup_type_cache(oldrngtype, TYPECACHE_RANGE_INFO);
+	if (typcache->rngelemtype == NULL)
+		elog(ERROR, "type %u is not a range type", oldrngtype);
+
+	if (rel_is_pk)
+		/* If the PK's range shrunk, a conflict is possible. */
+		return !range_eq_internal(typcache, oldrange, newrange) &&
+			!range_contains_internal(typcache, newrange, oldrange);
+	else
+		/* If the FK's range grew, a conflict is possible. */
+		return !range_eq_internal(typcache, oldrange, newrange) &&
+			range_contains_internal(typcache, newrange, oldrange);
+}
 
 /*
  * ri_AttributesEqual -
@@ -3021,10 +3273,16 @@ RI_FKey_trigger_type(Oid tgfoid)
 		case F_RI_FKEY_SETDEFAULT_UPD:
 		case F_RI_FKEY_NOACTION_DEL:
 		case F_RI_FKEY_NOACTION_UPD:
+		case F_TRI_FKEY_RESTRICT_DEL:
+		case F_TRI_FKEY_RESTRICT_UPD:
+		case F_TRI_FKEY_NOACTION_DEL:
+		case F_TRI_FKEY_NOACTION_UPD:
 			return RI_TRIGGER_PK;
 
 		case F_RI_FKEY_CHECK_INS:
 		case F_RI_FKEY_CHECK_UPD:
+		case F_TRI_FKEY_CHECK_INS:
+		case F_TRI_FKEY_CHECK_UPD:
 			return RI_TRIGGER_FK;
 	}
 
