@@ -177,6 +177,7 @@ quad_poly_tbl|t
 radix_text_tbl|t
 ramp|f
 real_city|f
+referencing_period_test|t
 reservations|f
 road|t
 shighway|t
