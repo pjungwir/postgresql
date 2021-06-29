@@ -6972,7 +6972,8 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 				i_tablespace,
 				i_indreloptions,
 				i_indstatcols,
-				i_indstatvals;
+				i_indstatvals,
+				i_withoutoverlaps;
 
 	/*
 	 * We want to perform just one query against pg_index.  However, we
@@ -7047,10 +7048,17 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 
 	if (fout->remoteVersion >= 150000)
 		appendPQExpBufferStr(query,
-							 "i.indnullsnotdistinct ");
+							 "i.indnullsnotdistinct, ");
 	else
 		appendPQExpBufferStr(query,
-							 "false AS indnullsnotdistinct ");
+							 "false AS indnullsnotdistinct, ");
+
+	if (fout->remoteVersion >= 170000)
+		appendPQExpBufferStr(query,
+							 "c.conexclop IS NOT NULL AS withoutoverlaps ");
+	else
+		appendPQExpBufferStr(query,
+							 "null AS withoutoverlaps ");
 
 	/*
 	 * The point of the messy-looking outer join is to find a constraint that
@@ -7125,6 +7133,7 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 	i_indreloptions = PQfnumber(res, "indreloptions");
 	i_indstatcols = PQfnumber(res, "indstatcols");
 	i_indstatvals = PQfnumber(res, "indstatvals");
+	i_withoutoverlaps = PQfnumber(res, "withoutoverlaps");
 
 	indxinfo = (IndxInfo *) pg_malloc(ntups * sizeof(IndxInfo));
 
@@ -7227,6 +7236,7 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 				constrinfo->condeferred = *(PQgetvalue(res, j, i_condeferred)) == 't';
 				constrinfo->conislocal = true;
 				constrinfo->separate = true;
+				constrinfo->withoutoverlaps = *(PQgetvalue(res, j, i_withoutoverlaps)) == 't';
 
 				indxinfo[j].indexconstraint = constrinfo->dobj.dumpId;
 			}
@@ -16922,9 +16932,22 @@ dumpConstraint(Archive *fout, const ConstraintInfo *coninfo)
 					break;
 				attname = getAttrName(indkey, tbinfo);
 
-				appendPQExpBuffer(q, "%s%s",
-								  (k == 0) ? "" : ", ",
-								  fmtId(attname));
+				if (k == 0)
+				{
+					appendPQExpBuffer(q, "%s",
+										fmtId(attname));
+				}
+				else if (k == indxinfo->indnkeyattrs - 1 &&
+						coninfo->withoutoverlaps)
+				{
+					appendPQExpBuffer(q, ", %s WITHOUT OVERLAPS",
+									  fmtId(attname));
+				}
+				else
+				{
+					appendPQExpBuffer(q, ", %s",
+										fmtId(attname));
+				}
 			}
 
 			if (indxinfo->indnkeyattrs < indxinfo->indnattrs)
