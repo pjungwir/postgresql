@@ -3083,6 +3083,7 @@ _copyConstraint(const Constraint *from)
 	COPY_SCALAR_FIELD(fk_del_action);
 	COPY_NODE_FIELD(old_conpfeqop);
 	COPY_SCALAR_FIELD(old_pktable_oid);
+	COPY_NODE_FIELD(without_overlaps);
 	COPY_SCALAR_FIELD(skip_validation);
 	COPY_SCALAR_FIELD(initially_valid);
 
@@ -3675,6 +3676,7 @@ _copyIndexStmt(const IndexStmt *from)
 	COPY_SCALAR_FIELD(unique);
 	COPY_SCALAR_FIELD(primary);
 	COPY_SCALAR_FIELD(isconstraint);
+	COPY_SCALAR_FIELD(istemporal);
 	COPY_SCALAR_FIELD(deferrable);
 	COPY_SCALAR_FIELD(initdeferred);
 	COPY_SCALAR_FIELD(transformed);

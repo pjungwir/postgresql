@@ -222,6 +222,8 @@ trigger_parted_p2|t
 trigger_parted_p2_2|t
 varchar_tbl|f
 view_base_table|t
+without_overlaps_test|t
+without_overlaps_uq_test|t
 -- restore normal output mode
 \a\t
 --
