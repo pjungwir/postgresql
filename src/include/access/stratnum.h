@@ -22,6 +22,7 @@
 typedef uint16 StrategyNumber;
 
 #define InvalidStrategy ((StrategyNumber) 0)
+#define StrategyIsValid(stratnum) ((bool) ((stratnum) != InvalidStrategy))
 
 /*
  * Strategy numbers for B-tree indexes.
