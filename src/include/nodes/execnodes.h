@@ -155,6 +155,7 @@ typedef struct ExprState
  *		UniqueProcs
  *		UniqueStrats
  *		Unique				is it a unique index?
+ *		Temporal			is it for a temporal constraint?
  *		OpclassOptions		opclass-specific options, or NULL if none
  *		ReadyForInserts		is it valid for inserts?
  *		CheckedUnchanged	IndexUnchanged status determined yet?
@@ -190,6 +191,7 @@ typedef struct IndexInfo
 	Datum	   *ii_OpclassOptions;	/* array with one entry per column */
 	bool		ii_Unique;
 	bool		ii_NullsNotDistinct;
+	bool		ii_Temporal;
 	bool		ii_ReadyForInserts;
 	bool		ii_CheckedUnchanged;
 	bool		ii_IndexUnchanged;
