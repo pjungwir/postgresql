@@ -124,6 +124,8 @@ static List *get_opclass(Oid opclass, Oid actual_datatype);
 static void transformIndexConstraints(CreateStmtContext *cxt);
 static IndexStmt *transformIndexConstraint(Constraint *constraint,
 										   CreateStmtContext *cxt);
+static bool findNewOrOldColumn(CreateStmtContext *cxt, char *colname, char **typname,
+							   Oid *typid);
 static void transformExtendedStatistics(CreateStmtContext *cxt);
 static void transformFKConstraints(CreateStmtContext *cxt,
 								   bool skipValidation,
@@ -1725,6 +1727,7 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 	index->unique = idxrec->indisunique;
 	index->nulls_not_distinct = idxrec->indnullsnotdistinct;
 	index->primary = idxrec->indisprimary;
+	index->istemporal = (idxrec->indisprimary || idxrec->indisunique) && idxrec->indisexclusion;
 	index->transformed = true;	/* don't need transformIndexStmt */
 	index->concurrent = false;
 	index->if_not_exists = false;
@@ -1774,7 +1777,9 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 				int			nElems;
 				int			i;
 
-				Assert(conrec->contype == CONSTRAINT_EXCLUSION);
+				Assert(conrec->contype == CONSTRAINT_EXCLUSION ||
+						(index->istemporal &&
+						 (conrec->contype == CONSTRAINT_PRIMARY || conrec->contype == CONSTRAINT_UNIQUE)));
 				/* Extract operator OIDs from the pg_constraint tuple */
 				datum = SysCacheGetAttrNotNull(CONSTROID, ht_constr,
 											   Anum_pg_constraint_conexclop);
@@ -2314,6 +2319,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 	}
 	index->nulls_not_distinct = constraint->nulls_not_distinct;
 	index->isconstraint = true;
+	index->istemporal = constraint->without_overlaps != NULL;
 	index->deferrable = constraint->deferrable;
 	index->initdeferred = constraint->initdeferred;
 
@@ -2406,6 +2412,11 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 					 errmsg("index \"%s\" is not valid", index_name),
 					 parser_errposition(cxt->pstate, constraint->location)));
 
+		/*
+		 * Today we forbid non-unique indexes, but we could permit GiST
+		 * indexes whose last entry is a range type and use that to create a
+		 * WITHOUT OVERLAPS constraint (i.e. a temporal constraint).
+		 */
 		if (!index_form->indisunique)
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
@@ -2682,6 +2693,65 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 				notnullcmds = lappend(notnullcmds, notnullcmd);
 			}
 		}
+
+		/*
+		 * Anything in without_overlaps should be included,
+		 * but with the overlaps operator (&&) instead of equality.
+		 */
+		if (constraint->without_overlaps != NULL) {
+			char *without_overlaps_str = strVal(constraint->without_overlaps);
+			IndexElem *iparam = makeNode(IndexElem);
+			char   *typname;
+			Oid		typid;
+
+			/*
+			 * Iterate through the table's columns
+			 * (like just a little bit above).
+			 * If we find one whose name is the same as without_overlaps,
+			 * validate that it's a range type.
+			 *
+			 * Otherwise report an error.
+			 */
+
+			if (findNewOrOldColumn(cxt, without_overlaps_str, &typname, &typid))
+			{
+				if (!type_is_range(typid))
+					ereport(ERROR,
+							(errcode(ERRCODE_DATATYPE_MISMATCH),
+							 errmsg("column \"%s\" in WITHOUT OVERLAPS is not a range type",
+									without_overlaps_str)));
+			}
+			else
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_COLUMN),
+						 errmsg("range or PERIOD \"%s\" in WITHOUT OVERLAPS does not exist",
+								without_overlaps_str)));
+
+			iparam->name = pstrdup(without_overlaps_str);
+			iparam->expr = NULL;
+			iparam->indexcolname = NULL;
+			iparam->collation = NIL;
+			iparam->opclass = NIL;
+			iparam->opclassopts = NIL;
+			iparam->ordering = SORTBY_DEFAULT;
+			iparam->nulls_ordering = SORTBY_NULLS_DEFAULT;
+			index->indexParams = lappend(index->indexParams, iparam);
+
+			index->accessMethod = "gist";
+			constraint->access_method = "gist";
+
+			if (constraint->contype == CONSTR_PRIMARY)
+			{
+				/*
+				 * Force the column to NOT NULL since it is part of the primary key.
+				 */
+				AlterTableCmd *notnullcmd = makeNode(AlterTableCmd);
+
+				notnullcmd->subtype = AT_SetAttNotNull;
+				notnullcmd->name = pstrdup(without_overlaps_str);
+				notnullcmds = lappend(notnullcmds, notnullcmd);
+			}
+		}
 	}
 
 	/*
@@ -2799,6 +2869,58 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 	}
 
 	return index;
+}
+
+/*
+ * Tries to find a column by name among the existing ones (if it's an ALTER TABLE)
+ * and the new ones. Sets typname and typid if one is found. Returns false if we
+ * couldn't find a match.
+ */
+static bool
+findNewOrOldColumn(CreateStmtContext *cxt, char *colname, char **typname, Oid *typid)
+{
+	/* Check the new columns first in case their type is changing. */
+
+	ColumnDef  *column = NULL;
+	ListCell   *columns;
+
+	foreach(columns, cxt->columns)
+	{
+		column = lfirst_node(ColumnDef, columns);
+		if (strcmp(column->colname, colname) == 0)
+		{
+			*typid = typenameTypeId(NULL, column->typeName);
+			*typname = TypeNameToString(column->typeName);
+			return true;
+		}
+	}
+
+	/* Look up columns on existing table. */
+
+	if (cxt->isalter)
+	{
+		Relation rel = cxt->rel;
+		for (int i = 0; i < rel->rd_att->natts; i++)
+		{
+			Form_pg_attribute attr = TupleDescAttr(rel->rd_att, i);
+			const char *attname;
+
+			if (attr->attisdropped)
+				continue;
+
+			attname = NameStr(attr->attname);
+			if (strcmp(attname, colname) == 0)
+			{
+				Type type = typeidType(attr->atttypid);
+				*typid = attr->atttypid;
+				*typname = pstrdup(typeTypeName(type));
+				ReleaseSysCache(type);
+				return true;
+			}
+		}
+	}
+
+	return false;
 }
 
 /*
