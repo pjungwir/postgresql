@@ -2210,6 +2210,32 @@ get_typisdefined(Oid typid)
 }
 
 /*
+ * get_typname
+ *
+ *		Returns the name of a given type
+ *
+ * Returns a palloc'd copy of the string, or NULL if no such type.
+ */
+char *
+get_typname(Oid typid)
+{
+	HeapTuple	tp;
+
+	tp = SearchSysCache1(TYPEOID, ObjectIdGetDatum(typid));
+	if (HeapTupleIsValid(tp))
+	{
+		Form_pg_type typtup = (Form_pg_type) GETSTRUCT(tp);
+		char	   *result;
+
+		result = pstrdup(NameStr(typtup->typname));
+		ReleaseSysCache(tp);
+		return result;
+	}
+	else
+		return NULL;
+}
+
+/*
  * get_typlen
  *
  *		Given the type OID, return the length of the type.

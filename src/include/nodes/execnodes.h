@@ -144,6 +144,7 @@ typedef struct ExprState
  *		IndexAttrNumbers	underlying-rel attribute numbers used as keys
  *							(zeroes indicate expressions). It also contains
  * 							info about included columns.
+ *		Period				period used in the index, or NULL if none
  *		Expressions			expr trees for expression entries, or NIL if none
  *		ExpressionsState	exec state for expressions, or NIL if none
  *		Predicate			partial-index predicate, or NIL if none
@@ -155,6 +156,7 @@ typedef struct ExprState
  *		UniqueProcs
  *		UniqueStrats
  *		Unique				is it a unique index?
+ *		Temporal			is it for a temporal constraint?
  *		OpclassOptions		opclass-specific options, or NULL if none
  *		ReadyForInserts		is it valid for inserts?
  *		CheckedUnchanged	IndexUnchanged status determined yet?
@@ -177,6 +179,7 @@ typedef struct IndexInfo
 	int			ii_NumIndexAttrs;	/* total number of columns in index */
 	int			ii_NumIndexKeyAttrs;	/* number of key columns in index */
 	AttrNumber	ii_IndexAttrNumbers[INDEX_MAX_KEYS];
+	Node	   *ii_Period;	/* period used in the index */
 	List	   *ii_Expressions; /* list of Expr */
 	List	   *ii_ExpressionsState;	/* list of ExprState */
 	List	   *ii_Predicate;	/* list of Expr */
@@ -190,6 +193,7 @@ typedef struct IndexInfo
 	Datum	   *ii_OpclassOptions;	/* array with one entry per column */
 	bool		ii_Unique;
 	bool		ii_NullsNotDistinct;
+	bool		ii_Temporal;
 	bool		ii_ReadyForInserts;
 	bool		ii_CheckedUnchanged;
 	bool		ii_IndexUnchanged;
