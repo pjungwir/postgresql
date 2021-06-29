@@ -486,6 +486,7 @@ typedef struct _constraintInfo
 	bool		condeferred;	/* true if constraint is INITIALLY DEFERRED */
 	bool		conislocal;		/* true if constraint has local definition */
 	bool		separate;		/* true if must dump as separate item */
+	bool		withoutoverlaps;	/* true if the last elem is WITHOUT OVERLAPS */
 } ConstraintInfo;
 
 typedef struct _periodInfo

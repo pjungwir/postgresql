@@ -50,6 +50,7 @@
 #include "catalog/pg_inherits.h"
 #include "catalog/pg_opclass.h"
 #include "catalog/pg_operator.h"
+#include "catalog/pg_period.h"
 #include "catalog/pg_tablespace.h"
 #include "catalog/pg_trigger.h"
 #include "catalog/pg_type.h"
@@ -235,13 +236,16 @@ index_check_primary_key(Relation heapRel,
 		HeapTuple	atttuple;
 		Form_pg_attribute attform;
 
-		if (attnum == 0)
+		if (attnum == 0 && !(stmt->istemporal && i > 0))
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("primary keys cannot be expressions")));
 
-		/* System attributes are never null, so no need to check */
-		if (attnum < 0)
+		/*
+		 * System attributes are never null, so no need to check.
+		 * Also skip expressions.
+		 */
+		if (attnum <= 0)
 			continue;
 
 		atttuple = SearchSysCache2(ATTNUM,
@@ -547,6 +551,7 @@ UpdateIndexRelation(Oid indexoid,
 					bool isready)
 {
 	int2vector *indkey;
+	Oid			indperiod;
 	oidvector  *indcollation;
 	oidvector  *indclass;
 	int2vector *indoption;
@@ -565,6 +570,7 @@ UpdateIndexRelation(Oid indexoid,
 	indkey = buildint2vector(NULL, indexInfo->ii_NumIndexAttrs);
 	for (i = 0; i < indexInfo->ii_NumIndexAttrs; i++)
 		indkey->values[i] = indexInfo->ii_IndexAttrNumbers[i];
+	indperiod = indexInfo->ii_Period ? ((Period *) indexInfo->ii_Period)->oid : InvalidOid;
 	indcollation = buildoidvector(collationOids, indexInfo->ii_NumIndexKeyAttrs);
 	indclass = buildoidvector(classOids, indexInfo->ii_NumIndexKeyAttrs);
 	indoption = buildint2vector(coloptions, indexInfo->ii_NumIndexKeyAttrs);
@@ -625,6 +631,7 @@ UpdateIndexRelation(Oid indexoid,
 	values[Anum_pg_index_indislive - 1] = BoolGetDatum(true);
 	values[Anum_pg_index_indisreplident - 1] = BoolGetDatum(false);
 	values[Anum_pg_index_indkey - 1] = PointerGetDatum(indkey);
+	values[Anum_pg_index_indperiod - 1] = ObjectIdGetDatum(indperiod);
 	values[Anum_pg_index_indcollation - 1] = PointerGetDatum(indcollation);
 	values[Anum_pg_index_indclass - 1] = PointerGetDatum(indclass);
 	values[Anum_pg_index_indoption - 1] = PointerGetDatum(indoption);
@@ -1283,6 +1290,7 @@ index_concurrently_create_copy(Relation heapRelation, Oid oldIndexId,
 	Datum		indclassDatum,
 				colOptionDatum,
 				optionDatum;
+	Oid			periodid;
 	oidvector  *indclass;
 	int2vector *indcoloptions;
 	bool		isnull;
@@ -1317,6 +1325,9 @@ index_concurrently_create_copy(Relation heapRelation, Oid oldIndexId,
 									 Anum_pg_index_indoption, &isnull);
 	Assert(!isnull);
 	indcoloptions = (int2vector *) DatumGetPointer(colOptionDatum);
+
+	/* Get the period */
+	periodid = oldInfo->ii_Period ? ((Period *) oldInfo->ii_Period)->oid : InvalidOid;
 
 	/* Fetch options of index if any */
 	classTuple = SearchSysCache1(RELOID, oldIndexId);
@@ -1370,6 +1381,7 @@ index_concurrently_create_copy(Relation heapRelation, Oid oldIndexId,
 							indexPreds,
 							oldInfo->ii_Unique,
 							oldInfo->ii_NullsNotDistinct,
+							oldInfo->ii_Temporal,
 							false,	/* not ready for inserts */
 							true);
 
@@ -1394,6 +1406,16 @@ index_concurrently_create_copy(Relation heapRelation, Oid oldIndexId,
 											 newInfo->ii_NumIndexAttrs);
 		for (int i = 0; i < newInfo->ii_NumIndexAttrs; i++)
 			newInfo->ii_OpclassOptions[i] = get_attoptions(oldIndexId, i + 1);
+	}
+
+	/* Set the period */
+	if (periodid == InvalidOid)
+		newInfo->ii_Period = NULL;
+	else
+	{
+		Period *p = makeNode(Period);
+		p->oid = periodid;
+		newInfo->ii_Period = (Node *) p;
 	}
 
 	/*
@@ -1895,6 +1917,7 @@ index_concurrently_set_dead(Oid heapId, Oid indexId)
  *		INDEX_CONSTR_CREATE_UPDATE_INDEX: update the pg_index row
  *		INDEX_CONSTR_CREATE_REMOVE_OLD_DEPS: remove existing dependencies
  *			of index on table's columns
+ *		INDEX_CONSTR_CREATE_TEMPORAL: constraint is for a temporal primary key
  * allow_system_table_mods: allow table to be a system catalog
  * is_internal: index is constructed due to internal process
  */
@@ -1913,16 +1936,19 @@ index_constraint_create(Relation heapRelation,
 	ObjectAddress myself,
 				idxaddr;
 	Oid			conOid;
+	Oid			periodid;
 	bool		deferrable;
 	bool		initdeferred;
 	bool		mark_as_primary;
 	bool		islocal;
 	bool		noinherit;
+	bool		is_temporal;
 	int			inhcount;
 
 	deferrable = (constr_flags & INDEX_CONSTR_CREATE_DEFERRABLE) != 0;
 	initdeferred = (constr_flags & INDEX_CONSTR_CREATE_INIT_DEFERRED) != 0;
 	mark_as_primary = (constr_flags & INDEX_CONSTR_CREATE_MARK_AS_PRIMARY) != 0;
+	is_temporal = (constr_flags & INDEX_CONSTR_CREATE_TEMPORAL) != 0;
 
 	/* constraint creation support doesn't work while bootstrapping */
 	Assert(!IsBootstrapProcessingMode());
@@ -1937,7 +1963,8 @@ index_constraint_create(Relation heapRelation,
 
 	/* primary/unique constraints shouldn't have any expressions */
 	if (indexInfo->ii_Expressions &&
-		constraintType != CONSTRAINT_EXCLUSION)
+		constraintType != CONSTRAINT_EXCLUSION &&
+		!indexInfo->ii_Temporal)
 		elog(ERROR, "constraints cannot have index expressions");
 
 	/*
@@ -1965,6 +1992,11 @@ index_constraint_create(Relation heapRelation,
 		inhcount = 0;
 		noinherit = true;
 	}
+
+	if (indexInfo->ii_Period != NULL)
+		periodid = ((Period *)indexInfo->ii_Period)->oid;
+	else
+		periodid = InvalidOid;
 
 	/*
 	 * Construct a pg_constraint entry.
@@ -1999,6 +2031,8 @@ index_constraint_create(Relation heapRelation,
 								   islocal,
 								   inhcount,
 								   noinherit,
+								   is_temporal,	/* contemporal */
+								   periodid, /* conperiod */
 								   is_internal);
 
 	/*
@@ -2443,12 +2477,23 @@ BuildIndexInfo(Relation index)
 					   RelationGetIndexPredicate(index),
 					   indexStruct->indisunique,
 					   indexStruct->indnullsnotdistinct,
+					   false,
 					   indexStruct->indisready,
 					   false);
 
 	/* fill in attribute numbers */
 	for (i = 0; i < numAtts; i++)
 		ii->ii_IndexAttrNumbers[i] = indexStruct->indkey.values[i];
+
+	/* set the period */
+	if (indexStruct->indperiod == InvalidOid)
+		ii->ii_Period = NULL;
+	else
+	{
+		Period *p = makeNode(Period);
+		p->oid = indexStruct->indperiod;
+		ii->ii_Period = (Node *) p;
+	}
 
 	/* fetch exclusion constraint info if any */
 	if (indexStruct->indisexclusion)
@@ -2503,12 +2548,16 @@ BuildDummyIndexInfo(Relation index)
 					   NIL,
 					   indexStruct->indisunique,
 					   indexStruct->indnullsnotdistinct,
+					   false,
 					   indexStruct->indisready,
 					   false);
 
 	/* fill in attribute numbers */
 	for (i = 0; i < numAtts; i++)
 		ii->ii_IndexAttrNumbers[i] = indexStruct->indkey.values[i];
+
+	/* no need for a period */
+	ii->ii_Period = NULL;
 
 	/* We ignore the exclusion constraint if any */
 
