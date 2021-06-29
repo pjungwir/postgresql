@@ -1280,6 +1280,12 @@ CREATE TABLE billing_addresses (
     Application periods can be used to define temporal primary and foreign keys.
     Any table with a temporal primary key is a temporal table and supports temporal update and delete commands.
    </para>
+
+   <para>
+    Temporal primary keys enforce a modified version of referential integrity called temporal referential integrity. They have two kinds of element: first one or more columns that behave as in ordinary primary keys, uniquely determiniing an entity,
+    and second a period (or range column) that qualifies when the row applies. So a temporal primary permits multiple rows with equal values in the ordinary key parts, as long as those rows don't have overlapping periods. Each row makes a statement about the entity identified by the ordinary key parts, but applying only to the span given by the period.
+    Temporal primary keys are essentially <link linkend="sql-createtable-exclude">exclusion constraints</link> where the first key parts are compared for equality and the last part for overlaps.
+   </para>
   </sect2>
 
   <sect2 id="ddl-periods-system-periods">

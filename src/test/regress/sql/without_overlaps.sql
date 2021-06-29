@@ -1,0 +1,365 @@
+-- Tests for WITHOUT OVERLAPS.
+
+--
+-- test input parser
+--
+
+-- PK with no columns just WITHOUT OVERLAPS:
+
+CREATE TABLE without_overlaps_test (
+	valid_at tsrange,
+	CONSTRAINT without_overlaps_pk PRIMARY KEY (valid_at WITHOUT OVERLAPS)
+);
+
+-- PK with a range column/PERIOD that isn't there:
+
+CREATE TABLE without_overlaps_test (
+	id INTEGER,
+	CONSTRAINT without_overlaps_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+
+-- PK with a non-range column:
+
+CREATE TABLE without_overlaps_test (
+	id INTEGER,
+	valid_at TEXT,
+	CONSTRAINT without_overlaps_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+
+-- PK with one column plus a range:
+
+CREATE TABLE without_overlaps_test (
+	-- Since we can't depend on having btree_gist here,
+	-- use an int4range instead of an int.
+	-- (The rangetypes regression test uses the same trick.)
+	id int4range,
+	valid_at tsrange,
+	CONSTRAINT without_overlaps_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+
+-- PK with two columns plus a range:
+CREATE TABLE without_overlaps_test2 (
+	id1 int4range,
+	id2 int4range,
+	valid_at tsrange,
+	CONSTRAINT without_overlaps2_pk PRIMARY KEY (id1, id2, valid_at WITHOUT OVERLAPS)
+);
+DROP TABLE without_overlaps_test2;
+
+
+-- PK with one column plus a PERIOD:
+CREATE TABLE without_overlaps_test2 (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT without_overlaps2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'without_overlaps2_pk';
+DROP TABLE without_overlaps_test2;
+
+-- PK with two columns plus a PERIOD:
+CREATE TABLE without_overlaps_test2 (
+	id1 int4range,
+	id2 int4range,
+	valid_from date,
+	valid_til date,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT without_overlaps2_pk PRIMARY KEY (id1, id2, valid_at WITHOUT OVERLAPS)
+);
+DROP TABLE without_overlaps_test2;
+
+-- PK with a custom range type:
+CREATE TYPE textrange2 AS range (subtype=text, collation="C");
+CREATE TABLE without_overlaps_test2 (
+	id int4range,
+	valid_at textrange2,
+	CONSTRAINT without_overlaps2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+ALTER TABLE without_overlaps_test2 DROP CONSTRAINT without_overlaps2_pk;
+DROP TABLE without_overlaps_test2;
+DROP TYPE textrange2;
+
+-- UNIQUE with no columns just WITHOUT OVERLAPS:
+
+CREATE TABLE without_overlaps_uq_test (
+	valid_at tsrange,
+	CONSTRAINT without_overlaps_uq UNIQUE (valid_at WITHOUT OVERLAPS)
+);
+
+-- UNIQUE with a range column/PERIOD that isn't there:
+
+CREATE TABLE without_overlaps_uq_test (
+	id INTEGER,
+	CONSTRAINT without_overlaps_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
+);
+
+-- UNIQUE with a non-range column:
+
+CREATE TABLE without_overlaps_uq_test (
+	id INTEGER,
+	valid_at TEXT,
+	CONSTRAINT without_overlaps_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
+);
+
+-- UNIQUE with one column plus a range:
+
+CREATE TABLE without_overlaps_uq_test (
+	-- Since we can't depend on having btree_gist here,
+	-- use an int4range instead of an int.
+	-- (The rangetypes regression test uses the same trick.)
+	id int4range,
+	valid_at tsrange,
+	CONSTRAINT without_overlaps_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
+);
+
+-- UNIQUE with two columns plus a range:
+CREATE TABLE without_overlaps_uq_test2 (
+	id1 int4range,
+	id2 int4range,
+	valid_at tsrange,
+	CONSTRAINT without_overlaps2_uq UNIQUE (id1, id2, valid_at WITHOUT OVERLAPS)
+);
+DROP TABLE without_overlaps_uq_test2;
+
+-- UNIQUE with one column plus a PERIOD:
+CREATE TABLE without_overlaps_uq_test2 (
+	id int4range,
+	valid_from timestamp,
+	valid_til timestamp,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT without_overlaps2_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
+);
+DROP TABLE without_overlaps_uq_test2;
+
+-- UNIQUE with two columns plus a PERIOD:
+CREATE TABLE without_overlaps_uq_test2 (
+	id1 int4range,
+	id2 int4range,
+	valid_from timestamp,
+	valid_til timestamp,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT without_overlaps2_uq UNIQUE (id1, id2, valid_at WITHOUT OVERLAPS)
+);
+DROP TABLE without_overlaps_uq_test2;
+
+-- UNIQUE with a custom range type:
+CREATE TYPE textrange2 AS range (subtype=text, collation="C");
+CREATE TABLE without_overlaps_uq_test2 (
+	id int4range,
+	valid_at textrange2,
+	CONSTRAINT without_overlaps2_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
+);
+ALTER TABLE without_overlaps_uq_test2 DROP CONSTRAINT without_overlaps2_uq;
+DROP TABLE without_overlaps_uq_test2;
+DROP TYPE textrange2;
+
+--
+-- test ALTER TABLE ADD CONSTRAINT
+--
+
+DROP TABLE without_overlaps_test;
+CREATE TABLE without_overlaps_test (
+	id int4range,
+	valid_at tsrange
+);
+ALTER TABLE without_overlaps_test
+	ADD CONSTRAINT without_overlaps_pk
+	PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+
+-- PK with USING INDEX (not yet allowed):
+CREATE TABLE without_overlaps_test2 (
+	id int4range,
+	valid_at tsrange
+);
+CREATE INDEX idx_without_overlaps2 ON without_overlaps_test2 USING gist (id, valid_at);
+ALTER TABLE without_overlaps_test2
+	ADD CONSTRAINT without_overlaps2_pk
+	PRIMARY KEY USING INDEX idx_without_overlaps2;
+DROP TABLE without_overlaps_test2;
+
+-- UNIQUE with USING INDEX (not yet allowed):
+CREATE TABLE without_overlaps_uq_test2 (
+	id int4range,
+	valid_at tsrange
+);
+CREATE INDEX idx_without_overlaps_uq ON without_overlaps_uq_test2 USING gist (id, valid_at);
+ALTER TABLE without_overlaps_uq_test2
+	ADD CONSTRAINT without_overlaps2_uq
+	UNIQUE USING INDEX idx_without_overlaps_uq;
+DROP TABLE without_overlaps_uq_test2;
+
+-- Add range column and the PK at the same time
+CREATE TABLE without_overlaps_test2 (
+	id int4range
+);
+ALTER TABLE without_overlaps_test2
+	ADD COLUMN valid_at tsrange,
+	ADD CONSTRAINT without_overlaps2_pk
+	PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+DROP TABLE without_overlaps_test2;
+
+-- Add PERIOD and the PK at the same time
+CREATE TABLE without_overlaps_test2 (
+	id int4range,
+	valid_from date,
+	valid_til date
+);
+ALTER TABLE without_overlaps_test2
+	ADD PERIOD FOR valid_at (valid_from, valid_til),
+	ADD CONSTRAINT without_overlaps2_pk
+	PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+DROP TABLE without_overlaps_test2;
+
+-- Add range column and UNIQUE constraint at the same time
+CREATE TABLE without_overlaps_test2 (
+	id int4range
+);
+ALTER TABLE without_overlaps_test2
+	ADD COLUMN valid_at tsrange,
+	ADD CONSTRAINT without_overlaps2_uq
+	UNIQUE (id, valid_at WITHOUT OVERLAPS);
+DROP TABLE without_overlaps_test2;
+
+-- Add PERIOD column and UNIQUE constraint at the same time
+CREATE TABLE without_overlaps_test2 (
+	id int4range,
+	valid_from date,
+	valid_til date
+);
+ALTER TABLE without_overlaps_test2
+	ADD PERIOD FOR valid_at (valid_from, valid_til),
+	ADD CONSTRAINT without_overlaps2_uq
+	UNIQUE (id, valid_at WITHOUT OVERLAPS);
+DROP TABLE without_overlaps_test2;
+
+-- Add date columns, PERIOD, and the PK at the same time
+CREATE TABLE without_overlaps_test2 (
+	id int4range
+);
+ALTER TABLE without_overlaps_test2
+	ADD COLUMN valid_from date,
+	ADD COLUMN valid_til date,
+	ADD PERIOD FOR valid_at (valid_from, valid_til),
+	ADD CONSTRAINT without_overlaps2_pk
+	PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+DROP TABLE without_overlaps_test2;
+
+-- Add date columns, PERIOD, and UNIQUE constraint at the same time
+CREATE TABLE without_overlaps_test2 (
+	id int4range
+);
+ALTER TABLE without_overlaps_test2
+	ADD COLUMN valid_from date,
+	ADD COLUMN valid_til date,
+	ADD PERIOD FOR valid_at (valid_from, valid_til),
+	ADD CONSTRAINT without_overlaps2_uq
+	UNIQUE (id, valid_at WITHOUT OVERLAPS);
+DROP TABLE without_overlaps_test2;
+
+--
+-- test pg_get_constraintdef
+--
+
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'without_overlaps_pk';
+
+--
+-- test PK inserts
+--
+
+-- okay:
+INSERT INTO without_overlaps_test VALUES ('[1,1]', tsrange('2018-01-02', '2018-02-03'));
+INSERT INTO without_overlaps_test VALUES ('[1,1]', tsrange('2018-03-03', '2018-04-04'));
+INSERT INTO without_overlaps_test VALUES ('[2,2]', tsrange('2018-01-01', '2018-01-05'));
+INSERT INTO without_overlaps_test VALUES ('[3,3]', tsrange('2018-01-01', NULL));
+
+-- should fail:
+INSERT INTO without_overlaps_test VALUES ('[1,1]', tsrange('2018-01-01', '2018-01-05'));
+INSERT INTO without_overlaps_test VALUES (NULL, tsrange('2018-01-01', '2018-01-05'));
+INSERT INTO without_overlaps_test VALUES ('[3,3]', NULL);
+
+--
+-- test a range with both a PK and a UNIQUE constraint
+--
+
+CREATE TABLE without_overlaps_test2 (
+  id int4range,
+  valid_at tsrange,
+  id2 int8range,
+  name TEXT,
+  CONSTRAINT without_overlaps_test2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+  CONSTRAINT without_overlaps_test2_uniq UNIQUE (id2, valid_at WITHOUT OVERLAPS)
+);
+INSERT INTO without_overlaps_test2 (id, valid_at, id2, name)
+  VALUES
+  ('[1,1]', tsrange('2000-01-01', '2010-01-01'), '[7,7]', 'foo'),
+  ('[2,2]', tsrange('2000-01-01', '2010-01-01'), '[9,9]', 'bar')
+;
+UPDATE without_overlaps_test2 FOR PORTION OF valid_at FROM '2000-05-01' TO '2000-07-01'
+  SET name = name || '1';
+UPDATE without_overlaps_test2 FOR PORTION OF valid_at FROM '2000-04-01' TO '2000-06-01'
+  SET name = name || '2'
+  WHERE id = '[2,2]';
+SELECT * FROM without_overlaps_test2 ORDER BY id, valid_at;
+-- conflicting id only:
+INSERT INTO without_overlaps_test2 (id, valid_at, id2, name)
+  VALUES
+  ('[1,1]', tsrange('2005-01-01', '2006-01-01'), '[8,8]', 'foo3');
+-- conflicting id2 only:
+INSERT INTO without_overlaps_test2 (id, valid_at, id2, name)
+  VALUES
+  ('[3,3]', tsrange('2005-01-01', '2010-01-01'), '[9,9]', 'bar3')
+;
+DROP TABLE without_overlaps_test2;
+
+--
+-- test a PERIOD with both a PK and a UNIQUE constraint
+--
+
+CREATE TABLE without_overlaps_test2 (
+  id int4range,
+	valid_from timestamp,
+	valid_til timestamp,
+	PERIOD FOR valid_at (valid_from, valid_til),
+  id2 int8range,
+  name TEXT,
+  CONSTRAINT without_overlaps_test2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+  CONSTRAINT without_overlaps_test2_uniq UNIQUE (id2, valid_at WITHOUT OVERLAPS)
+);
+INSERT INTO without_overlaps_test2 (id, valid_from, valid_til, id2, name)
+  VALUES
+  ('[1,1]', '2000-01-01', '2010-01-01', '[7,7]', 'foo'),
+  ('[2,2]', '2000-01-01', '2010-01-01', '[9,9]', 'bar')
+;
+UPDATE without_overlaps_test2 FOR PORTION OF valid_at FROM '2000-05-01' TO '2000-07-01'
+  SET name = name || '1';
+UPDATE without_overlaps_test2 FOR PORTION OF valid_at FROM '2000-04-01' TO '2000-06-01'
+  SET name = name || '2'
+  WHERE id = '[2,2]';
+SELECT * FROM without_overlaps_test2 ORDER BY id, valid_from, valid_til;
+-- conflicting id only:
+INSERT INTO without_overlaps_test2 (id, valid_from, valid_til, id2, name)
+  VALUES
+  ('[1,1]', '2005-01-01', '2006-01-01', '[8,8]', 'foo3');
+-- conflicting id2 only:
+INSERT INTO without_overlaps_test2 (id, valid_from, valid_til, id2, name)
+  VALUES
+  ('[3,3]', '2005-01-01', '2010-01-01', '[9,9]', 'bar3')
+;
+DROP TABLE without_overlaps_test2;
+
+--
+-- test changing the PK's dependencies
+--
+
+CREATE TABLE without_overlaps_test2 (
+	id int4range,
+	valid_at tsrange,
+	CONSTRAINT without_overlaps2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+
+ALTER TABLE without_overlaps_test2 ALTER COLUMN valid_at DROP NOT NULL;
+ALTER TABLE without_overlaps_test2 ALTER COLUMN valid_at TYPE tstzrange USING tstzrange(lower(valid_at), upper(valid_at));
+ALTER TABLE without_overlaps_test2 RENAME COLUMN valid_at TO valid_thru;
+ALTER TABLE without_overlaps_test2 DROP COLUMN valid_thru;
+DROP TABLE without_overlaps_test2;
