@@ -1716,6 +1716,7 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 	index->unique = idxrec->indisunique;
 	index->nulls_not_distinct = idxrec->indnullsnotdistinct;
 	index->primary = idxrec->indisprimary;
+	index->iswithoutoverlaps = (idxrec->indisprimary || idxrec->indisunique) && idxrec->indisexclusion;
 	index->transformed = true;	/* don't need transformIndexStmt */
 	index->concurrent = false;
 	index->if_not_exists = false;
@@ -1765,7 +1766,9 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 				int			nElems;
 				int			i;
 
-				Assert(conrec->contype == CONSTRAINT_EXCLUSION);
+				Assert(conrec->contype == CONSTRAINT_EXCLUSION ||
+						(index->iswithoutoverlaps &&
+						 (conrec->contype == CONSTRAINT_PRIMARY || conrec->contype == CONSTRAINT_UNIQUE)));
 				/* Extract operator OIDs from the pg_constraint tuple */
 				datum = SysCacheGetAttrNotNull(CONSTROID, ht_constr,
 											   Anum_pg_constraint_conexclop);
@@ -2305,6 +2308,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 	}
 	index->nulls_not_distinct = constraint->nulls_not_distinct;
 	index->isconstraint = true;
+	index->iswithoutoverlaps = constraint->without_overlaps;
 	index->deferrable = constraint->deferrable;
 	index->initdeferred = constraint->initdeferred;
 
@@ -2397,6 +2401,11 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 					 errmsg("index \"%s\" is not valid", index_name),
 					 parser_errposition(cxt->pstate, constraint->location)));
 
+		/*
+		 * Today we forbid non-unique indexes, but we could permit GiST
+		 * indexes whose last entry is a range type and use that to create a
+		 * WITHOUT OVERLAPS constraint (i.e. a temporal constraint).
+		 */
 		if (!index_form->indisunique)
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
@@ -2652,6 +2661,45 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 				}
 			}
 
+			/* If it's WITHOUT OVERLAPS, it must be a range type */
+			if (constraint->without_overlaps && lc == list_last_cell(constraint->keys))
+			{
+				Oid	typid = InvalidOid;
+
+				if (!found && cxt->isalter)
+				{
+					/*
+					 * Look up column type on existing table.
+					 * If we can't find it, let things fail in DefineIndex.
+					 */
+					Relation rel = cxt->rel;
+					for (int i = 0; i < rel->rd_att->natts; i++)
+					{
+						Form_pg_attribute attr = TupleDescAttr(rel->rd_att, i);
+						const char *attname;
+
+						if (attr->attisdropped)
+							break;
+
+						attname = NameStr(attr->attname);
+						if (strcmp(attname, key) == 0)
+						{
+							typid = attr->atttypid;
+							break;
+						}
+					}
+				}
+				else
+					typid = typenameTypeId(NULL, column->typeName);
+
+				if (OidIsValid(typid) && !type_is_range(typid))
+					ereport(ERROR,
+							(errcode(ERRCODE_DATATYPE_MISMATCH),
+							 errmsg("column \"%s\" in WITHOUT OVERLAPS is not a range type",
+									key),
+							 parser_errposition(cxt->pstate, constraint->location)));
+			}
+
 			/* OK, add it to the index definition */
 			iparam = makeNode(IndexElem);
 			iparam->name = pstrdup(key);
@@ -2673,6 +2721,23 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 				notnullcmds = lappend(notnullcmds, notnullcmd);
 			}
 		}
+
+		if (constraint->without_overlaps)
+		{
+			/*
+			 * This enforces that there is at least one equality column besides
+			 * the WITHOUT OVERLAPS columns.  This is per SQL standard.  XXX
+			 * Do we need this?
+			 */
+			if (list_length(constraint->keys) < 2)
+				ereport(ERROR,
+						errcode(ERRCODE_SYNTAX_ERROR),
+						errmsg("constraint using WITHOUT OVERLAPS needs at least two columns"));
+
+			/* WITHOUT OVERLAPS requires a GiST index */
+			index->accessMethod = "gist";
+		}
+
 	}
 
 	/*
