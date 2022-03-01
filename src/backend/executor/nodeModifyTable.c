@@ -999,6 +999,125 @@ ExecInsert(ModifyTableState *mtstate,
 	return result;
 }
 
+/*
+/* ----------------------------------------------------------------
+ *		ExecForPortionOfLeftovers
+ *
+ *		Insert tuples for the untouched timestamp of a row in a FOR
+ *		PORTION OF UPDATE/DELETE
+ * ----------------------------------------------------------------
+ */
+static void
+ExecForPortionOfLeftovers(ModifyTableState *mtstate,
+						  EState *estate,
+						  ResultRelInfo *resultRelInfo,
+						  ItemPointer tupleid,
+						  TupleTableSlot *slot,
+						  TupleTableSlot *planSlot)
+{
+	// TODO: figure out if I need to make a coyp of the slot somehow in order to insert it...
+
+	ModifyTable *node = (ModifyTable *) mtstate->ps.plan;
+	ForPortionOfExpr *forPortionOf = (ForPortionOfExpr *) node->forPortionOf;
+	Datum oldRange;
+	Datum targetRange;
+	RangeType *oldRangeType;
+	RangeType *targetRangeType;
+	RangeType *leftoverRangeType1;
+	RangeType *leftoverRangeType2;
+	Oid rangeTypeOid;
+	bool isNull;
+	TypeCacheEntry *typcache;
+	TupleTableSlot *oldtupleSlot = resultRelInfo->ri_forPortionOf->fp_Existing;
+	TupleTableSlot *leftoverTuple1 = resultRelInfo->ri_forPortionOf->fp_Leftover1;
+	TupleTableSlot *leftoverTuple2 = resultRelInfo->ri_forPortionOf->fp_Leftover2;
+
+	/* Get the range of the existing pre-UPDATE/DELETE tuple */
+
+	// TODO: Seems like we shouldn't have to do this,
+	// because the old tuple should already be available somehow?
+	// But this is what triggers do.... (Are you sure this is how they get the OLD tuple?)
+	// And even if we do have to do this, is SnapshotAny really correct?
+	// Shouldn't it be the snapshot of the UPDATE?
+	if (!table_tuple_fetch_row_version(resultRelInfo->ri_RelationDesc, tupleid, SnapshotAny, oldtupleSlot))
+		elog(ERROR, "failed to fetch tuple for FOR PORTION OF");
+
+	oldRange = slot_getattr(oldtupleSlot, forPortionOf->range_attno, &isNull);
+	if (isNull)
+		elog(ERROR, "found a NULL range in a temporal table");
+	oldRangeType = DatumGetRangeTypeP(oldRange);
+
+	/* Evaluate the target range if we haven't yet */
+
+	if (resultRelInfo->ri_forPortionOf->fp_targetRange)
+		targetRangeType = resultRelInfo->ri_forPortionOf->fp_targetRange;
+	else
+	{
+		ExprContext *econtext = GetPerTupleExprContext(estate);
+		econtext->ecxt_scantuple = slot;
+
+		ExprState *exprState = ExecPrepareExpr((Expr *) forPortionOf->targetRange, estate);
+		targetRange = ExecEvalExpr(exprState, econtext, &isNull);
+
+		if (isNull)
+			elog(ERROR, "Got a NULL FOR PORTION OF target range");
+		targetRangeType = DatumGetRangeTypeP(targetRange);
+		resultRelInfo->ri_forPortionOf->fp_targetRange = targetRangeType;
+	}
+
+	/*
+	 * Get the range's type cache entry. This is worth caching for the whole UPDATE
+	 * like range functions do.
+	 */
+
+	typcache = resultRelInfo->ri_forPortionOf->fp_rangetypcache;
+	if (typcache == NULL)
+	{
+		rangeTypeOid = RangeTypeGetOid(oldRangeType);
+		typcache = lookup_type_cache(rangeTypeOid, TYPECACHE_RANGE_INFO);
+		if (typcache->rngeletype == NULL)
+			elog(ERROR, "type %u is not a range type", rangeTypeOid);
+		resultRelInfo->ri_forPortionOf->fp_rangetypcache = typcache;
+	}
+
+	/* Get the ranges to the left/right of the targeted range. */
+
+	range_leftover_internal(typcache, oldRangeType, targetRangeType, &leftoverRangeType1,
+			&leftoverRangeType2);
+
+	/* Insert a copy of the tuple with the lower leftover range */
+
+	if (!RangeIsEmpty(leftoverRangeType1))
+	{
+		MinimalTuple oldtuple = ExecFetchSlotMinimalTuple(oldtupleSlot, NULL);
+		ExecForceStoreMinimalTuple(oldtuple, leftoverTuple1, false);
+
+		leftoverTuple1->tts_values[forPortionOf->range_attno - 1] = RangeTypePGetDatum(leftoverRangeType1);
+		leftoverTuple1->tts_isnull[forPortionOf->range_attno - 1] = false;
+
+		ExecMaterializeSlot(leftoverTuple1);
+
+		// TODO: tuple routing?
+		ExecInsert(mtstate, leftoverTuple1, planSlot, estate, node->canSetTag);
+	}
+
+	/* Insert a copy of the tuple with the upper leftover range */
+
+	if (!RangeIsEmpty(leftoverRangeType2))
+	{
+		MinimalTuple oldtuple = ExecFetchSlotMinimalTuple(oldtupleSlot, NULL);
+		ExecForceStoreMinimalTuple(oldtuple, leftoverTuple2, false);
+
+		leftoverTuple2->tts_values[forPortionOf->range_attno - 1] = RangeTypePGetDatum(leftoverRangeType2);
+		leftoverTuple2->tts_isnull[forPortionOf->range_attno - 1] = false;
+
+		ExecMaterializeSlot(leftoverTuple2);
+
+		// TODO: tuple routing?
+		ExecInsert(mtstate, leftoverTuple2, planSlot, estate, node->canSetTag);
+	}
+}
+
 /* ----------------------------------------------------------------
  *		ExecBatchInsert
  *
@@ -1020,6 +1139,8 @@ ExecBatchInsert(ModifyTableState *mtstate,
 	int			numInserted = numSlots;
 	TupleTableSlot *slot = NULL;
 	TupleTableSlot **rslots;
+	ModifyTable *node = (ModifyTable *) mtstate->ps.plan;
+	ForPortionOfExpr *forPortionOf = (ForPortionOfExpr *) node->forPortionOf;
 
 	/*
 	 * insert into foreign table: let the FDW do it
@@ -1362,6 +1483,11 @@ ldelete:;
 		ar_delete_trig_tcs = NULL;
 	}
 
+	/* Compute leftovers in FOR PORTION OF */
+	// TODO: Skip this for FDW deletes?
+	if (forPortionOf)
+		ExecForPortionOfLeftovers(mtstate, estate, resultRelInfo, tupleid, slot, planSlot);
+
 	/* AFTER ROW DELETE Triggers */
 	ExecARDeleteTriggers(estate, resultRelInfo, tupleid, oldtuple,
 						 ar_delete_trig_tcs);
@@ -1614,6 +1740,8 @@ ExecUpdate(ModifyTableState *mtstate,
 	TM_Result	result;
 	TM_FailureData tmfd;
 	List	   *recheckIndexes = NIL;
+	ModifyTable *node = (ModifyTable *) mtstate->ps.plan;
+	ForPortionOfExpr *forPortionOf = (ForPortionOfExpr *) node->forPortionOf;
 
 	/*
 	 * abort the operation if not running transactions
@@ -1942,6 +2070,11 @@ lreplace:;
 
 	if (canSetTag)
 		(estate->es_processed)++;
+
+	/* Compute leftovers in FOR PORTION OF */
+	// TODO: Skip this for FDW updates?
+	if (forPortionOf)
+		ExecForPortionOfLeftovers(mtstate, estate, resultRelInfo, tupleid, slot, planSlot);
 
 	/* AFTER ROW UPDATE Triggers */
 	ExecARUpdateTriggers(estate, resultRelInfo, tupleid, oldtuple, slot,
@@ -3071,12 +3204,27 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 
 		if (isNull) elog(ERROR, "Got a NULL FOR PORTION OF target range");
 
+		/* Create state for FOR PORTION OF operation */
+
 		resultRelInfo->ri_forPortionOf = makeNode(ForPortionOfState);
 		resultRelInfo->ri_forPortionOf->fp_rangeName = forPortionOf->range_name;
 		resultRelInfo->ri_forPortionOf->fp_periodStartName = forPortionOf->period_start_name;
 		resultRelInfo->ri_forPortionOf->fp_periodEndName = forPortionOf->period_end_name;
 		resultRelInfo->ri_forPortionOf->fp_targetRange = targetRange;
 		resultRelInfo->ri_forPortionOf->fp_rangeType = forPortionOf->rangeType;
+
+		/* Initialize slot for the existing tuple */
+
+		resultRelInfo->ri_forPortionOf->fp_Existing =
+			table_slot_create(resultRelInfo->ri_RelationDesc,
+							  &mtstate->ps.state->es_tupleTable);
+
+		/* Create the tuple slots for INSERTing the leftovers */
+
+		resultRelInfo->ri_forPortionOf->fp_Leftover1 =
+			ExecInitExtraTUpleSlot(mtstate->ps.state, tupDesc, &TTSOpsVirtual);
+		resultRelInfo->ri_forPortionOf->fp_Leftover2 =
+			ExecInitExtraTUpleSlot(mtstate->ps.state, tupDesc, &TTSOpsVirtual);
 
 		/* Don't free the ExprContext here because the result must last for the whole query */
 	}

@@ -4260,67 +4260,6 @@ AlterTableInternal(Oid relid, List *cmds, bool recurse, AlterTableUtilityContext
 }
 
 /*
- * CreateTemporalPrimaryKeyTriggers
- *		Create the triggers to perform implicit INSERTs in FOR PORTION OF
- *		queries.
- */
-void
-CreateTemporalPrimaryKeyTriggers(Relation rel, Oid constraintOid, Oid indexOid)
-{
-	CreateTrigStmt *pk_trigger;
-
-	/*
-	 * Build and execute a CREATE TRIGGER statement AFTER UPDATE.
-	 */
-	pk_trigger = makeNode(CreateTrigStmt);
-	pk_trigger->trigname = "PK_TemporalTrigger";
-	pk_trigger->relation = NULL;
-	pk_trigger->row = true;
-	pk_trigger->timing = TRIGGER_TYPE_AFTER;
-	pk_trigger->events = TRIGGER_TYPE_UPDATE;
-	pk_trigger->columns = NIL;
-	pk_trigger->transitionRels = NIL;
-	pk_trigger->whenClause = NULL;
-	pk_trigger->isconstraint = false;
-	pk_trigger->constrrel = NULL;
-	pk_trigger->deferrable = false;
-	pk_trigger->initdeferred = false;
-	pk_trigger->funcname = SystemFuncName("FP_insert_leftovers");
-	pk_trigger->args = NIL;
-
-	(void) CreateTrigger(pk_trigger, NULL, RelationGetRelid(rel), InvalidOid,
-						 constraintOid,
-						 indexOid, InvalidOid, InvalidOid, NULL, true, false);
-
-	/* Make changes-so-far visible */
-	CommandCounterIncrement();
-
-	/*
-	 * Build and execute a CREATE TRIGGER statement AFTER DELETE.
-	 */
-	pk_trigger = makeNode(CreateTrigStmt);
-	pk_trigger->trigname = "PK_TemporalTrigger";
-	pk_trigger->relation = NULL;
-	pk_trigger->row = true;
-	pk_trigger->timing = TRIGGER_TYPE_AFTER;
-	pk_trigger->events = TRIGGER_TYPE_DELETE;
-	pk_trigger->columns = NIL;
-	pk_trigger->transitionRels = NIL;
-	pk_trigger->whenClause = NULL;
-	pk_trigger->isconstraint = false;
-	pk_trigger->constrrel = NULL;
-	pk_trigger->deferrable = false;
-	pk_trigger->initdeferred = false;
-	pk_trigger->funcname = SystemFuncName("FP_insert_leftovers");
-	pk_trigger->args = NIL;
-
-	(void) CreateTrigger(pk_trigger, NULL, RelationGetRelid(rel), InvalidOid,
-						 constraintOid,
-						 indexOid, InvalidOid, InvalidOid, NULL, true, false);
-
-}
-
-/*
  * AlterTableGetLockLevel
  *
  * Sets the overall lock level required for the supplied list of subcommands.
@@ -9235,9 +9174,6 @@ ATExecAddIndexConstraint(AlteredTableInfo *tab, Relation rel,
 									  flags,
 									  allowSystemTableMods,
 									  false);	/* is_internal */
-
-	if (stmt->primary && stmt->istemporal)
-		CreateTemporalPrimaryKeyTriggers(rel, address.objectId, index_oid);
 
 	index_close(indexRel, NoLock);
 

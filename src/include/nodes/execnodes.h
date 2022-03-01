@@ -405,6 +405,11 @@ typedef struct ForPortionOfState
 	char   *fp_periodStartName;	/* the PERIOD's start column */
 	char   *fp_periodEndName;	/* the PERIOD's end column */
 	Datum	fp_targetRange;		/* the range from FOR PORTION OF */
+	TypeCacheEntry *fp_rangetypcache;	/* type cache entry of the range */
+	RangeType	   *fp_targetRange;		/* the range from FOR PORTION OF */
+	TupleTableSlot *fp_Existing;		/* slot to store existing target tuple in */
+	TupleTableSlot *fp_Leftover1;		/* slot to store leftover below the target range */
+	TupleTableSlot *fp_Leftover2;		/* slot to store leftover above the target range */
 } ForPortionOfState;
 
 /*
