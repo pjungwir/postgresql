@@ -300,35 +300,7 @@ build_period_range(const RI_ConstraintInfo *riinfo, TupleTableSlot *slot, bool r
 {
 	const int16 *period_attnums = rel_is_pk ? riinfo->pk_period_attnums : riinfo->fk_period_attnums;
 	Oid	rangetype = rel_is_pk ? riinfo->pk_period_rangetype : riinfo->fk_period_rangetype;
-	Datum startvalue;
-	Datum endvalue;
-	Datum result;
-	bool	startisnull;
-	bool	endisnull;
-	LOCAL_FCINFO(fcinfo, 2);
-	FmgrInfo	flinfo;
-	FuncExpr   *f;
-
-	InitFunctionCallInfoData(*fcinfo, &flinfo, 2, InvalidOid, NULL, NULL);
-	f = makeNode(FuncExpr);
-	f->funcresulttype = rangetype;
-	flinfo.fn_expr = (Node *) f;
-	flinfo.fn_extra = NULL;
-
-	/* compute oldvalue */
-	startvalue = slot_getattr(slot, period_attnums[0], &startisnull);
-	endvalue = slot_getattr(slot, period_attnums[1], &endisnull);
-
-	fcinfo->args[0].value = startvalue;
-	fcinfo->args[0].isnull = startisnull;
-	fcinfo->args[1].value = endvalue;
-	fcinfo->args[1].isnull = endisnull;
-
-	result = range_constructor2(fcinfo);
-	if (fcinfo->isnull)
-		elog(ERROR, "function %u returned NULL", flinfo.fn_oid);
-
-	return result;
+	return period_to_range(slot, period_attnums[0], period_attnums[1], rangetype);
 }
 
 /*
