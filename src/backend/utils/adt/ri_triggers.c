@@ -50,6 +50,7 @@
 #include "utils/inval.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
+#include "utils/period.h"
 #include "utils/rel.h"
 #include "utils/rls.h"
 #include "utils/ruleutils.h"
@@ -3443,7 +3444,7 @@ ri_ExtractValues(Relation rel, TupleTableSlot *slot,
 
 	for (int i = 0; i < riinfo->nkeys; i++)
 	{
-		if (attnums[i] != InvalidOid)
+		if (attnums[i] != InvalidAttrNumber)
 		{
 			vals[i] = slot_getattr(slot, attnums[i], &isnull);
 			nulls[i] = isnull ? 'n' : ' ';
@@ -4087,7 +4088,7 @@ tupleRange(TupleTableSlot *slot, const RI_ConstraintInfo *riinfo)
 	bool	isnull;
 	int16	attnum = riinfo->pk_attnums[riinfo->nkeys - 1];
 
-	if (attnum == InvalidOid)
+	if (attnum == InvalidAttrNumber)
 		/* Build a range from the PERIOD start and end columns */
 		return build_period_range(riinfo, slot, true);
 	else

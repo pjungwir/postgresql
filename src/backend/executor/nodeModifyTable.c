@@ -51,6 +51,7 @@
 #include "utils/builtins.h"
 #include "utils/datum.h"
 #include "utils/memutils.h"
+#include "utils/period.h"
 #include "utils/rangetypes.h"
 #include "utils/lsyscache.h"
 #include "utils/rel.h"
@@ -999,7 +1000,54 @@ ExecInsert(ModifyTableState *mtstate,
 	return result;
 }
 
-/*
+/* ----------------------------------------------------------------
+ *		set_leftover_tuple_bounds
+ *
+ *		Saves the new bounds into either the range attribute or the
+ *		PERIOD start/end attributes.
+ * ----------------------------------------------------------------
+ */
+static void set_leftover_tuple_bounds(TupleTableSlot *leftoverTuple,
+									  ForPortionOfExpr *forPortionOf,
+									  TypeCacheEntry *typcache,
+									  RangeType *leftoverRangeType)
+{
+	if (forPortionOf->range_attno == InvalidAttrNumber)
+	{
+		/* Store the lower/upper bounds to the PERIOD start/end cols */
+
+		RangeBound	lower;
+		RangeBound	upper;
+		bool		empty;
+
+		range_deserialize(typcache, leftoverRangeType, &lower, &upper, &empty);
+
+		if (empty || lower.infinite)
+			leftoverTuple->tts_isnull[forPortionOf->start_attno - 1] = true;
+		else
+		{
+			leftoverTuple->tts_values[forPortionOf->start_attno - 1] = lower.val;
+			leftoverTuple->tts_isnull[forPortionOf->start_attno - 1] = false;
+		}
+
+		if (empty || upper.infinite)
+			leftoverTuple->tts_isnull[forPortionOf->end_attno - 1] = true;
+		else
+		{
+			leftoverTuple->tts_values[forPortionOf->end_attno - 1] = upper.val;
+			leftoverTuple->tts_isnull[forPortionOf->end_attno - 1] = false;
+		}
+	}
+	else
+	{
+		/* Store the range directly */
+
+		leftoverTuple->tts_values[forPortionOf->range_attno - 1] = RangeTypePGetDatum(leftoverRangeType);
+		leftoverTuple->tts_isnull[forPortionOf->range_attno - 1] = false;
+	}
+
+}
+
 /* ----------------------------------------------------------------
  *		ExecForPortionOfLeftovers
  *
@@ -1020,13 +1068,12 @@ ExecForPortionOfLeftovers(ModifyTableState *mtstate,
 	ModifyTable *node = (ModifyTable *) mtstate->ps.plan;
 	ForPortionOfExpr *forPortionOf = (ForPortionOfExpr *) node->forPortionOf;
 	Datum oldRange;
-	Datum targetRange;
 	RangeType *oldRangeType;
 	RangeType *targetRangeType;
 	RangeType *leftoverRangeType1;
 	RangeType *leftoverRangeType2;
-	Oid rangeTypeOid;
-	bool isNull;
+	Oid rangeTypeOid = forPortionOf->rangeType;
+	bool isNull = false;
 	TypeCacheEntry *typcache;
 	TupleTableSlot *oldtupleSlot = resultRelInfo->ri_forPortionOf->fp_Existing;
 	TupleTableSlot *leftoverTuple1 = resultRelInfo->ri_forPortionOf->fp_Leftover1;
@@ -1042,28 +1089,18 @@ ExecForPortionOfLeftovers(ModifyTableState *mtstate,
 	if (!table_tuple_fetch_row_version(resultRelInfo->ri_RelationDesc, tupleid, SnapshotAny, oldtupleSlot))
 		elog(ERROR, "failed to fetch tuple for FOR PORTION OF");
 
-	oldRange = slot_getattr(oldtupleSlot, forPortionOf->range_attno, &isNull);
+	if (forPortionOf->range_attno == InvalidAttrNumber)
+		oldRange = period_to_range(oldtupleSlot, forPortionOf->start_attno, forPortionOf->end_attno, rangeTypeOid);
+	else
+		oldRange = slot_getattr(oldtupleSlot, forPortionOf->range_attno, &isNull);
+
 	if (isNull)
 		elog(ERROR, "found a NULL range in a temporal table");
 	oldRangeType = DatumGetRangeTypeP(oldRange);
 
 	/* Evaluate the target range if we haven't yet */
 
-	if (resultRelInfo->ri_forPortionOf->fp_targetRange)
-		targetRangeType = resultRelInfo->ri_forPortionOf->fp_targetRange;
-	else
-	{
-		ExprContext *econtext = GetPerTupleExprContext(estate);
-		econtext->ecxt_scantuple = slot;
-
-		ExprState *exprState = ExecPrepareExpr((Expr *) forPortionOf->targetRange, estate);
-		targetRange = ExecEvalExpr(exprState, econtext, &isNull);
-
-		if (isNull)
-			elog(ERROR, "Got a NULL FOR PORTION OF target range");
-		targetRangeType = DatumGetRangeTypeP(targetRange);
-		resultRelInfo->ri_forPortionOf->fp_targetRange = targetRangeType;
-	}
+	targetRangeType = DatumGetRangeTypeP(resultRelInfo->ri_forPortionOf->fp_targetRange);
 
 	/*
 	 * Get the range's type cache entry. This is worth caching for the whole UPDATE
@@ -1073,9 +1110,8 @@ ExecForPortionOfLeftovers(ModifyTableState *mtstate,
 	typcache = resultRelInfo->ri_forPortionOf->fp_rangetypcache;
 	if (typcache == NULL)
 	{
-		rangeTypeOid = RangeTypeGetOid(oldRangeType);
 		typcache = lookup_type_cache(rangeTypeOid, TYPECACHE_RANGE_INFO);
-		if (typcache->rngeletype == NULL)
+		if (typcache->rngelemtype == NULL)
 			elog(ERROR, "type %u is not a range type", rangeTypeOid);
 		resultRelInfo->ri_forPortionOf->fp_rangetypcache = typcache;
 	}
@@ -1085,36 +1121,38 @@ ExecForPortionOfLeftovers(ModifyTableState *mtstate,
 	range_leftover_internal(typcache, oldRangeType, targetRangeType, &leftoverRangeType1,
 			&leftoverRangeType2);
 
-	/* Insert a copy of the tuple with the lower leftover range */
+	/*
+	 * Insert a copy of the tuple with the lower leftover range.
+	 * Even if the table is partitioned,
+	 * our insert won't extend past the current row, so we don't need to re-route.
+	 */
 
 	if (!RangeIsEmpty(leftoverRangeType1))
 	{
 		MinimalTuple oldtuple = ExecFetchSlotMinimalTuple(oldtupleSlot, NULL);
 		ExecForceStoreMinimalTuple(oldtuple, leftoverTuple1, false);
 
-		leftoverTuple1->tts_values[forPortionOf->range_attno - 1] = RangeTypePGetDatum(leftoverRangeType1);
-		leftoverTuple1->tts_isnull[forPortionOf->range_attno - 1] = false;
-
+		set_leftover_tuple_bounds(leftoverTuple1, forPortionOf, typcache, leftoverRangeType1);
 		ExecMaterializeSlot(leftoverTuple1);
 
-		// TODO: tuple routing?
-		ExecInsert(mtstate, leftoverTuple1, planSlot, estate, node->canSetTag);
+		ExecInsert(mtstate, resultRelInfo, leftoverTuple1, planSlot, estate, node->canSetTag);
 	}
 
-	/* Insert a copy of the tuple with the upper leftover range */
+	/*
+	 * Insert a copy of the tuple with the upper leftover range
+	 * Even if the table is partitioned,
+	 * our insert won't extend past the current row, so we don't need to re-route.
+	 */
 
 	if (!RangeIsEmpty(leftoverRangeType2))
 	{
 		MinimalTuple oldtuple = ExecFetchSlotMinimalTuple(oldtupleSlot, NULL);
 		ExecForceStoreMinimalTuple(oldtuple, leftoverTuple2, false);
 
-		leftoverTuple2->tts_values[forPortionOf->range_attno - 1] = RangeTypePGetDatum(leftoverRangeType2);
-		leftoverTuple2->tts_isnull[forPortionOf->range_attno - 1] = false;
-
+		set_leftover_tuple_bounds(leftoverTuple2, forPortionOf, typcache, leftoverRangeType2);
 		ExecMaterializeSlot(leftoverTuple2);
 
-		// TODO: tuple routing?
-		ExecInsert(mtstate, leftoverTuple2, planSlot, estate, node->canSetTag);
+		ExecInsert(mtstate, resultRelInfo, leftoverTuple2, planSlot, estate, node->canSetTag);
 	}
 }
 
@@ -1139,8 +1177,6 @@ ExecBatchInsert(ModifyTableState *mtstate,
 	int			numInserted = numSlots;
 	TupleTableSlot *slot = NULL;
 	TupleTableSlot **rslots;
-	ModifyTable *node = (ModifyTable *) mtstate->ps.plan;
-	ForPortionOfExpr *forPortionOf = (ForPortionOfExpr *) node->forPortionOf;
 
 	/*
 	 * insert into foreign table: let the FDW do it
@@ -1219,6 +1255,8 @@ ExecDelete(ModifyTableState *mtstate,
 	TM_FailureData tmfd;
 	TupleTableSlot *slot = NULL;
 	TransitionCaptureState *ar_delete_trig_tcs;
+	ModifyTable *node = (ModifyTable *) mtstate->ps.plan;
+	ForPortionOfExpr *forPortionOf = (ForPortionOfExpr *) node->forPortionOf;
 
 	if (tupleDeleted)
 		*tupleDeleted = false;
@@ -3188,6 +3226,7 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 	 */
 	if (node->forPortionOf)
 	{
+		TupleDesc tupDesc = resultRelInfo->ri_RelationDesc->rd_att;
 		ForPortionOfExpr *forPortionOf = (ForPortionOfExpr *) node->forPortionOf;
 		Datum	targetRange;
 		bool	isNull;
@@ -3201,8 +3240,8 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 
 		exprState = ExecPrepareExpr((Expr *) forPortionOf->targetRange, estate);
 		targetRange = ExecEvalExpr(exprState, econtext, &isNull);
-
-		if (isNull) elog(ERROR, "Got a NULL FOR PORTION OF target range");
+		if (isNull)
+			elog(ERROR, "Got a NULL FOR PORTION OF target range");
 
 		/* Create state for FOR PORTION OF operation */
 
@@ -3210,7 +3249,7 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 		resultRelInfo->ri_forPortionOf->fp_rangeName = forPortionOf->range_name;
 		resultRelInfo->ri_forPortionOf->fp_periodStartName = forPortionOf->period_start_name;
 		resultRelInfo->ri_forPortionOf->fp_periodEndName = forPortionOf->period_end_name;
-		resultRelInfo->ri_forPortionOf->fp_targetRange = targetRange;
+		resultRelInfo->ri_forPortionOf->fp_targetRange = RangeTypePGetDatum(targetRange);
 		resultRelInfo->ri_forPortionOf->fp_rangeType = forPortionOf->rangeType;
 
 		/* Initialize slot for the existing tuple */
@@ -3222,9 +3261,9 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 		/* Create the tuple slots for INSERTing the leftovers */
 
 		resultRelInfo->ri_forPortionOf->fp_Leftover1 =
-			ExecInitExtraTUpleSlot(mtstate->ps.state, tupDesc, &TTSOpsVirtual);
+			ExecInitExtraTupleSlot(mtstate->ps.state, tupDesc, &TTSOpsVirtual);
 		resultRelInfo->ri_forPortionOf->fp_Leftover2 =
-			ExecInitExtraTUpleSlot(mtstate->ps.state, tupDesc, &TTSOpsVirtual);
+			ExecInitExtraTupleSlot(mtstate->ps.state, tupDesc, &TTSOpsVirtual);
 
 		/* Don't free the ExprContext here because the result must last for the whole query */
 	}
