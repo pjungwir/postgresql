@@ -3464,7 +3464,6 @@ rewriteTargetView(Query *parsetree, Relation view)
 		 * auxiliary UPDATE targetlist to refer to columns of the base
 		 * relation.
 		 */
-		// TODO: Does this really do anything? Anyway it's probably wrong because I don't think we've changed the Vars' rte or attno
 		foreach(lc, parsetree->forPortionOf->rangeSet)
 		{
 			TargetEntry *tle = (TargetEntry *) lfirst(lc);
