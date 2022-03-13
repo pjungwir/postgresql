@@ -518,9 +518,9 @@ _readForPortionOfExpr(void)
 {
 	READ_LOCALS(ForPortionOfExpr);
 
-	READ_INT_FIELD(range_attno);
-	READ_INT_FIELD(start_attno);
-	READ_INT_FIELD(end_attno);
+	READ_NODE_FIELD(rangeVar);
+	READ_NODE_FIELD(startVar);
+	READ_NODE_FIELD(endVar);
 	READ_STRING_FIELD(range_name);
 	READ_STRING_FIELD(period_start_name);
 	READ_STRING_FIELD(period_end_name);

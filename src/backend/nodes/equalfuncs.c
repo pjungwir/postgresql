@@ -844,9 +844,9 @@ _equalOnConflictExpr(const OnConflictExpr *a, const OnConflictExpr *b)
 static bool
 _equalForPortionOfExpr(const ForPortionOfExpr *a, const ForPortionOfExpr *b)
 {
-	COMPARE_SCALAR_FIELD(range_attno);
-	COMPARE_SCALAR_FIELD(start_attno);
-	COMPARE_SCALAR_FIELD(end_attno);
+	COMPARE_NODE_FIELD(rangeVar);
+	COMPARE_NODE_FIELD(startVar);
+	COMPARE_NODE_FIELD(endVar);
 	COMPARE_STRING_FIELD(range_name);
 	COMPARE_STRING_FIELD(period_start_name);
 	COMPARE_STRING_FIELD(period_end_name);

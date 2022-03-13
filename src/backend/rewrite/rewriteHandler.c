@@ -3809,7 +3809,7 @@ RewriteQuery(Query *parsetree, List *rewrite_events)
 		{
 			/*
 			 * Update FOR PORTION OF column(s) automatically.
-			 * Don't do this until we're still rewriting a view update,
+			 * Don't do this until we're done rewriting a view update,
 			 * so that we don't add the same update on the recursion.
 			 */
 			if (parsetree->forPortionOf && rt_entry_relation->rd_rel->relkind != RELKIND_VIEW)

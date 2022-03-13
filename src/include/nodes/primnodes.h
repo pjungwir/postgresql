@@ -1603,9 +1603,9 @@ typedef struct OnConflictExpr
 typedef struct ForPortionOfExpr
 {
 	NodeTag		type;
-	int			range_attno;		/* Range column number */
-	int			start_attno;		/* PERIOD start column number */
-	int			end_attno;			/* PERIOD end column number */
+	Var		   *rangeVar;			/* Range column */
+	Var		   *startVar;			/* PERIOD start column */
+	Var		   *endVar;				/* PERIOD end column */
 	char	   *range_name;			/* Range or PERIOD name */
 	char	   *period_start_name;	/* PERIOD start column name */
 	char	   *period_end_name;	/* PERIOD end column name */

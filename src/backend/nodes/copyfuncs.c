@@ -2304,9 +2304,9 @@ _copyForPortionOfExpr(const ForPortionOfExpr *from)
 {
 	ForPortionOfExpr *newnode = makeNode(ForPortionOfExpr);
 
-	COPY_SCALAR_FIELD(range_attno);
-	COPY_SCALAR_FIELD(start_attno);
-	COPY_SCALAR_FIELD(end_attno);
+	COPY_NODE_FIELD(rangeVar);
+	COPY_NODE_FIELD(startVar);
+	COPY_NODE_FIELD(endVar);
 	COPY_STRING_FIELD(range_name);
 	COPY_STRING_FIELD(period_start_name);
 	COPY_STRING_FIELD(period_end_name);

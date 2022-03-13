@@ -1338,6 +1338,8 @@ insert into uv_fpo_view (id, valid_at, b) values ('[1,1]', '[2010-01-01, 2020-01
 select * from uv_fpo_view;
 update uv_fpo_view for portion of valid_at from '2015-01-01' to '2020-01-01' set b = 2 where id = '[1,1]';
 select * from uv_fpo_view;
+delete from uv_fpo_view for portion of valid_at from '2017-01-01' to '2022-01-01' where id = '[1,1]';
+select * from uv_fpo_view;
 
 -- Test whole-row references to the view
 create table uv_iocu_tab (a int unique, b text);

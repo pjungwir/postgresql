@@ -1012,7 +1012,7 @@ static void set_leftover_tuple_bounds(TupleTableSlot *leftoverTuple,
 									  TypeCacheEntry *typcache,
 									  RangeType *leftoverRangeType)
 {
-	if (forPortionOf->range_attno == InvalidAttrNumber)
+	if (forPortionOf->rangeVar == NULL)
 	{
 		/* Store the lower/upper bounds to the PERIOD start/end cols */
 
@@ -1023,27 +1023,27 @@ static void set_leftover_tuple_bounds(TupleTableSlot *leftoverTuple,
 		range_deserialize(typcache, leftoverRangeType, &lower, &upper, &empty);
 
 		if (empty || lower.infinite)
-			leftoverTuple->tts_isnull[forPortionOf->start_attno - 1] = true;
+			leftoverTuple->tts_isnull[forPortionOf->startVar->varattno - 1] = true;
 		else
 		{
-			leftoverTuple->tts_values[forPortionOf->start_attno - 1] = lower.val;
-			leftoverTuple->tts_isnull[forPortionOf->start_attno - 1] = false;
+			leftoverTuple->tts_values[forPortionOf->startVar->varattno - 1] = lower.val;
+			leftoverTuple->tts_isnull[forPortionOf->startVar->varattno - 1] = false;
 		}
 
 		if (empty || upper.infinite)
-			leftoverTuple->tts_isnull[forPortionOf->end_attno - 1] = true;
+			leftoverTuple->tts_isnull[forPortionOf->endVar->varattno - 1] = true;
 		else
 		{
-			leftoverTuple->tts_values[forPortionOf->end_attno - 1] = upper.val;
-			leftoverTuple->tts_isnull[forPortionOf->end_attno - 1] = false;
+			leftoverTuple->tts_values[forPortionOf->endVar->varattno - 1] = upper.val;
+			leftoverTuple->tts_isnull[forPortionOf->endVar->varattno - 1] = false;
 		}
 	}
 	else
 	{
 		/* Store the range directly */
 
-		leftoverTuple->tts_values[forPortionOf->range_attno - 1] = RangeTypePGetDatum(leftoverRangeType);
-		leftoverTuple->tts_isnull[forPortionOf->range_attno - 1] = false;
+		leftoverTuple->tts_values[forPortionOf->rangeVar->varattno - 1] = RangeTypePGetDatum(leftoverRangeType);
+		leftoverTuple->tts_isnull[forPortionOf->rangeVar->varattno - 1] = false;
 	}
 
 }
@@ -1089,10 +1089,12 @@ ExecForPortionOfLeftovers(ModifyTableState *mtstate,
 	if (!table_tuple_fetch_row_version(resultRelInfo->ri_RelationDesc, tupleid, SnapshotAny, oldtupleSlot))
 		elog(ERROR, "failed to fetch tuple for FOR PORTION OF");
 
-	if (forPortionOf->range_attno == InvalidAttrNumber)
-		oldRange = period_to_range(oldtupleSlot, forPortionOf->start_attno, forPortionOf->end_attno, rangeTypeOid);
+	// TODO: Can't we just eval the expr in node->forPortionOf->range??
+	if (forPortionOf->rangeVar == NULL)
+		oldRange = period_to_range(oldtupleSlot, forPortionOf->startVar->varattno, forPortionOf->endVar->varattno, rangeTypeOid);
 	else
-		oldRange = slot_getattr(oldtupleSlot, forPortionOf->range_attno, &isNull);
+		oldRange = slot_getattr(oldtupleSlot, forPortionOf->rangeVar->varattno, &isNull);
+
 
 	if (isNull)
 		elog(ERROR, "found a NULL range in a temporal table");

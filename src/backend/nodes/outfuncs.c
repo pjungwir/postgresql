@@ -1754,9 +1754,9 @@ _outForPortionOfExpr(StringInfo str, const ForPortionOfExpr *node)
 {
 	WRITE_NODE_TYPE("FORPORTIONOFEXPR");
 
-	WRITE_INT_FIELD(range_attno);
-	WRITE_INT_FIELD(start_attno);
-	WRITE_INT_FIELD(end_attno);
+	WRITE_NODE_FIELD(rangeVar);
+	WRITE_NODE_FIELD(startVar);
+	WRITE_NODE_FIELD(endVar);
 	WRITE_STRING_FIELD(range_name);
 	WRITE_STRING_FIELD(period_start_name);
 	WRITE_STRING_FIELD(period_end_name);

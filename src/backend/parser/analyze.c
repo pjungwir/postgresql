@@ -1242,6 +1242,9 @@ transformForPortionOfClause(ParseState *pstate,
 				attr->attcollation,
 				0);
 		v->location = forPortionOf->range_name_location;
+		result->rangeVar = copyObject(v);
+		result->startVar = NULL;
+		result->endVar = NULL;
 		result->range = (Expr *) v;
 		result->rangeType = attr->atttypid;
 		range_type_name = get_typname(attr->atttypid);
@@ -1296,6 +1299,9 @@ transformForPortionOfClause(ParseState *pstate,
 								list_make2(startvar, endvar),
 								COERCE_EXPLICIT_CALL,
 								forPortionOf->range_name_location);
+			result->rangeVar = NULL;
+			result->startVar = copyObject(startvar);
+			result->endVar = copyObject(endvar);
 			result->range = (Expr *) periodRange;
 			result->rangeType = typenameTypeId(pstate, typeStringToTypeName(range_type_name));
 		}
@@ -1416,9 +1422,6 @@ transformForPortionOfClause(ParseState *pstate,
 		result->rangeSet = NIL;
 
 	result->range_name = range_name;
-	result->range_attno = range_attno;
-	result->start_attno = start_attno;
-	result->end_attno = end_attno;
 
 	return result;
 }
@@ -2750,9 +2753,9 @@ transformUpdateTargetList(ParseState *pstate, List *origTlist, ForPortionOfExpr 
 		 */
 		if (forPortionOf != NULL)
 		{
-			if (forPortionOf->range_attno != InvalidAttrNumber)
+			if (forPortionOf->rangeVar != NULL)
 			{
-				if (attrno == forPortionOf->range_attno)
+				if (attrno == forPortionOf->rangeVar->varattno)
 					ereport(ERROR,
 							(errcode(ERRCODE_SYNTAX_ERROR),
 							 errmsg("can't directly assign to \"%s\" in a FOR PORTION OF update",
@@ -2761,7 +2764,7 @@ transformUpdateTargetList(ParseState *pstate, List *origTlist, ForPortionOfExpr 
 			}
 			else
 			{
-				if (attrno == forPortionOf->start_attno || attrno == forPortionOf->end_attno)
+				if (attrno == forPortionOf->startVar->varattno || attrno == forPortionOf->endVar->varattno)
 					ereport(ERROR,
 							(errcode(ERRCODE_SYNTAX_ERROR),
 							 errmsg("can't directly assign to \"%s\" in a FOR PORTION OF update",
