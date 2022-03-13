@@ -2668,6 +2668,12 @@ toyemp| SELECT emp.name,
     emp.location,
     (12 * emp.salary) AS annualsal
    FROM emp;
+uv_fpo_view| SELECT uv_fpo_tab.b,
+    (uv_fpo_tab.b + (1)::double precision) AS c,
+    uv_fpo_tab.valid_at,
+    uv_fpo_tab.id,
+    '2.0'::text AS two
+   FROM uv_fpo_tab;
 SELECT tablename, rulename, definition FROM pg_rules
 WHERE schemaname IN ('pg_catalog', 'public')
 ORDER BY tablename, rulename;

@@ -845,12 +845,12 @@ static bool
 _equalForPortionOfExpr(const ForPortionOfExpr *a, const ForPortionOfExpr *b)
 {
 	COMPARE_SCALAR_FIELD(range_attno);
+	COMPARE_SCALAR_FIELD(start_attno);
+	COMPARE_SCALAR_FIELD(end_attno);
 	COMPARE_STRING_FIELD(range_name);
+	COMPARE_STRING_FIELD(period_start_name);
+	COMPARE_STRING_FIELD(period_end_name);
 	COMPARE_NODE_FIELD(range);
-	COMPARE_NODE_FIELD(startCol);
-	COMPARE_NODE_FIELD(endCol);
-	COMPARE_NODE_FIELD(targetStart);
-	COMPARE_NODE_FIELD(targetEnd);
 	COMPARE_NODE_FIELD(targetRange);
 	COMPARE_SCALAR_FIELD(rangeType);
 	COMPARE_NODE_FIELD(overlapsExpr);

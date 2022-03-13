@@ -1595,7 +1595,9 @@ typedef struct OnConflictExpr
 /*----------
  * ForPortionOfExpr - represents a FOR PORTION OF ... expression
  *
- * TODO: more notes as needed
+ * The contents here will vary depending on whether we are targeting a range
+ * column or a PERIOD. For PERIODs we hold extra info about the start/end
+ * columns.
  *----------
  */
 typedef struct ForPortionOfExpr
@@ -1604,16 +1606,11 @@ typedef struct ForPortionOfExpr
 	int			range_attno;		/* Range column number */
 	int			start_attno;		/* PERIOD start column number */
 	int			end_attno;			/* PERIOD end column number */
-	char	   *range_name;			/* Range name */
+	char	   *range_name;			/* Range or PERIOD name */
 	char	   *period_start_name;	/* PERIOD start column name */
 	char	   *period_end_name;	/* PERIOD end column name */
-	Expr	   *range;				/* Range column or expression */
-	// TODO: I do really use all these fields?:
-	Node	   *startCol;			/* Start column if using a PERIOD */
-	Node	   *endCol;				/* End column if using a PERIOD */
-	Node	   *targetStart;		/* Same type as the range's elements */
-	Node	   *targetEnd;			/* Same type as the range's elements */
-	Node	   *targetRange;		/* A range from targetStart to targetEnd */
+	Expr	   *range;				/* Range column, or expression from PERIOD cols */
+	Node	   *targetRange;		/* FOR PORTION OF bounds as a range */
 	Oid			rangeType;			/* type of targetRange */
 	Node	   *overlapsExpr;		/* range && targetRange */
 	List	   *rangeSet;			/* List of TargetEntrys to set the time column(s) */

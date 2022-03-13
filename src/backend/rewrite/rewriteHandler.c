@@ -1082,6 +1082,7 @@ process_matched_tle(TargetEntry *src_tle,
 	if (src_input == NULL ||
 		prior_input == NULL ||
 		exprType(src_expr) != exprType(prior_expr))
+		// TODO: hitting this with our updateable view. Why?
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
 				 errmsg("multiple assignments to same column \"%s\"",
@@ -3095,7 +3096,7 @@ rewriteTargetView(Query *parsetree, Relation view)
 	 * we get the modified columns from the query's targetlist, not from the
 	 * result RTE's insertedCols and/or updatedCols set, since
 	 * rewriteTargetListIU may have added additional targetlist entries for
-	 * view defaults, and these must also be updatable.
+	 * view defaults and FOR PORTION OF, and these must also be updatable.
 	 */
 	if (parsetree->commandType != CMD_DELETE)
 	{
@@ -3123,10 +3124,11 @@ rewriteTargetView(Query *parsetree, Relation view)
 			}
 		}
 
-		// TODO: The test suite isn't running this yet.
-		// Need a test for FPO and updateable views.
+#ifdef false
+		// We don't need this because we already added them to the targetList
 		if (parsetree->forPortionOf)
 		{
+			/* Mark the columns as modified. */
 			foreach(lc, parsetree->forPortionOf->rangeSet)
 			{
 				TargetEntry *tle = (TargetEntry *) lfirst(lc);
@@ -3136,6 +3138,7 @@ rewriteTargetView(Query *parsetree, Relation view)
 												   tle->resno - FirstLowInvalidHeapAttributeNumber);
 			}
 		}
+#endif
 
 		auto_update_detail = view_cols_are_auto_updatable(viewquery,
 														  modified_cols,
@@ -3452,6 +3455,31 @@ rewriteTargetView(Query *parsetree, Relation view)
 									  REPLACEVARS_REPORT_ERROR,
 									  0,
 									  &parsetree->hasSubLinks);
+	}
+
+	if (parsetree->forPortionOf && parsetree->commandType == CMD_UPDATE)
+	{
+		/*
+		 * Like the INSERT/UPDATE code above, update the resnos in the
+		 * auxiliary UPDATE targetlist to refer to columns of the base
+		 * relation.
+		 */
+		// TODO: Does this really do anything? Anyway it's probably wrong because I don't think we've changed the Vars' rte or attno
+		foreach(lc, parsetree->forPortionOf->rangeSet)
+		{
+			TargetEntry *tle = (TargetEntry *) lfirst(lc);
+			TargetEntry *view_tle;
+
+			if (tle->resjunk)
+				continue;
+
+			view_tle = get_tle_by_resno(view_targetlist, tle->resno);
+			if (view_tle != NULL && !view_tle->resjunk && IsA(view_tle->expr, Var))
+				tle->resno = ((Var *) view_tle->expr)->varattno;
+			else
+				elog(ERROR, "attribute number %d not found in view targetlist",
+					 tle->resno);
+		}
 	}
 
 	/*
@@ -3779,15 +3807,31 @@ RewriteQuery(Query *parsetree, List *rewrite_events)
 		}
 		else if (event == CMD_UPDATE)
 		{
-			/* Update FOR PORTION OF column(s) automatically */
-			if (parsetree->forPortionOf)
+			/*
+			 * Update FOR PORTION OF column(s) automatically.
+			 * Don't do this until we're still rewriting a view update,
+			 * so that we don't add the same update on the recursion.
+			 */
+			if (parsetree->forPortionOf && rt_entry_relation->rd_rel->relkind != RELKIND_VIEW)
 			{
 				ListCell *tl;
+				/*
+				parsetree->forPortionOf->rangeSet =
+					rewriteTargetListIU(parsetree->forPortionOf->rangeSet,
+										CMD_UPDATE,
+										parsetree->override,
+										rt_entry_relation,
+										NULL, 0, NULL);
+										*/
 				foreach(tl, parsetree->forPortionOf->rangeSet)
 				{
 					TargetEntry *tle = (TargetEntry *) lfirst(tl);
 					parsetree->targetList = lappend(parsetree->targetList, tle);
 				}
+				// TODO: So we added things to the targetList, but we didn't update rangeSet itself. We need to do that too, right?
+				//       But doesn't the view rewriter do that? Why are we doing it here too?
+				//       Well we need to run this even when there are no views.
+				// TODO: We should update {range,start,end}_attno, or perhaps change them to Nodes so we can do it automatically.
 			}
 			parsetree->targetList =
 				rewriteTargetListIU(parsetree->targetList,

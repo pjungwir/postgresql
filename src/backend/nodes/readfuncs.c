@@ -510,6 +510,28 @@ _readAlias(void)
 	READ_DONE();
 }
 
+/*
+ * _readForPortionOfExpr
+ */
+static ForPortionOfExpr *
+_readForPortionOfExpr(void)
+{
+	READ_LOCALS(ForPortionOfExpr);
+
+	READ_INT_FIELD(range_attno);
+	READ_INT_FIELD(start_attno);
+	READ_INT_FIELD(end_attno);
+	READ_STRING_FIELD(range_name);
+	READ_STRING_FIELD(period_start_name);
+	READ_STRING_FIELD(period_end_name);
+	READ_NODE_FIELD(range);
+	READ_NODE_FIELD(targetRange);
+	READ_OID_FIELD(rangeType);
+	READ_NODE_FIELD(overlapsExpr);
+	READ_NODE_FIELD(rangeSet);
+	READ_DONE();
+}
+
 static RangeVar *
 _readRangeVar(void)
 {
@@ -1421,28 +1443,6 @@ _readAppendRelInfo(void)
 /*
  *	Stuff from parsenodes.h.
  */
-
-/*
- * _readForPortionOfExpr
- */
-static ForPortionOfExpr *
-_readForPortionOfExpr(void)
-{
-	READ_LOCALS(ForPortionOfExpr);
-
-	READ_INT_FIELD(range_attno);
-	READ_STRING_FIELD(range_name);
-	READ_NODE_FIELD(range);
-	READ_NODE_FIELD(startCol);
-	READ_NODE_FIELD(endCol);
-	READ_NODE_FIELD(targetStart);
-	READ_NODE_FIELD(targetEnd);
-	READ_NODE_FIELD(targetRange);
-	READ_OID_FIELD(rangeType);
-	READ_NODE_FIELD(overlapsExpr);
-	READ_NODE_FIELD(rangeSet);
-	READ_DONE();
-}
 
 /*
  * _readRangeTblEntry
@@ -2770,6 +2770,8 @@ parseNodeString(void)
 		return_value = _readSetOperationStmt();
 	else if (MATCH("ALIAS", 5))
 		return_value = _readAlias();
+	else if (MATCH("FORPORTIONOFEXPR", 16))
+		return_value = _readForPortionOfExpr();
 	else if (MATCH("RANGEVAR", 8))
 		return_value = _readRangeVar();
 	else if (MATCH("INTOCLAUSE", 10))
@@ -2870,8 +2872,6 @@ parseNodeString(void)
 		return_value = _readAppendRelInfo();
 	else if (MATCH("RANGETBLENTRY", 13))
 		return_value = _readRangeTblEntry();
-	else if (MATCH("FORPORTIONOFEXPR", 16))
-		return_value = _readForPortionOfExpr();
 	else if (MATCH("RANGETBLFUNCTION", 16))
 		return_value = _readRangeTblFunction();
 	else if (MATCH("TABLESAMPLECLAUSE", 17))

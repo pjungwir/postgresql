@@ -1755,12 +1755,12 @@ _outForPortionOfExpr(StringInfo str, const ForPortionOfExpr *node)
 	WRITE_NODE_TYPE("FORPORTIONOFEXPR");
 
 	WRITE_INT_FIELD(range_attno);
+	WRITE_INT_FIELD(start_attno);
+	WRITE_INT_FIELD(end_attno);
 	WRITE_STRING_FIELD(range_name);
+	WRITE_STRING_FIELD(period_start_name);
+	WRITE_STRING_FIELD(period_end_name);
 	WRITE_NODE_FIELD(range);
-	WRITE_NODE_FIELD(startCol);
-	WRITE_NODE_FIELD(endCol);
-	WRITE_NODE_FIELD(targetStart);
-	WRITE_NODE_FIELD(targetEnd);
 	WRITE_NODE_FIELD(targetRange);
 	WRITE_OID_FIELD(rangeType);
 	WRITE_NODE_FIELD(overlapsExpr);

@@ -1410,6 +1410,7 @@ transformForPortionOfClause(ParseState *pstate,
 													 end_attno - FirstLowInvalidHeapAttributeNumber);
 		}
 		result->rangeSet = targetList;
+		// result->rangeSet = transformTargetList(pstate, targetList, EXPR_KIND_UPDATE_SOURCE);
 	}
 	else
 		result->rangeSet = NIL;
@@ -2768,7 +2769,6 @@ transformUpdateTargetList(ParseState *pstate, List *origTlist, ForPortionOfExpr 
 							 parser_errposition(pstate, origTarget->location)));
 			}
 		}
-
 
 		updateTargetListEntry(pstate, tle, origTarget->name,
 							  attrno,

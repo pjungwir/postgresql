@@ -2311,10 +2311,6 @@ _copyForPortionOfExpr(const ForPortionOfExpr *from)
 	COPY_STRING_FIELD(period_start_name);
 	COPY_STRING_FIELD(period_end_name);
 	COPY_NODE_FIELD(range);
-	COPY_NODE_FIELD(startCol);
-	COPY_NODE_FIELD(endCol);
-	COPY_NODE_FIELD(targetStart);
-	COPY_NODE_FIELD(targetEnd);
 	COPY_NODE_FIELD(targetRange);
 	COPY_SCALAR_FIELD(rangeType);
 	COPY_NODE_FIELD(overlapsExpr);

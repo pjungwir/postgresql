@@ -222,6 +222,7 @@ trigger_parted_p1|t
 trigger_parted_p1_1|t
 trigger_parted_p2|t
 trigger_parted_p2_2|t
+uv_fpo_tab|t
 varchar_tbl|f
 view_base_table|t
 without_overlaps_test|t
