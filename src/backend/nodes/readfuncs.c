@@ -524,7 +524,6 @@ _readForPortionOfExpr(void)
 	READ_STRING_FIELD(range_name);
 	READ_STRING_FIELD(period_start_name);
 	READ_STRING_FIELD(period_end_name);
-	READ_NODE_FIELD(range);
 	READ_NODE_FIELD(targetRange);
 	READ_OID_FIELD(rangeType);
 	READ_NODE_FIELD(overlapsExpr);

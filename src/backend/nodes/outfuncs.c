@@ -1760,7 +1760,6 @@ _outForPortionOfExpr(StringInfo str, const ForPortionOfExpr *node)
 	WRITE_STRING_FIELD(range_name);
 	WRITE_STRING_FIELD(period_start_name);
 	WRITE_STRING_FIELD(period_end_name);
-	WRITE_NODE_FIELD(range);
 	WRITE_NODE_FIELD(targetRange);
 	WRITE_OID_FIELD(rangeType);
 	WRITE_NODE_FIELD(overlapsExpr);

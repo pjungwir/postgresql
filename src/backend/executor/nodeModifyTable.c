@@ -1089,7 +1089,6 @@ ExecForPortionOfLeftovers(ModifyTableState *mtstate,
 	if (!table_tuple_fetch_row_version(resultRelInfo->ri_RelationDesc, tupleid, SnapshotAny, oldtupleSlot))
 		elog(ERROR, "failed to fetch tuple for FOR PORTION OF");
 
-	// TODO: Can't we just eval the expr in node->forPortionOf->range??
 	if (forPortionOf->rangeVar == NULL)
 		oldRange = period_to_range(oldtupleSlot, forPortionOf->startVar->varattno, forPortionOf->endVar->varattno, rangeTypeOid);
 	else

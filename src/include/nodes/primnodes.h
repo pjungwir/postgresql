@@ -1609,7 +1609,6 @@ typedef struct ForPortionOfExpr
 	char	   *range_name;			/* Range or PERIOD name */
 	char	   *period_start_name;	/* PERIOD start column name */
 	char	   *period_end_name;	/* PERIOD end column name */
-	Expr	   *range;				/* Range column, or expression from PERIOD cols */
 	Node	   *targetRange;		/* FOR PORTION OF bounds as a range */
 	Oid			rangeType;			/* type of targetRange */
 	Node	   *overlapsExpr;		/* range && targetRange */

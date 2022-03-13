@@ -3160,7 +3160,6 @@ expression_tree_mutator(Node *node,
 				MUTATE(newnode->rangeVar, fpo->rangeVar, Var *);
 				MUTATE(newnode->startVar, fpo->startVar, Var *);
 				MUTATE(newnode->endVar, fpo->endVar, Var *);
-				MUTATE(newnode->range, fpo->range, Expr *);
 				MUTATE(newnode->targetRange, fpo->targetRange, Node *);
 				MUTATE(newnode->rangeSet, fpo->rangeSet, List *);
 

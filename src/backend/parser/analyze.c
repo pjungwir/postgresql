@@ -1209,10 +1209,10 @@ transformForPortionOfClause(ParseState *pstate,
 	ForPortionOfExpr *result;
 	List *targetList;
 	Node *target_start, *target_end;
+	Expr *rangeExpr = NULL;
 	FuncCall *fc;
 
 	result = makeNode(ForPortionOfExpr);
-	result->range = NULL;
 
 	/*
 	 * First look for a range column, then look for a period.
@@ -1242,10 +1242,10 @@ transformForPortionOfClause(ParseState *pstate,
 				attr->attcollation,
 				0);
 		v->location = forPortionOf->range_name_location;
+		rangeExpr = (Expr *) v;
 		result->rangeVar = copyObject(v);
 		result->startVar = NULL;
 		result->endVar = NULL;
-		result->range = (Expr *) v;
 		result->rangeType = attr->atttypid;
 		range_type_name = get_typname(attr->atttypid);
 
@@ -1259,7 +1259,6 @@ transformForPortionOfClause(ParseState *pstate,
 			Form_pg_period per = (Form_pg_period) GETSTRUCT(perTuple);
 			Form_pg_attribute startattr, endattr;
 			Var *startvar, *endvar;
-			FuncCall *periodRange;
 
 			Type rngtype = typeidType(per->perrngtype);
 			range_type_name = typeTypeName(rngtype);
@@ -1295,19 +1294,18 @@ transformForPortionOfClause(ParseState *pstate,
 
 			ReleaseSysCache(perTuple);
 
-			periodRange = makeFuncCall(SystemFuncName(range_type_name),
-								list_make2(startvar, endvar),
-								COERCE_EXPLICIT_CALL,
-								forPortionOf->range_name_location);
+			rangeExpr = (Expr *) makeFuncCall(SystemFuncName(range_type_name),
+											  list_make2(startvar, endvar),
+											  COERCE_EXPLICIT_CALL,
+											  forPortionOf->range_name_location);
 			result->rangeVar = NULL;
 			result->startVar = copyObject(startvar);
 			result->endVar = copyObject(endvar);
-			result->range = (Expr *) periodRange;
 			result->rangeType = typenameTypeId(pstate, typeStringToTypeName(range_type_name));
 		}
 	}
 
-	if (result->range == NULL)
+	if (rangeExpr == NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_COLUMN),
 				 errmsg("column or period \"%s\" of relation \"%s\" does not exist",
@@ -1332,8 +1330,7 @@ transformForPortionOfClause(ParseState *pstate,
 
 	/* overlapsExpr is something we can add to the whereClause */
 	result->overlapsExpr = (Node *) makeSimpleA_Expr(AEXPR_OP, "&&",
-			// TODO: Maybe need a copy here?:
-			(Node *) result->range, (Node *) fc,
+			(Node *) copyObject(rangeExpr), (Node *) fc,
 			forPortionOf->range_name_location);
 
 	if (isUpdate)
@@ -1352,8 +1349,7 @@ transformForPortionOfClause(ParseState *pstate,
 		if (range_attno != InvalidAttrNumber)
 		{
 			Expr *rangeSetExpr = (Expr *) makeSimpleA_Expr(AEXPR_OP, "*",
-					// TODO: Maybe need a copy here?:
-					(Node *) result->range, (Node *) fc,
+					(Node *) copyObject(rangeExpr), (Node *) fc,
 					forPortionOf->range_name_location);
 			TargetEntry *tle;
 
@@ -1377,8 +1373,7 @@ transformForPortionOfClause(ParseState *pstate,
 			/* Set up targetList for the PERIOD start column */
 
 			intersectExpr = (Expr *) makeSimpleA_Expr(AEXPR_OP, "*",
-					// TODO: copy?
-					(Node *) result->range, (Node *) fc,
+					(Node *) copyObject(rangeExpr), (Node *) fc,
 					forPortionOf->range_name_location);
 
 			boundSetExpr = (Expr *) makeFuncCall(SystemFuncName("lower"),
@@ -1416,7 +1411,6 @@ transformForPortionOfClause(ParseState *pstate,
 													 end_attno - FirstLowInvalidHeapAttributeNumber);
 		}
 		result->rangeSet = targetList;
-		// result->rangeSet = transformTargetList(pstate, targetList, EXPR_KIND_UPDATE_SOURCE);
 	}
 	else
 		result->rangeSet = NIL;
