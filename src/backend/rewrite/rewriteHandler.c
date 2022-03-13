@@ -1082,7 +1082,6 @@ process_matched_tle(TargetEntry *src_tle,
 	if (src_input == NULL ||
 		prior_input == NULL ||
 		exprType(src_expr) != exprType(prior_expr))
-		// TODO: hitting this with our updateable view. Why?
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
 				 errmsg("multiple assignments to same column \"%s\"",
@@ -3807,30 +3806,19 @@ RewriteQuery(Query *parsetree, List *rewrite_events)
 		else if (event == CMD_UPDATE)
 		{
 			/*
-			 * Update FOR PORTION OF column(s) automatically.
-			 * Don't do this until we're done rewriting a view update,
-			 * so that we don't add the same update on the recursion.
+			 * Update FOR PORTION OF column(s) automatically. Don't
+			 * do this until we're done rewriting a view update, so
+			 * that we don't add the same update on the recursion.
 			 */
-			if (parsetree->forPortionOf && rt_entry_relation->rd_rel->relkind != RELKIND_VIEW)
+			if (parsetree->forPortionOf &&
+				rt_entry_relation->rd_rel->relkind != RELKIND_VIEW)
 			{
 				ListCell *tl;
-				/*
-				parsetree->forPortionOf->rangeSet =
-					rewriteTargetListIU(parsetree->forPortionOf->rangeSet,
-										CMD_UPDATE,
-										parsetree->override,
-										rt_entry_relation,
-										NULL, 0, NULL);
-										*/
 				foreach(tl, parsetree->forPortionOf->rangeSet)
 				{
 					TargetEntry *tle = (TargetEntry *) lfirst(tl);
 					parsetree->targetList = lappend(parsetree->targetList, tle);
 				}
-				// TODO: So we added things to the targetList, but we didn't update rangeSet itself. We need to do that too, right?
-				//       But doesn't the view rewriter do that? Why are we doing it here too?
-				//       Well we need to run this even when there are no views.
-				// TODO: We should update {range,start,end}_attno, or perhaps change them to Nodes so we can do it automatically.
 			}
 			parsetree->targetList =
 				rewriteTargetListIU(parsetree->targetList,
