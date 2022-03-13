@@ -1,18 +1,52 @@
 -- Tests for UPDATE/DELETE FOR PORTION OF
 
--- Fails on tables without a temporal PK:
+-- Works on non-PK columns
 CREATE TABLE for_portion_of_test (
-  id int4range PRIMARY KEY,
-  valid_at tsrange NOT NULL,
+  id int4range,
+  valid_at tsrange,
   name text NOT NULL
 );
+INSERT INTO for_portion_of_test VALUES
+('[1,2)', '[2018-01-02,2020-01-01)', 'one');
 
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-01-15' TO MAXVALUE
+FOR PORTION OF valid_at FROM '2018-01-15' TO '2019-01-01'
 SET name = 'foo';
 
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-01-15' TO MAXVALUE;
+FOR PORTION OF valid_at FROM '2019-01-15' TO MAXVALUE;
+
+SELECT * FROM for_portion_of_test;
+
+-- Works on more than one period
+DROP TABLE for_portion_of_test;
+CREATE TABLE for_portion_of_test (
+  id int4range,
+  valid1_at tsrange,
+  valid2_at tsrange,
+  name text NOT NULL
+);
+INSERT INTO for_portion_of_test VALUES
+('[1,2)', '[2018-01-02,2018-02-03)', '[2015-01-01,2025-01-01)', 'one');
+
+UPDATE for_portion_of_test
+FOR PORTION OF valid1_at FROM '2018-01-15' TO MAXVALUE
+SET name = 'foo';
+SELECT * FROM for_portion_of_test;
+
+UPDATE for_portion_of_test
+FOR PORTION OF valid2_at FROM '2018-01-15' TO MAXVALUE
+SET name = 'bar';
+SELECT * FROM for_portion_of_test;
+
+DELETE FROM for_portion_of_test
+FOR PORTION OF valid1_at FROM '2018-01-20' TO MAXVALUE;
+SELECT * FROM for_portion_of_test;
+
+DELETE FROM for_portion_of_test
+FOR PORTION OF valid2_at FROM '2018-01-20' TO MAXVALUE;
+SELECT * FROM for_portion_of_test;
+
 
 DROP TABLE for_portion_of_test;
 CREATE TABLE for_portion_of_test (
@@ -290,21 +324,59 @@ SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
 
 DROP TABLE for_portion_of_test;
 
--- Fails on tables without a temporal PK:
+-- Works on non-PK columns
 CREATE TABLE for_portion_of_test (
-  id int4range PRIMARY KEY,
+  id int4range,
   valid_from timestamp,
   valid_til timestamp,
   PERIOD FOR valid_at (valid_from, valid_til),
   name text NOT NULL
 );
+INSERT INTO for_portion_of_test VALUES
+('[1,2)', '2018-01-02', '2020-01-01', 'one');
 
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-01-15' TO MAXVALUE
+FOR PORTION OF valid_at FROM '2018-01-15' TO '2019-01-01'
 SET name = 'foo';
 
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-01-15' TO MAXVALUE;
+FOR PORTION OF valid_at FROM '2019-01-15' TO MAXVALUE;
+
+SELECT * FROM for_portion_of_test;
+
+-- Works on more than one period
+DROP TABLE for_portion_of_test;
+CREATE TABLE for_portion_of_test (
+  id int4range,
+  valid1_from timestamp,
+  valid1_til timestamp,
+  valid2_from timestamp,
+  valid2_til timestamp,
+  PERIOD FOR valid1_at (valid1_from, valid1_til),
+  PERIOD FOR valid2_at (valid2_from, valid2_til),
+  name text NOT NULL
+);
+INSERT INTO for_portion_of_test VALUES
+('[1,2)', '2018-01-02', '2018-02-03', '2015-01-01', '2025-01-01', 'one');
+
+UPDATE for_portion_of_test
+FOR PORTION OF valid1_at FROM '2018-01-15' TO MAXVALUE
+SET name = 'foo';
+SELECT * FROM for_portion_of_test;
+
+UPDATE for_portion_of_test
+FOR PORTION OF valid2_at FROM '2018-01-15' TO MAXVALUE
+SET name = 'bar';
+SELECT * FROM for_portion_of_test;
+
+DELETE FROM for_portion_of_test
+FOR PORTION OF valid1_at FROM '2018-01-20' TO MAXVALUE;
+SELECT * FROM for_portion_of_test;
+
+DELETE FROM for_portion_of_test
+FOR PORTION OF valid2_at FROM '2018-01-20' TO MAXVALUE;
+SELECT * FROM for_portion_of_test;
+
 
 DROP TABLE for_portion_of_test;
 CREATE TABLE for_portion_of_test (

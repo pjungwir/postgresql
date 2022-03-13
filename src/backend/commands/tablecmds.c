@@ -1245,6 +1245,10 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId,
 	foreach(listptr, stmt->periods)
 	{
 		Period *period = (Period *) lfirst(listptr);
+
+		/* Don't update the count of check constraints twice */
+		CommandCounterIncrement();
+
 		AddRelationNewPeriod(rel, period);
 	}
 

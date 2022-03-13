@@ -1208,42 +1208,11 @@ transformForPortionOfClause(ParseState *pstate,
 	char *endcolname = NULL;
 	ForPortionOfExpr *result;
 	List *targetList;
-	Oid pkoid;
-	HeapTuple indexTuple;
-	Form_pg_index pk;
 	Node *target_start, *target_end;
 	FuncCall *fc;
 
 	result = makeNode(ForPortionOfExpr);
 	result->range = NULL;
-
-	/* Make sure the table has a primary key */
-	pkoid = RelationGetPrimaryKeyIndex(targetrel);
-	if (pkoid == InvalidOid)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
-				 errmsg("relation \"%s\" does not have a temporal primary key",
-						RelationGetRelationName(pstate->p_target_relation)),
-				 parser_errposition(pstate, forPortionOf->range_name_location)));
-
-	/* Make sure the primary key is a temporal key */
-	// TODO: need a lock here?
-	indexTuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(pkoid));
-	if (!HeapTupleIsValid(indexTuple))	/* should not happen */
-		elog(ERROR, "cache lookup failed for index %u", pkoid);
-	pk = (Form_pg_index) GETSTRUCT(indexTuple);
-
-	/*
-	 * Only temporal pkey indexes have both isprimary and isexclusion.
-	 * Checking those saves us from scanning pg_constraint
-	 * like in RelationGetExclusionInfo.
-	 */
-	if (!(pk->indisprimary && pk->indisexclusion))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
-				 errmsg("relation \"%s\" does not have a temporal primary key",
-						RelationGetRelationName(pstate->p_target_relation)),
-				 parser_errposition(pstate, forPortionOf->range_name_location)));
 
 	/*
 	 * First look for a range column, then look for a period.
@@ -1264,17 +1233,6 @@ transformForPortionOfClause(ParseState *pstate,
 							range_name,
 							RelationGetRelationName(pstate->p_target_relation)),
 					 parser_errposition(pstate, forPortionOf->range_name_location)));
-
-		/* Make sure the range attribute is the last part of the pkey. */
-		if (range_attno != pk->indkey.values[pk->indnkeyatts - 1])
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
-					 errmsg("column \"%s\" is not the temporal part of the primary key for relation \"%s\"",
-							range_name,
-							RelationGetRelationName(pstate->p_target_relation)),
-					 parser_errposition(pstate, forPortionOf->range_name_location)));
-		}
 
 		v = makeVar(
 				rtindex,
@@ -1297,7 +1255,6 @@ transformForPortionOfClause(ParseState *pstate,
 		{
 			Form_pg_period per = (Form_pg_period) GETSTRUCT(perTuple);
 			Form_pg_attribute startattr, endattr;
-			bool pkeyIncludesPeriod = false;
 			Var *startvar, *endvar;
 			FuncCall *periodRange;
 
@@ -1314,24 +1271,6 @@ transformForPortionOfClause(ParseState *pstate,
 			endcolname = NameStr(endattr->attname);
 			result->period_start_name = startcolname;
 			result->period_end_name = endcolname;
-
-			/* Make sure the period is the last part of the pkey. */
-			if (pk->indkey.values[pk->indnkeyatts - 1] == InvalidOid)
-			{
-				/*
-				 * The PK ends with an expression. Make sure it's for our period.
-				 * There should be only one entry in indexprs, and it should be ours.
-				 */
-				pkeyIncludesPeriod = pk->indperiod == per->oid;
-			}
-
-			if (!pkeyIncludesPeriod)
-				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
-						 errmsg("column \"%s\" is not the temporal part of the primary key for relation \"%s\"",
-								range_name,
-								RelationGetRelationName(pstate->p_target_relation)),
-						 parser_errposition(pstate, forPortionOf->range_name_location)));
 
 			startvar = makeVar(
 					rtindex,
@@ -1361,7 +1300,6 @@ transformForPortionOfClause(ParseState *pstate,
 			result->rangeType = typenameTypeId(pstate, typeStringToTypeName(range_type_name));
 		}
 	}
-	ReleaseSysCache(indexTuple);
 
 	if (result->range == NULL)
 		ereport(ERROR,

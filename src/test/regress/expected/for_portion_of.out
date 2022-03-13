@@ -1,21 +1,79 @@
 -- Tests for UPDATE/DELETE FOR PORTION OF
--- Fails on tables without a temporal PK:
+-- Works on non-PK columns
 CREATE TABLE for_portion_of_test (
-  id int4range PRIMARY KEY,
-  valid_at tsrange NOT NULL,
+  id int4range,
+  valid_at tsrange,
   name text NOT NULL
 );
+INSERT INTO for_portion_of_test VALUES
+('[1,2)', '[2018-01-02,2020-01-01)', 'one');
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-01-15' TO MAXVALUE
+FOR PORTION OF valid_at FROM '2018-01-15' TO '2019-01-01'
 SET name = 'foo';
-ERROR:  relation "for_portion_of_test" does not have a temporal primary key
-LINE 2: FOR PORTION OF valid_at FROM '2018-01-15' TO MAXVALUE
-                       ^
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-01-15' TO MAXVALUE;
-ERROR:  relation "for_portion_of_test" does not have a temporal primary key
-LINE 2: FOR PORTION OF valid_at FROM '2018-01-15' TO MAXVALUE;
-                       ^
+FOR PORTION OF valid_at FROM '2019-01-15' TO MAXVALUE;
+SELECT * FROM for_portion_of_test;
+  id   |                        valid_at                         | name 
+-------+---------------------------------------------------------+------
+ [1,2) | ["Mon Jan 15 00:00:00 2018","Tue Jan 01 00:00:00 2019") | foo
+ [1,2) | ["Tue Jan 02 00:00:00 2018","Mon Jan 15 00:00:00 2018") | one
+ [1,2) | ["Tue Jan 01 00:00:00 2019","Tue Jan 15 00:00:00 2019") | one
+(3 rows)
+
+-- Works on more than one period
+DROP TABLE for_portion_of_test;
+CREATE TABLE for_portion_of_test (
+  id int4range,
+  valid1_at tsrange,
+  valid2_at tsrange,
+  name text NOT NULL
+);
+INSERT INTO for_portion_of_test VALUES
+('[1,2)', '[2018-01-02,2018-02-03)', '[2015-01-01,2025-01-01)', 'one');
+UPDATE for_portion_of_test
+FOR PORTION OF valid1_at FROM '2018-01-15' TO MAXVALUE
+SET name = 'foo';
+SELECT * FROM for_portion_of_test;
+  id   |                        valid1_at                        |                        valid2_at                        | name 
+-------+---------------------------------------------------------+---------------------------------------------------------+------
+ [1,2) | ["Mon Jan 15 00:00:00 2018","Sat Feb 03 00:00:00 2018") | ["Thu Jan 01 00:00:00 2015","Wed Jan 01 00:00:00 2025") | foo
+ [1,2) | ["Tue Jan 02 00:00:00 2018","Mon Jan 15 00:00:00 2018") | ["Thu Jan 01 00:00:00 2015","Wed Jan 01 00:00:00 2025") | one
+(2 rows)
+
+UPDATE for_portion_of_test
+FOR PORTION OF valid2_at FROM '2018-01-15' TO MAXVALUE
+SET name = 'bar';
+SELECT * FROM for_portion_of_test;
+  id   |                        valid1_at                        |                        valid2_at                        | name 
+-------+---------------------------------------------------------+---------------------------------------------------------+------
+ [1,2) | ["Mon Jan 15 00:00:00 2018","Sat Feb 03 00:00:00 2018") | ["Mon Jan 15 00:00:00 2018","Wed Jan 01 00:00:00 2025") | bar
+ [1,2) | ["Mon Jan 15 00:00:00 2018","Sat Feb 03 00:00:00 2018") | ["Thu Jan 01 00:00:00 2015","Mon Jan 15 00:00:00 2018") | foo
+ [1,2) | ["Tue Jan 02 00:00:00 2018","Mon Jan 15 00:00:00 2018") | ["Mon Jan 15 00:00:00 2018","Wed Jan 01 00:00:00 2025") | bar
+ [1,2) | ["Tue Jan 02 00:00:00 2018","Mon Jan 15 00:00:00 2018") | ["Thu Jan 01 00:00:00 2015","Mon Jan 15 00:00:00 2018") | one
+(4 rows)
+
+DELETE FROM for_portion_of_test
+FOR PORTION OF valid1_at FROM '2018-01-20' TO MAXVALUE;
+SELECT * FROM for_portion_of_test;
+  id   |                        valid1_at                        |                        valid2_at                        | name 
+-------+---------------------------------------------------------+---------------------------------------------------------+------
+ [1,2) | ["Tue Jan 02 00:00:00 2018","Mon Jan 15 00:00:00 2018") | ["Mon Jan 15 00:00:00 2018","Wed Jan 01 00:00:00 2025") | bar
+ [1,2) | ["Tue Jan 02 00:00:00 2018","Mon Jan 15 00:00:00 2018") | ["Thu Jan 01 00:00:00 2015","Mon Jan 15 00:00:00 2018") | one
+ [1,2) | ["Mon Jan 15 00:00:00 2018","Sat Jan 20 00:00:00 2018") | ["Mon Jan 15 00:00:00 2018","Wed Jan 01 00:00:00 2025") | bar
+ [1,2) | ["Mon Jan 15 00:00:00 2018","Sat Jan 20 00:00:00 2018") | ["Thu Jan 01 00:00:00 2015","Mon Jan 15 00:00:00 2018") | foo
+(4 rows)
+
+DELETE FROM for_portion_of_test
+FOR PORTION OF valid2_at FROM '2018-01-20' TO MAXVALUE;
+SELECT * FROM for_portion_of_test;
+  id   |                        valid1_at                        |                        valid2_at                        | name 
+-------+---------------------------------------------------------+---------------------------------------------------------+------
+ [1,2) | ["Tue Jan 02 00:00:00 2018","Mon Jan 15 00:00:00 2018") | ["Thu Jan 01 00:00:00 2015","Mon Jan 15 00:00:00 2018") | one
+ [1,2) | ["Mon Jan 15 00:00:00 2018","Sat Jan 20 00:00:00 2018") | ["Thu Jan 01 00:00:00 2015","Mon Jan 15 00:00:00 2018") | foo
+ [1,2) | ["Tue Jan 02 00:00:00 2018","Mon Jan 15 00:00:00 2018") | ["Mon Jan 15 00:00:00 2018","Sat Jan 20 00:00:00 2018") | bar
+ [1,2) | ["Mon Jan 15 00:00:00 2018","Sat Jan 20 00:00:00 2018") | ["Mon Jan 15 00:00:00 2018","Sat Jan 20 00:00:00 2018") | bar
+(4 rows)
+
 DROP TABLE for_portion_of_test;
 CREATE TABLE for_portion_of_test (
   id int4range NOT NULL,
@@ -349,25 +407,87 @@ SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
 -- Now re-run the same tests but with a PERIOD instead of a range:
 --
 DROP TABLE for_portion_of_test;
--- Fails on tables without a temporal PK:
+-- Works on non-PK columns
 CREATE TABLE for_portion_of_test (
-  id int4range PRIMARY KEY,
+  id int4range,
   valid_from timestamp,
   valid_til timestamp,
   PERIOD FOR valid_at (valid_from, valid_til),
   name text NOT NULL
 );
+INSERT INTO for_portion_of_test VALUES
+('[1,2)', '2018-01-02', '2020-01-01', 'one');
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-01-15' TO MAXVALUE
+FOR PORTION OF valid_at FROM '2018-01-15' TO '2019-01-01'
 SET name = 'foo';
-ERROR:  relation "for_portion_of_test" does not have a temporal primary key
-LINE 2: FOR PORTION OF valid_at FROM '2018-01-15' TO MAXVALUE
-                       ^
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-01-15' TO MAXVALUE;
-ERROR:  relation "for_portion_of_test" does not have a temporal primary key
-LINE 2: FOR PORTION OF valid_at FROM '2018-01-15' TO MAXVALUE;
-                       ^
+FOR PORTION OF valid_at FROM '2019-01-15' TO MAXVALUE;
+SELECT * FROM for_portion_of_test;
+  id   |        valid_from        |        valid_til         | name 
+-------+--------------------------+--------------------------+------
+ [1,2) | Mon Jan 15 00:00:00 2018 | Tue Jan 01 00:00:00 2019 | foo
+ [1,2) | Tue Jan 02 00:00:00 2018 | Mon Jan 15 00:00:00 2018 | one
+ [1,2) | Tue Jan 01 00:00:00 2019 | Tue Jan 15 00:00:00 2019 | one
+(3 rows)
+
+-- Works on more than one period
+DROP TABLE for_portion_of_test;
+CREATE TABLE for_portion_of_test (
+  id int4range,
+  valid1_from timestamp,
+  valid1_til timestamp,
+  valid2_from timestamp,
+  valid2_til timestamp,
+  PERIOD FOR valid1_at (valid1_from, valid1_til),
+  PERIOD FOR valid2_at (valid2_from, valid2_til),
+  name text NOT NULL
+);
+INSERT INTO for_portion_of_test VALUES
+('[1,2)', '2018-01-02', '2018-02-03', '2015-01-01', '2025-01-01', 'one');
+UPDATE for_portion_of_test
+FOR PORTION OF valid1_at FROM '2018-01-15' TO MAXVALUE
+SET name = 'foo';
+SELECT * FROM for_portion_of_test;
+  id   |       valid1_from        |        valid1_til        |       valid2_from        |        valid2_til        | name 
+-------+--------------------------+--------------------------+--------------------------+--------------------------+------
+ [1,2) | Mon Jan 15 00:00:00 2018 | Sat Feb 03 00:00:00 2018 | Thu Jan 01 00:00:00 2015 | Wed Jan 01 00:00:00 2025 | foo
+ [1,2) | Tue Jan 02 00:00:00 2018 | Mon Jan 15 00:00:00 2018 | Thu Jan 01 00:00:00 2015 | Wed Jan 01 00:00:00 2025 | one
+(2 rows)
+
+UPDATE for_portion_of_test
+FOR PORTION OF valid2_at FROM '2018-01-15' TO MAXVALUE
+SET name = 'bar';
+SELECT * FROM for_portion_of_test;
+  id   |       valid1_from        |        valid1_til        |       valid2_from        |        valid2_til        | name 
+-------+--------------------------+--------------------------+--------------------------+--------------------------+------
+ [1,2) | Mon Jan 15 00:00:00 2018 | Sat Feb 03 00:00:00 2018 | Mon Jan 15 00:00:00 2018 | Wed Jan 01 00:00:00 2025 | bar
+ [1,2) | Mon Jan 15 00:00:00 2018 | Sat Feb 03 00:00:00 2018 | Thu Jan 01 00:00:00 2015 | Mon Jan 15 00:00:00 2018 | foo
+ [1,2) | Tue Jan 02 00:00:00 2018 | Mon Jan 15 00:00:00 2018 | Mon Jan 15 00:00:00 2018 | Wed Jan 01 00:00:00 2025 | bar
+ [1,2) | Tue Jan 02 00:00:00 2018 | Mon Jan 15 00:00:00 2018 | Thu Jan 01 00:00:00 2015 | Mon Jan 15 00:00:00 2018 | one
+(4 rows)
+
+DELETE FROM for_portion_of_test
+FOR PORTION OF valid1_at FROM '2018-01-20' TO MAXVALUE;
+SELECT * FROM for_portion_of_test;
+  id   |       valid1_from        |        valid1_til        |       valid2_from        |        valid2_til        | name 
+-------+--------------------------+--------------------------+--------------------------+--------------------------+------
+ [1,2) | Tue Jan 02 00:00:00 2018 | Mon Jan 15 00:00:00 2018 | Mon Jan 15 00:00:00 2018 | Wed Jan 01 00:00:00 2025 | bar
+ [1,2) | Tue Jan 02 00:00:00 2018 | Mon Jan 15 00:00:00 2018 | Thu Jan 01 00:00:00 2015 | Mon Jan 15 00:00:00 2018 | one
+ [1,2) | Mon Jan 15 00:00:00 2018 | Sat Jan 20 00:00:00 2018 | Mon Jan 15 00:00:00 2018 | Wed Jan 01 00:00:00 2025 | bar
+ [1,2) | Mon Jan 15 00:00:00 2018 | Sat Jan 20 00:00:00 2018 | Thu Jan 01 00:00:00 2015 | Mon Jan 15 00:00:00 2018 | foo
+(4 rows)
+
+DELETE FROM for_portion_of_test
+FOR PORTION OF valid2_at FROM '2018-01-20' TO MAXVALUE;
+SELECT * FROM for_portion_of_test;
+  id   |       valid1_from        |        valid1_til        |       valid2_from        |        valid2_til        | name 
+-------+--------------------------+--------------------------+--------------------------+--------------------------+------
+ [1,2) | Tue Jan 02 00:00:00 2018 | Mon Jan 15 00:00:00 2018 | Thu Jan 01 00:00:00 2015 | Mon Jan 15 00:00:00 2018 | one
+ [1,2) | Mon Jan 15 00:00:00 2018 | Sat Jan 20 00:00:00 2018 | Thu Jan 01 00:00:00 2015 | Mon Jan 15 00:00:00 2018 | foo
+ [1,2) | Tue Jan 02 00:00:00 2018 | Mon Jan 15 00:00:00 2018 | Mon Jan 15 00:00:00 2018 | Sat Jan 20 00:00:00 2018 | bar
+ [1,2) | Mon Jan 15 00:00:00 2018 | Sat Jan 20 00:00:00 2018 | Mon Jan 15 00:00:00 2018 | Sat Jan 20 00:00:00 2018 | bar
+(4 rows)
+
 DROP TABLE for_portion_of_test;
 CREATE TABLE for_portion_of_test (
   id int4range NOT NULL,
