@@ -1189,7 +1189,14 @@ transformForPortionOfBound(Node *n, bool isLowerBound)
 
 /*
  * transformForPortionOfClause
- *	  transforms a ForPortionOfClause in an UPDATE/DELETE statement
+ *
+ *	  Transforms a ForPortionOfClause in an UPDATE/DELETE statement.
+ *
+ *	  - Look up the range/period requested.
+ *	  - Build a compatible range value from the FROM and TO expressions.
+ *	  - Build an "overlaps" expression for filtering.
+ *	  - For UPDATEs, build an "intersects" expression the rewriter can add
+ *	  - to the targetList to change the temporal bounds.
  */
 static ForPortionOfExpr *
 transformForPortionOfClause(ParseState *pstate,
@@ -1215,7 +1222,11 @@ transformForPortionOfClause(ParseState *pstate,
 	result = makeNode(ForPortionOfExpr);
 
 	/*
+	 * Look up the FOR PORTION OF name requested.
 	 * First look for a range column, then look for a period.
+	 * If the relation is an updateable view, then only range columns are
+	 * possible, since the standard doesn't give any way to define a period
+	 * on a view.
 	 */
 	range_attno = attnameAttNum(targetrel, range_name, false);
 	if (range_attno != InvalidAttrNumber)
@@ -1231,7 +1242,7 @@ transformForPortionOfClause(ParseState *pstate,
 					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
 					 errmsg("column \"%s\" of relation \"%s\" is not a range type",
 							range_name,
-							RelationGetRelationName(pstate->p_target_relation)),
+							RelationGetRelationName(targetrel)),
 					 parser_errposition(pstate, forPortionOf->range_name_location)));
 
 		v = makeVar(
@@ -1310,7 +1321,7 @@ transformForPortionOfClause(ParseState *pstate,
 				(errcode(ERRCODE_UNDEFINED_COLUMN),
 				 errmsg("column or period \"%s\" of relation \"%s\" does not exist",
 						range_name,
-						RelationGetRelationName(pstate->p_target_relation)),
+						RelationGetRelationName(targetrel)),
 				 parser_errposition(pstate, forPortionOf->range_name_location)));
 
 	/*
@@ -1339,11 +1350,8 @@ transformForPortionOfClause(ParseState *pstate,
 		 * Now make sure we update the start/end time of the record.
 		 * For a range col (r) this is `r = r * targetRange`.
 		 * For a PERIOD with cols (s, e) this is `s = lower(tsrange(s, e) * targetRange)`
-		 * and `e = upper(tsrange(s, e) * targetRange` (of course not necessarily with
-		 * tsrange, but with whatever range type is used there)).
-		 *
-		 * We also compute the possible left-behind bits at the start and end of the tuple,
-		 * so that we can INSERT them if necessary.
+		 * and `e = upper(tsrange(s, e) * targetRange)` (of course not necessarily with
+		 * tsrange, but with whatever range type is used there).
 		 */
 		targetList = NIL;
 		if (range_attno != InvalidAttrNumber)
