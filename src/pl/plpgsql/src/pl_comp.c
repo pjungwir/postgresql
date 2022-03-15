@@ -722,6 +722,72 @@ do_compile(FunctionCallInfo fcinfo,
 			var->dtype = PLPGSQL_DTYPE_PROMISE;
 			((PLpgSQL_var *) var)->promise = PLPGSQL_PROMISE_TG_ARGV;
 
+			/* add the variable tg_temporal_range_name */
+			var = plpgsql_build_variable("tg_temporal_range_name", 0,
+										 plpgsql_build_datatype(NAMEOID,
+																-1,
+																function->fn_input_collation,
+																NULL),
+										 true);
+			Assert(var->dtype == PLPGSQL_DTYPE_VAR);
+			var->dtype = PLPGSQL_DTYPE_PROMISE;
+			((PLpgSQL_var *) var)->promise = PLPGSQL_PROMISE_TG_TEMPORAL_RANGE_NAME;
+
+			/* add the variable tg_temporal_range_type */
+			var = plpgsql_build_variable("tg_temporal_range_type", 0,
+										 plpgsql_build_datatype(OIDOID,
+																-1,
+																function->fn_input_collation,
+																NULL),
+										 true);
+			Assert(var->dtype == PLPGSQL_DTYPE_VAR);
+			var->dtype = PLPGSQL_DTYPE_PROMISE;
+			((PLpgSQL_var *) var)->promise = PLPGSQL_PROMISE_TG_TEMPORAL_RANGE_TYPE;
+
+			/* add the variable tg_temporal_has_period */
+			var = plpgsql_build_variable("tg_temporal_has_period", 0,
+										 plpgsql_build_datatype(BOOLOID,
+																-1,
+																function->fn_input_collation,
+																NULL),
+										 true);
+			Assert(var->dtype == PLPGSQL_DTYPE_VAR);
+			var->dtype = PLPGSQL_DTYPE_PROMISE;
+			((PLpgSQL_var *) var)->promise = PLPGSQL_PROMISE_TG_TEMPORAL_HAS_PERIOD;
+
+			/* add the variable tg_temporal_period_start_name */
+			var = plpgsql_build_variable("tg_temporal_period_start_name", 0,
+										 plpgsql_build_datatype(NAMEOID,
+																-1,
+																function->fn_input_collation,
+																NULL),
+										 true);
+			Assert(var->dtype == PLPGSQL_DTYPE_VAR);
+			var->dtype = PLPGSQL_DTYPE_PROMISE;
+			((PLpgSQL_var *) var)->promise = PLPGSQL_PROMISE_TG_TEMPORAL_PERIOD_START_NAME;
+
+			/* add the variable tg_temporal_period_end_name */
+			var = plpgsql_build_variable("tg_temporal_period_end_name", 0,
+										 plpgsql_build_datatype(NAMEOID,
+																-1,
+																function->fn_input_collation,
+																NULL),
+										 true);
+			Assert(var->dtype == PLPGSQL_DTYPE_VAR);
+			var->dtype = PLPGSQL_DTYPE_PROMISE;
+			((PLpgSQL_var *) var)->promise = PLPGSQL_PROMISE_TG_TEMPORAL_PERIOD_END_NAME;
+
+			/* add the variable tg_temporal_target_range */
+			var = plpgsql_build_variable("tg_temporal_target_range", 0,
+										 plpgsql_build_datatype(ANYRANGEOID,
+																-1,
+																function->fn_input_collation,
+																NULL),
+										 true);
+			Assert(var->dtype == PLPGSQL_DTYPE_VAR);
+			var->dtype = PLPGSQL_DTYPE_PROMISE;
+			((PLpgSQL_var *) var)->promise = PLPGSQL_PROMISE_TG_TEMPORAL_TARGET_RANGE;
+
 			break;
 
 		case PLPGSQL_EVENT_TRIGGER:

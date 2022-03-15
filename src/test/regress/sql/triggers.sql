@@ -522,6 +522,12 @@ begin
 	raise NOTICE 'TG_TABLE_NAME: %', TG_table_name;
 	raise NOTICE 'TG_TABLE_SCHEMA: %', TG_table_schema;
 	raise NOTICE 'TG_NARGS: %', TG_nargs;
+  raise NOTICE 'TG_TEMPORAL_RANGE_NAME: %s', TG_temporal_range_name;
+  raise NOTICE 'TG_TEMPORAL_RANGE_TYPE: %s', TG_temporal_range_type;
+  raise NOTICE 'TG_TEMPORAL_HAS_PERIOD: %s', TG_temporal_has_period;
+  raise NOTICE 'TG_TEMPORAL_PERIOD_START_NAME: %s', TG_temporal_period_start_name;
+  raise NOTICE 'TG_TEMPORAL_PERIOD_END_NAME: %s', TG_temporal_period_end_name;
+  raise NOTICE 'TG_TEMPORAL_TARGET_RANGE: %s', TG_temporal_target_range;
 
 	argstr := '[';
 	for i in 0 .. TG_nargs - 1 loop
