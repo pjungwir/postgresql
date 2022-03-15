@@ -6431,7 +6431,7 @@ getTables(Archive *fout, int *numTables)
 							 "(SELECT count(*) FROM pg_period WHERE perrelid = c.oid) AS nperiods, ");
 	else
 		appendPQExpBufferStr(query,
-							 "NULL AS nperiods, ");
+							 "0 AS nperiods, ");
 
 	if (fout->remoteVersion >= 80400)
 		appendPQExpBufferStr(query,
@@ -6695,7 +6695,7 @@ getTables(Archive *fout, int *numTables)
 	i_relkind = PQfnumber(res, "relkind");
 	i_rolname = PQfnumber(res, "rolname");
 	i_relchecks = PQfnumber(res, "relchecks");
-	i_nperiod = PQfnumber(res, "nperiod");
+	i_nperiod = PQfnumber(res, "nperiods");
 	i_relhasindex = PQfnumber(res, "relhasindex");
 	i_relhasrules = PQfnumber(res, "relhasrules");
 	i_relpages = PQfnumber(res, "relpages");
@@ -9037,13 +9037,12 @@ getTableAttrs(Archive *fout, TableInfo *tblinfo, int numTables)
 			appendPQExpBuffer(q,
 				"SELECT p.tableoid, p.oid, p.pername, "
 				"       sa.attname AS perstart, ea.attname AS perend, "
-				"       no.nspname AS opcnamespace, o.opcname, "
+				"       r.typname AS rngtype, "
 				"       c.conname AS conname "
 				"FROM pg_catalog.pg_period AS p "
 				"JOIN pg_catalog.pg_attribute AS sa ON (sa.attrelid, sa.attnum) = (p.perrelid, p.perstart) "
 				"JOIN pg_catalog.pg_attribute AS ea ON (ea.attrelid, ea.attnum) = (p.perrelid, p.perend) "
-				"JOIN pg_catalog.pg_opclass AS o ON o.oid = p.peropclass "
-				"JOIN pg_catalog.pg_namespace AS no ON no.oid = o.opcnamespace "
+				"JOIN pg_catalog.pg_type AS r ON r.oid = p.perrngtype "
 				"JOIN pg_catalog.pg_constraint AS c ON c.oid = p.perconstraint "
 				"WHERE p.perrelid = '%u'::pg_catalog.oid "
 				"ORDER BY p.pername",
@@ -9080,9 +9079,8 @@ getTableAttrs(Archive *fout, TableInfo *tblinfo, int numTables)
 				periods[j].pertable = tbinfo;
 				periods[j].perstart = pg_strdup(PQgetvalue(res, j, 3));
 				periods[j].perend = pg_strdup(PQgetvalue(res, j, 4));
-				periods[j].opcnamespace = pg_strdup(PQgetvalue(res, j, 5));
-				periods[j].opcname = pg_strdup(PQgetvalue(res, j, 6));
-				periods[j].conname = pg_strdup(PQgetvalue(res, j, 7));
+				periods[j].rngtype = pg_strdup(PQgetvalue(res, j, 5));
+				periods[j].conname = pg_strdup(PQgetvalue(res, j, 6));
 			}
 			PQclear(res);
 		}
@@ -16106,8 +16104,7 @@ dumpTableSchema(Archive *fout, const TableInfo *tbinfo)
 				char	   *name = pg_strdup(fmtId(period->dobj.name));
 				char	   *start = pg_strdup(fmtId(period->perstart));
 				char	   *end = pg_strdup(fmtId(period->perend));
-				char	   *opcnamespace = pg_strdup(fmtId(period->opcnamespace));
-				char	   *opcname = pg_strdup(fmtId(period->opcname));
+				char	   *rngtype = pg_strdup(fmtId(period->rngtype));
 				char	   *conname = pg_strdup(fmtId(period->conname));
 
 				if (actual_atts == 0)
@@ -16116,10 +16113,9 @@ dumpTableSchema(Archive *fout, const TableInfo *tbinfo)
 					appendPQExpBufferStr(q, ",\n    ");
 
 				appendPQExpBuffer(q, "PERIOD FOR %s (%s, %s) "
-						"WITH (operator_class = %s.%s, constraint_name = %s)",
+						"WITH (rangetype = %s, constraint_name = %s)",
 								  name, start, end,
-								  opcnamespace, opcname,
-								  conname);
+								  rngtype, conname);
 
 				actual_atts++;
 			}

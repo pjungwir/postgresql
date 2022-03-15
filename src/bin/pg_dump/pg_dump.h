@@ -479,8 +479,7 @@ typedef struct _periodInfo
 	TableInfo  *pertable;
 	char	   *perstart;		/* the name of the start column */
 	char	   *perend;			/* the name of the end column */
-	char	   *opcnamespace;	/* the name of the operator class schema */
-	char	   *opcname;		/* the name of the operator class */
+	char	   *rngtype;		/* the name of the range type */
 	char	   *conname;		/* the name of the CHECK constraint */
 } PeriodInfo;
 
