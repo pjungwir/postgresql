@@ -5600,25 +5600,17 @@ CopyForPortionOfState(ForPortionOfState *src)
 		/*
 		 * Need to lift the FOR PORTION OF details into a higher memory context
 		 * because cascading foreign key update/deletes can cause triggers to fire
-		 * triggers (both other TRI triggers and the insert_leftovers trigger),
-		 * and the AfterTriggerEvents will outlive the FPO details of the original
-		 * query.
+		 * triggers, and the AfterTriggerEvents will outlive the FPO
+		 * details of the original query.
 		 */
 		oldctx = MemoryContextSwitchTo(TopTransactionContext);
 		dst = makeNode(ForPortionOfState);
 		dst->fp_rangeName = pstrdup(src->fp_rangeName);
 		dst->fp_rangeType = src->fp_rangeType;
 		dst->fp_hasPeriod = src->fp_hasPeriod;
-
-		if (src->fp_periodStartName)
-			dst->fp_periodStartName = pstrdup(src->fp_periodStartName);
-		else
-			dst->fp_periodStartName = NULL;
-
-		if (src->fp_periodEndName)
-			dst->fp_periodEndName = pstrdup(src->fp_periodEndName);
-		else
-			dst->fp_periodEndName = NULL;
+		dst->fp_rangeAttno = src->fp_rangeAttno;
+		dst->fp_periodStartAttno = src->fp_periodStartAttno;
+		dst->fp_periodEndAttno = src->fp_periodEndAttno;
 
 		r = DatumGetRangeTypeP(src->fp_targetRange);
 		typcache = lookup_type_cache(RangeTypeGetOid(r), TYPECACHE_RANGE_INFO);

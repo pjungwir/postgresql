@@ -3248,10 +3248,20 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 
 		resultRelInfo->ri_forPortionOf = makeNode(ForPortionOfState);
 		resultRelInfo->ri_forPortionOf->fp_rangeName = forPortionOf->range_name;
-		resultRelInfo->ri_forPortionOf->fp_periodStartName = forPortionOf->period_start_name;
-		resultRelInfo->ri_forPortionOf->fp_periodEndName = forPortionOf->period_end_name;
-		resultRelInfo->ri_forPortionOf->fp_targetRange = RangeTypePGetDatum(targetRange);
 		resultRelInfo->ri_forPortionOf->fp_rangeType = forPortionOf->rangeType;
+		if (forPortionOf->rangeVar == NULL)
+		{
+			resultRelInfo->ri_forPortionOf->fp_hasPeriod = true;
+			resultRelInfo->ri_forPortionOf->fp_rangeAttno = InvalidAttrNumber;
+			resultRelInfo->ri_forPortionOf->fp_periodStartAttno = forPortionOf->startVar->varattno;
+			resultRelInfo->ri_forPortionOf->fp_periodEndAttno = forPortionOf->endVar->varattno;
+		} else {
+			resultRelInfo->ri_forPortionOf->fp_hasPeriod = false;
+			resultRelInfo->ri_forPortionOf->fp_rangeAttno = forPortionOf->rangeVar->varattno;
+			resultRelInfo->ri_forPortionOf->fp_periodStartAttno = InvalidAttrNumber;
+			resultRelInfo->ri_forPortionOf->fp_periodEndAttno = InvalidAttrNumber;
+		}
+		resultRelInfo->ri_forPortionOf->fp_targetRange = RangeTypePGetDatum(targetRange);
 
 		/* Initialize slot for the existing tuple */
 
