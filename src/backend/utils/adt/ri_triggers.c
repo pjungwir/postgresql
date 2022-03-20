@@ -249,6 +249,7 @@ static void ri_ReportViolation(const RI_ConstraintInfo *riinfo,
 							   TupleTableSlot *violatorslot, TupleDesc tupdesc,
 							   int queryno, bool partgone) pg_attribute_noreturn();
 static Datum tupleRange(TupleTableSlot *slot, const RI_ConstraintInfo *riinfo);
+static bool references_period(const ForPortionOfState *tg_temporal, const RI_ConstraintInfo *riinfo);
 
 
 /*
@@ -1578,7 +1579,7 @@ TRI_FKey_cascade_del(PG_FUNCTION_ARGS)
 	 * restrict the casacde to just the targeted portion.
 	 */
 	targetRange = tupleRange(oldslot, riinfo);
-	if (trigdata->tg_temporal)
+	if (references_period(trigdata->tg_temporal, riinfo))
 		targetRange = restrict_cascading_range(targetRange,
 											   trigdata->tg_temporal->fp_targetRange);
 
@@ -1781,7 +1782,7 @@ TRI_FKey_cascade_upd(PG_FUNCTION_ARGS)
 	 * restrict the casacde to just the targeted portion.
 	 */
 	targetRange = tupleRange(oldslot, riinfo);
-	if (trigdata->tg_temporal)
+	if (references_period(trigdata->tg_temporal, riinfo))
 		targetRange = restrict_cascading_range(targetRange,
 											   trigdata->tg_temporal->fp_targetRange);
 
@@ -2005,6 +2006,30 @@ restrict_cascading_range(Datum pkRecordRange, Datum targetedRange)
 }
 
 /*
+ * references_period
+ *
+ * Returns true iff the primary key referenced by riinfo includes the range
+ * column or PERIOD targeted by the FOR PORTION OF clause (according to
+ * tg_temporal).
+ */
+static bool
+references_period(const ForPortionOfState *tg_temporal, const RI_ConstraintInfo *riinfo)
+{
+	if (tg_temporal == NULL)
+		return false;
+
+	if (tg_temporal->fp_hasPeriod)
+	{
+		return riinfo->pk_period != InvalidOid &&
+			   riinfo->pk_period_attnums[0] == tg_temporal->fp_periodStartAttno &&
+			   riinfo->pk_period_attnums[1] == tg_temporal->fp_periodEndAttno;
+	} else {
+		return riinfo->pk_period == InvalidOid &&
+			   riinfo->pk_attnums[riinfo->nkeys - 1] == tg_temporal->fp_rangeAttno;
+	}
+}
+
+/*
  * tri_set -
  *
  * Common code for temporal ON DELETE SET NULL, ON DELETE SET DEFAULT, ON
@@ -2039,7 +2064,7 @@ tri_set(TriggerData *trigdata, bool is_set_null)
 	 * restrict the casacde to just the targeted portion.
 	 */
 	targetRange = tupleRange(oldslot, riinfo);
-	if (trigdata->tg_temporal)
+	if (references_period(trigdata->tg_temporal, riinfo))
 		targetRange = restrict_cascading_range(targetRange,
 											   trigdata->tg_temporal->fp_targetRange);
 
