@@ -2482,9 +2482,9 @@ typedef struct VariableShowStmt
 /* ----------------------
  *		Create Table Statement
  *
- * NOTE: in the raw gram.y output, ColumnDef, Period, and Constraint nodes are
+ * NOTE: in the raw gram.y output, ColumnDef, PeriodDef, and Constraint nodes are
  * intermixed in tableElts; periods and constraints are NIL.  After parse analysis,
- * tableElts contains just ColumnDefs, periods contains just Period nodes, and constraints contains just
+ * tableElts contains just ColumnDefs, periods contains just PeriodDef nodes, and constraints contains just
  * Constraint nodes (in fact, only CONSTR_CHECK nodes, in the present
  * implementation).
  * ----------------------
@@ -2495,7 +2495,7 @@ typedef struct CreateStmt
 	NodeTag		type;
 	RangeVar   *relation;		/* relation to create */
 	List	   *tableElts;		/* column definitions (list of ColumnDef) */
-	List	   *periods;		/* periods (list of Period nodes) */
+	List	   *periods;		/* periods (list of PeriodDef nodes) */
 	List	   *inhRelations;	/* relations to inherit from (list of
 								 * RangeVar) */
 	PartitionBoundSpec *partbound;	/* FOR VALUES clause */
@@ -2515,7 +2515,7 @@ typedef struct CreateStmt
  * ----------
  */
 
-typedef struct Period
+typedef struct PeriodDef
 {
 	NodeTag		type;
 	Oid			oid;			/* period oid, once it's transformed */
@@ -2527,7 +2527,7 @@ typedef struct Period
 	char	   *rangetypename;	/* name of the range type */
 	Oid			rngtypid;		/* the range type to use */
 	int			location;		/* token location, or -1 if unknown */
-} Period;
+} PeriodDef;
 
 /* ----------
  * Definitions for constraints in CreateStmt
@@ -3235,7 +3235,7 @@ typedef struct IndexStmt
 	List	   *indexParams;	/* columns to index: a list of IndexElem */
 	List	   *indexIncludingParams;	/* additional columns to index: a list
 										 * of IndexElem */
-	Period	   *period;			/* The period included in the index */
+	PeriodDef  *period;			/* The period included in the index */
 	List	   *options;		/* WITH clause options: a list of DefElem */
 	Node	   *whereClause;	/* qualification (partial-index predicate) */
 	List	   *excludeOpNames; /* exclusion operator names, or NIL if none */

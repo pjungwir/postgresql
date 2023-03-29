@@ -1620,8 +1620,8 @@ exprLocation(const Node *expr)
 		case T_Constraint:
 			loc = ((const Constraint *) expr)->location;
 			break;
-		case T_Period:
-			loc = ((const Period *) expr)->location;
+		case T_PeriodDef:
+			loc = ((const PeriodDef *) expr)->location;
 			break;
 		case T_FunctionParameter:
 			/* just use typename's location */

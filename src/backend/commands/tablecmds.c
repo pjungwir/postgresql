@@ -458,7 +458,7 @@ static ObjectAddress ATExecColumnDefault(Relation rel, const char *colName,
 										 Node *newDefault, LOCKMODE lockmode);
 static ObjectAddress ATExecCookedColumnDefault(Relation rel, AttrNumber attnum,
 											   Node *newDefault);
-static ObjectAddress ATExecAddPeriod(Relation rel, Period *period,
+static ObjectAddress ATExecAddPeriod(Relation rel, PeriodDef *period,
 									 AlterTableUtilityContext *context);
 static void ATExecDropPeriod(Relation rel, const char *periodName,
 							 DropBehavior behavior,
@@ -663,11 +663,11 @@ static List *GetParentedForeignKeyRefs(Relation partition);
 static void ATDetachCheckNoForeignKeyRefs(Relation partition);
 static char GetAttributeCompression(Oid atttypid, char *compression);
 static char GetAttributeStorage(Oid atttypid, const char *storagemode);
-static void AddRelationNewPeriod(Relation rel, Period *period);
-static void ValidatePeriod(Relation rel, Period *period,
+static void AddRelationNewPeriod(Relation rel, PeriodDef *period);
+static void ValidatePeriod(Relation rel, PeriodDef *period,
 						   Oid *colTypeId,
 						   AttrNumber *startattnum, AttrNumber *endattnum);
-static Constraint *make_constraint_for_period(Relation rel, Period *period,
+static Constraint *make_constraint_for_period(Relation rel, PeriodDef *period,
 											  Oid coltypid);
 
 
@@ -1288,7 +1288,7 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId,
 	 */
 	foreach(listptr, stmt->periods)
 	{
-		Period *period = (Period *) lfirst(listptr);
+		PeriodDef *period = (PeriodDef *) lfirst(listptr);
 
 		/* Don't update the count of check constraints twice */
 		CommandCounterIncrement();
@@ -1315,7 +1315,7 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId,
  * Also fills in period->constraintname if needed.
  */
 static Constraint *
-make_constraint_for_period(Relation rel, Period *period, Oid coltypid)
+make_constraint_for_period(Relation rel, PeriodDef *period, Oid coltypid)
 {
 	ColumnRef  *scol, *ecol;
 	Constraint *constr;
@@ -1378,7 +1378,7 @@ make_constraint_for_period(Relation rel, Period *period, Oid coltypid)
  * endattnum - the attnum of the end column.
  */
 static void
-ValidatePeriod(Relation rel, Period *period,
+ValidatePeriod(Relation rel, PeriodDef *period,
 			   Oid *colTypeId,
 			   AttrNumber *startattnum, AttrNumber *endattnum)
 {
@@ -1447,7 +1447,7 @@ ValidatePeriod(Relation rel, Period *period,
  * non-ambiguous existing type.
  */
 Oid
-choose_rangetype_for_period(Period *period, Oid coltypid)
+choose_rangetype_for_period(PeriodDef *period, Oid coltypid)
 {
 	Oid	rngtypid;
 
@@ -1490,7 +1490,7 @@ choose_rangetype_for_period(Period *period, Oid coltypid)
 }
 
 static void
-AddRelationNewPeriod(Relation rel, Period *period)
+AddRelationNewPeriod(Relation rel, PeriodDef *period)
 {
 	Relation	attrelation;
 	Oid			coltypid;
@@ -5304,7 +5304,7 @@ ATExecCmd(List **wqueue, AlteredTableInfo *tab,
 			address = ATExecCookedColumnDefault(rel, cmd->num, cmd->def);
 			break;
 		case AT_AddPeriod:
-			address = ATExecAddPeriod(rel, (Period *) cmd->def, context);
+			address = ATExecAddPeriod(rel, (PeriodDef *) cmd->def, context);
 			break;
 		case AT_DropPeriod:
 			ATExecDropPeriod(rel, cmd->name, cmd->behavior,
@@ -8156,7 +8156,7 @@ ATExecCookedColumnDefault(Relation rel, AttrNumber attnum,
  * Return the address of the period.
  */
 static ObjectAddress
-ATExecAddPeriod(Relation rel, Period *period, AlterTableUtilityContext *context)
+ATExecAddPeriod(Relation rel, PeriodDef *period, AlterTableUtilityContext *context)
 {
 	Relation		attrelation;
 	AttrNumber		startattnum, endattnum;

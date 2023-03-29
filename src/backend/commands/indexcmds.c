@@ -293,7 +293,7 @@ CheckIndexCompatible(Oid oldId,
 
 	/* The two indexes should have the same period. */
 	old_periodid = indexForm->indperiod;
-	new_periodid = indexInfo->ii_Period ? ((Period *) indexInfo->ii_Period)->oid : InvalidOid;
+	new_periodid = indexInfo->ii_Period ? ((PeriodDef *) indexInfo->ii_Period)->oid : InvalidOid;
 	if (old_periodid != new_periodid)
 	{
 		ReleaseSysCache(tuple);
@@ -2370,7 +2370,7 @@ ComputeIndexPeriod(IndexInfo *indexInfo, Oid relId, const char *periodName)
 		indexInfo->ii_Period = NULL;
 	else
 	{
-		Period *p = makeNode(Period);
+		PeriodDef *p = makeNode(PeriodDef);
 		p->oid = get_period_oid(relId, periodName, true);
 		indexInfo->ii_Period = (Node *) p;
 	}

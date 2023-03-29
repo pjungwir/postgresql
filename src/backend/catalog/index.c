@@ -584,7 +584,7 @@ UpdateIndexRelation(Oid indexoid,
 	indkey = buildint2vector(NULL, indexInfo->ii_NumIndexAttrs);
 	for (i = 0; i < indexInfo->ii_NumIndexAttrs; i++)
 		indkey->values[i] = indexInfo->ii_IndexAttrNumbers[i];
-	indperiod = indexInfo->ii_Period ? ((Period *) indexInfo->ii_Period)->oid : InvalidOid;
+	indperiod = indexInfo->ii_Period ? ((PeriodDef *) indexInfo->ii_Period)->oid : InvalidOid;
 	indcollation = buildoidvector(collationOids, indexInfo->ii_NumIndexKeyAttrs);
 	indclass = buildoidvector(classOids, indexInfo->ii_NumIndexKeyAttrs);
 	indoption = buildint2vector(coloptions, indexInfo->ii_NumIndexKeyAttrs);
@@ -1337,7 +1337,7 @@ index_concurrently_create_copy(Relation heapRelation, Oid oldIndexId,
 	indcoloptions = (int2vector *) DatumGetPointer(colOptionDatum);
 
 	/* Get the period */
-	periodid = oldInfo->ii_Period ? ((Period *) oldInfo->ii_Period)->oid : InvalidOid;
+	periodid = oldInfo->ii_Period ? ((PeriodDef *) oldInfo->ii_Period)->oid : InvalidOid;
 
 	/* Fetch options of index if any */
 	classTuple = SearchSysCache1(RELOID, oldIndexId);
@@ -1422,7 +1422,7 @@ index_concurrently_create_copy(Relation heapRelation, Oid oldIndexId,
 		newInfo->ii_Period = NULL;
 	else
 	{
-		Period *p = makeNode(Period);
+		PeriodDef *p = makeNode(PeriodDef);
 		p->oid = periodid;
 		newInfo->ii_Period = (Node *) p;
 	}
@@ -1999,7 +1999,7 @@ index_constraint_create(Relation heapRelation,
 	}
 
 	if (indexInfo->ii_Period != NULL)
-		periodid = ((Period *)indexInfo->ii_Period)->oid;
+		periodid = ((PeriodDef *)indexInfo->ii_Period)->oid;
 	else
 		periodid = InvalidOid;
 
@@ -2500,7 +2500,7 @@ BuildIndexInfo(Relation index)
 		ii->ii_Period = NULL;
 	else
 	{
-		Period *p = makeNode(Period);
+		PeriodDef *p = makeNode(PeriodDef);
 		p->oid = indexStruct->indperiod;
 		ii->ii_Period = (Node *) p;
 	}

@@ -4106,7 +4106,7 @@ TableLikeOption:
 TablePeriod:
 			PERIOD FOR name '(' name ',' name ')' opt_definition
 				{
-					Period *n = makeNode(Period);
+					PeriodDef *n = makeNode(PeriodDef);
 					n->periodname = $3;
 					n->startcolname = $5;
 					n->endcolname = $7;

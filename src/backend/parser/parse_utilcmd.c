@@ -81,7 +81,7 @@ typedef struct
 	bool		isforeign;		/* true if CREATE/ALTER FOREIGN TABLE */
 	bool		isalter;		/* true if altering existing table */
 	List	   *columns;		/* ColumnDef items */
-	List	   *periods;		/* Period items */
+	List	   *periods;		/* PeriodDef items */
 	List	   *ckconstraints;	/* CHECK constraints */
 	List	   *fkconstraints;	/* FOREIGN KEY constraints */
 	List	   *ixconstraints;	/* index-creating constraints */
@@ -115,7 +115,7 @@ typedef struct
 static void transformColumnDefinition(CreateStmtContext *cxt,
 									  ColumnDef *column);
 static void transformTablePeriod(CreateStmtContext *cxt,
-								 Period *period);
+								 PeriodDef *period);
 static void transformTableConstraint(CreateStmtContext *cxt,
 									 Constraint *constraint);
 static void transformTableLikeClause(CreateStmtContext *cxt,
@@ -287,8 +287,8 @@ transformCreateStmt(CreateStmt *stmt, const char *queryString)
 				transformColumnDefinition(&cxt, (ColumnDef *) element);
 				break;
 
-			case T_Period:
-				transformTablePeriod(&cxt, (Period *) element);
+			case T_PeriodDef:
+				transformTablePeriod(&cxt, (PeriodDef *) element);
 				break;
 
 			case T_Constraint:
@@ -879,7 +879,7 @@ transformColumnDefinition(CreateStmtContext *cxt, ColumnDef *column)
 }
 
 void
-transformPeriodOptions(Period *period)
+transformPeriodOptions(PeriodDef *period)
 {
 	ListCell   *option;
 	DefElem	   *dconstraintname = NULL;
@@ -924,10 +924,10 @@ transformPeriodOptions(Period *period)
 
 /*
  * transformTablePeriod
- *		transform a Period node within CREATE TABLE or ALTER TABLE
+ *		transform a PeriodDef node within CREATE TABLE or ALTER TABLE
  */
 static void
-transformTablePeriod(CreateStmtContext *cxt, Period *period)
+transformTablePeriod(CreateStmtContext *cxt, PeriodDef *period)
 {
 	Oid			coltypid;
 	ColumnDef  *col;
@@ -1641,7 +1641,7 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 	Oid			keycoltype;
 	Datum		datum;
 	bool		isnull;
-	Period	   *period;
+	PeriodDef  *period;
 
 	if (constraintOid)
 		*constraintOid = InvalidOid;
@@ -1700,7 +1700,7 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 	index->reset_default_tblspc = false;
 
 	/* Copy the period */
-	period = makeNode(Period);
+	period = makeNode(PeriodDef);
 	period->oid = idxrec->indperiod;
 	index->period = period;
 
@@ -2733,7 +2733,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 				ListCell *periods = NULL;
 				foreach(periods, cxt->periods)
 				{
-					Period *period = castNode(Period, lfirst(periods));
+					PeriodDef *period = castNode(PeriodDef, lfirst(periods));
 					if (strcmp(period->periodname, without_overlaps_str) == 0)
 					{
 						startcolname = period->startcolname;
@@ -2760,7 +2760,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 						Form_pg_period per = (Form_pg_period) GETSTRUCT(perTuple);
 						startcolname = get_attname(relid, per->perstart, false);
 						endcolname = get_attname(relid, per->perend, false);
-						index->period = makeNode(Period);
+						index->period = makeNode(PeriodDef);
 						index->period->oid = per->oid;
 						index->period->periodname = without_overlaps_str;
 
