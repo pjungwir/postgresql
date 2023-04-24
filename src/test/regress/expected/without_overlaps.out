@@ -383,6 +383,28 @@ ALTER TABLE without_overlaps_test2 RENAME COLUMN valid_at TO valid_thru;
 ALTER TABLE without_overlaps_test2 DROP COLUMN valid_thru;
 DROP TABLE without_overlaps_test2;
 --
+-- test PARTITION BY for ranges
+--
+CREATE TABLE temporal_partitioned (
+	id int4range,
+	valid_at daterange,
+	CONSTRAINT temporal_paritioned_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+) PARTITION BY LIST (id);
+ERROR:  cannot match partition key to an index using access method "gist"
+-- TODO: attach some partitions, insert into them, update them with and without FOR PORTION OF, delete them the same way.
+--
+-- test PARTITION BY for PERIODS
+--
+CREATE TABLE temporal_partitioned (
+  id int4range,
+  valid_from TIMESTAMP,
+  valid_til TIMESTAMP,
+  PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_paritioned_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+) PARTITION BY LIST (id);
+ERROR:  cannot match partition key to an index using access method "gist"
+-- TODO: attach some partitions, insert into them, update them with and without FOR PORTION OF, delete them the same way.
+--
 -- test FK dependencies
 --
 -- can't drop a range referenced by an FK, unless with CASCADE
