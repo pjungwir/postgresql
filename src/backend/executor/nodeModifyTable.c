@@ -1273,7 +1273,7 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 						  ResultRelInfo *resultRelInfo,
 						  ItemPointer tupleid)
 {
-	// TODO: figure out if I need to make a coyp of the slot somehow in order to insert it...
+	// TODO: figure out if I need to make a copy of the slot somehow in order to insert it...
 
 	ModifyTableState *mtstate = context->mtstate;
 	ModifyTable *node = (ModifyTable *) mtstate->ps.plan;
@@ -1290,13 +1290,19 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	TupleTableSlot *leftoverTuple1 = resultRelInfo->ri_forPortionOf->fp_Leftover1;
 	TupleTableSlot *leftoverTuple2 = resultRelInfo->ri_forPortionOf->fp_Leftover2;
 
-	/* Get the range of the existing pre-UPDATE/DELETE tuple */
-
-	// TODO: Seems like we shouldn't have to do this,
-	// because the old tuple should already be available somehow?
-	// But this is what triggers do.... (Are you sure this is how they get the OLD tuple?)
-	// And even if we do have to do this, is SnapshotAny really correct?
-	// Shouldn't it be the snapshot of the UPDATE?
+	/*
+	 * Get the range of the old pre-UPDATE/DELETE tuple,
+	 * so we can intersect it with the FOR PORTION OF target
+	 * and see if there are any "leftovers" to insert.
+	 *
+	 * We have already locked the tuple in ExecUpdate/ExecDelete
+	 * (TODO: if it was *not* concurrently updated, does table_tuple_update lock the tuple itself?
+	 * I don't found the code for that yet, and maybe it depends on the AM?)
+	 * and it has passed EvalPlanQual.
+	 * Make sure we're looking at the most recent version.
+	 * Otherwise concurrent updates of the same tuple in READ COMMITTED
+	 * could insert conflicting "leftovers".
+	 */
 	if (!table_tuple_fetch_row_version(resultRelInfo->ri_RelationDesc, tupleid, SnapshotAny, oldtupleSlot))
 		elog(ERROR, "failed to fetch tuple for FOR PORTION OF");
 
@@ -1310,7 +1316,7 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 		elog(ERROR, "found a NULL range in a temporal table");
 	oldRangeType = DatumGetRangeTypeP(oldRange);
 
-	/* Evaluate the target range if we haven't yet */
+	/* Get the target range. */
 
 	targetRangeType = DatumGetRangeTypeP(resultRelInfo->ri_forPortionOf->fp_targetRange);
 
@@ -1330,6 +1336,7 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 
 	/* Get the ranges to the left/right of the targeted range. */
 
+	// TODO: set memory context?:
 	range_leftover_internal(typcache, oldRangeType, targetRangeType, &leftoverRangeType1,
 			&leftoverRangeType2);
 
@@ -1337,12 +1344,15 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	 * Insert a copy of the tuple with the lower leftover range.
 	 * Even if the table is partitioned,
 	 * our insert won't extend past the current row, so we don't need to re-route.
+	 * TODO: Really? What if you update the partition key?
 	 */
 
 	if (!RangeIsEmpty(leftoverRangeType1))
 	{
-		MinimalTuple oldtuple = ExecFetchSlotMinimalTuple(oldtupleSlot, NULL);
-		ExecForceStoreMinimalTuple(oldtuple, leftoverTuple1, false);
+		// TODO: anything we need to clear here?
+		// Are we in the row context?
+		HeapTuple oldtuple = ExecFetchSlotHeapTuple(oldtupleSlot, false, NULL);
+		ExecForceStoreHeapTuple(oldtuple, leftoverTuple1, false);
 
 		set_leftover_tuple_bounds(leftoverTuple1, forPortionOf, typcache, leftoverRangeType1);
 		ExecMaterializeSlot(leftoverTuple1);
@@ -1355,12 +1365,13 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	 * Insert a copy of the tuple with the upper leftover range
 	 * Even if the table is partitioned,
 	 * our insert won't extend past the current row, so we don't need to re-route.
+	 * TODO: Really? What if you update the partition key?
 	 */
 
 	if (!RangeIsEmpty(leftoverRangeType2))
 	{
-		MinimalTuple oldtuple = ExecFetchSlotMinimalTuple(oldtupleSlot, NULL);
-		ExecForceStoreMinimalTuple(oldtuple, leftoverTuple2, false);
+		HeapTuple oldtuple = ExecFetchSlotHeapTuple(oldtupleSlot, false, NULL);
+		ExecForceStoreHeapTuple(oldtuple, leftoverTuple2, false);
 
 		set_leftover_tuple_bounds(leftoverTuple2, forPortionOf, typcache, leftoverRangeType2);
 		ExecMaterializeSlot(leftoverTuple2);
@@ -2591,6 +2602,7 @@ redo_act:
 								ExecInitUpdateProjection(context->mtstate,
 														 resultRelInfo);
 
+							ereport(NOTICE, (errmsg("READ_COMMITTED reload")));
 							/* Fetch the most recent version of old tuple. */
 							oldSlot = resultRelInfo->ri_oldTupleSlot;
 							if (!table_tuple_fetch_row_version(resultRelationDesc,
@@ -3789,6 +3801,7 @@ ExecModifyTable(PlanState *pstate)
 		 * Reset per-tuple memory context used for processing on conflict and
 		 * returning clauses, to free any expression evaluation storage
 		 * allocated in the previous cycle.
+		 * TODO: It sounds like FOR PORTION OF might need to do something here too?
 		 */
 		if (pstate->ps_ExprContext)
 			ResetExprContext(pstate->ps_ExprContext);

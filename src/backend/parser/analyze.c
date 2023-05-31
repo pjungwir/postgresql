@@ -1246,6 +1246,7 @@ transformForPortionOfClause(ParseState *pstate,
 	Relation targetrel = pstate->p_target_relation;
 	RTEPermissionInfo *target_perminfo = pstate->p_target_nsitem->p_perminfo;
 	char *range_name = forPortionOf->range_name;
+	Oid	rngtypid = InvalidOid;
 	char *range_type_name = NULL;
 	int range_attno = InvalidAttrNumber;
 	int start_attno = InvalidAttrNumber;
@@ -1310,7 +1311,8 @@ transformForPortionOfClause(ParseState *pstate,
 			Form_pg_attribute startattr, endattr;
 			Var *startvar, *endvar;
 
-			Type rngtype = typeidType(per->perrngtype);
+			rngtypid = per->perrngtype;
+			Type rngtype = typeidType(rngtypid);
 			range_type_name = typeTypeName(rngtype);
 			ReleaseSysCache(rngtype);
 			start_attno = per->perstart;
@@ -1351,7 +1353,9 @@ transformForPortionOfClause(ParseState *pstate,
 			result->rangeVar = NULL;
 			result->startVar = copyObject(startvar);
 			result->endVar = copyObject(endvar);
-			result->rangeType = typenameTypeId(pstate, typeStringToTypeName(range_type_name, NULL));
+			// TODO: we have rngType already, and range_type_name is char *.
+			// And isn't per->perrngtype already the type oid, which is what we need here?:
+			result->rangeType = rngtypid;
 		}
 	}
 
@@ -1367,8 +1371,7 @@ transformForPortionOfClause(ParseState *pstate,
 	 * Build a range from the FROM ... TO .... bounds.
 	 * This should give a constant result, so we accept functions like NOW()
 	 * but not column references, subqueries, etc.
-	 *
-	 * It also permits MINVALUE and MAXVALUE like declarative partitions.
+	 * It also permits UNBOUNDED.
 	 */
 	target_start = transformForPortionOfBound(forPortionOf->target_start, true);
 	target_end   = transformForPortionOfBound(forPortionOf->target_end, false);
