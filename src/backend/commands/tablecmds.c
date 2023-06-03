@@ -11898,10 +11898,7 @@ CreateFKCheckTrigger(Oid myRelOid, Oid refRelOid, Constraint *fkconstraint,
 	fk_trigger = makeNode(CreateTrigStmt);
 	fk_trigger->replace = false;
 	fk_trigger->isconstraint = true;
-	if (is_temporal)
-		fk_trigger->trigname = "TRI_ConstraintTrigger_c";
-	else
-		fk_trigger->trigname = "RI_ConstraintTrigger_c";
+	fk_trigger->trigname = "RI_ConstraintTrigger_c";
 	fk_trigger->relation = NULL;
 
 	/* Either ON INSERT or ON UPDATE */
