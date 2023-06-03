@@ -6978,8 +6978,7 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 				i_indreloptions,
 				i_indstatcols,
 				i_indstatvals,
-				i_withoutoverlaps,
-				i_indperiod;
+				i_withoutoverlaps;
 
 	/*
 	 * We want to perform just one query against pg_index.  However, we
@@ -7061,13 +7060,6 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 		appendPQExpBufferStr(query,
 							 "false AS indnullsnotdistinct, ");
 
-	if (fout->remoteVersion >= 160000)
-		appendPQExpBufferStr(query,
-							 "p.pername AS indperiod ");
-	else
-		appendPQExpBufferStr(query,
-							 "null AS indperiod ");
-
 	/*
 	 * The point of the messy-looking outer join is to find a constraint that
 	 * is related by an internal dependency link to the index. If we find one,
@@ -7077,27 +7069,7 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 	 * Note: the check on conrelid is redundant, but useful because that
 	 * column is indexed while conindid is not.
 	 */
-	if (fout->remoteVersion >= 160000)
-	{
-		appendPQExpBuffer(query,
-						  "FROM unnest('%s'::pg_catalog.oid[]) AS src(tbloid)\n"
-						  "JOIN pg_catalog.pg_index i ON (src.tbloid = i.indrelid) "
-						  "JOIN pg_catalog.pg_class t ON (t.oid = i.indexrelid) "
-						  "JOIN pg_catalog.pg_class t2 ON (t2.oid = i.indrelid) "
-						  "LEFT JOIN pg_catalog.pg_constraint c "
-						  "ON (i.indrelid = c.conrelid AND "
-						  "i.indexrelid = c.conindid AND "
-						  "c.contype IN ('p','u','x')) "
-						  "LEFT JOIN pg_catalog.pg_period p "
-						  "ON (p.oid = i.indperiod) "
-						  "LEFT JOIN pg_catalog.pg_inherits inh "
-						  "ON (inh.inhrelid = indexrelid) "
-						  "WHERE (i.indisvalid OR t2.relkind = 'p') "
-						  "AND i.indisready "
-						  "ORDER BY i.indrelid, indexname",
-						  tbloids->data);
-	}
-	else if (fout->remoteVersion >= 110000)
+	if (fout->remoteVersion >= 110000)
 	{
 		appendPQExpBuffer(query,
 						  "FROM unnest('%s'::pg_catalog.oid[]) AS src(tbloid)\n"
@@ -7162,7 +7134,6 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 	i_indstatcols = PQfnumber(res, "indstatcols");
 	i_indstatvals = PQfnumber(res, "indstatvals");
 	i_withoutoverlaps = PQfnumber(res, "withoutoverlaps");
-	i_indperiod = PQfnumber(res, "indperiod");
 
 	indxinfo = (IndxInfo *) pg_malloc(ntups * sizeof(IndxInfo));
 
@@ -7266,7 +7237,6 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 				constrinfo->conislocal = true;
 				constrinfo->separate = true;
 				constrinfo->withoutoverlaps = *(PQgetvalue(res, j, i_withoutoverlaps)) == 't';
-				constrinfo->indperiod = pg_strdup(PQgetvalue(res, j, i_indperiod));
 
 				indxinfo[j].indexconstraint = constrinfo->dobj.dumpId;
 			}
@@ -16959,17 +16929,7 @@ dumpConstraint(Archive *fout, const ConstraintInfo *coninfo)
 				const char *attname;
 
 				if (indkey == InvalidAttrNumber)
-				{
-					if (coninfo->withoutoverlaps)
-					{
-						/* We have a PERIOD, so there is no attname. */
-						appendPQExpBuffer(q, ", %s WITHOUT OVERLAPS",
-										  fmtId(coninfo->indperiod));
-						continue;
-					}
-					else
-						break;
-				}
+					break;
 				attname = getAttrName(indkey, tbinfo);
 
 				if (k == 0)
