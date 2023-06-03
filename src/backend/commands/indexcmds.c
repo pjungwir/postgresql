@@ -94,9 +94,6 @@ static void ComputeIndexAttrs(IndexInfo *indexInfo,
 							  Oid ddl_userid,
 							  int ddl_sec_context,
 							  int *ddl_save_nestlevel);
-static void ComputeIndexPeriod(IndexInfo *indexInfo,
-							   Oid relId,
-							   const char *periodName);
 static char *ChooseIndexName(const char *tabname, Oid namespaceId,
 							 const List *colnames, const List *exclusionOpNames,
 							 bool primary, bool isconstraint);
@@ -152,9 +149,6 @@ typedef struct ReindexErrorInfo
  * 'exclusionOpNames': list of names of exclusion-constraint operators,
  *		or NIL if not an exclusion constraint.
  * 'istemporal': true iff this index has a WITHOUT OVERLAPS clause.
- * 'indexPeriodName': the name of the PERIOD used in WITHOUT OVERLAPS. If a
- *		range column is used, this should be NULL. We'll check that in
- *		attributeList.
  *
  * This is tailored to the needs of ALTER TABLE ALTER TYPE, which recreates
  * any indexes that depended on a changing column from their pg_get_indexdef
@@ -185,8 +179,7 @@ CheckIndexCompatible(Oid oldId,
 					 const char *accessMethodName,
 					 const List *attributeList,
 					 const List *exclusionOpNames,
-					 bool istemporal,
-					 const char *indexPeriodName)
+					 bool istemporal)
 {
 	bool		isconstraint;
 	Oid		   *typeIds;
@@ -205,8 +198,6 @@ CheckIndexCompatible(Oid oldId,
 	int			numberOfAttributes;
 	int			old_natts;
 	bool		ret = true;
-	Oid			old_periodid;
-	Oid			new_periodid;
 	oidvector  *old_indclass;
 	oidvector  *old_indcollation;
 	Relation	irel;
@@ -264,8 +255,6 @@ CheckIndexCompatible(Oid oldId,
 					  amcanorder, isconstraint, istemporal, InvalidOid,
 					  0, NULL);
 
-	ComputeIndexPeriod(indexInfo, relationId, indexPeriodName);
-
 	/* Get the soon-obsolete pg_index tuple. */
 	tuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(oldId));
 	if (!HeapTupleIsValid(tuple))
@@ -279,22 +268,6 @@ CheckIndexCompatible(Oid oldId,
 	if (!(heap_attisnull(tuple, Anum_pg_index_indpred, NULL) &&
 		  heap_attisnull(tuple, Anum_pg_index_indexprs, NULL) &&
 		  indexForm->indisvalid))
-	{
-		ReleaseSysCache(tuple);
-		return false;
-	}
-
-	/* The two indexes should agree on WITHOUT OVERLAPS. */
-	if (indexInfo->ii_Temporal != istemporal)
-	{
-		ReleaseSysCache(tuple);
-		return false;
-	}
-
-	/* The two indexes should have the same period. */
-	old_periodid = indexForm->indperiod;
-	new_periodid = indexInfo->ii_Period ? ((PeriodDef *) indexInfo->ii_Period)->oid : InvalidOid;
-	if (old_periodid != new_periodid)
 	{
 		ReleaseSysCache(tuple);
 		return false;
@@ -580,7 +553,6 @@ DefineIndex(Oid tableId,
 	Oid			tablespaceId;
 	Oid			createdConstraintId = InvalidOid;
 	List	   *indexColNames;
-	char	   *indexPeriodName;
 	List	   *allIndexParams;
 	Relation	rel;
 	HeapTuple	tuple;
@@ -832,11 +804,6 @@ DefineIndex(Oid tableId,
 	indexColNames = ChooseIndexColumnNames(allIndexParams);
 
 	/*
-	 * Choose the index period name.
-	 */
-	indexPeriodName = stmt->period ? stmt->period->periodname : NULL;
-
-	/*
 	 * Select name for index if caller didn't specify
 	 */
 	indexRelationName = stmt->idxname;
@@ -951,8 +918,6 @@ DefineIndex(Oid tableId,
 					  amcanorder, stmt->isconstraint, stmt->istemporal,
 					  root_save_userid, root_save_sec_context,
 					  &root_save_nestlevel);
-
-	ComputeIndexPeriod(indexInfo, relationId, indexPeriodName);
 
 	/*
 	 * Extra checks when creating a PRIMARY KEY index.
@@ -1895,7 +1860,7 @@ CheckPredicate(Expr *predicate)
  *
  * Finds an operator for a temporal index attribute.
  * We need an equality operator for normal keys
- * and an overlaps operator for the range/PERIOD.
+ * and an overlaps operator for the range.
  * Returns the operator oid and strategy in opid and strat,
  * respectively.
  */
@@ -2368,19 +2333,6 @@ ComputeIndexAttrs(IndexInfo *indexInfo,
 		}
 
 		attn++;
-	}
-}
-
-static void
-ComputeIndexPeriod(IndexInfo *indexInfo, Oid relId, const char *periodName)
-{
-	if (periodName == NULL)
-		indexInfo->ii_Period = NULL;
-	else
-	{
-		PeriodDef *p = makeNode(PeriodDef);
-		p->oid = get_period_oid(relId, periodName, true);
-		indexInfo->ii_Period = (Node *) p;
 	}
 }
 
