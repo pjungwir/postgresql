@@ -45,8 +45,7 @@ extern bool CheckIndexCompatible(Oid oldId,
 								 const char *accessMethodName,
 								 List *attributeList,
 								 List *exclusionOpNames,
-								 bool istemporal,
-								 const char *indexPeriodName);
+								 bool istemporal);
 extern Oid	GetDefaultOpClass(Oid type_id, Oid am_id);
 extern Oid	ResolveOpClass(List *opclass, Oid attrType,
 						   const char *accessMethodName, Oid accessMethodId);

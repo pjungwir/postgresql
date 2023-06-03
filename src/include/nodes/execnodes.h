@@ -144,7 +144,6 @@ typedef struct ExprState
  *		IndexAttrNumbers	underlying-rel attribute numbers used as keys
  *							(zeroes indicate expressions). It also contains
  * 							info about included columns.
- *		Period				period used in the index, or NULL if none
  *		Expressions			expr trees for expression entries, or NIL if none
  *		ExpressionsState	exec state for expressions, or NIL if none
  *		Predicate			partial-index predicate, or NIL if none
@@ -179,7 +178,6 @@ typedef struct IndexInfo
 	int			ii_NumIndexAttrs;	/* total number of columns in index */
 	int			ii_NumIndexKeyAttrs;	/* number of key columns in index */
 	AttrNumber	ii_IndexAttrNumbers[INDEX_MAX_KEYS];
-	Node	   *ii_Period;	/* period used in the index */
 	List	   *ii_Expressions; /* list of Expr */
 	List	   *ii_ExpressionsState;	/* list of ExprState */
 	List	   *ii_Predicate;	/* list of Expr */

@@ -108,7 +108,7 @@ WITH ( MODULUS <replaceable class="parameter">numeric_literal</replaceable>, REM
 
 <phrase><replaceable class="parameter">temporal_interval</replaceable> in a <literal>PRIMARY KEY</literal>, <literal>UNIQUE</literal>, or <literal>FOREIGN KEY</literal> constraint is:</phrase>
 
-<replaceable class="parameter">range_column_name</replaceable> | <replaceable class="parameter">period_name</replaceable>
+<replaceable class="parameter">range_column_name</replaceable>
 
 <phrase><replaceable class="parameter">referential_action</replaceable> in a <literal>FOREIGN KEY</literal>/<literal>REFERENCES</literal> constraint is:</phrase>
 
@@ -1079,7 +1079,7 @@ WITH ( MODULUS <replaceable class="parameter">numeric_literal</replaceable>, REM
       A <literal>PRIMARY KEY</literal> with a <literal>WITHOUT OVERLAPS</literal> option
       is a <emphasis>temporal</emphasis> primary key.
       The <literal>WITHOUT OVERLAPS</literal> value
-      must be a period or range type and is used to constrain the record's applicability
+      must be a range type and is used to constrain the record's applicability
       to just that interval (usually a range of dates or timestamps).
       The main part of the primary key may be repeated in other rows of the table,
       as long as records with the same key don't overlap in the
