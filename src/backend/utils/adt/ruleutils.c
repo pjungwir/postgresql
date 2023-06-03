@@ -339,7 +339,7 @@ static char *pg_get_viewdef_worker(Oid viewoid,
 								   int prettyFlags, int wrapColumn);
 static char *pg_get_triggerdef_worker(Oid trigid, bool pretty);
 static int	decompile_column_index_array(Datum column_index_array, Oid relId, Oid indexId,
-										 bool withoutOverlaps, Oid periodid, StringInfo buf);
+										 bool withoutOverlaps, StringInfo buf);
 static char *pg_get_ruledef_worker(Oid ruleoid, int prettyFlags);
 static char *pg_get_indexdef_worker(Oid indexrelid, int colno,
 									const Oid *excludeOps,
@@ -2247,7 +2247,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 				val = SysCacheGetAttrNotNull(CONSTROID, tup,
 											 Anum_pg_constraint_conkey);
 
-				decompile_column_index_array(val, conForm->conrelid, conForm->conindid, false, InvalidOid, &buf);
+				decompile_column_index_array(val, conForm->conrelid, conForm->conindid, false, &buf);
 
 				/* add foreign relation name */
 				appendStringInfo(&buf, ") REFERENCES %s(",
@@ -2258,7 +2258,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 				val = SysCacheGetAttrNotNull(CONSTROID, tup,
 											 Anum_pg_constraint_confkey);
 
-				decompile_column_index_array(val, conForm->confrelid, conForm->conindid, false, InvalidOid, &buf);
+				decompile_column_index_array(val, conForm->confrelid, conForm->conindid, false, &buf);
 
 				appendStringInfoChar(&buf, ')');
 
@@ -2344,7 +2344,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 				if (!isnull)
 				{
 					appendStringInfoString(&buf, " (");
-					decompile_column_index_array(val, conForm->conrelid, InvalidOid, false, InvalidOid, &buf);
+					decompile_column_index_array(val, conForm->conrelid, InvalidOid, false, &buf);
 					appendStringInfoChar(&buf, ')');
 				}
 
@@ -2387,7 +2387,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 				indexId = conForm->conindid;
 				SysCacheGetAttr(CONSTROID, tup,
 						  Anum_pg_constraint_conexclop, &isnull);
-				keyatts = decompile_column_index_array(val, conForm->conrelid, indexId, !isnull, InvalidOid, &buf);
+				keyatts = decompile_column_index_array(val, conForm->conrelid, indexId, !isnull, &buf);
 
 				appendStringInfoChar(&buf, ')');
 
@@ -2569,7 +2569,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
  */
 static int
 decompile_column_index_array(Datum column_index_array, Oid relId, Oid indexId,
-							 bool withoutOverlaps, Oid periodid, StringInfo buf)
+							 bool withoutOverlaps, StringInfo buf)
 {
 	Datum	   *keys;
 	int			nKeys;
@@ -2584,34 +2584,7 @@ decompile_column_index_array(Datum column_index_array, Oid relId, Oid indexId,
 		char	   *colName;
 		int			colid = DatumGetInt16(keys[j]);
 
-		/* The key might contain a PERIOD instead of an attribute */
-		if (colid == 0)
-		{
-			/* First try the given periodid, then fall back on the index */
-			if (periodid == InvalidOid && indexId != InvalidOid)
-			{
-				HeapTuple indtup;
-				bool isnull;
-				Datum periodidDatum;
-
-				indtup = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(indexId));
-				if (!HeapTupleIsValid(indtup))
-					elog(ERROR, "cache lookup failed for index %u", indexId);
-
-				periodidDatum = SysCacheGetAttr(INDEXRELID, indtup,
-										   Anum_pg_index_indperiod, &isnull);
-				if (isnull)
-					elog(ERROR, "missing period for index %u", indexId);
-
-				periodid = DatumGetObjectId(periodidDatum);
-				ReleaseSysCache(indtup);
-			}
-			colName = get_periodname(periodid, false);
-		}
-		else
-		{
-			colName = get_attname(relId, colid, false);
-		}
+		colName = get_attname(relId, colid, false);
 
 		if (j == 0)
 			appendStringInfoString(buf, quote_identifier(colName));
