@@ -515,7 +515,7 @@ static ObjectAddress addFkRecurseReferenced(List **wqueue, Constraint *fkconstra
 											bool old_check_ok,
 											Oid parentDelTrigger, Oid parentUpdTrigger,
 											bool is_temporal);
-static void validateFkOnDeleteSetColumns(int numfks, const int16 *fkattnums,
+static void validateFkOnDeleteSetColumns(int numfks, const int16 *fkattnums, const int16 fkperiodattnum,
 										 int numfksetcols, const int16 *fksetcolsattnums,
 										 List *fksetcols);
 static void addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint,
@@ -9792,7 +9792,7 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	numfkdelsetcols = transformColumnNameList(RelationGetRelid(rel),
 											  fkconstraint->fk_del_set_cols,
 											  fkdelsetcols, NULL);
-	validateFkOnDeleteSetColumns(numfks, fkattnum,
+	validateFkOnDeleteSetColumns(numfks, fkattnum, fkperiodattnum,
 								 numfkdelsetcols, fkdelsetcols,
 								 fkconstraint->fk_del_set_cols);
 
@@ -9981,12 +9981,15 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
  */
 void
 validateFkOnDeleteSetColumns(int numfks, const int16 *fkattnums,
+							 const int16 fkperiodattnum,
 							 int numfksetcols, const int16 *fksetcolsattnums,
 							 List *fksetcols)
 {
 	for (int i = 0; i < numfksetcols; i++)
 	{
 		int16		setcol_attnum = fksetcolsattnums[i];
+		/* assume only one PERIOD key column in a foreign key */
+		int16		fkperiod_attnum = fkperiodattnum;
 		bool		seen = false;
 
 		for (int j = 0; j < numfks; j++)
@@ -9995,6 +9998,13 @@ validateFkOnDeleteSetColumns(int numfks, const int16 *fkattnums,
 			{
 				seen = true;
 				break;
+			}
+			if (fkperiod_attnum == setcol_attnum)
+			{
+				char	   *col = strVal(list_nth(fksetcols, i));
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+						 errmsg("column \"%s\" referenced in ON DELETE SET action cannot be PERIOD", col)));
 			}
 		}
 
@@ -12633,11 +12643,19 @@ createForeignKeyActionTriggers(Relation rel, Oid refRelOid, Constraint *fkconstr
 				fk_trigger->funcname = SystemFuncName("TRI_FKey_restrict_del");
 				break;
 			case FKCONSTR_ACTION_CASCADE:
+				fk_trigger->deferrable = false;
+				fk_trigger->initdeferred = false;
+				fk_trigger->funcname = SystemFuncName("TRI_FKey_cascade_del");
+				break;
 			case FKCONSTR_ACTION_SETNULL:
+				fk_trigger->deferrable = false;
+				fk_trigger->initdeferred = false;
+				fk_trigger->funcname = SystemFuncName("TRI_FKey_setnull_del");
+				break;
 			case FKCONSTR_ACTION_SETDEFAULT:
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("action not supported for temporal foreign keys")));
+				fk_trigger->deferrable = false;
+				fk_trigger->initdeferred = false;
+				fk_trigger->funcname = SystemFuncName("TRI_FKey_setdefault_del");
 				break;
 			default:
 				elog(ERROR, "unrecognized FK action type: %d",
@@ -12724,11 +12742,19 @@ createForeignKeyActionTriggers(Relation rel, Oid refRelOid, Constraint *fkconstr
 				fk_trigger->funcname = SystemFuncName("TRI_FKey_restrict_upd");
 				break;
 			case FKCONSTR_ACTION_CASCADE:
+				fk_trigger->deferrable = false;
+				fk_trigger->initdeferred = false;
+				fk_trigger->funcname = SystemFuncName("TRI_FKey_cascade_upd");
+				break;
 			case FKCONSTR_ACTION_SETNULL:
+				fk_trigger->deferrable = false;
+				fk_trigger->initdeferred = false;
+				fk_trigger->funcname = SystemFuncName("TRI_FKey_setnull_upd");
+				break;
 			case FKCONSTR_ACTION_SETDEFAULT:
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("action not supported for temporal foreign keys")));
+				fk_trigger->deferrable = false;
+				fk_trigger->initdeferred = false;
+				fk_trigger->funcname = SystemFuncName("TRI_FKey_setdefault_upd");
 				break;
 			default:
 				elog(ERROR, "unrecognized FK action type: %d",
