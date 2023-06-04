@@ -1611,6 +1611,8 @@ DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
  * That way foreign keys can compare fkattr <@ range_agg(pkattr).
  * intersectoperoid is used by NO ACTION constraints to trim the range being considered
  * to just what was updated/deleted.
+ * intersectprocoid is used to limit the effect of CASCADE/SET NULL/SET DEFAULT
+ * when the PK record is changed with FOR PORTION OF.
  * withoutportionoid is a set-returning function computing
  * the difference between one range and another,
  * returning each result range in a separate row.
@@ -1695,6 +1697,14 @@ FindFKPeriodOpersAndProcs(Oid opclass,
 				errmsg("could not identify a without_overlaps support function for type %s", format_type_be(opcintype)),
 				errhint("Define a without_overlaps support function for operator class \"%d\" for access method \"%s\".",
 						opclass, "gist"));
+	/*
+	 * If the command uses FOR PORTION OF,
+	 * we will also need an intersect support proc.
+	 * If this is missing we don't need to complain here,
+	 * because FOR PORTION OF will not be allowed.
+	 */
+	if (opfamily != InvalidOid && opcintype != InvalidOid)
+		*intersectprocoid = get_opfamily_proc(opfamily, opcintype, opcintype, GIST_INTERSECT_PROC);
 }
 
 /*
