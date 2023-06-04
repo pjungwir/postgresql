@@ -513,7 +513,7 @@ static ObjectAddress addFkRecurseReferenced(List **wqueue, Constraint *fkconstra
 											bool old_check_ok,
 											Oid parentDelTrigger, Oid parentUpdTrigger,
 											bool with_period);
-static void validateFkOnDeleteSetColumns(int numfks, const int16 *fkattnums,
+static void validateFkOnDeleteSetColumns(int numfks, const int16 *fkattnums, const int16 fkperiodattnum,
 										 int numfksetcols, const int16 *fksetcolsattnums,
 										 List *fksetcols);
 static void addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint,
@@ -9823,6 +9823,7 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	int16		fkdelsetcols[INDEX_MAX_KEYS] = {0};
 	bool		with_period;
 	bool		pk_with_period;
+	int16		fkperiodattnum = InvalidOid;
 	int			i;
 	int			numfks,
 				numpks,
@@ -9924,12 +9925,13 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_FOREIGN_KEY),
 					errmsg("foreign key uses PERIOD on the referenced table but not the referencing table")));
+		fkperiodattnum = fkattnum[numfks - 1];
 	}
 
 	numfkdelsetcols = transformColumnNameList(RelationGetRelid(rel),
 											  fkconstraint->fk_del_set_cols,
 											  fkdelsetcols, NULL);
-	validateFkOnDeleteSetColumns(numfks, fkattnum,
+	validateFkOnDeleteSetColumns(numfks, fkattnum, fkperiodattnum,
 								 numfkdelsetcols, fkdelsetcols,
 								 fkconstraint->fk_del_set_cols);
 
@@ -10266,9 +10268,14 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	{
 		Oid			periodoperoid;
 		Oid			aggedperiodoperoid;
-		Oid			periodprocoid;
+		Oid			aggprocoid;
+		Oid			intersectprocoid;
 
-		FindFKPeriodOpersAndProcs(opclasses[numpks - 1], &periodoperoid, &aggedperiodoperoid, &periodprocoid);
+		FindFKPeriodOpersAndProcs(opclasses[numpks - 1],
+								  &periodoperoid,
+								  &aggedperiodoperoid,
+								  &aggprocoid,
+								  &intersectprocoid);
 	}
 
 	/*
@@ -10322,6 +10329,7 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
  */
 void
 validateFkOnDeleteSetColumns(int numfks, const int16 *fkattnums,
+							 const int16 fkperiodattnum,
 							 int numfksetcols, const int16 *fksetcolsattnums,
 							 List *fksetcols)
 {
@@ -10332,6 +10340,13 @@ validateFkOnDeleteSetColumns(int numfks, const int16 *fkattnums,
 
 		for (int j = 0; j < numfks; j++)
 		{
+			if (fkperiodattnum == setcol_attnum)
+			{
+				char	   *col = strVal(list_nth(fksetcols, i));
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+						 errmsg("column \"%s\" referenced in ON DELETE SET action cannot be PERIOD", col)));
+			}
 			if (fkattnums[j] == setcol_attnum)
 			{
 				seen = true;
@@ -12638,16 +12653,6 @@ createForeignKeyActionTriggers(Relation rel, Oid refRelOid, Constraint *fkconstr
 	fk_trigger->transitionRels = NIL;
 	fk_trigger->constrrel = NULL;
 
-	/* Forbid some actions with PERIOD elements for now: */
-	if (fkconstraint->fk_with_period && (
-		fkconstraint->fk_del_action == FKCONSTR_ACTION_CASCADE ||
-		fkconstraint->fk_del_action == FKCONSTR_ACTION_SETNULL ||
-		fkconstraint->fk_del_action == FKCONSTR_ACTION_SETDEFAULT))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("invalid %s action for foreign key constraint using PERIOD",
-						"ON DELETE")));
-
 	switch (fkconstraint->fk_del_action)
 	{
 		case FKCONSTR_ACTION_NOACTION:
@@ -12663,17 +12668,26 @@ createForeignKeyActionTriggers(Relation rel, Oid refRelOid, Constraint *fkconstr
 		case FKCONSTR_ACTION_CASCADE:
 			fk_trigger->deferrable = false;
 			fk_trigger->initdeferred = false;
-			fk_trigger->funcname = SystemFuncName("RI_FKey_cascade_del");
+			if (fkconstraint->fk_with_period)
+				fk_trigger->funcname = SystemFuncName("RI_FKey_period_cascade_del");
+			else
+				fk_trigger->funcname = SystemFuncName("RI_FKey_cascade_del");
 			break;
 		case FKCONSTR_ACTION_SETNULL:
 			fk_trigger->deferrable = false;
 			fk_trigger->initdeferred = false;
-			fk_trigger->funcname = SystemFuncName("RI_FKey_setnull_del");
+			if (fkconstraint->fk_with_period)
+				fk_trigger->funcname = SystemFuncName("RI_FKey_period_setnull_del");
+			else
+				fk_trigger->funcname = SystemFuncName("RI_FKey_setnull_del");
 			break;
 		case FKCONSTR_ACTION_SETDEFAULT:
 			fk_trigger->deferrable = false;
 			fk_trigger->initdeferred = false;
-			fk_trigger->funcname = SystemFuncName("RI_FKey_setdefault_del");
+			if (fkconstraint->fk_with_period)
+				fk_trigger->funcname = SystemFuncName("RI_FKey_period_setdefault_del");
+			else
+				fk_trigger->funcname = SystemFuncName("RI_FKey_setdefault_del");
 			break;
 		default:
 			elog(ERROR, "unrecognized FK action type: %d",
@@ -12709,16 +12723,6 @@ createForeignKeyActionTriggers(Relation rel, Oid refRelOid, Constraint *fkconstr
 	fk_trigger->transitionRels = NIL;
 	fk_trigger->constrrel = NULL;
 
-	/* Forbid some actions with PERIOD elements for now: */
-	if (fkconstraint->fk_with_period && (
-		fkconstraint->fk_upd_action == FKCONSTR_ACTION_CASCADE ||
-		fkconstraint->fk_upd_action == FKCONSTR_ACTION_SETNULL ||
-		fkconstraint->fk_upd_action == FKCONSTR_ACTION_SETDEFAULT))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("invalid %s action for foreign key constraint using PERIOD",
-						"ON UPDATE")));
-
 	switch (fkconstraint->fk_upd_action)
 	{
 		case FKCONSTR_ACTION_NOACTION:
@@ -12734,17 +12738,26 @@ createForeignKeyActionTriggers(Relation rel, Oid refRelOid, Constraint *fkconstr
 		case FKCONSTR_ACTION_CASCADE:
 			fk_trigger->deferrable = false;
 			fk_trigger->initdeferred = false;
-			fk_trigger->funcname = SystemFuncName("RI_FKey_cascade_upd");
+			if (fkconstraint->fk_with_period)
+				fk_trigger->funcname = SystemFuncName("RI_FKey_period_cascade_upd");
+			else
+				fk_trigger->funcname = SystemFuncName("RI_FKey_cascade_upd");
 			break;
 		case FKCONSTR_ACTION_SETNULL:
 			fk_trigger->deferrable = false;
 			fk_trigger->initdeferred = false;
-			fk_trigger->funcname = SystemFuncName("RI_FKey_setnull_upd");
+			if (fkconstraint->fk_with_period)
+				fk_trigger->funcname = SystemFuncName("RI_FKey_period_setnull_upd");
+			else
+				fk_trigger->funcname = SystemFuncName("RI_FKey_setnull_upd");
 			break;
 		case FKCONSTR_ACTION_SETDEFAULT:
 			fk_trigger->deferrable = false;
 			fk_trigger->initdeferred = false;
-			fk_trigger->funcname = SystemFuncName("RI_FKey_setdefault_upd");
+			if (fkconstraint->fk_with_period)
+				fk_trigger->funcname = SystemFuncName("RI_FKey_period_setdefault_upd");
+			else
+				fk_trigger->funcname = SystemFuncName("RI_FKey_setdefault_upd");
 			break;
 		default:
 			elog(ERROR, "unrecognized FK action type: %d",
