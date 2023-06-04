@@ -1411,7 +1411,7 @@ TRI_FKey_cascade_del(PG_FUNCTION_ARGS)
 		char		attname[MAX_QUOTED_NAME_LEN];
 		char		paramname[16];
 		const char *querysep;
-		Oid			queryoids[RI_MAX_NUMKEYS];
+		Oid			queryoids[RI_MAX_NUMKEYS + 1];
 		const char *fk_only;
 
 		/* ----------
@@ -1452,6 +1452,7 @@ TRI_FKey_cascade_del(PG_FUNCTION_ARGS)
 			queryoids[i] = pk_type;
 		}
 
+		/* Set a param for FOR PORTION OF TO/FROM */
 		queryoids[riinfo->nkeys] = RIAttType(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]);
 
 		/* Prepare and save the plan */
@@ -1573,7 +1574,7 @@ TRI_FKey_cascade_upd(PG_FUNCTION_ARGS)
 		char		paramname[16];
 		const char *querysep;
 		const char *qualsep;
-		Oid		 queryoids[RI_MAX_NUMKEYS];
+		Oid		 queryoids[2 * RI_MAX_NUMKEYS + 1];
 		const char *fk_only;
 
 		/* ----------
@@ -1632,6 +1633,7 @@ TRI_FKey_cascade_upd(PG_FUNCTION_ARGS)
 		}
 		appendBinaryStringInfo(&querybuf, qualbuf.data, qualbuf.len);
 
+		/* Set a param for FOR PORTION OF TO/FROM */
 		queryoids[2 * riinfo->nkeys] = RIAttType(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]);
 
 		/* Prepare and save the plan */
@@ -1787,7 +1789,7 @@ tri_set(TriggerData *trigdata, bool is_set_null, int tgkind)
 		char		paramname[16];
 		const char *querysep;
 		const char *qualsep;
-		Oid			queryoids[RI_MAX_NUMKEYS];	// TODO: Fix off-by-one (or have a TRI_MAX_NUMKEYS) since we need one spot for the range column.
+		Oid			queryoids[RI_MAX_NUMKEYS + 1]; /* +1 for FOR PORTION OF */
 		const char *fk_only;
 		int			num_cols_to_set;
 		const int16 *set_cols;
@@ -1879,8 +1881,8 @@ tri_set(TriggerData *trigdata, bool is_set_null, int tgkind)
 			qualsep = "AND";
 			queryoids[i] = pk_type;
 		}
-		// TODO: Is this a problem? Aren't I doing this already above? And the range *is* an att isn't it?
-		// TODO: likewise for cascade_upd and cascade_del
+
+		/* Set a param for FOR PORTION OF TO/FROM */
 		queryoids[riinfo->nkeys] = RIAttType(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]);
 
 		/* Prepare and save the plan */
@@ -3048,8 +3050,8 @@ ri_PerformCheck(const RI_ConstraintInfo *riinfo,
 	int			spi_result;
 	Oid			save_userid;
 	int			save_sec_context;
-	Datum		vals[RI_MAX_NUMKEYS * 2];
-	char		nulls[RI_MAX_NUMKEYS * 2];
+	Datum		vals[RI_MAX_NUMKEYS * 2 + 1];
+	char		nulls[RI_MAX_NUMKEYS * 2 + 1];
 	int			last_param;
 
 	/*
