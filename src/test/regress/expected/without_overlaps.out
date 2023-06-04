@@ -926,7 +926,62 @@ ALTER TABLE temporal_fk_rng2rng
 		FOREIGN KEY (parent_id, PERIOD valid_at)
 		REFERENCES temporal_rng
 		ON DELETE CASCADE ON UPDATE CASCADE;
-ERROR:  action not supported for temporal foreign keys
+UPDATE temporal_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id = '[7,7]' WHERE id = '[6,6]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[4,4]';
+  id   |                        valid_at                         | parent_id 
+-------+---------------------------------------------------------+-----------
+ [4,5) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [7,8)
+ [4,5) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [6,7)
+ [4,5) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [6,7)
+(3 rows)
+
+UPDATE temporal_rng SET id = '[7,7]' WHERE id = '[6,6]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[4,4]';
+  id   |                        valid_at                         | parent_id 
+-------+---------------------------------------------------------+-----------
+ [4,5) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [7,8)
+ [4,5) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [7,8)
+ [4,5) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [7,8)
+(3 rows)
+
+INSERT INTO temporal_rng VALUES ('[15,15]', tsrange('2018-01-01', '2020-01-01'));
+INSERT INTO temporal_rng VALUES ('[15,15]', tsrange('2020-01-01', '2021-01-01'));
+INSERT INTO temporal_fk_rng2rng VALUES ('[10,10]', tsrange('2018-01-01', '2021-01-01'), '[15,15]');
+UPDATE temporal_rng SET id = '[16,16]' WHERE id = '[15,15]' AND valid_at @> '2019-01-01'::timestamp;
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[10,10]';
+   id    |                        valid_at                         | parent_id 
+---------+---------------------------------------------------------+-----------
+ [10,11) | ["Mon Jan 01 00:00:00 2018","Wed Jan 01 00:00:00 2020") | [16,17)
+ [10,11) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [15,16)
+(2 rows)
+
+-- test FK parent deletes CASCADE
+INSERT INTO temporal_rng VALUES ('[8,8]', tsrange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_fk_rng2rng VALUES ('[5,5]', tsrange('2018-01-01', '2021-01-01'), '[8,8]');
+DELETE FROM temporal_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[8,8]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[5,5]';
+  id   |                        valid_at                         | parent_id 
+-------+---------------------------------------------------------+-----------
+ [5,6) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [8,9)
+ [5,6) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [8,9)
+(2 rows)
+
+DELETE FROM temporal_rng WHERE id = '[8,8]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[5,5]';
+ id | valid_at | parent_id 
+----+----------+-----------
+(0 rows)
+
+INSERT INTO temporal_rng VALUES ('[17,17]', tsrange('2018-01-01', '2020-01-01'));
+INSERT INTO temporal_rng VALUES ('[17,17]', tsrange('2020-01-01', '2021-01-01'));
+INSERT INTO temporal_fk_rng2rng VALUES ('[11,11]', tsrange('2018-01-01', '2021-01-01'), '[17,17]');
+DELETE FROM temporal_rng WHERE id = '[17,17]' AND valid_at @> '2019-01-01'::timestamp;
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[11,11]';
+   id    |                        valid_at                         | parent_id 
+---------+---------------------------------------------------------+-----------
+ [11,12) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [17,18)
+(1 row)
+
 -- test FK parent updates SET NULL
 INSERT INTO temporal_rng VALUES ('[9,9]', tsrange('2018-01-01', '2021-01-01'));
 INSERT INTO temporal_fk_rng2rng VALUES ('[6,6]', tsrange('2018-01-01', '2021-01-01'), '[9,9]');
@@ -936,7 +991,67 @@ ALTER TABLE temporal_fk_rng2rng
 		FOREIGN KEY (parent_id, PERIOD valid_at)
 		REFERENCES temporal_rng
 		ON DELETE SET NULL ON UPDATE SET NULL;
-ERROR:  action not supported for temporal foreign keys
+UPDATE temporal_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id = '[10,10]' WHERE id = '[9,9]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[6,6]';
+  id   |                        valid_at                         | parent_id 
+-------+---------------------------------------------------------+-----------
+ [6,7) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | 
+ [6,7) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [9,10)
+ [6,7) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [9,10)
+(3 rows)
+
+UPDATE temporal_rng SET id = '[10,10]' WHERE id = '[9,9]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[6,6]';
+  id   |                        valid_at                         | parent_id 
+-------+---------------------------------------------------------+-----------
+ [6,7) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | 
+ [6,7) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | 
+ [6,7) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | 
+(3 rows)
+
+INSERT INTO temporal_rng VALUES ('[18,18]', tsrange('2018-01-01', '2020-01-01'));
+INSERT INTO temporal_rng VALUES ('[18,18]', tsrange('2020-01-01', '2021-01-01'));
+INSERT INTO temporal_fk_rng2rng VALUES ('[12,12]', tsrange('2018-01-01', '2021-01-01'), '[18,18]');
+UPDATE temporal_rng SET id = '[19,19]' WHERE id = '[18,18]' AND valid_at @> '2019-01-01'::timestamp;
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[12,12]';
+   id    |                        valid_at                         | parent_id 
+---------+---------------------------------------------------------+-----------
+ [12,13) | ["Mon Jan 01 00:00:00 2018","Wed Jan 01 00:00:00 2020") | 
+ [12,13) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [18,19)
+(2 rows)
+
+-- test FK parent deletes SET NULL
+INSERT INTO temporal_rng VALUES ('[11,11]', tsrange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_fk_rng2rng VALUES ('[7,7]', tsrange('2018-01-01', '2021-01-01'), '[11,11]');
+DELETE FROM temporal_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[11,11]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[7,7]';
+  id   |                        valid_at                         | parent_id 
+-------+---------------------------------------------------------+-----------
+ [7,8) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | 
+ [7,8) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [11,12)
+ [7,8) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [11,12)
+(3 rows)
+
+DELETE FROM temporal_rng WHERE id = '[11,11]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[7,7]';
+  id   |                        valid_at                         | parent_id 
+-------+---------------------------------------------------------+-----------
+ [7,8) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | 
+ [7,8) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | 
+ [7,8) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | 
+(3 rows)
+
+INSERT INTO temporal_rng VALUES ('[20,20]', tsrange('2018-01-01', '2020-01-01'));
+INSERT INTO temporal_rng VALUES ('[20,20]', tsrange('2020-01-01', '2021-01-01'));
+INSERT INTO temporal_fk_rng2rng VALUES ('[13,13]', tsrange('2018-01-01', '2021-01-01'), '[20,20]');
+DELETE FROM temporal_rng WHERE id = '[20,20]' AND valid_at @> '2019-01-01'::timestamp;
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[13,13]';
+   id    |                        valid_at                         | parent_id 
+---------+---------------------------------------------------------+-----------
+ [13,14) | ["Mon Jan 01 00:00:00 2018","Wed Jan 01 00:00:00 2020") | 
+ [13,14) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [20,21)
+(2 rows)
+
 -- test FK parent updates SET DEFAULT
 INSERT INTO temporal_rng VALUES ('[-1,-1]', tsrange(null, null));
 INSERT INTO temporal_rng VALUES ('[12,12]', tsrange('2018-01-01', '2021-01-01'));
@@ -948,7 +1063,67 @@ ALTER TABLE temporal_fk_rng2rng
 		FOREIGN KEY (parent_id, PERIOD valid_at)
 		REFERENCES temporal_rng
 		ON DELETE SET DEFAULT ON UPDATE SET DEFAULT;
-ERROR:  action not supported for temporal foreign keys
+UPDATE temporal_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id = '[13,13]' WHERE id = '[12,12]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[8,8]';
+  id   |                        valid_at                         | parent_id 
+-------+---------------------------------------------------------+-----------
+ [8,9) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)
+ [8,9) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [12,13)
+ [8,9) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [12,13)
+(3 rows)
+
+UPDATE temporal_rng SET id = '[13,13]' WHERE id = '[12,12]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[8,8]';
+  id   |                        valid_at                         | parent_id 
+-------+---------------------------------------------------------+-----------
+ [8,9) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)
+ [8,9) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [-1,0)
+ [8,9) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [-1,0)
+(3 rows)
+
+INSERT INTO temporal_rng VALUES ('[22,22]', tsrange('2018-01-01', '2020-01-01'));
+INSERT INTO temporal_rng VALUES ('[22,22]', tsrange('2020-01-01', '2021-01-01'));
+INSERT INTO temporal_fk_rng2rng VALUES ('[14,14]', tsrange('2018-01-01', '2021-01-01'), '[22,22]');
+UPDATE temporal_rng SET id = '[23,23]' WHERE id = '[22,22]' AND valid_at @> '2019-01-01'::timestamp;
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[14,14]';
+   id    |                        valid_at                         | parent_id 
+---------+---------------------------------------------------------+-----------
+ [14,15) | ["Mon Jan 01 00:00:00 2018","Wed Jan 01 00:00:00 2020") | [-1,0)
+ [14,15) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [22,23)
+(2 rows)
+
+-- test FK parent deletes SET DEFAULT
+INSERT INTO temporal_rng VALUES ('[14,14]', tsrange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_fk_rng2rng VALUES ('[9,9]', tsrange('2018-01-01', '2021-01-01'), '[14,14]');
+DELETE FROM temporal_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[14,14]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[9,9]';
+   id   |                        valid_at                         | parent_id 
+--------+---------------------------------------------------------+-----------
+ [9,10) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)
+ [9,10) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [14,15)
+ [9,10) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [14,15)
+(3 rows)
+
+DELETE FROM temporal_rng WHERE id = '[14,14]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[9,9]';
+   id   |                        valid_at                         | parent_id 
+--------+---------------------------------------------------------+-----------
+ [9,10) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)
+ [9,10) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [-1,0)
+ [9,10) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [-1,0)
+(3 rows)
+
+INSERT INTO temporal_rng VALUES ('[24,24]', tsrange('2018-01-01', '2020-01-01'));
+INSERT INTO temporal_rng VALUES ('[24,24]', tsrange('2020-01-01', '2021-01-01'));
+INSERT INTO temporal_fk_rng2rng VALUES ('[15,15]', tsrange('2018-01-01', '2021-01-01'), '[24,24]');
+DELETE FROM temporal_rng WHERE id = '[24,24]' AND valid_at @> '2019-01-01'::timestamp;
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[15,15]';
+   id    |                        valid_at                         | parent_id 
+---------+---------------------------------------------------------+-----------
+ [15,16) | ["Mon Jan 01 00:00:00 2018","Wed Jan 01 00:00:00 2020") | [-1,0)
+ [15,16) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [24,25)
+(2 rows)
+
 -- FK between partitioned tables
 CREATE TABLE temporal_partitioned_rng (
 	id int4range,
@@ -1061,7 +1236,6 @@ ALTER TABLE temporal_partitioned_fk_rng2rng
 		FOREIGN KEY (parent_id, PERIOD valid_at)
 		REFERENCES temporal_partitioned_rng
 		ON DELETE CASCADE ON UPDATE CASCADE;
-ERROR:  action not supported for temporal foreign keys
 -- partitioned FK parent deletes CASCADE
 -- partitioned FK parent updates SET NULL
 ALTER TABLE temporal_partitioned_fk_rng2rng
@@ -1070,7 +1244,6 @@ ALTER TABLE temporal_partitioned_fk_rng2rng
 		FOREIGN KEY (parent_id, PERIOD valid_at)
 		REFERENCES temporal_partitioned_rng
 		ON DELETE SET NULL ON UPDATE SET NULL;
-ERROR:  action not supported for temporal foreign keys
 -- partitioned FK parent deletes SET NULL
 -- partitioned FK parent updates SET DEFAULT
 ALTER TABLE temporal_partitioned_fk_rng2rng
@@ -1080,7 +1253,6 @@ ALTER TABLE temporal_partitioned_fk_rng2rng
 		FOREIGN KEY (parent_id, PERIOD valid_at)
 		REFERENCES temporal_partitioned_rng
 		ON DELETE SET DEFAULT ON UPDATE SET DEFAULT;
-ERROR:  action not supported for temporal foreign keys
 -- partitioned FK parent deletes SET DEFAULT
 DROP TABLE temporal_partitioned_fk_rng2rng;
 DROP TABLE temporal_partitioned_rng;
