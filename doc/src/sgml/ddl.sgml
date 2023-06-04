@@ -1850,9 +1850,9 @@ ALTER TABLE variants
 
     <para>
      <productname>PostgreSQL</productname> supports <literal>NO ACTION</literal>
-     temporal foreign keys, but not <literal>RESTRICT</literal>,
-     <literal>CASCADE</literal>, <literal>SET NULL</literal>, or
-     <literal>SET DEFAULT</literal>.
+     <literal>CASCADE</literal>, <literal>SET NULL</literal>, and
+     <literal>SET DEFAULT</literal> temporal foreign keys,
+     but not <literal>RESTRICT</literal>.
     </para>
    </sect3>
   </sect2>
