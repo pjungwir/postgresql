@@ -525,7 +525,7 @@ alter table idxpart add unique (b, a);		-- this works
 \d idxpart
 drop table idxpart;
 
--- Exclusion constraints can be added if a partitioning by their equal column
+-- Exclusion constraints can be added if partitioning by their equal column
 create table idxpart (a int4range, b int4range) partition by range (a);
 alter table idxpart add exclude USING GIST (a with =);
 drop table idxpart;

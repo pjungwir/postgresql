@@ -2342,30 +2342,6 @@ ALTER TABLE ataddindex
 \d ataddindex
 DROP TABLE ataddindex;
 
--- supported exclusion constraint parts for partitioned tables
-CREATE TABLE partitioned (
-	a int4range,
-	b int4range
-) PARTITION BY RANGE (a);
-ALTER TABLE partitioned ADD EXCLUDE USING gist (a WITH =);
-DROP TABLE partitioned;
-
--- unsupported exclusion constraint parts for partitioned tables
-CREATE TABLE partitioned (
-	a int4range,
-	b int4range
-) PARTITION BY RANGE (a, b);
-ALTER TABLE partitioned ADD EXCLUDE USING gist (a WITH =);
-DROP TABLE partitioned;
-
--- unsupported exclusion constraint operator for partitioned tables
-CREATE TABLE partitioned (
-	a int4range,
-	b int4range
-) PARTITION BY RANGE (a, b);
-ALTER TABLE partitioned ADD EXCLUDE USING gist (a WITH -|-);
-DROP TABLE partitioned;
-
 -- cannot drop column that is part of the partition key
 CREATE TABLE partitioned (
 	a int,
