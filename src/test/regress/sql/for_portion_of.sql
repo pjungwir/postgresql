@@ -18,7 +18,7 @@ FOR PORTION OF valid_at FROM '2019-01-15' TO UNBOUNDED;
 
 SELECT * FROM for_portion_of_test;
 
--- Works on more than one period
+-- Works on more than one range
 DROP TABLE for_portion_of_test;
 CREATE TABLE for_portion_of_test (
   id int4range,
@@ -305,3 +305,36 @@ FOR PORTION OF valid_at FROM '2023-01-01' TO '2024-01-01'
 WHERE id = '[5,6)';
 
 SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
+
+-- Test with a custom range type
+
+CREATE TYPE mydaterange AS range(subtype=date);
+
+CREATE TABLE for_portion_of_test2 (
+  id int4range NOT NULL,
+  valid_at mydaterange NOT NULL,
+  name text NOT NULL,
+	CONSTRAINT for_portion_of_test2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+INSERT INTO for_portion_of_test2
+VALUES
+('[1,1]', '[2018-01-02,2018-02-03)', 'one'),
+('[1,1]', '[2018-02-03,2018-03-03)', 'one'),
+('[1,1]', '[2018-03-03,2018-04-04)', 'one'),
+('[2,2]', '[2018-01-01,2018-05-01)', 'two'),
+('[3,3]', '[2018-01-01,)', 'three');
+;
+
+UPDATE for_portion_of_test2
+FOR PORTION OF valid_at FROM '2018-01-10' TO '2018-02-10'
+SET name = 'one^1'
+WHERE id = '[1,1]';
+
+DELETE FROM for_portion_of_test2
+FOR PORTION OF valid_at FROM '2018-01-15' TO '2018-02-15'
+WHERE id = '[2,2]';
+
+SELECT * FROM for_portion_of_test2 ORDER BY id, valid_at;
+
+DROP TABLE for_portion_of_test2;
+DROP TYPE mydaterange;
