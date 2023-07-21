@@ -93,3 +93,40 @@ get_relation_period_oid(Oid relid, const char *pername, bool missing_ok)
 
 	return perOid;
 }
+
+/*
+ * get_period_attnos
+ *		Get the attno of the GENERATED rangetype column
+ *		for all PERIODs in this table.
+ */
+extern Bitmapset
+*get_period_attnos(Oid relid)
+{
+	Bitmapset *attnos = NULL;
+	Relation	pg_period;
+	HeapTuple	tuple;
+	SysScanDesc scan;
+	ScanKeyData skey[1];
+
+	pg_period = table_open(PeriodRelationId, AccessShareLock);
+
+	ScanKeyInit(&skey[0],
+				Anum_pg_period_perrelid,
+				BTEqualStrategyNumber, F_OIDEQ,
+				ObjectIdGetDatum(relid));
+
+	scan = systable_beginscan(pg_period, PeriodRelidNameIndexId, true,
+							  NULL, 1, skey);
+
+	while (HeapTupleIsValid(tuple = systable_getnext(scan)))
+	{
+		Form_pg_period period = (Form_pg_period) GETSTRUCT(tuple);
+
+		attnos = bms_add_member(attnos, period->perrange);
+	}
+
+	systable_endscan(scan);
+	table_close(pg_period, AccessShareLock);
+
+	return attnos;
+}
