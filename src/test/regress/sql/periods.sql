@@ -67,7 +67,7 @@ drop table pt2;
 
 /* CREATE TABLE (LIKE ...) */
 
-/* Periods are not copied by LIKE */
+/* Periods are not copied by LIKE, so their columns aren't either */
 create table pt2 (like pt);
 \d pt2
 drop table pt2;
