@@ -2052,7 +2052,6 @@ Oid
 StorePeriod(Relation rel, const char *periodname, AttrNumber startnum,
 			AttrNumber endnum, AttrNumber rangenum, Oid conoid)
 {
-	Assert(rangenum != InvalidAttrNumber);
 	Datum		values[Natts_pg_period];
 	bool		nulls[Natts_pg_period];
 	Relation	pg_period;
@@ -2060,6 +2059,8 @@ StorePeriod(Relation rel, const char *periodname, AttrNumber startnum,
 	Oid			oid;
 	NameData	pername;
 	ObjectAddress	myself, referenced;
+
+	Assert(rangenum != InvalidAttrNumber);
 
 	namestrcpy(&pername, periodname);
 
