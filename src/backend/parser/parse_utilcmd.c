@@ -37,6 +37,7 @@
 #include "catalog/pg_constraint.h"
 #include "catalog/pg_opclass.h"
 #include "catalog/pg_operator.h"
+#include "catalog/pg_period.h"
 #include "catalog/pg_statistic_ext.h"
 #include "catalog/pg_type.h"
 #include "commands/comment.h"
@@ -1121,6 +1122,7 @@ transformTableLikeClause(CreateStmtContext *cxt, TableLikeClause *table_like_cla
 	AttrNumber	parent_attno;
 	Relation	relation;
 	TupleDesc	tupleDesc;
+	Bitmapset  *periodatts;
 	AclResult	aclresult;
 	char	   *comment;
 	ParseCallbackState pcbstate;
@@ -1173,6 +1175,7 @@ transformTableLikeClause(CreateStmtContext *cxt, TableLikeClause *table_like_cla
 	}
 
 	tupleDesc = RelationGetDescr(relation);
+	periodatts = get_period_attnos(RelationGetRelid(relation));
 
 	/*
 	 * Insert the copied attributes into the cxt for the new table definition.
@@ -1182,6 +1185,13 @@ transformTableLikeClause(CreateStmtContext *cxt, TableLikeClause *table_like_cla
 	for (parent_attno = 1; parent_attno <= tupleDesc->natts;
 		 parent_attno++)
 	{
+		/*
+		 * If this column is from a PERIOD, skip it
+		 * (since LIKE never copies PERIODs).
+		 */
+		if (bms_is_member(parent_attno, periodatts))
+			continue;
+
 		Form_pg_attribute attribute = TupleDescAttr(tupleDesc,
 													parent_attno - 1);
 		ColumnDef  *def;
