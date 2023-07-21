@@ -58,37 +58,27 @@ get_relation_period_oid(Oid relid, const char *pername, bool missing_ok)
 	Relation	pg_period;
 	HeapTuple	tuple;
 	SysScanDesc scan;
-	ScanKeyData skey[1];
+	ScanKeyData skey[2];
 	Oid			perOid = InvalidOid;
 
-	/*
-	 * Fetch the period tuple from pg_period.  Periods should have unique
-	 * names, but if we find a duplicate then error out.
-	 */
+	/* Fetch the period tuple from pg_period. */
 	pg_period = table_open(PeriodRelationId, AccessShareLock);
 
 	ScanKeyInit(&skey[0],
 				Anum_pg_period_perrelid,
 				BTEqualStrategyNumber, F_OIDEQ,
 				ObjectIdGetDatum(relid));
+	ScanKeyInit(&skey[1],
+				Anum_pg_period_pername,
+				BTEqualStrategyNumber, F_NAMEEQ,
+				CStringGetDatum(pername));
 
 	scan = systable_beginscan(pg_period, PeriodRelidNameIndexId, true,
-							  NULL, 1, skey);
+							  NULL, 2, skey);
 
-	while (HeapTupleIsValid(tuple = systable_getnext(scan)))
-	{
-		Form_pg_period period = (Form_pg_period) GETSTRUCT(tuple);
-
-		if (strcmp(NameStr(period->pername), pername) == 0)
-		{
-			if (OidIsValid(perOid))
-				ereport(ERROR,
-						(errcode(ERRCODE_DUPLICATE_OBJECT),
-						 errmsg("table \"%s\" has multiple periods named \"%s\"",
-								get_rel_name(relid), pername)));
-			perOid = period->oid;
-		}
-	}
+	/* There can be at most one matching row */
+	if (HeapTupleIsValid(tuple = systable_getnext(scan)))
+		perOid = ((Form_pg_period) GETSTRUCT(tuple))->oid;
 
 	systable_endscan(scan);
 
