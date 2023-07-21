@@ -49,5 +49,6 @@ DECLARE_UNIQUE_INDEX(pg_period_perrelid_pername_index, 8002, PeriodRelidNameInde
 extern void RemovePeriodById(Oid periodId);
 
 extern Oid get_relation_period_oid(Oid relid, const char *pername, bool missing_ok);
+extern Bitmapset *get_period_attnos(Oid relid);
 
 #endif							/* PG_PERIOD_H */
