@@ -1285,6 +1285,7 @@ transformForPortionOfClause(ParseState *pstate,
 	char *range_name = forPortionOf->range_name;
 	char *range_type_name = NULL;
 	int range_attno = InvalidAttrNumber;
+	Form_pg_attribute attr;
 	ForPortionOfExpr *result;
 	List *targetList;
 	Node *target_start, *target_end;
@@ -1302,7 +1303,7 @@ transformForPortionOfClause(ParseState *pstate,
 						range_name,
 						RelationGetRelationName(targetrel)),
 				 parser_errposition(pstate, forPortionOf->range_name_location)));
-	Form_pg_attribute attr = TupleDescAttr(targetrel->rd_att, range_attno - 1);
+	attr = TupleDescAttr(targetrel->rd_att, range_attno - 1);
 	// TODO: check attr->attisdropped (?),
 	// and figure out concurrency issues with that in general.
 	// It should work the same as updating any other column.
@@ -1355,12 +1356,12 @@ transformForPortionOfClause(ParseState *pstate,
 		 * Now make sure we update the start/end time of the record.
 		 * For a range col (r) this is `r = r * targetRange`.
 		 */
-		targetList = NIL;
 		Expr *rangeSetExpr = (Expr *) makeSimpleA_Expr(AEXPR_OP, "*",
 				(Node *) copyObject(rangeVar), (Node *) fc,
 				forPortionOf->range_name_location);
 		TargetEntry *tle;
 
+		targetList = NIL;
 		rangeSetExpr = (Expr *) transformExpr(pstate, (Node *) rangeSetExpr, EXPR_KIND_UPDATE_PORTION);
 		tle = makeTargetEntry(rangeSetExpr,
 							  range_attno,
