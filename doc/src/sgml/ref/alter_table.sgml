@@ -583,7 +583,7 @@ WITH ( MODULUS <replaceable class="parameter">numeric_literal</replaceable>, REM
     </listitem>
    </varlistentry>
 
-   <varlistentry>
+   <varlistentry id="sql-altertable-desc-drop-period">
     <term><literal>DROP PERIOD FOR</literal></term>
     <listitem>
      <para>
