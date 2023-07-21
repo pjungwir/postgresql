@@ -7065,16 +7065,14 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 							 "(SELECT pg_catalog.array_agg(attstattarget ORDER BY attnum) "
 							 "  FROM pg_catalog.pg_attribute "
 							 "  WHERE attrelid = i.indexrelid AND "
-							 "    attstattarget >= 0) AS indstatvals, "
-							 "c.conexclop IS NOT NULL AS withoutoverlaps, ");
+							 "    attstattarget >= 0) AS indstatvals, ");
 	else
 		appendPQExpBufferStr(query,
 							 "0 AS parentidx, "
 							 "i.indnatts AS indnkeyatts, "
 							 "i.indnatts AS indnatts, "
 							 "'' AS indstatcols, "
-							 "'' AS indstatvals, "
-							 "null AS withoutoverlaps, ");
+							 "'' AS indstatvals, ");
 
 	if (fout->remoteVersion >= 150000)
 		appendPQExpBufferStr(query,
@@ -7082,6 +7080,13 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 	else
 		appendPQExpBufferStr(query,
 							 "false AS indnullsnotdistinct, ");
+
+	if (fout->remoteVersion >= 170000)
+		appendPQExpBufferStr(query,
+							 "c.conexclop IS NOT NULL AS withoutoverlaps ");
+	else
+		appendPQExpBufferStr(query,
+							 "null AS withoutoverlaps ");
 
 	/*
 	 * The point of the messy-looking outer join is to find a constraint that
