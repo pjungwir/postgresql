@@ -8692,6 +8692,7 @@ ATExecAddPeriod(Relation rel, PeriodDef *period, AlterTableUtilityContext *conte
 	Relation		attrelation;
 	ObjectAddress	address = InvalidObjectAddress;
 	Constraint	   *constr;
+	ColumnDef	   *rangecol;
 	Oid				conoid, periodoid;
 	List		   *cmds = NIL;
 	AlterTableCmd  *cmd;
@@ -8726,7 +8727,7 @@ ATExecAddPeriod(Relation rel, PeriodDef *period, AlterTableUtilityContext *conte
 	conoid = get_relation_constraint_oid(RelationGetRelid(rel), period->constraintname, false);
 
 	/* Make the range column */
-	ColumnDef *rangecol = make_range_column_for_period(period);
+	rangecol = make_range_column_for_period(period);
 	cmd = makeNode(AlterTableCmd);
 	cmd->subtype = AT_AddColumn;
 	cmd->def = (Node *) rangecol;
