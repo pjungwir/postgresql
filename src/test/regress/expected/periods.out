@@ -82,7 +82,7 @@ create table pt3 (id int, ds date, de date, period for p (ds, de) with (rangetyp
 ERROR:  Range type tstzrange does not match column type date
 drop table pt2;
 /* CREATE TABLE (LIKE ...) */
-/* Periods are not copied by LIKE */
+/* Periods are not copied by LIKE, so their columns aren't either */
 create table pt2 (like pt);
 \d pt2
                 Table "public.pt2"
