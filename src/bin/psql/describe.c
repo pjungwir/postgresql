@@ -1943,6 +1943,7 @@ describeOneTableDetails(const char *schemaname,
 
 	appendPQExpBufferStr(&buf, "\nFROM pg_catalog.pg_attribute a");
 	appendPQExpBuffer(&buf, "\nWHERE a.attrelid = '%s' AND a.attnum > 0 AND NOT a.attisdropped", oid);
+	appendPQExpBuffer(&buf, "\nAND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_period p WHERE p.perrelid = a.attrelid AND p.perrange = a.attnum)");
 	appendPQExpBufferStr(&buf, "\nORDER BY a.attnum;");
 
 	res = PSQLexec(buf.data);
