@@ -1245,6 +1245,7 @@ transformForPortionOfClause(ParseState *pstate,
 	Relation targetrel = pstate->p_target_relation;
 	RTEPermissionInfo *target_perminfo = pstate->p_target_nsitem->p_perminfo;
 	char *range_name = forPortionOf->range_name;
+	char *range_type_namespace = NULL;
 	char *range_type_name = NULL;
 	int range_attno = InvalidAttrNumber;
 	Form_pg_attribute attr;
@@ -1289,7 +1290,8 @@ transformForPortionOfClause(ParseState *pstate,
 	rangeVar->location = forPortionOf->range_name_location;
 	result->rangeVar = rangeVar;
 	result->rangeType = attr->atttypid;
-	range_type_name = get_typname(attr->atttypid);
+	if (!get_typname_and_namespace(attr->atttypid, &range_type_name, &range_type_namespace))
+		elog(ERROR, "missing range type %d", attr->atttypid);
 
 
 	/*
@@ -1301,10 +1303,11 @@ transformForPortionOfClause(ParseState *pstate,
 	 */
 	target_start = transformForPortionOfBound(forPortionOf->target_start, true);
 	target_end   = transformForPortionOfBound(forPortionOf->target_end, false);
-	fc = makeFuncCall(SystemFuncName(range_type_name),
-								list_make2(target_start, target_end),
-								COERCE_EXPLICIT_CALL,
-								forPortionOf->range_name_location);
+	fc = makeFuncCall(
+			list_make2(makeString(range_type_namespace), makeString(range_type_name)),
+			list_make2(target_start, target_end),
+			COERCE_EXPLICIT_CALL,
+			forPortionOf->range_name_location);
 	result->targetRange = transformExpr(pstate, (Node *) fc, EXPR_KIND_UPDATE_PORTION);
 
 	/* overlapsExpr is something we can add to the whereClause */
