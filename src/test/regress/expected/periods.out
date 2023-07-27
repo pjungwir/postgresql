@@ -27,14 +27,20 @@ create table pt (id integer, ds date, de date, period for p (ds, de), period for
 ERROR:  period name "p" specified more than once
 /* Now make one that works */
 create table pt (id integer, ds date, de date, period for p (ds, de));
+/* Two are okay */
+create table pt2 (id integer, ds date, de date, period for p1 (ds, de), period for p2 (ds, de));
+drop table pt2;
 /*
- * CREATE TABLE currently adds an ALTER TABLE to add the periods, but let's do
- * some explicit testing anyway
+ * ALTER TABLE tests
  */
 alter table pt drop period for p;
 alter table pt add period for system_time (ds, de);
 ERROR:  PERIOD FOR SYSTEM_TIME is not supported
 alter table pt add period for p (ds, de);
+/* Adding a second one */
+create table pt2 (id integer, ds date, de date, period for p1 (ds, de));
+alter table pt2 add period for p2 (ds, de);
+drop table pt2;
 /* Can't drop its columns */
 alter table pt drop column ds;
 ERROR:  cannot drop column ds of table pt because other objects depend on it
