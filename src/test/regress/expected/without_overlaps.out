@@ -148,6 +148,7 @@ SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'te
  CREATE UNIQUE INDEX temporal_rng2_uq ON temporal_rng2 USING gist (id, valid_at)
 (1 row)
 
+DROP TABLE temporal_rng2;
 -- UNIQUE with two columns plus a range:
 CREATE TABLE temporal_rng3 (
 	id1 int4range,
@@ -791,3 +792,31 @@ SELECT * FROM temporal_fk_rng2rng WHERE id = '[15,15]';
  [15,16) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [24,25)
 (2 rows)
 
+-- FK with a custom range type
+CREATE TYPE mydaterange AS range(subtype=date);
+CREATE TABLE temporal_rng2 (
+	id int4range,
+	valid_at mydaterange,
+	CONSTRAINT temporal_rng2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+CREATE TABLE temporal_fk2_rng2rng (
+	id int4range,
+	valid_at mydaterange,
+	parent_id int4range,
+	CONSTRAINT temporal_fk2_rng2rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk2_rng2rng_fk FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES temporal_rng2 (id, PERIOD valid_at) ON DELETE CASCADE
+);
+INSERT INTO temporal_rng2 VALUES ('[8,8]', mydaterange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_fk2_rng2rng VALUES ('[5,5]', mydaterange('2018-01-01', '2021-01-01'), '[8,8]');
+DELETE FROM temporal_rng2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[8,8]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[5,5]';
+  id   |        valid_at         | parent_id 
+-------+-------------------------+-----------
+ [5,6) | [01-01-2018,01-01-2019) | [8,9)
+ [5,6) | [01-01-2020,01-01-2021) | [8,9)
+(2 rows)
+
+DROP TABLE temporal_fk2_rng2rng;
+DROP TABLE temporal_rng2;
+DROP TYPE mydaterange;

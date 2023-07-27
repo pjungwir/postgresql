@@ -103,6 +103,7 @@ CREATE TABLE temporal_rng2 (
 \d temporal_rng2
 SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rng2_uq';
 SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng2_uq';
+DROP TABLE temporal_rng2;
 
 -- UNIQUE with two columns plus a range:
 CREATE TABLE temporal_rng3 (
@@ -599,3 +600,29 @@ INSERT INTO temporal_rng VALUES ('[24,24]', tsrange('2020-01-01', '2021-01-01'))
 INSERT INTO temporal_fk_rng2rng VALUES ('[15,15]', tsrange('2018-01-01', '2021-01-01'), '[24,24]');
 DELETE FROM temporal_rng WHERE id = '[24,24]' AND valid_at @> '2019-01-01'::timestamp;
 SELECT * FROM temporal_fk_rng2rng WHERE id = '[15,15]';
+
+-- FK with a custom range type
+
+CREATE TYPE mydaterange AS range(subtype=date);
+
+CREATE TABLE temporal_rng2 (
+	id int4range,
+	valid_at mydaterange,
+	CONSTRAINT temporal_rng2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+CREATE TABLE temporal_fk2_rng2rng (
+	id int4range,
+	valid_at mydaterange,
+	parent_id int4range,
+	CONSTRAINT temporal_fk2_rng2rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk2_rng2rng_fk FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES temporal_rng2 (id, PERIOD valid_at) ON DELETE CASCADE
+);
+INSERT INTO temporal_rng2 VALUES ('[8,8]', mydaterange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_fk2_rng2rng VALUES ('[5,5]', mydaterange('2018-01-01', '2021-01-01'), '[8,8]');
+DELETE FROM temporal_rng2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[8,8]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[5,5]';
+
+DROP TABLE temporal_fk2_rng2rng;
+DROP TABLE temporal_rng2;
+DROP TYPE mydaterange;
