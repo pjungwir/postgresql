@@ -22,6 +22,13 @@ create table pt (id integer, ds date, de date, period for p (ds, de), period for
 /* Now make one that works */
 create table pt (id integer, ds date, de date, period for p (ds, de));
 
+/* SELECT * excludes the PERIOD */
+insert into pt values (1, '2000-01-01', '2001-01-01');
+select * from pt;
+
+/* You can get it if you want */
+select *, p from pt;
+
 /* Two are okay */
 create table pt2 (id integer, ds date, de date, period for p1 (ds, de), period for p2 (ds, de));
 drop table pt2;
