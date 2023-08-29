@@ -1241,8 +1241,6 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 						  ResultRelInfo *resultRelInfo,
 						  ItemPointer tupleid)
 {
-	// TODO: figure out if I need to make a copy of the slot somehow in order to insert it...
-
 	ModifyTableState *mtstate = context->mtstate;
 	ModifyTable *node = (ModifyTable *) mtstate->ps.plan;
 	ForPortionOfExpr *forPortionOf = (ForPortionOfExpr *) node->forPortionOf;
@@ -1300,7 +1298,6 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 
 	/* Get the ranges to the left/right of the targeted range. */
 
-	// TODO: set memory context?
 	range_leftover_internal(typcache, oldRangeType, targetRangeType, &leftoverRangeType1,
 			&leftoverRangeType2);
 
