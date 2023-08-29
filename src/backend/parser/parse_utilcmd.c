@@ -2884,8 +2884,6 @@ findNewOrOldColumn(CreateStmtContext *cxt, char *colname, char **typname, Oid *t
 		}
 	}
 
-	// TODO: should I consider DROP COLUMN?
-
 	/* Look up columns on existing table. */
 
 	if (cxt->isalter)
@@ -2894,6 +2892,10 @@ findNewOrOldColumn(CreateStmtContext *cxt, char *colname, char **typname, Oid *t
 		for (int i = 0; i < rel->rd_att->natts; i++)
 		{
 			Form_pg_attribute attr = TupleDescAttr(rel->rd_att, i);
+
+			if (attr->attisdropped)
+				continue;
+
 			const char *attname = NameStr(attr->attname);
 			if (strcmp(attname, colname) == 0)
 			{
