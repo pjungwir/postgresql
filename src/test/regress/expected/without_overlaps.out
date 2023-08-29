@@ -132,7 +132,7 @@ CREATE TABLE temporal_rng2 (
   Column  |   Type    | Collation | Nullable | Default 
 ----------+-----------+-----------+----------+---------
  id       | int4range |           |          | 
- valid_at | tsrange   |           | not null | 
+ valid_at | tsrange   |           |          | 
 Indexes:
     "temporal_rng2_uq" UNIQUE (id, valid_at WITHOUT OVERLAPS)
 
@@ -161,7 +161,7 @@ CREATE TABLE temporal_rng3 (
 ----------+-----------+-----------+----------+---------
  id1      | int4range |           |          | 
  id2      | int4range |           |          | 
- valid_at | tsrange   |           | not null | 
+ valid_at | tsrange   |           |          | 
 Indexes:
     "temporal_rng3_uq" UNIQUE (id1, id2, valid_at WITHOUT OVERLAPS)
 
