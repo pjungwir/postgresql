@@ -2704,23 +2704,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 
 			if (findNewOrOldColumn(cxt, without_overlaps_str, &typname, &typid))
 			{
-				if (type_is_range(typid))
-				{
-					AlterTableCmd *notnullcmd;
-
-					iparam->name = pstrdup(without_overlaps_str);
-					iparam->expr = NULL;
-
-					/*
-					 * Force the column to NOT NULL since it is part of the primary key.
-					 */
-					notnullcmd = makeNode(AlterTableCmd);
-
-					notnullcmd->subtype = AT_SetNotNull;
-					notnullcmd->name = pstrdup(without_overlaps_str);
-					notnullcmds = lappend(notnullcmds, notnullcmd);
-				}
-				else
+				if (!type_is_range(typid))
 					ereport(ERROR,
 							(errcode(ERRCODE_DATATYPE_MISMATCH),
 							 errmsg("column \"%s\" named in WITHOUT OVERLAPS is not a range type",
@@ -2732,15 +2716,30 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 						 errmsg("range or PERIOD \"%s\" named in WITHOUT OVERLAPS does not exist",
 								without_overlaps_str)));
 
+			iparam->name = pstrdup(without_overlaps_str);
+			iparam->expr = NULL;
 			iparam->indexcolname = NULL;
 			iparam->collation = NIL;
 			iparam->opclass = NIL;
+			iparam->opclassopts = NIL;
 			iparam->ordering = SORTBY_DEFAULT;
 			iparam->nulls_ordering = SORTBY_NULLS_DEFAULT;
 			index->indexParams = lappend(index->indexParams, iparam);
 
 			index->accessMethod = "gist";
 			constraint->access_method = "gist";
+
+			if (constraint->contype == CONSTR_PRIMARY)
+			{
+				/*
+				 * Force the column to NOT NULL since it is part of the primary key.
+				 */
+				AlterTableCmd *notnullcmd = makeNode(AlterTableCmd);
+
+				notnullcmd->subtype = AT_SetAttNotNull;
+				notnullcmd->name = pstrdup(without_overlaps_str);
+				notnullcmds = lappend(notnullcmds, notnullcmd);
+			}
 		}
 	}
 
