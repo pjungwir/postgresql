@@ -2074,6 +2074,8 @@ StorePeriod(Relation rel, const char *periodname, AttrNumber startnum,
 	values[Anum_pg_period_perend - 1] = endnum;
 	values[Anum_pg_period_perrange - 1] = rangenum;
 	values[Anum_pg_period_perconstraint - 1] = conoid;
+	values[Anum_pg_period_perislocal] = true;
+	values[Anum_pg_period_perinhcount] = 0;
 
 	tuple = heap_form_tuple(RelationGetDescr(pg_period), values, nulls);
 	CatalogTupleInsert(pg_period, tuple);

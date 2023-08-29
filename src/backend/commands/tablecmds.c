@@ -3501,6 +3501,10 @@ MergePeriods(char *relname, List *periods, List *tableElts, List *supers)
 {
 	ListCell   *entry;
 
+	// TODO: inheritance
+	// 1 - merge periods from all supers into inhPeriods
+	// 2 - merge local periods vs inhPeriods
+
 	/* If we have a PERIOD then supers must be empty. */
 
 	if (list_length(periods) > 0 && list_length(supers) > 0)

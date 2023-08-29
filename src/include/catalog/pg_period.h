@@ -34,6 +34,12 @@ CATALOG(pg_period,8000,PeriodRelationId)
 	int16		perend;			/* column for end value */
 	int16		perrange;		/* column for range value */
 	Oid			perconstraint;	/* OID of (start < end) constraint */
+
+	/* Has a local definition (hence, do not drop when perinhcount is 0) */
+	bool		perislocal;
+
+	/* Number of times inherited from direct parent relation(s) */
+	int16		perinhcount;
 } FormData_pg_period;
 
 /* ----------------

@@ -108,10 +108,13 @@ create table pt2 (like pt, period for id (ds, de));
 
 /* CREATE TALBE INHERITS */
 
-/* Can't inherit from a table with a period */
+/* Can inherit from a table with a period */
 create table pt2 (name text) inherits (pt);
+\d pt2
 
 /* Can't inherit with a period */
 create table pt2 (d2s date, d2e date, period for p (d2s, d2e)) inherits (not_p);
+
+/* Can't add a period using inherited columns */
 
 drop table not_p;

@@ -2556,6 +2556,7 @@ typedef struct PeriodDef
 {
 	NodeTag		type;
 	Oid			oid;			/* period oid, once it's transformed */
+	int			inhcount;		/* number of times period is inherited */
 	char	   *periodname;		/* period name */
 	char	   *startcolname;	/* name of start column */
 	char	   *endcolname;		/* name of end column */
