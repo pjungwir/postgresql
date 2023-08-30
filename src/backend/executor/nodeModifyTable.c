@@ -4438,14 +4438,17 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 	 */
 	if (node->forPortionOf)
 	{
-		resultRelInfo = mtstate->resultRelInfo;
-		TupleDesc tupDesc = resultRelInfo->ri_RelationDesc->rd_att;
-		ForPortionOfExpr *forPortionOf = (ForPortionOfExpr *) node->forPortionOf;
+		TupleDesc tupDesc;
+		ForPortionOfExpr *forPortionOf;
 		Datum	targetRange;
 		bool	isNull;
 		ExprContext *econtext;
 		ExprState *exprState;
 		ForPortionOfState *fpoState;
+
+		resultRelInfo = mtstate->resultRelInfo;
+		tupDesc = resultRelInfo->ri_RelationDesc->rd_att;
+		forPortionOf = (ForPortionOfExpr *) node->forPortionOf;
 
 		/* Eval the FOR PORTION OF target */
 		if (mtstate->ps.ps_ExprContext == NULL)
