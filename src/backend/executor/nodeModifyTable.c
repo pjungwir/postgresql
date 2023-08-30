@@ -4441,6 +4441,7 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 	 */
 	if (node->forPortionOf)
 	{
+		resultRelInfo = mtstate->resultRelInfo;
 		TupleDesc tupDesc = resultRelInfo->ri_RelationDesc->rd_att;
 		ForPortionOfExpr *forPortionOf = (ForPortionOfExpr *) node->forPortionOf;
 		Datum	targetRange;
@@ -4478,6 +4479,14 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 			ExecInitExtraTupleSlot(mtstate->ps.state, tupDesc, &TTSOpsVirtual);
 		resultRelInfo->ri_forPortionOf->fp_Leftover2 =
 			ExecInitExtraTupleSlot(mtstate->ps.state, tupDesc, &TTSOpsVirtual);
+
+		/*
+		 * If we are updating a partitioned table,
+		 * make sure the root relation has the FOR PORTION OF clause,
+		 * in case the row changes partition.
+		 */
+		if (node->rootRelation > 0)
+			mtstate->rootResultRelInfo->ri_forPortionOf = resultRelInfo->ri_forPortionOf;
 
 		/* Don't free the ExprContext here because the result must last for the whole query */
 	}

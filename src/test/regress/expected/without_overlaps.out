@@ -378,6 +378,30 @@ SELECT * FROM tp2 ORDER BY id, valid_at;
  [3,4) | [01-01-2000,01-01-2010) | three
 (1 row)
 
+UPDATE  temporal_partitioned
+  FOR PORTION OF valid_at FROM '2000-01-15' TO '2000-02-15'
+  SET name = 'one2'
+  WHERE id = '[1,1]';
+UPDATE  temporal_partitioned
+  FOR PORTION OF valid_at FROM '2000-02-20' TO '2000-02-25'
+  SET id = '[4,4]'
+  WHERE name = 'one';
+DELETE FROM temporal_partitioned
+  FOR PORTION OF valid_at FROM '2000-01-15' TO '2000-02-15'
+  WHERE id = '[3,3]';
+SELECT * FROM temporal_partitioned ORDER BY id, valid_at;
+  id   |        valid_at         | name  
+-------+-------------------------+-------
+ [1,2) | [01-01-2000,01-15-2000) | one
+ [1,2) | [01-15-2000,02-01-2000) | one2
+ [1,2) | [02-01-2000,02-15-2000) | one2
+ [1,2) | [02-15-2000,02-20-2000) | one
+ [1,2) | [02-25-2000,03-01-2000) | one
+ [3,4) | [01-01-2000,01-15-2000) | three
+ [3,4) | [02-15-2000,01-01-2010) | three
+ [4,5) | [02-20-2000,02-25-2000) | one
+(8 rows)
+
 DROP TABLE temporal_partitioned;
 -- temporal UNIQUE:
 CREATE TABLE temporal_partitioned (
@@ -412,6 +436,30 @@ SELECT * FROM tp2 ORDER BY id, valid_at;
 -------+-------------------------+-------
  [3,4) | [01-01-2000,01-01-2010) | three
 (1 row)
+
+UPDATE  temporal_partitioned
+  FOR PORTION OF valid_at FROM '2000-01-15' TO '2000-02-15'
+  SET name = 'one2'
+  WHERE id = '[1,1]';
+UPDATE  temporal_partitioned
+  FOR PORTION OF valid_at FROM '2000-02-20' TO '2000-02-25'
+  SET id = '[4,4]'
+  WHERE name = 'one';
+DELETE FROM temporal_partitioned
+  FOR PORTION OF valid_at FROM '2000-01-15' TO '2000-02-15'
+  WHERE id = '[3,3]';
+SELECT * FROM temporal_partitioned ORDER BY id, valid_at;
+  id   |        valid_at         | name  
+-------+-------------------------+-------
+ [1,2) | [01-01-2000,01-15-2000) | one
+ [1,2) | [01-15-2000,02-01-2000) | one2
+ [1,2) | [02-01-2000,02-15-2000) | one2
+ [1,2) | [02-15-2000,02-20-2000) | one
+ [1,2) | [02-25-2000,03-01-2000) | one
+ [3,4) | [01-01-2000,01-15-2000) | three
+ [3,4) | [02-15-2000,01-01-2010) | three
+ [4,5) | [02-20-2000,02-25-2000) | one
+(8 rows)
 
 DROP TABLE temporal_partitioned;
 --
