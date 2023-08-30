@@ -283,6 +283,10 @@ UPDATE  temporal_partitioned
   FOR PORTION OF valid_at FROM '2000-02-20' TO '2000-02-25'
   SET id = '[4,4]'
   WHERE name = 'one';
+UPDATE  temporal_partitioned
+  FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01'
+  SET id = '[2,2]'
+  WHERE name = 'three';
 DELETE FROM temporal_partitioned
   FOR PORTION OF valid_at FROM '2000-01-15' TO '2000-02-15'
   WHERE id = '[3,3]';
@@ -313,6 +317,10 @@ UPDATE  temporal_partitioned
   FOR PORTION OF valid_at FROM '2000-02-20' TO '2000-02-25'
   SET id = '[4,4]'
   WHERE name = 'one';
+UPDATE  temporal_partitioned
+  FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01'
+  SET id = '[2,2]'
+  WHERE name = 'three';
 DELETE FROM temporal_partitioned
   FOR PORTION OF valid_at FROM '2000-01-15' TO '2000-02-15'
   WHERE id = '[3,3]';
