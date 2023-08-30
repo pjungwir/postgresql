@@ -228,6 +228,15 @@ DROP TABLE temporal3;
 CREATE TABLE temporal_partitioned (
 	id int4range,
 	valid_at daterange,
+  name text,
 	CONSTRAINT temporal_paritioned_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 ) PARTITION BY LIST (id);
--- TODO: attach some partitions, insert into them, update them with and without FOR PORTION OF, delete them the same way.
+CREATE TABLE tp1 partition OF temporal_partitioned FOR VALUES IN ('[1,1]', '[2,2]');
+CREATE TABLE tp2 partition OF temporal_partitioned FOR VALUES IN ('[3,3]', '[4,4]');
+INSERT INTO temporal_partitioned VALUES
+  ('[1,1]', daterange('2000-01-01', '2000-02-01'), 'one'),
+  ('[1,1]', daterange('2000-02-01', '2000-03-01'), 'one'),
+  ('[3,3]', daterange('2000-01-01', '2010-01-01'), 'three');
+SELECT * FROM temporal_partitioned ORDER BY id, valid_at;
+SELECT * FROM tp1 ORDER BY id, valid_at;
+SELECT * FROM tp2 ORDER BY id, valid_at;
