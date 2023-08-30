@@ -1252,9 +1252,10 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	Oid rangeTypeOid = forPortionOf->rangeType;
 	bool isNull = false;
 	TypeCacheEntry *typcache;
-	TupleTableSlot *oldtupleSlot = resultRelInfo->ri_forPortionOf->fp_Existing;
-	TupleTableSlot *leftoverTuple1 = resultRelInfo->ri_forPortionOf->fp_Leftover1;
-	TupleTableSlot *leftoverTuple2 = resultRelInfo->ri_forPortionOf->fp_Leftover2;
+	ForPortionOfState *fpoState = resultRelInfo->ri_forPortionOf;
+	TupleTableSlot *oldtupleSlot = fpoState->fp_Existing;
+	TupleTableSlot *leftoverTuple1 = fpoState->fp_Leftover1;
+	TupleTableSlot *leftoverTuple2 = fpoState->fp_Leftover2;
 
 	/*
 	 * Get the range of the old pre-UPDATE/DELETE tuple,
@@ -1280,20 +1281,20 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 
 	/* Get the target range. */
 
-	targetRangeType = DatumGetRangeTypeP(resultRelInfo->ri_forPortionOf->fp_targetRange);
+	targetRangeType = DatumGetRangeTypeP(fpoState->fp_targetRange);
 
 	/*
 	 * Get the range's type cache entry. This is worth caching for the whole UPDATE
 	 * like range functions do.
 	 */
 
-	typcache = resultRelInfo->ri_forPortionOf->fp_rangetypcache;
+	typcache = fpoState->fp_rangetypcache;
 	if (typcache == NULL)
 	{
 		typcache = lookup_type_cache(rangeTypeOid, TYPECACHE_RANGE_INFO);
 		if (typcache->rngelemtype == NULL)
 			elog(ERROR, "type %u is not a range type", rangeTypeOid);
-		resultRelInfo->ri_forPortionOf->fp_rangetypcache = typcache;
+		fpoState->fp_rangetypcache = typcache;
 	}
 
 	/* Get the ranges to the left/right of the targeted range. */
@@ -1499,8 +1500,7 @@ ExecDeleteAct(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
  */
 static void
 ExecDeleteEpilogue(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
-				   ItemPointer tupleid, HeapTuple oldtuple, bool changingPart,
-				   ForPortionOfExpr *forPortionOf)
+				   ItemPointer tupleid, HeapTuple oldtuple, bool changingPart)
 {
 	ModifyTableState *mtstate = context->mtstate;
 	EState	   *estate = context->estate;
@@ -1531,7 +1531,7 @@ ExecDeleteEpilogue(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 
 	/* Compute leftovers in FOR PORTION OF */
 	// TODO: Skip this for FDW deletes?
-	if (forPortionOf)
+	if (((ModifyTable *) context->mtstate->ps.plan)->forPortionOf)
 		ExecForPortionOfLeftovers(context, estate, resultRelInfo, tupleid);
 
 	/* AFTER ROW DELETE Triggers */
@@ -1809,8 +1809,7 @@ ldelete:
 	if (tupleDeleted)
 		*tupleDeleted = true;
 
-	ExecDeleteEpilogue(context, resultRelInfo, tupleid, oldtuple, changingPart,
-			(ForPortionOfExpr *)((ModifyTable *) context->mtstate->ps.plan)->forPortionOf);
+	ExecDeleteEpilogue(context, resultRelInfo, tupleid, oldtuple, changingPart);
 
 	/* Process RETURNING if present and if requested */
 	if (processReturning && resultRelInfo->ri_projectReturning)
@@ -2271,8 +2270,7 @@ lreplace:
 static void
 ExecUpdateEpilogue(ModifyTableContext *context, UpdateContext *updateCxt,
 				   ResultRelInfo *resultRelInfo, ItemPointer tupleid,
-				   HeapTuple oldtuple, TupleTableSlot *slot,
-				   ForPortionOfExpr *forPortionOf)
+				   HeapTuple oldtuple, TupleTableSlot *slot)
 {
 	ModifyTableState *mtstate = context->mtstate;
 	List	   *recheckIndexes = NIL;
@@ -2287,7 +2285,7 @@ ExecUpdateEpilogue(ModifyTableContext *context, UpdateContext *updateCxt,
 
 	/* Compute leftovers in FOR PORTION OF */
 	// TODO: Skip this for FDW updates?
-	if (forPortionOf)
+	if (((ModifyTable *) context->mtstate->ps.plan)->forPortionOf)
 		ExecForPortionOfLeftovers(context, context->estate, resultRelInfo, tupleid);
 
 	/* AFTER ROW UPDATE Triggers */
@@ -2633,8 +2631,7 @@ redo_act:
 		(estate->es_processed)++;
 
 	ExecUpdateEpilogue(context, &updateCxt, resultRelInfo, tupleid, oldtuple,
-					   slot,
-					   (ForPortionOfExpr *) ((ModifyTable *) context->mtstate->ps.plan)->forPortionOf);
+					   slot);
 
 	/* Process RETURNING if present */
 	if (resultRelInfo->ri_projectReturning)
@@ -3074,7 +3071,7 @@ lmerge_matched:
 				if (result == TM_Ok && updateCxt.updated)
 				{
 					ExecUpdateEpilogue(context, &updateCxt, resultRelInfo,
-									   tupleid, NULL, newslot, NULL);
+									   tupleid, NULL, newslot);
 					mtstate->mt_merge_updated += 1;
 				}
 				break;
@@ -3092,7 +3089,7 @@ lmerge_matched:
 				if (result == TM_Ok)
 				{
 					ExecDeleteEpilogue(context, resultRelInfo, tupleid, NULL,
-									   false, NULL);
+									   false);
 					mtstate->mt_merge_deleted += 1;
 				}
 				break;
@@ -4468,6 +4465,7 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 		bool	isNull;
 		ExprContext *econtext;
 		ExprState *exprState;
+		ForPortionOfState *fpoState;
 
 		/* Eval the FOR PORTION OF target */
 		if (mtstate->ps.ps_ExprContext == NULL)
@@ -4481,32 +4479,42 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 
 		/* Create state for FOR PORTION OF operation */
 
-		resultRelInfo->ri_forPortionOf = makeNode(ForPortionOfState);
-		resultRelInfo->ri_forPortionOf->fp_rangeName = forPortionOf->range_name;
-		resultRelInfo->ri_forPortionOf->fp_rangeType = forPortionOf->rangeType;
-		resultRelInfo->ri_forPortionOf->fp_rangeAttno = forPortionOf->rangeVar->varattno;
-		resultRelInfo->ri_forPortionOf->fp_targetRange = targetRange;
+		fpoState = makeNode(ForPortionOfState);
+		fpoState->fp_rangeName = forPortionOf->range_name;
+		fpoState->fp_rangeType = forPortionOf->rangeType;
+		fpoState->fp_rangeAttno = forPortionOf->rangeVar->varattno;
+		fpoState->fp_targetRange = targetRange;
 
 		/* Initialize slot for the existing tuple */
 
-		resultRelInfo->ri_forPortionOf->fp_Existing =
+		fpoState->fp_Existing =
 			table_slot_create(resultRelInfo->ri_RelationDesc,
 							  &mtstate->ps.state->es_tupleTable);
 
 		/* Create the tuple slots for INSERTing the leftovers */
 
-		resultRelInfo->ri_forPortionOf->fp_Leftover1 =
+		fpoState->fp_Leftover1 =
 			ExecInitExtraTupleSlot(mtstate->ps.state, tupDesc, &TTSOpsVirtual);
-		resultRelInfo->ri_forPortionOf->fp_Leftover2 =
+		fpoState->fp_Leftover2 =
 			ExecInitExtraTupleSlot(mtstate->ps.state, tupDesc, &TTSOpsVirtual);
 
 		/*
-		 * If we are updating a partitioned table,
-		 * make sure the root relation has the FOR PORTION OF clause,
-		 * in case the row changes partition.
+		 * We must attach the ForPortionOfState to all result rels,
+		 * in case of a cross-partition update or triggers firing
+		 * on partitions.
+		 *
+		 * They should all have the same tupledesc, so it's okay
+		 * that any one of them can use the tuple table slots there.
 		 */
+		for (i = 0; i < nrels; i++)
+		{
+			resultRelInfo = &mtstate->resultRelInfo[i];
+			resultRelInfo->ri_forPortionOf = fpoState;
+		}
+
+		/* Make sure the root relation has the FOR PORTION OF clause too. */
 		if (node->rootRelation > 0)
-			mtstate->rootResultRelInfo->ri_forPortionOf = resultRelInfo->ri_forPortionOf;
+			mtstate->rootResultRelInfo->ri_forPortionOf = fpoState;
 
 		/* Don't free the ExprContext here because the result must last for the whole query */
 	}
