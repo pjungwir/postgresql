@@ -236,6 +236,7 @@ DROP TABLE temporal3;
 -- test PARTITION BY for ranges
 --
 
+-- temporal PRIMARY KEY:
 CREATE TABLE temporal_partitioned (
 	id int4range,
 	valid_at daterange,
@@ -251,3 +252,22 @@ INSERT INTO temporal_partitioned VALUES
 SELECT * FROM temporal_partitioned ORDER BY id, valid_at;
 SELECT * FROM tp1 ORDER BY id, valid_at;
 SELECT * FROM tp2 ORDER BY id, valid_at;
+DROP TABLE temporal_partitioned;
+
+-- temporal UNIQUE:
+CREATE TABLE temporal_partitioned (
+	id int4range,
+	valid_at daterange,
+  name text,
+	CONSTRAINT temporal_paritioned_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
+) PARTITION BY LIST (id);
+CREATE TABLE tp1 PARTITION OF temporal_partitioned FOR VALUES IN ('[1,1]', '[2,2]');
+CREATE TABLE tp2 PARTITION OF temporal_partitioned FOR VALUES IN ('[3,3]', '[4,4]');
+INSERT INTO temporal_partitioned VALUES
+  ('[1,1]', daterange('2000-01-01', '2000-02-01'), 'one'),
+  ('[1,1]', daterange('2000-02-01', '2000-03-01'), 'one'),
+  ('[3,3]', daterange('2000-01-01', '2010-01-01'), 'three');
+SELECT * FROM temporal_partitioned ORDER BY id, valid_at;
+SELECT * FROM tp1 ORDER BY id, valid_at;
+SELECT * FROM tp2 ORDER BY id, valid_at;
+DROP TABLE temporal_partitioned;
