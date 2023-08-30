@@ -359,6 +359,10 @@ UPDATE  temporal_partitioned
   FOR PORTION OF valid_at FROM '2000-02-20' TO '2000-02-25'
   SET id = '[4,4]'
   WHERE name = 'one';
+UPDATE  temporal_partitioned
+  FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01'
+  SET id = '[2,2]'
+  WHERE name = 'three';
 DELETE FROM temporal_partitioned
   FOR PORTION OF valid_at FROM '2000-01-15' TO '2000-02-15'
   WHERE id = '[3,3]';
@@ -370,10 +374,12 @@ SELECT * FROM temporal_partitioned ORDER BY id, valid_at;
  [1,2) | [02-01-2000,02-15-2000) | one2
  [1,2) | [02-15-2000,02-20-2000) | one
  [1,2) | [02-25-2000,03-01-2000) | one
+ [2,3) | [01-01-2002,01-01-2003) | three
  [3,4) | [01-01-2000,01-15-2000) | three
- [3,4) | [02-15-2000,01-01-2010) | three
+ [3,4) | [02-15-2000,01-01-2002) | three
+ [3,4) | [01-01-2003,01-01-2010) | three
  [4,5) | [02-20-2000,02-25-2000) | one
-(8 rows)
+(10 rows)
 
 DROP TABLE temporal_partitioned;
 -- temporal UNIQUE:
@@ -418,6 +424,10 @@ UPDATE  temporal_partitioned
   FOR PORTION OF valid_at FROM '2000-02-20' TO '2000-02-25'
   SET id = '[4,4]'
   WHERE name = 'one';
+UPDATE  temporal_partitioned
+  FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01'
+  SET id = '[2,2]'
+  WHERE name = 'three';
 DELETE FROM temporal_partitioned
   FOR PORTION OF valid_at FROM '2000-01-15' TO '2000-02-15'
   WHERE id = '[3,3]';
@@ -429,10 +439,12 @@ SELECT * FROM temporal_partitioned ORDER BY id, valid_at;
  [1,2) | [02-01-2000,02-15-2000) | one2
  [1,2) | [02-15-2000,02-20-2000) | one
  [1,2) | [02-25-2000,03-01-2000) | one
+ [2,3) | [01-01-2002,01-01-2003) | three
  [3,4) | [01-01-2000,01-15-2000) | three
- [3,4) | [02-15-2000,01-01-2010) | three
+ [3,4) | [02-15-2000,01-01-2002) | three
+ [3,4) | [01-01-2003,01-01-2010) | three
  [4,5) | [02-20-2000,02-25-2000) | one
-(8 rows)
+(10 rows)
 
 DROP TABLE temporal_partitioned;
 --
