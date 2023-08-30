@@ -309,6 +309,18 @@ INSERT INTO temporal_partitioned (id, valid_at, name) VALUES
 SELECT * FROM temporal_partitioned ORDER BY id, valid_at;
 SELECT * FROM tp1 ORDER BY id, valid_at;
 SELECT * FROM tp2 ORDER BY id, valid_at;
+UPDATE  temporal_partitioned
+  FOR PORTION OF valid_at FROM '2000-01-15' TO '2000-02-15'
+  SET name = 'one2'
+  WHERE id = '[1,1]';
+UPDATE  temporal_partitioned
+  FOR PORTION OF valid_at FROM '2000-02-20' TO '2000-02-25'
+  SET id = '[4,4]'
+  WHERE name = 'one';
+DELETE FROM temporal_partitioned
+  FOR PORTION OF valid_at FROM '2000-01-15' TO '2000-02-15'
+  WHERE id = '[3,3]';
+SELECT * FROM temporal_partitioned ORDER BY id, valid_at;
 DROP TABLE temporal_partitioned;
 
 -- temporal UNIQUE:
@@ -327,6 +339,18 @@ INSERT INTO temporal_partitioned (id, valid_at, name) VALUES
 SELECT * FROM temporal_partitioned ORDER BY id, valid_at;
 SELECT * FROM tp1 ORDER BY id, valid_at;
 SELECT * FROM tp2 ORDER BY id, valid_at;
+UPDATE  temporal_partitioned
+  FOR PORTION OF valid_at FROM '2000-01-15' TO '2000-02-15'
+  SET name = 'one2'
+  WHERE id = '[1,1]';
+UPDATE  temporal_partitioned
+  FOR PORTION OF valid_at FROM '2000-02-20' TO '2000-02-25'
+  SET id = '[4,4]'
+  WHERE name = 'one';
+DELETE FROM temporal_partitioned
+  FOR PORTION OF valid_at FROM '2000-01-15' TO '2000-02-15'
+  WHERE id = '[3,3]';
+SELECT * FROM temporal_partitioned ORDER BY id, valid_at;
 DROP TABLE temporal_partitioned;
 
 --
