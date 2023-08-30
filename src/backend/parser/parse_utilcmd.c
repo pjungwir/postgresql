@@ -1727,7 +1727,7 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 	index->unique = idxrec->indisunique;
 	index->nulls_not_distinct = idxrec->indnullsnotdistinct;
 	index->primary = idxrec->indisprimary;
-	index->istemporal = idxrec->indisprimary && idxrec->indisexclusion;
+	index->istemporal = (idxrec->indisprimary || idxrec->indisunique) && idxrec->indisexclusion;
 	index->transformed = true;	/* don't need transformIndexStmt */
 	index->concurrent = false;
 	index->if_not_exists = false;
@@ -1777,7 +1777,9 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 				int			nElems;
 				int			i;
 
-				Assert(conrec->contype == CONSTRAINT_EXCLUSION || (index->istemporal && conrec->contype == CONSTRAINT_PRIMARY));
+				Assert(conrec->contype == CONSTRAINT_EXCLUSION ||
+						(index->istemporal &&
+						 (conrec->contype == CONSTRAINT_PRIMARY || conrec->contype == CONSTRAINT_UNIQUE)));
 				/* Extract operator OIDs from the pg_constraint tuple */
 				datum = SysCacheGetAttrNotNull(CONSTROID, ht_constr,
 											   Anum_pg_constraint_conexclop);
