@@ -1185,6 +1185,9 @@ transformTableLikeClause(CreateStmtContext *cxt, TableLikeClause *table_like_cla
 	for (parent_attno = 1; parent_attno <= tupleDesc->natts;
 		 parent_attno++)
 	{
+		Form_pg_attribute attribute;
+		ColumnDef  *def;
+
 		/*
 		 * If this column is from a PERIOD, skip it
 		 * (since LIKE never copies PERIODs).
@@ -1192,9 +1195,7 @@ transformTableLikeClause(CreateStmtContext *cxt, TableLikeClause *table_like_cla
 		if (bms_is_member(parent_attno, periodatts))
 			continue;
 
-		Form_pg_attribute attribute = TupleDescAttr(tupleDesc,
-													parent_attno - 1);
-		ColumnDef  *def;
+		attribute = TupleDescAttr(tupleDesc, parent_attno - 1);
 
 		/*
 		 * Ignore dropped columns in the parent.
