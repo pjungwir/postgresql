@@ -2894,11 +2894,12 @@ findNewOrOldColumn(CreateStmtContext *cxt, char *colname, char **typname, Oid *t
 		for (int i = 0; i < rel->rd_att->natts; i++)
 		{
 			Form_pg_attribute attr = TupleDescAttr(rel->rd_att, i);
+			const char *attname;
 
 			if (attr->attisdropped)
 				continue;
 
-			const char *attname = NameStr(attr->attname);
+			attname = NameStr(attr->attname);
 			if (strcmp(attname, colname) == 0)
 			{
 				Type type = typeidType(attr->atttypid);
