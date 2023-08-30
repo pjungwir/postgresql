@@ -566,6 +566,7 @@ DefineIndex(Oid tableId,
 	bool		amcanorder;
 	bool		amissummarizing;
 	amoptions_function amoptions;
+	bool		exclusion;
 	bool		partitioned;
 	bool		safe_index;
 	Datum		reloptions;
@@ -683,6 +684,12 @@ DefineIndex(Oid tableId,
 						   root_save_sec_context | SECURITY_RESTRICTED_OPERATION);
 
 	namespaceId = RelationGetNamespace(rel);
+
+	/*
+	 * It has exclusion constraint behavior if it's an EXCLUDE constraint
+	 * or a temporal PRIMARY KEY/UNIQUE constraint
+	 */
+	exclusion = stmt->excludeOpNames || stmt->istemporal;
 
 	/* Ensure that it makes sense to index this kind of relation */
 	switch (rel->rd_rel->relkind)
@@ -867,7 +874,7 @@ DefineIndex(Oid tableId,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("access method \"%s\" does not support multicolumn indexes",
 						accessMethodName)));
-	if (stmt->excludeOpNames && amRoutine->amgettuple == NULL)
+	if (exclusion && amRoutine->amgettuple == NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("access method \"%s\" does not support exclusion constraints",
@@ -940,7 +947,7 @@ DefineIndex(Oid tableId,
 	 * We could lift this limitation if we had global indexes, but those have
 	 * their own problems, so this is a useful feature combination.
 	 */
-	if (partitioned && (stmt->unique || stmt->excludeOpNames))
+	if (partitioned && (stmt->unique || exclusion))
 	{
 		PartitionKey key = RelationGetPartitionKey(rel);
 		const char *constraint_type;
@@ -996,10 +1003,10 @@ DefineIndex(Oid tableId,
 			 * associated with index columns, too.  We know what to do with
 			 * btree opclasses; if there are ever any other index types that
 			 * support unique indexes, this logic will need extension. But if
-			 * we have an exclusion constraint, it already knows the
-			 * operators, so we don't have to infer them.
+			 * we have an exclusion constraint (or a temporal PK), it already
+			 * knows the operators, so we don't have to infer them.
 			 */
-			if (stmt->unique && accessMethodId != BTREE_AM_OID)
+			if (stmt->unique && !stmt->istemporal && accessMethodId != BTREE_AM_OID)
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("cannot match partition key to an index using access method \"%s\"",
@@ -1032,12 +1039,12 @@ DefineIndex(Oid tableId,
 					{
 						Oid			idx_eqop = InvalidOid;
 
-						if (stmt->unique)
+						if (stmt->unique && !stmt->istemporal)
 							idx_eqop = get_opfamily_member(idx_opfamily,
 														   idx_opcintype,
 														   idx_opcintype,
 														   BTEqualStrategyNumber);
-						else if (stmt->excludeOpNames)
+						else if (exclusion)
 							idx_eqop = indexInfo->ii_ExclusionOps[j];
 						Assert(idx_eqop);
 
@@ -1046,7 +1053,7 @@ DefineIndex(Oid tableId,
 							found = true;
 							break;
 						}
-						else if (stmt->excludeOpNames)
+						else if (exclusion)
 						{
 							/*
 							 * We found a match, but it's not an equality
@@ -1965,9 +1972,9 @@ ComputeIndexAttrs(IndexInfo *indexInfo,
 	else
 		nextExclOp = NULL;
 
-	if (istemporal)
+	/* exclusionOpNames can be non-NIL if we are creating a partition */
+	if (istemporal && exclusionOpNames == NIL)
 	{
-		Assert(exclusionOpNames == NIL);
 		indexInfo->ii_ExclusionOps = palloc_array(Oid, nkeycols);
 		indexInfo->ii_ExclusionProcs = palloc_array(Oid, nkeycols);
 		indexInfo->ii_ExclusionStrats = palloc_array(uint16, nkeycols);
