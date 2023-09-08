@@ -380,6 +380,7 @@ static int	transformColumnNameList(Oid relId, List *colList,
 									int16 *attnums, Oid *atttypids);
 static int	transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 									   List **attnamelist,
+									   Node **pk_period,
 									   int16 *attnums, Oid *atttypids,
 									   int16 *periodattnums, Oid *periodatttypids,
 									   Oid *opclasses);
@@ -9566,6 +9567,7 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	{
 		numpks = transformFkeyGetPrimaryKey(pkrel, &indexOid,
 											&fkconstraint->pk_attrs,
+											&fkconstraint->pk_period,
 											pkattnum, pktypoid,
 											pkperiodattnums, pkperiodtypoids,
 											opclasses);
@@ -11752,6 +11754,7 @@ transformColumnNameList(Oid relId, List *colList,
 static int
 transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 						   List **attnamelist,
+						   Node **pk_period,
 						   int16 *attnums, Oid *atttypids,
 						   int16 *periodattnums, Oid *periodatttypids,
 						   Oid *opclasses)
@@ -11833,6 +11836,8 @@ transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 			periodattnums[0] = pkattno;
 			periodatttypids[0] = attnumTypeId(pkrel, pkattno);
 			opclasses[i] = indclass->values[i];
+
+			*pk_period = (Node *) makeString(pstrdup(NameStr(*attnumAttName(pkrel, pkattno))));
 		}
 		else
 		{
