@@ -474,8 +474,18 @@ ALTER TABLE temporal_fk_rng2rng
 	ADD CONSTRAINT temporal_fk_rng2rng_fk
 	FOREIGN KEY (parent_id, PERIOD valid_at)
 	REFERENCES temporal_rng (id, PERIOD valid_at);
+-- with inferred PK on the referenced table, and wrong column type:
 ALTER TABLE temporal_fk_rng2rng
-	DROP CONSTRAINT temporal_fk_rng2rng_fk;
+	DROP CONSTRAINT temporal_fk_rng2rng_fk,
+	ALTER COLUMN valid_at TYPE daterange USING daterange(lower(valid_at)::date, upper(valid_at)::date);
+ALTER TABLE temporal_fk_rng2rng
+	ADD CONSTRAINT temporal_fk_rng2rng_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES temporal_rng;
+ERROR:  foreign key constraint "temporal_fk_rng2rng_fk" cannot be implemented
+DETAIL:  Key columns "valid_at" and "valid_at" are of incompatible types: daterange and tsrange.
+ALTER TABLE temporal_fk_rng2rng
+	ALTER COLUMN valid_at TYPE tsrange USING tsrange(lower(valid_at), upper(valid_at));
 -- with inferred PK on the referenced table:
 ALTER TABLE temporal_fk_rng2rng
 	ADD CONSTRAINT temporal_fk_rng2rng_fk
@@ -563,7 +573,7 @@ UPDATE temporal_rng SET valid_at = tsrange('2016-01-01', '2016-02-01')
 WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
 ERROR:  update or delete on table "temporal_rng" violates foreign key constraint "temporal_fk_rng2rng_fk" on table "temporal_fk_rng2rng"
 DETAIL:  Key (id, valid_at)=([5,6), ["Mon Jan 01 00:00:00 2018","Thu Feb 01 00:00:00 2018")) is still referenced from table "temporal_fk_rng2rng".
--- changing the scalar part fails too:
+-- changing the scalar part fails:
 UPDATE temporal_rng SET id = '[7,7]'
 WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
 ERROR:  update or delete on table "temporal_rng" violates foreign key constraint "temporal_fk_rng2rng_fk" on table "temporal_fk_rng2rng"
@@ -600,7 +610,7 @@ UPDATE temporal_rng SET valid_at = tsrange('2016-01-01', '2016-02-01')
 WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
 ERROR:  update or delete on table "temporal_rng" violates foreign key constraint "temporal_fk_rng2rng_fk" on table "temporal_fk_rng2rng"
 DETAIL:  Key (id, valid_at)=([5,6), ["Mon Jan 01 00:00:00 2018","Thu Feb 01 00:00:00 2018")) is still referenced from table "temporal_fk_rng2rng".
--- changing the scalar part fails too:
+-- changing the scalar part fails:
 UPDATE temporal_rng SET id = '[7,7]'
 WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
 ERROR:  update or delete on table "temporal_rng" violates foreign key constraint "temporal_fk_rng2rng_fk" on table "temporal_fk_rng2rng"
