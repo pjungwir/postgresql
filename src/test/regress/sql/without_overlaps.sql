@@ -373,8 +373,18 @@ ALTER TABLE temporal_fk_rng2rng
 	ADD CONSTRAINT temporal_fk_rng2rng_fk
 	FOREIGN KEY (parent_id, PERIOD valid_at)
 	REFERENCES temporal_rng (id, PERIOD valid_at);
+
+-- with inferred PK on the referenced table, and wrong column type:
 ALTER TABLE temporal_fk_rng2rng
-	DROP CONSTRAINT temporal_fk_rng2rng_fk;
+	DROP CONSTRAINT temporal_fk_rng2rng_fk,
+	ALTER COLUMN valid_at TYPE tsrange USING tsrange(lower(valid_at), upper(valid_at));
+ALTER TABLE temporal_fk_rng2rng
+	ADD CONSTRAINT temporal_fk_rng2rng_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES temporal_rng;
+ALTER TABLE temporal_fk_rng2rng
+	ALTER COLUMN valid_at TYPE daterange USING daterange(lower(valid_at)::date, upper(valid_at)::date);
+
 -- with inferred PK on the referenced table:
 ALTER TABLE temporal_fk_rng2rng
 	ADD CONSTRAINT temporal_fk_rng2rng_fk
@@ -457,7 +467,7 @@ WHERE id = '[5,5]' AND valid_at = daterange('2018-02-01', '2018-03-01');
 -- a PK update that fails because both are referenced:
 UPDATE temporal_rng SET valid_at = daterange('2016-01-01', '2016-02-01')
 WHERE id = '[5,5]' AND valid_at = daterange('2018-01-01', '2018-02-01');
--- changing the scalar part fails too:
+-- changing the scalar part fails:
 UPDATE temporal_rng SET id = '[7,7]'
 WHERE id = '[5,5]' AND valid_at = daterange('2018-01-01', '2018-02-01');
 -- then delete the objecting FK record and the same PK update succeeds:
@@ -492,7 +502,7 @@ WHERE id = '[5,5]' AND valid_at = daterange('2018-02-01', '2018-03-01');
 -- a PK update that fails because both are referenced:
 UPDATE temporal_rng SET valid_at = daterange('2016-01-01', '2016-02-01')
 WHERE id = '[5,5]' AND valid_at = daterange('2018-01-01', '2018-02-01');
--- changing the scalar part fails too:
+-- changing the scalar part fails:
 UPDATE temporal_rng SET id = '[7,7]'
 WHERE id = '[5,5]' AND valid_at = daterange('2018-01-01', '2018-02-01');
 -- then delete the objecting FK record and the same PK update succeeds:
