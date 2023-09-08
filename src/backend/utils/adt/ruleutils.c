@@ -338,8 +338,8 @@ static char *deparse_expression_pretty(Node *expr, List *dpcontext,
 static char *pg_get_viewdef_worker(Oid viewoid,
 								   int prettyFlags, int wrapColumn);
 static char *pg_get_triggerdef_worker(Oid trigid, bool pretty);
-static int	decompile_column_index_array(Datum column_index_array, Oid relId, Oid indexId,
-										 bool withoutOverlaps, StringInfo buf);
+static int	decompile_column_index_array(Datum column_index_array, Oid relId,
+										 Datum index_opts, StringInfo buf);
 static char *pg_get_ruledef_worker(Oid ruleoid, int prettyFlags);
 static char *pg_get_indexdef_worker(Oid indexrelid, int colno,
 									const Oid *excludeOps,
@@ -2247,7 +2247,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 				val = SysCacheGetAttrNotNull(CONSTROID, tup,
 											 Anum_pg_constraint_conkey);
 
-				decompile_column_index_array(val, conForm->conrelid, conForm->conindid, false, &buf);
+				decompile_column_index_array(val, conForm->conrelid, 0, &buf);
 
 				/* add foreign relation name */
 				appendStringInfo(&buf, ") REFERENCES %s(",
@@ -2258,7 +2258,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 				val = SysCacheGetAttrNotNull(CONSTROID, tup,
 											 Anum_pg_constraint_confkey);
 
-				decompile_column_index_array(val, conForm->confrelid, conForm->conindid, false, &buf);
+				decompile_column_index_array(val, conForm->confrelid, 0, &buf);
 
 				appendStringInfoChar(&buf, ')');
 
@@ -2344,7 +2344,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 				if (!isnull)
 				{
 					appendStringInfoString(&buf, " (");
-					decompile_column_index_array(val, conForm->conrelid, InvalidOid, false, &buf);
+					decompile_column_index_array(val, conForm->conrelid, 0, &buf);
 					appendStringInfoChar(&buf, ')');
 				}
 
@@ -2357,6 +2357,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 				Oid			indexId;
 				int			keyatts;
 				HeapTuple	indtup;
+				Datum		indopts;
 				bool		isnull;
 
 				/* Start off the constraint definition */
@@ -2380,14 +2381,12 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 				val = SysCacheGetAttrNotNull(CONSTROID, tup,
 											 Anum_pg_constraint_conkey);
 
-				/*
-				 * If it has exclusion-style operator OIDs
-				 * then it uses WITHOUT OVERLAPS.
-				 */
 				indexId = conForm->conindid;
 				SysCacheGetAttr(CONSTROID, tup,
 						  Anum_pg_constraint_conexclop, &isnull);
-				keyatts = decompile_column_index_array(val, conForm->conrelid, indexId, !isnull, &buf);
+				indopts = SysCacheGetAttrNotNull(INDEXRELID, indtup,
+						Anum_pg_index_indoption);
+				keyatts = decompile_column_index_array(val, conForm->conrelid, indopts, &buf);
 
 				appendStringInfoChar(&buf, ')');
 
@@ -2582,16 +2581,21 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
  * of keys.
  */
 static int
-decompile_column_index_array(Datum column_index_array, Oid relId, Oid indexId,
-							 bool withoutOverlaps, StringInfo buf)
+decompile_column_index_array(Datum column_index_array, Oid relId, Datum index_opts, StringInfo buf)
 {
 	Datum	   *keys;
+	Datum	   *opts = NULL;
 	int			nKeys;
+	int			nOpts = 0;
 	int			j;
 
 	/* Extract data from array of int16 */
 	deconstruct_array_builtin(DatumGetArrayTypeP(column_index_array), INT2OID,
 							  &keys, NULL, &nKeys);
+
+	if (index_opts)
+		deconstruct_array_builtin(DatumGetArrayTypeP(index_opts), INT2OID, &opts,
+								  NULL, &nOpts);
 
 	for (j = 0; j < nKeys; j++)
 	{
@@ -2600,12 +2604,12 @@ decompile_column_index_array(Datum column_index_array, Oid relId, Oid indexId,
 
 		colName = get_attname(relId, colid, false);
 
-		if (j == 0)
-			appendStringInfoString(buf, quote_identifier(colName));
-		else if (withoutOverlaps && j == nKeys - 1)
-			appendStringInfo(buf, ", %s WITHOUT OVERLAPS", quote_identifier(colName));
-		else
-			appendStringInfo(buf, ", %s", quote_identifier(colName));
+		if (j > 0)
+			appendStringInfo(buf, ", ");
+		appendStringInfoString(buf, quote_identifier(colName));
+
+		if (nOpts && DatumGetInt16(opts[j]) & INDOPTION_WITHOUT_OVERLAPS)
+			appendStringInfo(buf, " WITHOUT OVERLAPS");
 	}
 
 	return nKeys;

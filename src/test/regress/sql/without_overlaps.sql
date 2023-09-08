@@ -15,6 +15,14 @@ CREATE TABLE temporal_rng (
 	CONSTRAINT temporal_rng_pk PRIMARY KEY (valid_at WITHOUT OVERLAPS)
 );
 
+-- PK with no columns just WITHOUT OVERLAPS twice:
+
+CREATE TABLE temporal_rng (
+	valid_at tsrange,
+	asserted_at tsrange,
+	CONSTRAINT temporal_rng_pk PRIMARY KEY (valid_at WITHOUT OVERLAPS, asserted_at WITHOUT OVERLAPS)
+);
+
 -- PK with a range column/PERIOD that isn't there:
 
 CREATE TABLE temporal_rng (
@@ -25,7 +33,7 @@ CREATE TABLE temporal_rng (
 -- PK with a non-range column:
 
 CREATE TABLE temporal_rng (
-	id INTEGER,
+	id int4range,
 	valid_at TEXT,
 	CONSTRAINT temporal_rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
@@ -56,6 +64,64 @@ SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rn
 SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng2_pk';
 DROP TABLE temporal_rng2;
 
+-- PK with one column plus two ranges:
+CREATE TABLE temporal_rng2 (
+	id int4range,
+	valid_at tsrange,
+	asserted_at tsrange,
+	CONSTRAINT temporal_rng2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS, asserted_at WITHOUT OVERLAPS)
+);
+\d temporal_rng2
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rng2_pk';
+SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng2_pk';
+DROP TABLE temporal_rng2;
+
+-- PK with a range plus a column:
+CREATE TABLE temporal_rng2 (
+	id int4range,
+	valid_at tsrange,
+	CONSTRAINT temporal_rng2_pk PRIMARY KEY (valid_at WITHOUT OVERLAPS, id)
+);
+\d temporal_rng2
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rng2_pk';
+SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng2_pk';
+DROP TABLE temporal_rng2;
+
+-- PK with a range, a column, and a range:
+CREATE TABLE temporal_rng2 (
+	id int4range,
+	valid_at tsrange,
+	asserted_at tsrange,
+	CONSTRAINT temporal_rng2_pk PRIMARY KEY (valid_at WITHOUT OVERLAPS, id, asserted_at WITHOUT OVERLAPS)
+);
+\d temporal_rng2
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rng2_pk';
+SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng2_pk';
+DROP TABLE temporal_rng2;
+
+-- PK with two ranges plus a column:
+CREATE TABLE temporal_rng2 (
+	id int4range,
+	valid_at tsrange,
+	asserted_at tsrange,
+	CONSTRAINT temporal_rng2_pk PRIMARY KEY (valid_at WITHOUT OVERLAPS, asserted_at WITHOUT OVERLAPS, id)
+);
+\d temporal_rng2
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rng2_pk';
+SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng2_pk';
+DROP TABLE temporal_rng2;
+
+-- PK with a column, a range, and a column:
+CREATE TABLE temporal_rng2 (
+	id1 int4range,
+	id2 int4range,
+	valid_at tsrange,
+	CONSTRAINT temporal_rng2_pk PRIMARY KEY (id1, valid_at WITHOUT OVERLAPS, id2)
+);
+\d temporal_rng2
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rng2_pk';
+SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng2_pk';
+DROP TABLE temporal_rng2;
 
 -- PK with a custom range type:
 CREATE TYPE textrange2 AS range (subtype=text, collation="C");
@@ -75,6 +141,14 @@ CREATE TABLE temporal_rng2 (
 	CONSTRAINT temporal_rng2_uq UNIQUE (valid_at WITHOUT OVERLAPS)
 );
 
+-- UNIQUE with no columns just WITHOUT OVERLAPS twice:
+
+CREATE TABLE temporal_rng (
+	valid_at tsrange,
+	asserted_at tsrange,
+	CONSTRAINT temporal_rng_pk UNIQUE (valid_at WITHOUT OVERLAPS, asserted_at WITHOUT OVERLAPS)
+);
+
 -- UNIQUE with a range column/PERIOD that isn't there:
 
 CREATE TABLE temporal_rng2 (
@@ -85,7 +159,7 @@ CREATE TABLE temporal_rng2 (
 -- UNIQUE with a non-range column:
 
 CREATE TABLE temporal_rng2 (
-	id INTEGER,
+	id int4range,
 	valid_at TEXT,
 	CONSTRAINT temporal_rng2_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
 );
@@ -114,6 +188,77 @@ CREATE TABLE temporal_rng3 (
 \d temporal_rng3
 SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rng3_uq';
 SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng3_uq';
+DROP TABLE temporal_rng3;
+
+-- UNIQUE with two columns plus a range:
+CREATE TABLE temporal_rng3 (
+	id1 int4range,
+	id2 int4range,
+	valid_at tsrange,
+	CONSTRAINT temporal_rng3_pk UNIQUE (id1, id2, valid_at WITHOUT OVERLAPS)
+);
+\d temporal_rng3
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rng3_pk';
+SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng3_pk';
+DROP TABLE temporal_rng3;
+
+-- UNIQUE with one column plus two ranges:
+CREATE TABLE temporal_rng3 (
+	id int4range,
+	valid_at tsrange,
+	asserted_at tsrange,
+	CONSTRAINT temporal_rng3_pk UNIQUE (id, valid_at WITHOUT OVERLAPS, asserted_at WITHOUT OVERLAPS)
+);
+\d temporal_rng3
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rng3_pk';
+SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng3_pk';
+DROP TABLE temporal_rng3;
+
+-- UNIQUE with a range plus a column:
+CREATE TABLE temporal_rng3 (
+	id int4range,
+	valid_at tsrange,
+	CONSTRAINT temporal_rng3_pk UNIQUE (valid_at WITHOUT OVERLAPS, id)
+);
+\d temporal_rng3
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rng3_pk';
+SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng3_pk';
+DROP TABLE temporal_rng3;
+
+-- UNIQUE with a range, a column, and a range:
+CREATE TABLE temporal_rng3 (
+	id int4range,
+	valid_at tsrange,
+	asserted_at tsrange,
+	CONSTRAINT temporal_rng3_pk UNIQUE (valid_at WITHOUT OVERLAPS, id, asserted_at WITHOUT OVERLAPS)
+);
+\d temporal_rng3
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rng3_pk';
+SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng3_pk';
+DROP TABLE temporal_rng3;
+
+-- UNIQUE with two ranges plus a column:
+CREATE TABLE temporal_rng3 (
+	id int4range,
+	valid_at tsrange,
+	asserted_at tsrange,
+	CONSTRAINT temporal_rng3_pk UNIQUE (valid_at WITHOUT OVERLAPS, asserted_at WITHOUT OVERLAPS, id)
+);
+\d temporal_rng3
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rng3_pk';
+SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng3_pk';
+DROP TABLE temporal_rng3;
+
+-- UNIQUE with a column, a range, and a column:
+CREATE TABLE temporal_rng3 (
+	id1 int4range,
+	id2 int4range,
+	valid_at tsrange,
+	CONSTRAINT temporal_rng3_pk UNIQUE (id1, valid_at WITHOUT OVERLAPS, id2)
+);
+\d temporal_rng3
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rng3_pk';
+SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng3_pk';
 DROP TABLE temporal_rng3;
 
 -- UNIQUE with a custom range type:

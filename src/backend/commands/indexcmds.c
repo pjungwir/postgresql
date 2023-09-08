@@ -874,6 +874,8 @@ DefineIndex(Oid tableId,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("access method \"%s\" does not support exclusion constraints",
 						accessMethodName)));
+	// TODO: must be gist if it's a temporal index
+	// (but allow btree_gist of course)
 
 	amcanorder = amRoutine->amcanorder;
 	amoptions = amRoutine->amoptions;
@@ -2101,6 +2103,17 @@ ComputeIndexAttrs(IndexInfo *indexInfo,
 
 		typeOids[attn] = atttype;
 
+		/* WITHOUT OVERLAPS must be a range column */
+		if (attribute->withoutOverlaps)
+		{
+			Assert(attribute->name != NULL);
+			if (!type_is_range(atttype))
+				ereport(ERROR,
+						(errcode(ERRCODE_DATATYPE_MISMATCH),
+						 errmsg("column \"%s\" in WITHOUT OVERLAPS is not a range type",
+								attribute->name)));
+		}
+
 		/*
 		 * Included columns have no collation, no opclass and no ordering
 		 * options.
@@ -2279,9 +2292,10 @@ ComputeIndexAttrs(IndexInfo *indexInfo,
 		{
 			int strat;
 			Oid opid;
+
 			get_index_attr_temporal_operator(opclassOids[attn],
 											 atttype,
-											 attn == nkeycols - 1,	/* TODO: Don't assume it's last? */
+											 attribute->withoutOverlaps,
 											 &opid,
 											 &strat);
 			indexInfo->ii_ExclusionOps[attn] = opid;
@@ -2290,9 +2304,10 @@ ComputeIndexAttrs(IndexInfo *indexInfo,
 		}
 
 		/*
-		 * Set up the per-column options (indoption field).  For now, this is
+		 * Set up the per-column options (indoption field).  Mostly this is
 		 * zero for any un-ordered index, while ordered indexes have DESC and
-		 * NULLS FIRST/LAST options.
+		 * NULLS FIRST/LAST options. But we also use indoption for columns
+		 * with WITHOUT OVERLAPS.
 		 */
 		colOptions[attn] = 0;
 		if (amcanorder)
@@ -2323,6 +2338,9 @@ ComputeIndexAttrs(IndexInfo *indexInfo,
 						 errmsg("access method \"%s\" does not support NULLS FIRST/LAST options",
 								accessMethodName)));
 		}
+
+		if (attribute->withoutOverlaps)
+			colOptions[attn] |= INDOPTION_WITHOUT_OVERLAPS;
 
 		/* Set up the per-column opclass options (attoptions field). */
 		if (attribute->opclassopts)

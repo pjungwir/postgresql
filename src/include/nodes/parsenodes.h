@@ -782,6 +782,7 @@ typedef struct IndexElem
 	List	   *opclassopts;	/* opclass-specific options, or NIL */
 	SortByDir	ordering;		/* ASC/DESC/default */
 	SortByNulls nulls_ordering; /* FIRST/LAST/default */
+	bool		withoutOverlaps;	/* WITHOUT OVERLAPS qualifier */
 } IndexElem;
 
 /*
@@ -2611,8 +2612,9 @@ typedef struct Constraint
 
 	/* Fields used for unique constraints (UNIQUE and PRIMARY KEY): */
 	bool		nulls_not_distinct; /* null treatment for UNIQUE constraints */
-	List	   *keys;			/* String nodes naming referenced key
-								 * column(s); also used for NOT NULL */
+	List	   *keys;			/* Tuple String nodes naming referenced key
+								 * column(s) with optional modifier; also used
+								 * for NOT NULL */
 	List	   *including;		/* String nodes naming referenced nonkey
 								 * column(s) */
 
@@ -2640,9 +2642,6 @@ typedef struct Constraint
 	List	   *old_conpfeqop;	/* pg_constraint.conpfeqop of my former self */
 	Oid			old_pktable_oid;	/* pg_constraint.confrelid of my former
 									 * self */
-
-	/* Fields used for temporal PRIMARY KEY and FOREIGN KEY constraints: */
-	Node	   *without_overlaps; /* String node naming range column */
 
 	/* Fields used for constraints that allow a NOT VALID specification */
 	bool		skip_validation;	/* skip validation of existing rows? */

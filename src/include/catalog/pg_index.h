@@ -33,6 +33,7 @@ CATALOG(pg_index,2610,IndexRelationId) BKI_SCHEMA_MACRO
 												 * indexes */
 	int16		indnatts;		/* total number of columns in index */
 	int16		indnkeyatts;	/* number of key columns in index */
+	int16		indoverlaps;	/* which columns are WITHOUT OVERLAPS */
 	bool		indisunique;	/* is this a unique index? */
 	bool		indnullsnotdistinct;	/* null treatment in unique index */
 	bool		indisprimary;	/* is this index for primary key? */
@@ -78,12 +79,14 @@ DECLARE_ARRAY_FOREIGN_KEY_OPT((indrelid, indkey), pg_attribute, (attrelid, attnu
 #ifdef EXPOSE_TO_CLIENT_CODE
 
 /*
- * Index AMs that support ordered scans must support these two indoption
- * bits.  Otherwise, the content of the per-column indoption fields is
+ * Index AMs that support ordered scans must support the first two indoption
+ * bits.  The third is used for temporal PRIMARY KEY / UNIQUE constraints.
+ * Otherwise, the content of the per-column indoption fields is
  * open for future definition.
  */
 #define INDOPTION_DESC			0x0001	/* values are in reverse order */
 #define INDOPTION_NULLS_FIRST	0x0002	/* NULLs are first instead of last */
+#define INDOPTION_WITHOUT_OVERLAPS	0x0004 /* WITHOUT OVERLAPS */
 
 #endif							/* EXPOSE_TO_CLIENT_CODE */
 
