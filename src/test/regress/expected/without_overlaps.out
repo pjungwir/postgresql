@@ -640,20 +640,25 @@ UPDATE temporal_rng SET id = '[7,7]'
 WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
 ERROR:  update or delete on table "temporal_rng" violates foreign key constraint "temporal_fk_rng2rng_fk" on table "temporal_fk_rng2rng"
 DETAIL:  Key (id, valid_at)=([5,6), ["Mon Jan 01 00:00:00 2018","Thu Feb 01 00:00:00 2018")) is still referenced from table "temporal_fk_rng2rng".
+-- changing an unreferenced part is okay:
+UPDATE temporal_rng
+FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
+SET id = '[7,7]'
+WHERE id = '[5,5]';
 -- changing just a part fails:
 UPDATE temporal_rng
 FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
 SET id = '[7,7]'
 WHERE id = '[5,5]';
 ERROR:  update or delete on table "temporal_rng" violates foreign key constraint "temporal_fk_rng2rng_fk" on table "temporal_fk_rng2rng"
-DETAIL:  Key (id, valid_at)=([5,6), ["Mon Jan 01 00:00:00 2018","Thu Feb 01 00:00:00 2018")) is still referenced from table "temporal_fk_rng2rng".
+DETAIL:  Key (id, valid_at)=([5,6), ["Wed Jan 03 00:00:00 2018","Thu Feb 01 00:00:00 2018")) is still referenced from table "temporal_fk_rng2rng".
 -- then delete the objecting FK record and the same PK update succeeds:
 DELETE FROM temporal_fk_rng2rng WHERE id = '[3,3]';
 UPDATE temporal_rng SET valid_at = tsrange('2016-01-01', '2016-02-01')
 WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
 -- clean up:
 DELETE FROM temporal_fk_rng2rng WHERE parent_id = '[5,5]';
-DELETE FROM temporal_rng WHERE id = '[5,5]';
+DELETE FROM temporal_rng WHERE id IN ('[5,5]', '[7,7]');
 --
 -- test FK parent deletes NO ACTION
 --
@@ -705,12 +710,16 @@ DELETE FROM temporal_rng WHERE id = '[5,5]' AND valid_at = tsrange('2018-02-01',
 DELETE FROM temporal_rng WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
 ERROR:  update or delete on table "temporal_rng" violates foreign key constraint "temporal_fk_rng2rng_fk" on table "temporal_fk_rng2rng"
 DETAIL:  Key (id, valid_at)=([5,6), ["Mon Jan 01 00:00:00 2018","Thu Feb 01 00:00:00 2018")) is still referenced from table "temporal_fk_rng2rng".
+-- deleting an unreferenced part is okay:
+DELETE FROM temporal_rng
+FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
+WHERE id = '[5,5]';
 -- deleting just a part fails:
 DELETE FROM temporal_rng
 FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
 WHERE id = '[5,5]';
 ERROR:  update or delete on table "temporal_rng" violates foreign key constraint "temporal_fk_rng2rng_fk" on table "temporal_fk_rng2rng"
-DETAIL:  Key (id, valid_at)=([5,6), ["Mon Jan 01 00:00:00 2018","Thu Feb 01 00:00:00 2018")) is still referenced from table "temporal_fk_rng2rng".
+DETAIL:  Key (id, valid_at)=([5,6), ["Wed Jan 03 00:00:00 2018","Thu Feb 01 00:00:00 2018")) is still referenced from table "temporal_fk_rng2rng".
 -- then delete the objecting FK record and the same PK delete succeeds:
 DELETE FROM temporal_fk_rng2rng WHERE id = '[3,3]';
 DELETE FROM temporal_rng WHERE id = '[5,5]';
