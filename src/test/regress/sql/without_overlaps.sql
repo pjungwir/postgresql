@@ -699,6 +699,11 @@ ROLLBACK;
 -- changing the scalar part fails:
 UPDATE temporal_rng SET id = '[7,8)'
 WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
+-- changing an unreferenced part is okay:
+UPDATE temporal_rng
+FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
+SET id = '[7,7]'
+WHERE id = '[5,5]';
 -- changing just a part fails:
 UPDATE temporal_rng
 FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
@@ -770,6 +775,10 @@ BEGIN;
     DEFERRABLE INITIALLY DEFERRED;
   DELETE FROM temporal_rng WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
 ROLLBACK;
+-- deleting an unreferenced part is okay:
+DELETE FROM temporal_rng
+FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
+WHERE id = '[5,5]';
 -- deleting just a part fails:
 DELETE FROM temporal_rng
 FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
