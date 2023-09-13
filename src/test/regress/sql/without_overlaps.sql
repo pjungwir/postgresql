@@ -694,6 +694,11 @@ WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
 -- changing the scalar part fails:
 UPDATE temporal_rng SET id = '[7,8)'
 WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
+-- changing an unreferenced part is okay:
+UPDATE temporal_rng
+FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
+SET id = '[7,7]'
+WHERE id = '[5,5]';
 -- changing just a part fails:
 UPDATE temporal_rng
 FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
@@ -760,6 +765,10 @@ INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES ('[3,4)', dater
 DELETE FROM temporal_rng WHERE id = '[5,6)' AND valid_at = daterange('2018-02-01', '2018-03-01');
 -- a PK delete that fails because both are referenced:
 DELETE FROM temporal_rng WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
+-- deleting an unreferenced part is okay:
+DELETE FROM temporal_rng
+FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
+WHERE id = '[5,5]';
 -- deleting just a part fails:
 DELETE FROM temporal_rng
 FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
