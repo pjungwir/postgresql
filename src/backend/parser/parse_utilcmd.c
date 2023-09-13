@@ -2709,13 +2709,13 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 				if (!type_is_range(typid))
 					ereport(ERROR,
 							(errcode(ERRCODE_DATATYPE_MISMATCH),
-							 errmsg("column \"%s\" named in WITHOUT OVERLAPS is not a range type",
+							 errmsg("column \"%s\" in WITHOUT OVERLAPS is not a range type",
 									without_overlaps_str)));
 			}
 			else
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_COLUMN),
-						 errmsg("range or PERIOD \"%s\" named in WITHOUT OVERLAPS does not exist",
+						 errmsg("range or PERIOD \"%s\" in WITHOUT OVERLAPS does not exist",
 								without_overlaps_str)));
 
 			iparam->name = pstrdup(without_overlaps_str);
