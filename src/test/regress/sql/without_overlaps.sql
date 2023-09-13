@@ -491,6 +491,7 @@ WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
 DELETE FROM temporal_fk_rng2rng WHERE id = '[3,3]';
 UPDATE temporal_rng SET valid_at = tsrange('2016-01-01', '2016-02-01')
 WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+-- TODO: test with FOR PORTION OF queries
 -- clean up:
 DELETE FROM temporal_fk_rng2rng WHERE parent_id = '[5,5]';
 DELETE FROM temporal_rng WHERE id = '[5,5]';
@@ -505,7 +506,7 @@ ALTER TABLE temporal_fk_rng2rng
 	ADD CONSTRAINT temporal_fk_rng2rng_fk
 	FOREIGN KEY (parent_id, PERIOD valid_at)
 	REFERENCES temporal_rng
-	ON DELETE RESTRICT;
+	ON UPDATE RESTRICT;
 -- a PK update that succeeds because the numeric id isn't referenced:
 INSERT INTO temporal_rng VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
 UPDATE temporal_rng SET valid_at = tsrange('2016-01-01', '2016-02-01') WHERE id = '[5,5]';
@@ -514,6 +515,8 @@ DELETE FROM temporal_rng WHERE id = '[5,5]';
 INSERT INTO temporal_rng VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
 INSERT INTO temporal_rng VALUES ('[5,5]', tsrange('2018-02-01', '2018-03-01'));
 INSERT INTO temporal_fk_rng2rng VALUES ('[3,3]', tsrange('2018-01-05', '2018-01-10'), '[5,5]');
+-- TODO: test setting the id too
+-- TODO: shouldn't this fail?:
 UPDATE temporal_rng SET valid_at = tsrange('2016-02-01', '2016-03-01')
 WHERE id = '[5,5]' AND valid_at = tsrange('2018-02-01', '2018-03-01');
 -- a PK update that fails because both are referenced:
@@ -523,6 +526,7 @@ WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
 DELETE FROM temporal_fk_rng2rng WHERE id = '[3,3]';
 UPDATE temporal_rng SET valid_at = tsrange('2016-01-01', '2016-02-01')
 WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+-- TODO: test with FOR PORTION OF queries
 -- clean up:
 DELETE FROM temporal_fk_rng2rng WHERE parent_id = '[5,5]';
 DELETE FROM temporal_rng WHERE id = '[5,5]';
@@ -548,6 +552,7 @@ DELETE FROM temporal_rng WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01',
 -- then delete the objecting FK record and the same PK delete succeeds:
 DELETE FROM temporal_fk_rng2rng WHERE id = '[3,3]';
 DELETE FROM temporal_rng WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+-- TODO: test with FOR PORTION OF queries
 
 --
 -- test FK parent deletes RESTRICT
@@ -572,6 +577,7 @@ DELETE FROM temporal_rng WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01',
 -- then delete the objecting FK record and the same PK delete succeeds:
 DELETE FROM temporal_fk_rng2rng WHERE id = '[3,3]';
 DELETE FROM temporal_rng WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+-- TODO: test with FOR PORTION OF queries
 
 --
 -- test ON UPDATE/DELETE options
@@ -784,7 +790,7 @@ ALTER TABLE temporal_partitioned_fk_rng2rng
 	ADD CONSTRAINT temporal_partitioned_fk_rng2rng_fk
 	FOREIGN KEY (parent_id, PERIOD valid_at)
 	REFERENCES temporal_partitioned_rng
-	ON DELETE RESTRICT;
+	ON UPDATE RESTRICT;
 INSERT INTO temporal_partitioned_rng VALUES ('[5,5]', daterange('2016-01-01', '2016-02-01'));
 UPDATE temporal_partitioned_rng SET valid_at = daterange('2018-01-01', '2018-02-01') WHERE id = '[5,5]';
 INSERT INTO temporal_partitioned_rng VALUES ('[5,5]', daterange('2018-02-01', '2018-03-01'));

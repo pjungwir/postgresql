@@ -12569,6 +12569,7 @@ transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 			periodatttypids[0] = attnumTypeId(pkrel, pkattno);
 			opclasses[i] = indclass->values[i];
 
+			Assert(*pk_period == NULL);
 			*pk_period = (Node *) makeString(pstrdup(NameStr(*attnumAttName(pkrel, pkattno))));
 		}
 		else

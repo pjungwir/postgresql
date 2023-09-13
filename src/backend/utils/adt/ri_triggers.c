@@ -234,7 +234,7 @@ static bool ri_PerformCheck(const RI_ConstraintInfo *riinfo,
 							RI_QueryKey *qkey, SPIPlanPtr qplan,
 							Relation fk_rel, Relation pk_rel,
 							TupleTableSlot *oldslot, TupleTableSlot *newslot,
-							bool hasForPortionOf, Datum forPortionOf,
+							int forPortionOfParam, Datum forPortionOf,
 							bool detectNewRows, int expect_OK);
 static void ri_ExtractValues(Relation rel, TupleTableSlot *slot,
 							 const RI_ConstraintInfo *riinfo, bool rel_is_pk,
@@ -456,7 +456,7 @@ RI_FKey_check(TriggerData *trigdata)
 	ri_PerformCheck(riinfo, &qkey, qplan,
 					fk_rel, pk_rel,
 					NULL, newslot,
-					false, 0,
+					-1, 0,
 					pk_rel->rd_rel->relkind == RELKIND_PARTITIONED_TABLE,
 					SPI_OK_SELECT);
 
@@ -548,14 +548,40 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 		 *		   FOR KEY SHARE OF x
 		 * The type id's for the $ parameters are those of the
 		 * PK attributes themselves.
+		 *
+		 * But for temporal FKs we need to make sure
+		 * the FK's range is completely covered.
+		 * So we use this query instead:
+		 *  SELECT 1
+		 *	FROM	(
+		 *		SELECT pkperiodatt AS r
+		 *		FROM   [ONLY] pktable x
+		 *		WHERE  pkatt1 = $1 [AND ...]
+		 *		AND    pkperiodatt && $n
+		 *		FOR KEY SHARE OF x
+		 *	) x1
+		 *  HAVING $n <@ range_agg(x1.r)
+		 * Note if FOR KEY SHARE ever allows GROUP BY and HAVING
+		 * we can make this a bit simpler.
 		 * ----------
 		 */
 		initStringInfo(&querybuf);
 		pk_only = pk_rel->rd_rel->relkind == RELKIND_PARTITIONED_TABLE ?
 			"" : "ONLY ";
 		quoteRelationName(pkrelname, pk_rel);
-		appendStringInfo(&querybuf, "SELECT 1 FROM %s%s x",
-						 pk_only, pkrelname);
+		if (riinfo->temporal)
+		{
+			quoteOneName(attname, RIAttName(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]));
+
+			appendStringInfo(&querybuf,
+					"SELECT 1 FROM (SELECT %s AS r FROM %s%s x",
+					attname, pk_only, pkrelname);
+		}
+		else
+		{
+			appendStringInfo(&querybuf, "SELECT 1 FROM %s%s x",
+					pk_only, pkrelname);
+		}
 		querysep = "WHERE";
 		for (int i = 0; i < riinfo->nkeys; i++)
 		{
@@ -574,6 +600,8 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 			queryoids[i] = pk_type;
 		}
 		appendStringInfoString(&querybuf, " FOR KEY SHARE OF x");
+		if (riinfo->temporal)
+			appendStringInfo(&querybuf, ") x1 HAVING $%d <@ pg_catalog.range_agg(x1.r)", riinfo->nkeys);
 
 		/* Prepare and save the plan */
 		qplan = ri_PlanCheck(querybuf.data, riinfo->nkeys, queryoids,
@@ -586,7 +614,7 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 	result = ri_PerformCheck(riinfo, &qkey, qplan,
 							 fk_rel, pk_rel,
 							 oldslot, NULL,
-							 false, 0,
+							 -1, 0,
 							 true,	/* treat like update */
 							 SPI_OK_SELECT);
 
@@ -686,6 +714,8 @@ ri_restrict(TriggerData *trigdata, bool is_no_action)
 	TupleTableSlot *oldslot;
 	RI_QueryKey qkey;
 	SPIPlanPtr	qplan;
+	int			targetRangeParam = -1;
+	Datum		targetRange = 0;
 
 	riinfo = ri_FetchConstraintInfo(trigdata->tg_trigger,
 									trigdata->tg_relation, true);
@@ -782,10 +812,16 @@ ri_restrict(TriggerData *trigdata, bool is_no_action)
 	/*
 	 * We have a plan now. Run it to check for existing references.
 	 */
+	if (trigdata->tg_temporal)
+	{
+		targetRangeParam = riinfo->nkeys - 1;
+		targetRange = restrict_cascading_range(trigdata->tg_temporal, riinfo, oldslot);
+	}
+
 	ri_PerformCheck(riinfo, &qkey, qplan,
 					fk_rel, pk_rel,
 					oldslot, NULL,
-					false, 0,
+					targetRangeParam, targetRange,
 					true,		/* must detect new rows */
 					SPI_OK_SELECT);
 
@@ -892,7 +928,7 @@ RI_FKey_cascade_del(PG_FUNCTION_ARGS)
 	ri_PerformCheck(riinfo, &qkey, qplan,
 					fk_rel, pk_rel,
 					oldslot, NULL,
-					false, 0,
+					-1, 0,
 					true,		/* must detect new rows */
 					SPI_OK_DELETE);
 
@@ -1014,7 +1050,7 @@ RI_FKey_cascade_upd(PG_FUNCTION_ARGS)
 	ri_PerformCheck(riinfo, &qkey, qplan,
 					fk_rel, pk_rel,
 					oldslot, newslot,
-					false, 0,
+					-1, 0,
 					true,		/* must detect new rows */
 					SPI_OK_UPDATE);
 
@@ -1247,7 +1283,7 @@ ri_set(TriggerData *trigdata, bool is_set_null, int tgkind)
 	ri_PerformCheck(riinfo, &qkey, qplan,
 					fk_rel, pk_rel,
 					oldslot, NULL,
-					false, 0,
+					-1, 0,
 					true,		/* must detect new rows */
 					SPI_OK_UPDATE);
 
@@ -1469,7 +1505,7 @@ TRI_FKey_cascade_del(PG_FUNCTION_ARGS)
 	ri_PerformCheck(riinfo, &qkey, qplan,
 					fk_rel, pk_rel,
 					oldslot, NULL,
-					true, targetRange,
+					riinfo->nkeys * 2, targetRange,
 					true,	   /* must detect new rows */
 					SPI_OK_DELETE);
 
@@ -1649,7 +1685,7 @@ TRI_FKey_cascade_upd(PG_FUNCTION_ARGS)
 	ri_PerformCheck(riinfo, &qkey, qplan,
 					fk_rel, pk_rel,
 					oldslot, newslot,
-					true, targetRange,
+					riinfo->nkeys * 2, targetRange,
 					true,		/* must detect new rows */
 					SPI_OK_UPDATE);
 
@@ -1898,7 +1934,7 @@ tri_set(TriggerData *trigdata, bool is_set_null, int tgkind)
 	ri_PerformCheck(riinfo, &qkey, qplan,
 					fk_rel, pk_rel,
 					oldslot, NULL,
-					true, targetRange,
+					riinfo->nkeys * 2, targetRange,
 					true,		/* must detect new rows */
 					SPI_OK_UPDATE);
 
@@ -3040,7 +3076,7 @@ ri_PerformCheck(const RI_ConstraintInfo *riinfo,
 				RI_QueryKey *qkey, SPIPlanPtr qplan,
 				Relation fk_rel, Relation pk_rel,
 				TupleTableSlot *oldslot, TupleTableSlot *newslot,
-				bool hasForPortionOf, Datum forPortionOf,
+				int forPortionOfParam, Datum forPortionOf,
 				bool detectNewRows, int expect_OK)
 {
 	Relation	query_rel,
@@ -3054,7 +3090,6 @@ ri_PerformCheck(const RI_ConstraintInfo *riinfo,
 	int			save_sec_context;
 	Datum		vals[RI_MAX_NUMKEYS * 2 + 1];
 	char		nulls[RI_MAX_NUMKEYS * 2 + 1];
-	int			last_param;
 
 	/*
 	 * Use the query type code to determine whether the query is run against
@@ -3084,7 +3119,6 @@ ri_PerformCheck(const RI_ConstraintInfo *riinfo,
 	}
 
 	/* Extract the parameters to be passed into the query */
-	last_param = riinfo->nkeys;
 	if (newslot)
 	{
 		ri_ExtractValues(source_rel, newslot, riinfo, source_is_pk,
@@ -3093,7 +3127,6 @@ ri_PerformCheck(const RI_ConstraintInfo *riinfo,
 		{
 			ri_ExtractValues(source_rel, oldslot, riinfo, source_is_pk,
 							 vals + riinfo->nkeys, nulls + riinfo->nkeys);
-			last_param = 2 * riinfo->nkeys;
 		}
 	}
 	else
@@ -3102,10 +3135,10 @@ ri_PerformCheck(const RI_ConstraintInfo *riinfo,
 						 vals, nulls);
 	}
 	/* Add one more query param if we are using FOR PORTION OF */
-	if (hasForPortionOf)
+	if (forPortionOf)
 	{
-		vals[last_param] = forPortionOf;
-		nulls[last_param] = ' ';
+		vals[forPortionOfParam] = forPortionOf;
+		nulls[forPortionOfParam] = ' ';
 	}
 
 	/*
