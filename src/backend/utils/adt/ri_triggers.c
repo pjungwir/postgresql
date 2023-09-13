@@ -535,14 +535,40 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 		 *		   FOR KEY SHARE OF x
 		 * The type id's for the $ parameters are those of the
 		 * PK attributes themselves.
+		 * But for temporal FKs we need to make sure
+		 * the FK's range is completely covered.
+		 * So we use this query instead:
+		 *  SELECT 1
+		 *  FROM    (
+		 *	  SELECT pkperiodatt AS r
+		 *	  FROM   [ONLY] pktable x
+		 *	  WHERE  pkatt1 = $1 [AND ...]
+		 *	  AND    pkperiodatt && $n
+		 *	  FOR KEY SHARE OF x
+		 *  ) x1
+		 *  HAVING $n <@ range_agg(x1.r)
+		 * Note if FOR KEY SHARE ever allows GROUP BY and HAVING
+		 * we can make this a bit simpler.
 		 * ----------
 		 */
 		initStringInfo(&querybuf);
 		pk_only = pk_rel->rd_rel->relkind == RELKIND_PARTITIONED_TABLE ?
 			"" : "ONLY ";
 		quoteRelationName(pkrelname, pk_rel);
-		appendStringInfo(&querybuf, "SELECT 1 FROM %s%s x",
-						 pk_only, pkrelname);
+		if (riinfo->temporal)
+		{
+			quoteOneName(attname, RIAttName(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]));
+
+			appendStringInfo(&querybuf,
+					"SELECT 1 FROM (SELECT %s AS r FROM %s%s x",
+					attname, pk_only, pkrelname);
+		}
+		else
+		{
+			appendStringInfo(&querybuf, "SELECT 1 FROM %s%s x",
+					pk_only, pkrelname);
+		}
+
 		querysep = "WHERE";
 		for (int i = 0; i < riinfo->nkeys; i++)
 		{
@@ -561,6 +587,8 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 			queryoids[i] = pk_type;
 		}
 		appendStringInfoString(&querybuf, " FOR KEY SHARE OF x");
+		if (riinfo->temporal)
+			appendStringInfo(&querybuf, ") x1 HAVING $%d <@ pg_catalog.range_agg(x1.r)", riinfo->nkeys);
 
 		/* Prepare and save the plan */
 		qplan = ri_PlanCheck(querybuf.data, riinfo->nkeys, queryoids,
