@@ -390,8 +390,18 @@ ALTER TABLE temporal_fk_rng2rng
 	ADD CONSTRAINT temporal_fk_rng2rng_fk
 	FOREIGN KEY (parent_id, PERIOD valid_at)
 	REFERENCES temporal_rng (id, PERIOD valid_at);
+
+-- with inferred PK on the referenced table, and wrong column type:
 ALTER TABLE temporal_fk_rng2rng
-	DROP CONSTRAINT temporal_fk_rng2rng_fk;
+	DROP CONSTRAINT temporal_fk_rng2rng_fk,
+	ALTER COLUMN valid_at TYPE daterange USING daterange(lower(valid_at)::date, upper(valid_at)::date);
+ALTER TABLE temporal_fk_rng2rng
+	ADD CONSTRAINT temporal_fk_rng2rng_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES temporal_rng;
+ALTER TABLE temporal_fk_rng2rng
+	ALTER COLUMN valid_at TYPE tsrange USING tsrange(lower(valid_at), upper(valid_at);
+
 -- with inferred PK on the referenced table:
 ALTER TABLE temporal_fk_rng2rng
 	ADD CONSTRAINT temporal_fk_rng2rng_fk
@@ -400,9 +410,12 @@ ALTER TABLE temporal_fk_rng2rng
 
 -- should fail because of duplicate referenced columns:
 ALTER TABLE temporal_fk_rng2rng
+	DROP CONSTRAINT temporal_fk_rng2rng_fk;
+ALTER TABLE temporal_fk_rng2rng
 	ADD CONSTRAINT temporal_fk_rng2rng_fk2
 	FOREIGN KEY (parent_id, PERIOD parent_id)
 	REFERENCES temporal_rng (id, PERIOD id);
+\d temporal_fk_rng2rng
 
 --
 -- test with rows already
