@@ -19,14 +19,14 @@ CREATE TABLE temporal_rng (
 	id INTEGER,
 	CONSTRAINT temporal_rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
-ERROR:  range or PERIOD "valid_at" named in WITHOUT OVERLAPS does not exist
+ERROR:  range or PERIOD "valid_at" in WITHOUT OVERLAPS does not exist
 -- PK with a non-range column:
 CREATE TABLE temporal_rng (
 	id INTEGER,
 	valid_at TEXT,
 	CONSTRAINT temporal_rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
-ERROR:  column "valid_at" named in WITHOUT OVERLAPS is not a range type
+ERROR:  column "valid_at" in WITHOUT OVERLAPS is not a range type
 -- PK with one column plus a range:
 CREATE TABLE temporal_rng (
 	-- Since we can't depend on having btree_gist here,
@@ -110,14 +110,14 @@ CREATE TABLE temporal_rng2 (
 	id INTEGER,
 	CONSTRAINT temporal_rng2_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
 );
-ERROR:  range or PERIOD "valid_at" named in WITHOUT OVERLAPS does not exist
+ERROR:  range or PERIOD "valid_at" in WITHOUT OVERLAPS does not exist
 -- UNIQUE with a non-range column:
 CREATE TABLE temporal_rng2 (
 	id INTEGER,
 	valid_at TEXT,
 	CONSTRAINT temporal_rng2_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
 );
-ERROR:  column "valid_at" named in WITHOUT OVERLAPS is not a range type
+ERROR:  column "valid_at" in WITHOUT OVERLAPS is not a range type
 -- UNIQUE with one column plus a range:
 CREATE TABLE temporal_rng2 (
 	-- Since we can't depend on having btree_gist here,
