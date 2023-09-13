@@ -699,6 +699,11 @@ ROLLBACK;
 -- changing the scalar part fails:
 UPDATE temporal_rng SET id = '[7,8)'
 WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
+-- changing just a part fails:
+UPDATE temporal_rng
+FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
+SET id = '[7,7]'
+WHERE id = '[5,5]';
 -- then delete the objecting FK record and the same PK update succeeds:
 DELETE FROM temporal_fk_rng2rng WHERE id = '[3,4)';
 UPDATE temporal_rng SET valid_at = daterange('2016-01-01', '2016-02-01')
@@ -765,6 +770,10 @@ BEGIN;
     DEFERRABLE INITIALLY DEFERRED;
   DELETE FROM temporal_rng WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
 ROLLBACK;
+-- deleting just a part fails:
+DELETE FROM temporal_rng
+FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
+WHERE id = '[5,5]';
 -- then delete the objecting FK record and the same PK delete succeeds:
 DELETE FROM temporal_fk_rng2rng WHERE id = '[3,4)';
 DELETE FROM temporal_rng WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
