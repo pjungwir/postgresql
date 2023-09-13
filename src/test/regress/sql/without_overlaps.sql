@@ -605,6 +605,11 @@ WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
 -- changing the scalar part fails:
 UPDATE temporal_rng SET id = '[7,7]'
 WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+-- changing just a part fails:
+UPDATE temporal_rng
+FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
+SET id = '[7,7]'
+WHERE id = '[5,5]';
 -- then delete the objecting FK record and the same PK update succeeds:
 DELETE FROM temporal_fk_rng2rng WHERE id = '[3,3]';
 UPDATE temporal_rng SET valid_at = tsrange('2016-01-01', '2016-02-01')
@@ -655,6 +660,10 @@ INSERT INTO temporal_fk_rng2rng VALUES ('[3,3]', tsrange('2018-01-05', '2018-01-
 DELETE FROM temporal_rng WHERE id = '[5,5]' AND valid_at = tsrange('2018-02-01', '2018-03-01');
 -- a PK delete that fails because both are referenced:
 DELETE FROM temporal_rng WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+-- deleting just a part fails:
+DELETE FROM temporal_rng
+FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
+WHERE id = '[5,5]';
 -- then delete the objecting FK record and the same PK delete succeeds:
 DELETE FROM temporal_fk_rng2rng WHERE id = '[3,3]';
 DELETE FROM temporal_rng WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
