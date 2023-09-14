@@ -523,7 +523,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 %type <node>	TableElement TypedTableElement ConstraintElem TableFuncElement
 %type <node>	columnDef columnOptions
 %type <defelt>	def_elem reloption_elem old_aggr_elem operator_def_elem
-%type <node>	def_arg columnElem withoutOverlapsClause
+%type <node>	def_arg columnElem without_overlaps_clause
 				where_clause where_or_current_clause
 				a_expr b_expr c_expr AexprConst indirection_el opt_slice_bound
 				columnref in_expr having_clause func_table xmltable array_expr
@@ -3898,7 +3898,6 @@ ColConstraintElem:
 					n->contype = CONSTR_PRIMARY;
 					n->location = @1;
 					n->keys = NULL;
-					n->without_overlaps = NULL;
 					n->options = $3;
 					n->indexname = NULL;
 					n->indexspace = $4;
@@ -4119,7 +4118,7 @@ ConstraintElem:
 					n->initially_valid = true;
 					$$ = (Node *) n;
 				}
-			| UNIQUE opt_unique_null_treatment '(' columnList withoutOverlapsClause ')' opt_c_include opt_definition OptConsTableSpace
+			| UNIQUE opt_unique_null_treatment '(' columnList without_overlaps_clause ')' opt_c_include opt_definition OptConsTableSpace
 				ConstraintAttributeSpec
 				{
 					Constraint *n = makeNode(Constraint);
@@ -4154,7 +4153,7 @@ ConstraintElem:
 								   NULL, yyscanner);
 					$$ = (Node *) n;
 				}
-			| PRIMARY KEY '(' columnList withoutOverlapsClause ')' opt_c_include opt_definition OptConsTableSpace
+			| PRIMARY KEY '(' columnList without_overlaps_clause ')' opt_c_include opt_definition OptConsTableSpace
 				ConstraintAttributeSpec
 				{
 					Constraint *n = makeNode(Constraint);
@@ -4179,7 +4178,6 @@ ConstraintElem:
 					n->contype = CONSTR_PRIMARY;
 					n->location = @1;
 					n->keys = NIL;
-					n->without_overlaps = NULL;
 					n->including = NIL;
 					n->options = NIL;
 					n->indexname = $3;
@@ -4246,7 +4244,7 @@ columnList:
 			| columnList ',' columnElem				{ $$ = lappend($1, $3); }
 		;
 
-withoutOverlapsClause:
+without_overlaps_clause:
 			',' columnElem WITHOUT OVERLAPS { $$ = $2; }
 			| /*EMPTY*/               { $$ = NULL; }
 	;
