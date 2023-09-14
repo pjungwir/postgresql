@@ -1389,8 +1389,7 @@ index_concurrently_create_copy(Relation heapRelation, Oid oldIndexId,
 							oldInfo->ii_NullsNotDistinct,
 							false,	/* not ready for inserts */
 							true,
-							indexRelation->rd_indam->amsummarizing,
-							oldInfo->ii_Temporal);
+							indexRelation->rd_indam->amsummarizing);
 
 	/*
 	 * Extract the list of column names and the column numbers for the new
@@ -2482,8 +2481,7 @@ BuildIndexInfo(Relation index)
 					   indexStruct->indnullsnotdistinct,
 					   indexStruct->indisready,
 					   false,
-					   index->rd_indam->amsummarizing,
-					   false);
+					   index->rd_indam->amsummarizing);
 
 	/* fill in attribute numbers */
 	for (i = 0; i < numAtts; i++)
@@ -2552,8 +2550,7 @@ BuildDummyIndexInfo(Relation index)
 					   indexStruct->indnullsnotdistinct,
 					   indexStruct->indisready,
 					   false,
-					   index->rd_indam->amsummarizing,
-					   false);
+					   index->rd_indam->amsummarizing);
 
 	/* fill in attribute numbers */
 	for (i = 0; i < numAtts; i++)
