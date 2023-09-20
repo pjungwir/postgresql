@@ -1782,7 +1782,6 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 	Oid			keycoltype;
 	Datum		datum;
 	bool		isnull;
-	PeriodDef  *period;
 
 	if (constraintOid)
 		*constraintOid = InvalidOid;
@@ -1839,11 +1838,6 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 	index->concurrent = false;
 	index->if_not_exists = false;
 	index->reset_default_tblspc = false;
-
-	/* Copy the period */
-	period = makeNode(PeriodDef);
-	period->oid = idxrec->indperiod;
-	index->period = period;
 
 	/*
 	 * We don't try to preserve the name of the source index; instead, just
