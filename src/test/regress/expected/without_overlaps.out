@@ -542,6 +542,20 @@ DETAIL:  Key (parent_id, valid_at)=([1,2), ["Tue Jan 02 00:00:00 2018","Tue May 
 UPDATE temporal_fk_rng2rng SET parent_id = '[8,8]' WHERE id = '[1,1]';
 ERROR:  insert or update on table "temporal_fk_rng2rng" violates foreign key constraint "temporal_fk_rng2rng_fk"
 DETAIL:  Key (parent_id, valid_at)=([8,9), ["Tue Jan 02 00:00:00 2018","Thu Mar 01 00:00:00 2018")) is not present in table "temporal_rng".
+-- ALTER FK DEFERRABLE
+BEGIN;
+  INSERT INTO temporal_rng VALUES
+    ('[5,5]', tsrange('2018-01-01', '2018-02-01')),
+    ('[5,5]', tsrange('2018-02-01', '2018-03-01'));
+  INSERT INTO temporal_fk_rng2rng VALUES
+    ('[3,3]', tsrange('2018-01-05', '2018-01-10'), '[5,5]');
+  ALTER TABLE temporal_fk_rng2rng
+    ALTER CONSTRAINT temporal_fk_rng2rng_fk
+    DEFERRABLE INITIALLY DEFERRED;
+  DELETE FROM temporal_rng WHERE id = '[5,5]'; --should not fail yet.
+COMMIT; -- should fail here.
+ERROR:  update or delete on table "temporal_rng" violates foreign key constraint "temporal_fk_rng2rng_fk" on table "temporal_fk_rng2rng"
+DETAIL:  Key (id, valid_at)=([5,6), ["Mon Jan 01 00:00:00 2018","Thu Feb 01 00:00:00 2018")) is still referenced from table "temporal_fk_rng2rng".
 --
 -- test FK parent updates NO ACTION
 --
