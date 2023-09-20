@@ -11457,7 +11457,11 @@ ATExecAlterConstrRecurse(Constraint *cmdcon, Relation conrel, Relation tgrel,
 			if (tgform->tgfoid != F_RI_FKEY_NOACTION_DEL &&
 				tgform->tgfoid != F_RI_FKEY_NOACTION_UPD &&
 				tgform->tgfoid != F_RI_FKEY_CHECK_INS &&
-				tgform->tgfoid != F_RI_FKEY_CHECK_UPD)
+				tgform->tgfoid != F_RI_FKEY_CHECK_UPD &&
+				tgform->tgfoid != F_TRI_FKEY_NOACTION_DEL &&
+				tgform->tgfoid != F_TRI_FKEY_NOACTION_UPD &&
+				tgform->tgfoid != F_TRI_FKEY_CHECK_INS &&
+				tgform->tgfoid != F_TRI_FKEY_CHECK_UPD)
 				continue;
 
 			tgCopyTuple = heap_copytuple(tgtuple);
