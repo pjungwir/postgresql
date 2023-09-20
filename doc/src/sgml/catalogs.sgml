@@ -5820,11 +5820,11 @@ SCRAM-SHA-256$<replaceable>&lt;iteration count&gt;</replaceable>:<replaceable>&l
 
      <row>
       <entry role="catalog_table_entry"><para role="column_definition">
-       <structfield>perrngtype</structfield> <type>oid</type>
-       (references <link linkend="catalog-pg-type"><structname>pg_type</structname></link>.<structfield>oid</structfield>)
+       <structfield>perrange</structfield> <type>int2</type>
+       (references <link linkend="catalog-pg-attribute"><structname>pg_attribute</structname></link>.<structfield>attnum</structfield>)
       </para>
       <para>
-       The OID of the range type associated with this period
+       The number of the <literal>GENERATED</literal> column that implements the <literal>PERIOD</literal>.
       </para></entry>
      </row>
 
