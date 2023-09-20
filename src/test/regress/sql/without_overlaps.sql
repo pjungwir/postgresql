@@ -440,6 +440,21 @@ UPDATE temporal_fk_rng2rng SET valid_at = tsrange('2018-01-02', '2018-03-01') WH
 UPDATE temporal_fk_rng2rng SET valid_at = tsrange('2018-01-02', '2018-05-01') WHERE id = '[1,1]';
 UPDATE temporal_fk_rng2rng SET parent_id = '[8,8]' WHERE id = '[1,1]';
 
+-- ALTER FK DEFERRABLE
+
+BEGIN;
+  INSERT INTO temporal_rng VALUES
+    ('[5,5]', tsrange('2018-01-01', '2018-02-01')),
+    ('[5,5]', tsrange('2018-02-01', '2018-03-01'));
+  INSERT INTO temporal_fk_rng2rng VALUES
+    ('[3,3]', tsrange('2018-01-05', '2018-01-10'), '[5,5]');
+  ALTER TABLE temporal_fk_rng2rng
+    ALTER CONSTRAINT temporal_fk_rng2rng_fk
+    DEFERRABLE INITIALLY DEFERRED;
+
+  DELETE FROM temporal_rng WHERE id = '[5,5]'; --should not fail yet.
+COMMIT; -- should fail here.
+
 --
 -- test FK parent updates NO ACTION
 --
