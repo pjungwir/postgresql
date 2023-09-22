@@ -10850,7 +10850,11 @@ FindFKComparisonOperators(Constraint *fkconstraint,
 	{
 		if (amid != GIST_AM_OID)
 			elog(ERROR, "only GiST indexes are supported for temporal foreign keys");
-		eqstrategy = for_overlaps ? RTOverlapStrategyNumber : RTEqualStrategyNumber;
+		/*
+		 * For the non-overlaps parts, we want either RTEqualStrategyNumber (without btree_gist)
+		 * or BTEqualStrategyNumber (with btree_gist). We'll try the latter first.
+		 */
+		eqstrategy = for_overlaps ? RTOverlapStrategyNumber : BTEqualStrategyNumber;
 	}
 	else
 	{
@@ -10872,6 +10876,15 @@ FindFKComparisonOperators(Constraint *fkconstraint,
 	 */
 	ppeqop = get_opfamily_member(opfamily, opcintype, opcintype,
 								 eqstrategy);
+
+	/* Fall back to RTEqualStrategyNumber for temporal overlaps */
+	if (is_temporal && !for_overlaps && !OidIsValid(ppeqop))
+	{
+		eqstrategy = RTEqualStrategyNumber;
+		ppeqop = get_opfamily_member(opfamily, opcintype, opcintype,
+									 eqstrategy);
+	}
+
 
 	if (!OidIsValid(ppeqop))
 		elog(ERROR, "missing operator %d(%u,%u) in opfamily %u",
