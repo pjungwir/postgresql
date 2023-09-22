@@ -4232,9 +4232,17 @@ ConstraintElem:
 					n->location = @1;
 					n->pktable = $8;
 					n->fk_attrs = $4;
-					n->fk_period = $5;
+					if ($5)
+					{
+						n->fk_attrs = lappend(n->fk_attrs, $5);
+						n->fk_with_period = true;
+					}
 					n->pk_attrs = linitial($9);
-					n->pk_period = lsecond($9);
+					if (lsecond($9))
+					{
+						n->pk_attrs = lappend(n->pk_attrs, lsecond($9));
+						n->pk_with_period = true;
+					}
 					n->fk_matchtype = $10;
 					n->fk_upd_action = ($11)->updateAction->action;
 					n->fk_del_action = ($11)->deleteAction->action;
@@ -17339,6 +17347,7 @@ unreserved_keyword:
 			| PARTITION
 			| PASSING
 			| PASSWORD
+			| PERIOD
 			| PLANS
 			| POLICY
 			| PRECEDING
@@ -17631,7 +17640,6 @@ reserved_keyword:
 			| ONLY
 			| OR
 			| ORDER
-			| PERIOD
 			| PLACING
 			| PRIMARY
 			| REFERENCES

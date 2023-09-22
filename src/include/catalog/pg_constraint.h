@@ -127,20 +127,20 @@ CATALOG(pg_constraint,2606,ConstraintRelationId)
 	int16		confkey[1];
 
 	/*
-	 * If a foreign key, the OIDs of the PK = FK comparison operators for each
-	 * column of the constraint
+	 * If a foreign key, the OIDs of the PK = FK equality/overlap operators for
+	 * each column of the constraint
 	 */
 	Oid			conpfeqop[1] BKI_LOOKUP(pg_operator);
 
 	/*
-	 * If a foreign key, the OIDs of the PK = PK comparison operators for each
-	 * column of the constraint (i.e., equality for the referenced columns)
+	 * If a foreign key, the OIDs of the PK = PK equality/overlap operators for
+	 * each column of the constraint (i.e., equality for the referenced columns)
 	 */
 	Oid			conppeqop[1] BKI_LOOKUP(pg_operator);
 
 	/*
-	 * If a foreign key, the OIDs of the FK = FK comparison operators for each
-	 * column of the constraint (i.e., equality for the referencing columns)
+	 * If a foreign key, the OIDs of the FK = FK equality/overlap operators for
+	 * each column of the constraint (i.e., equality for the referencing columns)
 	 */
 	Oid			conffeqop[1] BKI_LOOKUP(pg_operator);
 
@@ -183,7 +183,7 @@ MAKE_SYSCACHE(CONSTROID, pg_constraint_oid_index, 16);
 
 /* conkey can contain zero (InvalidAttrNumber) if a whole-row Var is used */
 DECLARE_ARRAY_FOREIGN_KEY_OPT((conrelid, conkey), pg_attribute, (attrelid, attnum));
-DECLARE_ARRAY_FOREIGN_KEY_OPT((confrelid, confkey), pg_attribute, (attrelid, attnum));
+DECLARE_ARRAY_FOREIGN_KEY((confrelid, confkey), pg_attribute, (attrelid, attnum));
 
 #ifdef EXPOSE_TO_CLIENT_CODE
 
@@ -283,6 +283,10 @@ extern void DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
 									   AttrNumber *conkey, AttrNumber *confkey,
 									   Oid *pf_eq_oprs, Oid *pp_eq_oprs, Oid *ff_eq_oprs,
 									   int *num_fk_del_set_cols, AttrNumber *fk_del_set_cols);
+extern void FindFKPeriodOpersAndProcs(Oid opclass,
+									  Oid *periodoperoid,
+									  Oid *aggedperiodoperoid,
+									  Oid *periodprocoid);
 
 extern bool check_functional_grouping(Oid relid,
 									  Index varno, Index varlevelsup,
