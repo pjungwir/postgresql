@@ -1079,19 +1079,26 @@ WITH ( MODULUS <replaceable class="parameter">numeric_literal</replaceable>, REM
      <para>
       A <literal>PRIMARY KEY</literal> with a <literal>WITHOUT OVERLAPS</literal> option
       is a <emphasis>temporal</emphasis> primary key.
-      The <literal>WITHOUT OVERLAPS</literal> value
-      must be a range type and is used to constrain the record's applicability
-      to just that interval (usually a range of dates or timestamps).
-      The main part of the primary key may be repeated in other rows of the table,
-      as long as records with the same key don't overlap in the
-      <literal>WITHOUT OVERLAPS</literal> column.
+      The <literal>WITHOUT OVERLAPS</literal> column
+      must be a range type or a <literal>PERIOD</literal>
+      and is used to constrain the record's applicability
+      to just that range/period (usually a range of dates or timestamps,
+      although Postgres allows a range/period over any base type).
      </para>
 
      <para>
-      A temporal <literal>PRIMARY KEY</literal> is enforced with an
+      The non-<literal>WITHOUT OVERLAPS</literal> part(s) of the key can be any
+      type that can be compared for equality in a GiST index. By default
+      only range types are supported, but you can use other types by
+      adding the <xref linkend="btree-gist"/> extension
+      (which is the expected way to use this feature).
+      These ordinary parts of the primary key do allow duplicates,
+      so long as the duplicates don't overlap in the
+      <literal>WITHOUT OVERLAPS</literal> column.
+      In effect a temporal <literal>PRIMARY KEY</literal> is enforced with an
       <literal>EXCLUDE</literal> constraint rather than a <literal>UNIQUE</literal>
-      constraint, backed by a GiST index. You may need to install the
-      <xref linkend="btree-gist"/> extension to create temporal primary keys.
+      constraint. So for example <literal>PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)</literal>
+      behaves like <literal>EXCLUDE USING GIST (id WITH =, valid_at WITH &amp;&amp;)</literal>.
      </para>
     </listitem>
    </varlistentry>
