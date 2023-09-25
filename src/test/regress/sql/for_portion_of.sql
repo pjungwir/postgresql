@@ -7,7 +7,7 @@ CREATE TABLE for_portion_of_test (
   name text NOT NULL
 );
 INSERT INTO for_portion_of_test VALUES
-('[1,2)', '[2018-01-02,2020-01-01)', 'one');
+('[1,1]', '[2018-01-02,2020-01-01)', 'one');
 
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM '2018-01-15' TO '2019-01-01'
@@ -27,7 +27,7 @@ CREATE TABLE for_portion_of_test (
   name text NOT NULL
 );
 INSERT INTO for_portion_of_test VALUES
-('[1,2)', '[2018-01-02,2018-02-03)', '[2015-01-01,2025-01-01)', 'one');
+('[1,1]', '[2018-01-02,2018-02-03)', '[2015-01-01,2025-01-01)', 'one');
 
 UPDATE for_portion_of_test
 FOR PORTION OF valid1_at FROM '2018-01-15' TO UNBOUNDED
@@ -57,13 +57,13 @@ CREATE TABLE for_portion_of_test (
 );
 INSERT INTO for_portion_of_test
 VALUES
-('[1,2)', '[2018-01-02,2018-02-03)', 'one'),
-('[1,2)', '[2018-02-03,2018-03-03)', 'one'),
-('[1,2)', '[2018-03-03,2018-04-04)', 'one'),
-('[2,3)', '[2018-01-01,2018-01-05)', 'two'),
-('[3,4)', '[2018-01-01,)', 'three'),
-('[4,5)', '(,2018-04-01)', 'four'),
-('[5,6)', '(,)', 'five')
+('[1,1]', '[2018-01-02,2018-02-03)', 'one'),
+('[1,1]', '[2018-02-03,2018-03-03)', 'one'),
+('[1,1]', '[2018-03-03,2018-04-04)', 'one'),
+('[2,2]', '[2018-01-01,2018-01-05)', 'two'),
+('[3,3]', '[2018-01-01,)', 'three'),
+('[4,4]', '(,2018-04-01)', 'four'),
+('[5,5]', '(,)', 'five')
 ;
 
 --
@@ -74,97 +74,97 @@ VALUES
 UPDATE for_portion_of_test
 FOR PORTION OF invalid_at FROM '2018-06-01' TO UNBOUNDED
 SET name = 'foo'
-WHERE id = '[5,6)';
+WHERE id = '[5,5]';
 
 -- Setting the range fails
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM '2018-06-01' TO UNBOUNDED
 SET valid_at = '[1990-01-01,1999-01-01)'
-WHERE id = '[5,6)';
+WHERE id = '[5,5]';
 
 -- The wrong type fails
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM 1 TO 4
 SET name = 'nope'
-WHERE id = '[3,4)';
+WHERE id = '[3,3]';
 
 -- Setting with timestamps reversed fails
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM '2018-06-01' TO '2018-01-01'
 SET name = 'three^1'
-WHERE id = '[3,4)';
+WHERE id = '[3,3]';
 
 -- Setting with a subquery fails
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM (SELECT '2018-01-01') TO '2018-06-01'
 SET name = 'nope'
-WHERE id = '[3,4)';
+WHERE id = '[3,3]';
 
 -- Setting with a column fails
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM lower(valid_at) TO UNBOUNDED
 SET name = 'nope'
-WHERE id = '[3,4)';
+WHERE id = '[3,3]';
 
 -- Setting with timestamps equal does nothing
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM '2018-04-01' TO '2018-04-01'
 SET name = 'three^0'
-WHERE id = '[3,4)';
+WHERE id = '[3,3]';
 
 -- Updating a finite/open portion with a finite/open target
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM '2018-06-01' TO UNBOUNDED
 SET name = 'three^1'
-WHERE id = '[3,4)';
+WHERE id = '[3,3]';
 
 -- Updating a finite/open portion with an open/finite target
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM UNBOUNDED TO '2018-03-01'
 SET name = 'three^2'
-WHERE id = '[3,4)';
+WHERE id = '[3,3]';
 
 -- Updating an open/finite portion with an open/finite target
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM UNBOUNDED TO '2018-02-01'
 SET name = 'four^1'
-WHERE id = '[4,5)';
+WHERE id = '[4,4]';
 
 -- Updating an open/finite portion with a finite/open target
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM '2017-01-01' TO UNBOUNDED
 SET name = 'four^2'
-WHERE id = '[4,5)';
+WHERE id = '[4,4]';
 
 -- Updating a finite/finite portion with an exact fit
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM '2017-01-01' TO '2018-02-01'
 SET name = 'four^3'
-WHERE id = '[4,5)';
+WHERE id = '[4,4]';
 
 -- Updating an enclosed span
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM UNBOUNDED TO UNBOUNDED
 SET name = 'two^2'
-WHERE id = '[2,3)';
+WHERE id = '[2,2]';
 
 -- Updating an open/open portion with a finite/finite target
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM '2018-01-01' TO '2019-01-01'
 SET name = 'five^2'
-WHERE id = '[5,6)';
+WHERE id = '[5,5]';
 
 -- Updating an enclosed span with separate protruding spans
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM '2017-01-01' TO '2020-01-01'
 SET name = 'five^3'
-WHERE id = '[5,6)';
+WHERE id = '[5,5]';
 
 -- Updating multiple enclosed spans
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM NULL TO NULL
 SET name = 'one^2'
-WHERE id = '[1,2)';
+WHERE id = '[1,1]';
 
 -- Updating with a shift/reduce conflict
 UPDATE for_portion_of_test
@@ -172,27 +172,27 @@ FOR PORTION OF valid_at
   FROM '2018-03-01' AT TIME ZONE INTERVAL '1' HOUR TO MINUTE
   TO '2019-01-01'
 SET name = 'one^3'
-WHERE id = '[1,2)';
+WHERE id = '[1,1]';
 
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at
   FROM '2018-03-01' AT TIME ZONE INTERVAL '2' HOUR
   TO '2019-01-01'
 SET name = 'one^4'
-WHERE id = '[1,2)';
+WHERE id = '[1,1]';
 
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at
   FROM ('2018-03-01' AT TIME ZONE INTERVAL '2' HOUR)
   TO '2019-01-01'
 SET name = 'one^4'
-WHERE id = '[1,2)';
+WHERE id = '[1,1]';
 
 -- Updating the non-range part of the PK:
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM '2018-02-15' TO NULL
-SET id = '[6,7)'
-WHERE id = '[1,2)';
+SET id = '[6,6]'
+WHERE id = '[1,1]';
 
 -- UPDATE with no WHERE clause
 UPDATE for_portion_of_test
@@ -208,37 +208,37 @@ SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
 -- Deleting with a missing column fails
 DELETE FROM for_portion_of_test
 FOR PORTION OF invalid_at FROM '2018-06-01' TO NULL
-WHERE id = '[5,6)';
+WHERE id = '[5,5]';
 
 -- Deleting with timestamps reversed fails
 DELETE FROM for_portion_of_test
 FOR PORTION OF valid_at FROM '2018-06-01' TO '2018-01-01'
-WHERE id = '[3,4)';
+WHERE id = '[3,3]';
 
 -- Deleting with timestamps equal does nothing
 DELETE FROM for_portion_of_test
 FOR PORTION OF valid_at FROM '2018-04-01' TO '2018-04-01'
-WHERE id = '[3,4)';
+WHERE id = '[3,3]';
 
 -- Deleting with a closed/closed target
 DELETE FROM for_portion_of_test
 FOR PORTION OF valid_at FROM '2018-06-01' TO '2020-06-01'
-WHERE id = '[5,6)';
+WHERE id = '[5,5]';
 
 -- Deleting with a closed/open target
 DELETE FROM for_portion_of_test
 FOR PORTION OF valid_at FROM '2018-04-01' TO NULL
-WHERE id = '[3,4)';
+WHERE id = '[3,3]';
 
 -- Deleting with an open/closed target
 DELETE FROM for_portion_of_test
 FOR PORTION OF valid_at FROM NULL TO '2018-02-08'
-WHERE id = '[1,2)';
+WHERE id = '[1,1]';
 
 -- Deleting with an open/open target
 DELETE FROM for_portion_of_test
 FOR PORTION OF valid_at FROM NULL TO NULL
-WHERE id = '[6,7)';
+WHERE id = '[6,6]';
 
 -- DELETE with no WHERE clause
 DELETE FROM for_portion_of_test
@@ -250,7 +250,7 @@ SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM '2018-02-01' TO '2018-02-15'
 SET name = 'three^3'
-WHERE id = '[3,4)'
+WHERE id = '[3,3]'
 RETURNING *;
 
 -- test that we run triggers on the UPDATE/DELETEd row and the INSERTed rows
@@ -298,11 +298,11 @@ CREATE TRIGGER trg_for_portion_of_after_delete
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM '2021-01-01' TO '2022-01-01'
 SET name = 'five^4'
-WHERE id = '[5,6)';
+WHERE id = '[5,5]';
 
 DELETE FROM for_portion_of_test
 FOR PORTION OF valid_at FROM '2023-01-01' TO '2024-01-01'
-WHERE id = '[5,6)';
+WHERE id = '[5,5]';
 
 SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
 
