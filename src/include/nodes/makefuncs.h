@@ -100,6 +100,8 @@ extern IndexInfo *makeIndexInfo(int numattrs, int numkeyattrs, Oid amoid,
 								bool isready, bool concurrent,
 								bool summarizing);
 
+extern KeyElem *makeKeyElem(char *column, bool withoutOverlaps);
+
 extern DefElem *makeDefElem(char *name, Node *arg, int location);
 extern DefElem *makeDefElemExtended(char *nameSpace, char *name, Node *arg,
 									DefElemAction defaction, int location);

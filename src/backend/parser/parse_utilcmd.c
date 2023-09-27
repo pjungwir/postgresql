@@ -801,7 +801,7 @@ transformColumnDefinition(CreateStmtContext *cxt, ColumnDef *column)
 							 parser_errposition(cxt->pstate,
 												constraint->location)));
 				if (constraint->keys == NIL)
-					constraint->keys = list_make1(list_make2(makeString(column->colname), NULL));
+					constraint->keys = list_make1(makeKeyElem(column->colname, false));
 				cxt->ixconstraints = lappend(cxt->ixconstraints, constraint);
 				break;
 
@@ -2515,7 +2515,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 							 errdetail("Cannot create a primary key or unique constraint using such an index."),
 							 parser_errposition(cxt->pstate, constraint->location)));
 
-				constraint->keys = lappend(constraint->keys, list_make2(makeString(attname), NULL));
+				constraint->keys = lappend(constraint->keys, makeKeyElem(attname, false));
 			}
 			else
 				constraint->including = lappend(constraint->including, makeString(attname));
@@ -2561,9 +2561,8 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 
 		foreach(lc, constraint->keys)
 		{
-			char	   *key = strVal(linitial(lfirst(lc)));
-			Node	   *modifier = lsecond(lfirst(lc));
-			bool		withoutOverlaps = false;
+			KeyElem	   *keyElem = (KeyElem *) lfirst(lc);
+			char	   *key = keyElem->column;
 			bool		found = false;
 			ColumnDef  *column = NULL;
 			ListCell   *columns;
@@ -2677,17 +2676,8 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 			}
 
 			/* Check for WITHOUT OVERLAPS modifiers */
-			if (modifier)
+			if (keyElem->withoutOverlaps)
 			{
-				if (strcmp(strVal(modifier), "WITHOUT OVERLAPS"))
-					ereport(ERROR,
-							(errcode(ERRCODE_SYNTAX_ERROR),
-							 errmsg("unknown modifier for column \"%s\": \"%s\"",
-								 key, strVal(modifier)),
-							 parser_errposition(cxt->pstate, constraint->location)));
-
-				withoutOverlaps = true;
-
 				index->istemporal = true;
 				// TODO: Error out if constraint already has a conflicting access method.
 				// Also why are we setting constraint->access_method here?
@@ -2695,9 +2685,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 				constraint->access_method = "gist";
 			}
 			else
-			{
 				hasNonWithoutOverlaps = true;
-			}
 
 			/* OK, add it to the index definition */
 			iparam = makeNode(IndexElem);
@@ -2709,7 +2697,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 			iparam->opclassopts = NIL;
 			iparam->ordering = SORTBY_DEFAULT;
 			iparam->nulls_ordering = SORTBY_NULLS_DEFAULT;
-			iparam->withoutOverlaps = withoutOverlaps;
+			iparam->withoutOverlaps = keyElem->withoutOverlaps;
 			index->indexParams = lappend(index->indexParams, iparam);
 
 			if (constraint->contype == CONSTR_PRIMARY)

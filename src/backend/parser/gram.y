@@ -429,7 +429,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 				func_as createfunc_opt_list opt_createfunc_opt_list alterfunc_opt_list
 				old_aggr_definition old_aggr_list
 				oper_argtypes RuleActionList RuleActionMulti
-				opt_column_list columnList column_with_without_overlaps_list opt_name_list
+				opt_column_list columnList uniqueKeyList opt_name_list
 				sort_clause opt_sort_clause sortby_list index_params
 				stats_params
 				opt_include opt_c_include index_including_params
@@ -523,12 +523,11 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 %type <node>	TableElement TypedTableElement ConstraintElem TableFuncElement
 %type <node>	columnDef columnOptions
 %type <defelt>	def_elem reloption_elem old_aggr_elem operator_def_elem
-%type <node>	def_arg columnElem
+%type <node>	def_arg columnElem uniqueKeyElem
 				where_clause where_or_current_clause
 				a_expr b_expr c_expr AexprConst indirection_el opt_slice_bound
 				columnref in_expr having_clause func_table xmltable array_expr
 				OptWhereClause operator_def_arg
-%type <list>	column_elem_with_without_overlaps
 %type <list>	rowsfrom_item rowsfrom_list opt_col_def_list
 %type <boolean> opt_ordinality
 %type <list>	ExclusionConstraintList ExclusionConstraintElem
@@ -4098,7 +4097,7 @@ ConstraintElem:
 					n->initially_valid = true;
 					$$ = (Node *) n;
 				}
-			| UNIQUE opt_unique_null_treatment '(' column_with_without_overlaps_list ')' opt_c_include opt_definition OptConsTableSpace
+			| UNIQUE opt_unique_null_treatment '(' uniqueKeyList ')' opt_c_include opt_definition OptConsTableSpace
 				ConstraintAttributeSpec
 				{
 					Constraint *n = makeNode(Constraint);
@@ -4132,7 +4131,7 @@ ConstraintElem:
 								   NULL, yyscanner);
 					$$ = (Node *) n;
 				}
-			| PRIMARY KEY '(' column_with_without_overlaps_list ')' opt_c_include opt_definition OptConsTableSpace
+			| PRIMARY KEY '(' uniqueKeyList ')' opt_c_include opt_definition OptConsTableSpace
 				ConstraintAttributeSpec
 				{
 					Constraint *n = makeNode(Constraint);
@@ -4222,20 +4221,20 @@ columnList:
 			| columnList ',' columnElem				{ $$ = lappend($1, $3); }
 		;
 
-column_with_without_overlaps_list:
-			column_elem_with_without_overlaps								{ $$ = list_make1($1); }
-			| column_with_without_overlaps_list ',' column_elem_with_without_overlaps				{ $$ = lappend($1, $3); }
-		;
-
 columnElem: ColId
 				{
 					$$ = (Node *) makeString($1);
 				}
 		;
 
-column_elem_with_without_overlaps:
-			columnElem { $$ = list_make2($1, NULL); }
-			| columnElem WITHOUT OVERLAPS { $$ = list_make2($1, makeString("WITHOUT OVERLAPS")); }
+uniqueKeyList:
+			uniqueKeyElem							{ $$ = list_make1($1); }
+			| uniqueKeyList ',' uniqueKeyElem		{ $$ = lappend($1, $3); }
+		;
+
+uniqueKeyElem:
+			ColId							{ $$ = (Node *) makeKeyElem($1, false); }
+			| ColId WITHOUT OVERLAPS		{ $$ = (Node *) makeKeyElem($1, true); }
 		;
 
 opt_c_include:	INCLUDE '(' columnList ')'			{ $$ = $3; }

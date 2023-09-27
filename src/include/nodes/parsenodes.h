@@ -786,6 +786,18 @@ typedef struct IndexElem
 } IndexElem;
 
 /*
+ * KeyElem - column in a PRIMARY KEY or UNIQUE constraint.
+ *
+ * If WITHOUT OVERLAPS is given that is noted here.
+ */
+typedef struct KeyElem
+{
+	NodeTag		type;
+	char	   *column;
+	bool		withoutOverlaps;
+} KeyElem;
+
+/*
  * DefElem - a generic "name = value" option definition
  *
  * In some contexts the name can be qualified.  Also, certain SQL commands
@@ -2612,9 +2624,8 @@ typedef struct Constraint
 
 	/* Fields used for unique constraints (UNIQUE and PRIMARY KEY): */
 	bool		nulls_not_distinct; /* null treatment for UNIQUE constraints */
-	List	   *keys;			/* Tuple String nodes naming referenced key
-								 * column(s) with optional modifier; also used
-								 * for NOT NULL */
+	List	   *keys;			/* String or KeyElem nodes naming referenced key
+								 * column(s); also used for NOT NULL */
 	List	   *including;		/* String nodes naming referenced nonkey
 								 * column(s) */
 

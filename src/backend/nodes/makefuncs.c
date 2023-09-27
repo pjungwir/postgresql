@@ -539,6 +539,21 @@ makeFuncExpr(Oid funcid, Oid rettype, List *args,
 }
 
 /*
+ * makeKeyElem -
+ *  build a KeyElem node
+ */
+KeyElem *
+makeKeyElem(char *column, bool withoutOverlaps)
+{
+	KeyElem	   *res = makeNode(KeyElem);
+
+	res->column = column;
+	res->withoutOverlaps = withoutOverlaps;
+
+	return res;
+}
+
+/*
  * makeDefElem -
  *	build a DefElem node
  *
