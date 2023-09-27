@@ -116,6 +116,17 @@ SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rn
 SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng3_uq';
 DROP TABLE temporal_rng3;
 
+-- UNIQUE with a custom range type:
+CREATE TYPE textrange2 AS range (subtype=text, collation="C");
+CREATE TABLE temporal_rng3 (
+	id int4range,
+	valid_at textrange2,
+	CONSTRAINT temporal_rng3_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
+);
+ALTER TABLE temporal_rng3 DROP CONSTRAINT temporal_rng3_uq;
+DROP TABLE temporal_rng3;
+DROP TYPE textrange2;
+
 --
 -- test ALTER TABLE ADD CONSTRAINT
 --
