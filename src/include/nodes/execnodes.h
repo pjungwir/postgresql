@@ -436,7 +436,13 @@ typedef struct ForPortionOfState
 	char   *fp_rangeName;		/* the column/PERIOD named in FOR PORTION OF */
 	Oid		fp_rangeType;		/* the type of the FOR PORTION OF expression */
 	bool	fp_hasPeriod;		/* true iff this is a PERIOD not a range */
-	int		fp_rangeAttno;		/* the attno of the range column (or 0 for a PERIOD) */
+	// TODO: with multiple WITHOUT OVERLAPS,
+	// these will need to become Lists.
+	// In that case we probably want them to be Vars not ints.
+	// At least that lets us call map_variable_attnos in ExecInitPartitionInfo.
+	// and I guess fp_rangeName can be a List of Strings.
+	// Note we will need to allow mixing PERIODs and ranges too.
+	int		fp_rangeAttno;		/* the attno of the range column */
 	int		fp_periodStartAttno;	/* the attno of the PERIOD start column (or 0 for a range) */
 	int		fp_periodEndAttno;		/* the attno of the PERIOD end column (or 0 for a range) */
 	Datum	fp_targetRange;		/* the range from FOR PORTION OF */

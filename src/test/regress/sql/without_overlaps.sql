@@ -769,8 +769,10 @@ CREATE TABLE temporal_partitioned_fk_rng2rng (
 	CONSTRAINT temporal_partitioned_fk_rng2rng_fk FOREIGN KEY (parent_id, PERIOD valid_at)
 		REFERENCES temporal_partitioned_rng (id, PERIOD valid_at)
 ) PARTITION BY LIST (id);
-CREATE TABLE tfkp1 partition OF temporal_partitioned_fk_rng2rng FOR VALUES IN ('[1,1]', '[3,3]', '[5,5]', '[7,7]', '[9,9]', '[11,11]', '[13,13]', '[15,15]', '[17,17]', '[19,19]', '[21,21]', '[23,23]');
-CREATE TABLE tfkp2 partition OF temporal_partitioned_fk_rng2rng FOR VALUES IN ('[0,0]', '[2,2]', '[4,4]', '[6,6]', '[8,8]', '[10,10]', '[12,12]', '[14,14]', '[16,16]', '[18,18]', '[20,20]', '[22,22]', '[24,24]');
+CREATE TABLE tfkp1 PARTITION OF temporal_partitioned_fk_rng2rng FOR VALUES IN ('[1,1]', '[3,3]', '[5,5]', '[7,7]', '[9,9]', '[11,11]', '[13,13]', '[15,15]', '[17,17]', '[19,19]', '[21,21]', '[23,23]');
+-- Give tfkp2 a different column order:
+CREATE TABLE tfkp2 (valid_at daterange NOT NULL, parent_id int4range, id int4range NOT NULL);
+ALTER TABLE temporal_partitioned_fk_rng2rng ATTACH PARTITION tfkp2 FOR VALUES IN ('[0,0]', '[2,2]', '[4,4]', '[6,6]', '[8,8]', '[10,10]', '[12,12]', '[14,14]', '[16,16]', '[18,18]', '[20,20]', '[22,22]', '[24,24]');
 
 -- partitioned FK child inserts
 

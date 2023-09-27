@@ -1225,6 +1225,11 @@ static void set_leftover_tuple_bounds(TupleTableSlot *leftoverTuple,
 {
 	/* Store the range directly */
 
+	/*
+	 * We use the attno of the top-level relation,
+	 * even if these are leftovers from a partition,
+	 * since ExecInsert will route it again.
+	 */
 	leftoverTuple->tts_values[forPortionOf->rangeVar->varattno - 1] = RangeTypePGetDatum(leftoverRangeType);
 	leftoverTuple->tts_isnull[forPortionOf->rangeVar->varattno - 1] = false;
 }
@@ -1274,7 +1279,7 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	if (!table_tuple_fetch_row_version(resultRelInfo->ri_RelationDesc, tupleid, SnapshotAny, oldtupleSlot))
 		elog(ERROR, "failed to fetch tuple for FOR PORTION OF");
 
-	oldRange = slot_getattr(oldtupleSlot, forPortionOf->rangeVar->varattno, &isNull);
+	oldRange = slot_getattr(oldtupleSlot, fpoState->fp_rangeAttno, &isNull);
 
 	if (isNull)
 		elog(ERROR, "found a NULL range in a temporal table");
@@ -1306,8 +1311,11 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	/*
 	 * Insert a copy of the tuple with the lower leftover range.
 	 * Even if the table is partitioned,
-	 * our insert won't extend past the current row, so we don't need to re-route.
-	 * TODO: Really? What if you update the partition key?
+	 * ExecInsert will call ExecPrepareTupleRouting so the rows get to the right place.
+	 * (Anyway the leaf table is only different if the original UPDATE changed
+	 * one of the partition keys).
+	 * TODO: Are you sure? When we get here is resultRelInfo the old leaf partition or the new one?
+	 * If it's the old one then there is even less to worry about.
 	 */
 
 	if (!RangeIsEmpty(leftoverRangeType1))
@@ -1327,8 +1335,9 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	/*
 	 * Insert a copy of the tuple with the upper leftover range
 	 * Even if the table is partitioned,
-	 * our insert won't extend past the current row, so we don't need to re-route.
-	 * TODO: Really? What if you update the partition key?
+	 * ExecInsert will call ExecPrepareTupleRouting so the rows get to the right place.
+	 * (Anyway the leaf table is only different if the original UPDATE changed
+	 * one of the partition keys).
 	 */
 
 	if (!RangeIsEmpty(leftoverRangeType2))

@@ -855,6 +855,43 @@ ExecInitPartitionInfo(ModifyTableState *mtstate, EState *estate,
 	}
 
 	/*
+	 * If there is a FOR PORTION OF clause, initialize state for it.
+	 */
+	if (node && node->forPortionOf)
+	{
+		// TupleDesc	partrelDesc = RelationGetDescr(partrel);
+		ForPortionOfExpr *fpo;
+
+		if (part_attmap == NULL)
+			part_attmap =
+				build_attrmap_by_name(RelationGetDescr(partrel),
+									  RelationGetDescr(firstResultRel),
+									  false);
+		// TODO: error checking, etc.
+		// But this is change anyway to use map_variable_attnos when we support multiple WITHOUT OVERLAPS elements.
+		fpo = (ForPortionOfExpr *)node->forPortionOf;
+		fpo->rangeVar = (Var *)
+			map_variable_attnos((Node *) fpo->rangeVar,
+								firstVarno, 0,
+								part_attmap,
+								RelationGetForm(partrel)->reltype,
+								&found_whole_row);
+		/* We ignore the value of found_whole_row. */
+
+		/*
+		fpo->fp_rangeAttno = part_attmap->attnums[fpo->fp_rangeAttno - 1];
+		if (fpo->fp_periodStartAttno)
+			fpo->fp_periodStartAttno = part_attmap->attnums[fpo->fp_periodStartAttno - 1];
+		if (fpo->fp_periodEndAttno)
+			fpo->fp_periodEndAttno = part_attmap->attnums[fpo->fp_periodEndAttno - 1];
+			*/
+
+		// TODO: Need a separate tuple descriptor in case the partition is a different AM?
+		// See just above from the ON CONFLICT code.
+	}
+
+
+	/*
 	 * Since we've just initialized this ResultRelInfo, it's not in any list
 	 * attached to the estate as yet.  Add it, so that it can be found later.
 	 *
