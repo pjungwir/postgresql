@@ -339,7 +339,8 @@ static char *pg_get_viewdef_worker(Oid viewoid,
 								   int prettyFlags, int wrapColumn);
 static char *pg_get_triggerdef_worker(Oid trigid, bool pretty);
 static int	decompile_column_index_array(Datum column_index_array, Oid relId,
-										 Datum index_opts, bool withPeriod, StringInfo buf);
+										 Datum index_opts, Datum column_periods,
+										 StringInfo buf);
 static char *pg_get_ruledef_worker(Oid ruleoid, int prettyFlags);
 static char *pg_get_indexdef_worker(Oid indexrelid, int colno,
 									const Oid *excludeOps,
@@ -2239,6 +2240,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 				Datum		val;
 				bool		isnull;
 				const char *string;
+				Datum		periods;
 
 				/* Start off the constraint definition */
 				appendStringInfoString(&buf, "FOREIGN KEY (");
@@ -2247,10 +2249,10 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 				val = SysCacheGetAttrNotNull(CONSTROID, tup,
 											 Anum_pg_constraint_conkey);
 
-				/* If it is a temporal foreign key then it uses PERIOD. */
-				// TODO: Use conForm->overlaps instead
+				periods = SysCacheGetAttrNotNull(INDEXRELID, tup,
+												 Anum_pg_constraint_conperiods);
 				decompile_column_index_array(val, conForm->conrelid, 0,
-											 conForm->contemporal, &buf);
+											 periods, &buf);
 
 				/* add foreign relation name */
 				appendStringInfo(&buf, ") REFERENCES %s(",
@@ -2261,9 +2263,8 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 				val = SysCacheGetAttrNotNull(CONSTROID, tup,
 											 Anum_pg_constraint_confkey);
 
-				// TODO: Use conForm->overlaps instead
 				decompile_column_index_array(val, conForm->confrelid, 0,
-											 conForm->contemporal, &buf);
+											 periods, &buf);
 
 				appendStringInfoChar(&buf, ')');
 
@@ -2349,7 +2350,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 				if (!isnull)
 				{
 					appendStringInfoString(&buf, " (");
-					decompile_column_index_array(val, conForm->conrelid, 0, false, &buf);
+					decompile_column_index_array(val, conForm->conrelid, 0, 0, &buf);
 					appendStringInfoChar(&buf, ')');
 				}
 
@@ -2391,7 +2392,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 						  Anum_pg_constraint_conexclop, &isnull);
 				indopts = SysCacheGetAttrNotNull(INDEXRELID, indtup,
 						Anum_pg_index_indoption);
-				keyatts = decompile_column_index_array(val, conForm->conrelid, indopts, false, &buf);
+				keyatts = decompile_column_index_array(val, conForm->conrelid, indopts, 0, &buf);
 
 				appendStringInfoChar(&buf, ')');
 
@@ -2582,25 +2583,31 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 
 /*
  * Convert an int16[] Datum into a comma-separated list of column names
- * for the indicated relation; append the list to buf.  Returns the number
- * of keys.
+ * for the indicated relation; append the list to buf.  Prints WITHOUT
+ * OVERLAPS modifiers for each matching element in the int16[] index_opts
+ * Datum.  Likewise PERIOD modifiers for each tru element in the bool[]
+ * periods Datum.  Returns the number of keys.
  */
 static int
-decompile_column_index_array(Datum column_index_array, Oid relId, Datum index_opts, bool withPeriod, StringInfo buf)
+decompile_column_index_array(Datum column_index_array, Oid relId, Datum index_opts, Datum column_periods, StringInfo buf)
 {
 	Datum	   *keys;
 	Datum	   *opts = NULL;
+	Datum	   *periods = NULL;
 	int			nKeys;
 	int			nOpts = 0;
+	int			nPeriods = 0;
 	int			j;
 
 	/* Extract data from array of int16 */
 	deconstruct_array_builtin(DatumGetArrayTypeP(column_index_array), INT2OID,
 							  &keys, NULL, &nKeys);
-
 	if (index_opts)
 		deconstruct_array_builtin(DatumGetArrayTypeP(index_opts), INT2OID, &opts,
 								  NULL, &nOpts);
+	if (periods)
+		deconstruct_array_builtin(DatumGetArrayTypeP(column_periods), BOOLOID, &periods,
+								  NULL, &nPeriods);
 
 	for (j = 0; j < nKeys; j++)
 	{
@@ -2611,10 +2618,11 @@ decompile_column_index_array(Datum column_index_array, Oid relId, Datum index_op
 
 		if (j > 0)
 			appendStringInfo(buf, ", ");
-		if (withPeriod && j == nKeys - 1)
-			appendStringInfo(buf, "PERIOD %s", quote_identifier(colName));
 		else
 		{
+			if (nPeriods && DatumGetBool(periods[j]))
+				appendStringInfo(buf, "PERIOD ");
+
 			appendStringInfoString(buf, quote_identifier(colName));
 
 			if (nOpts && DatumGetInt16(opts[j]) & INDOPTION_WITHOUT_OVERLAPS)

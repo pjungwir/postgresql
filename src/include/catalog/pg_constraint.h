@@ -107,12 +107,6 @@ CATALOG(pg_constraint,2606,ConstraintRelationId)
 	/* Has a local definition and cannot be inherited */
 	bool		connoinherit;
 
-	/*
-	 * For primary and foreign keys, signifies the last column is a range
-	 * and should use overlaps instead of equals.
-	 */
-	bool		contemporal;
-
 #ifdef CATALOG_VARLEN			/* variable-length fields start here */
 
 	/*
@@ -125,6 +119,14 @@ CATALOG(pg_constraint,2606,ConstraintRelationId)
 	 * If a foreign key, the referenced columns of confrelid
 	 */
 	int16		confkey[1];
+
+	/*
+	 * For primary and foreign keys, signifies which columns should use
+	 * overlaps instead of equals.
+	 * TODO: Make sure we set this for PKs too. And then do we really need to use indoption?
+	 * TODO: Rename to conoverlaps
+	 */
+	bool		conperiods[1];
 
 	/*
 	 * If a foreign key, the OIDs of the PK = FK comparison operators for each
@@ -227,6 +229,7 @@ extern Oid	CreateConstraintEntry(const char *constraintName,
 								  Oid indexRelId,
 								  Oid foreignRelId,
 								  const int16 *foreignKey,
+								  const bool *foreignPeriods,
 								  const Oid *pfEqOp,
 								  const Oid *ppEqOp,
 								  const Oid *ffEqOp,
@@ -242,7 +245,6 @@ extern Oid	CreateConstraintEntry(const char *constraintName,
 								  bool conIsLocal,
 								  int conInhCount,
 								  bool conNoInherit,
-								  bool conTemporal,
 								  bool is_internal);
 
 extern bool ConstraintNameIsUsed(ConstraintCategory conCat, Oid objId,
@@ -277,7 +279,7 @@ extern Oid	get_relation_idx_constraint_oid(Oid relationId, Oid indexId);
 extern Bitmapset *get_primary_key_attnos(Oid relid, bool deferrableOk,
 										 Oid *constraintOid);
 extern void DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
-									   AttrNumber *conkey, AttrNumber *confkey,
+									   AttrNumber *conkey, AttrNumber *confkey, bool *conperiods,
 									   Oid *pf_eq_oprs, Oid *pp_eq_oprs, Oid *ff_eq_oprs,
 									   int *num_fk_del_set_cols, AttrNumber *fk_del_set_cols);
 

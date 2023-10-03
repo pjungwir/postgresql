@@ -124,6 +124,7 @@ typedef struct RI_ConstraintInfo
 	int			nkeys;			/* number of key columns */
 	int16		pk_attnums[RI_MAX_NUMKEYS]; /* attnums of referenced cols */
 	int16		fk_attnums[RI_MAX_NUMKEYS]; /* attnums of referencing cols */
+	bool		periods[RI_MAX_NUMKEYS];	/* which columns have PERIOD */
 	Oid			pf_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (PK = FK) */
 	Oid			pp_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (PK = PK) */
 	Oid			ff_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (FK = FK) */
@@ -2368,12 +2369,12 @@ ri_LoadConstraintInfo(Oid constraintOid)
 	riinfo->confupdtype = conForm->confupdtype;
 	riinfo->confdeltype = conForm->confdeltype;
 	riinfo->confmatchtype = conForm->confmatchtype;
-	riinfo->temporal = conForm->contemporal;
 
 	DeconstructFkConstraintRow(tup,
 							   &riinfo->nkeys,
 							   riinfo->fk_attnums,
 							   riinfo->pk_attnums,
+							   riinfo->periods,
 							   riinfo->pf_eq_oprs,
 							   riinfo->pp_eq_oprs,
 							   riinfo->ff_eq_oprs,

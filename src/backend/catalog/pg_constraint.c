@@ -63,6 +63,7 @@ CreateConstraintEntry(const char *constraintName,
 					  Oid indexRelId,
 					  Oid foreignRelId,
 					  const int16 *foreignKey,
+					  const bool *foreignPeriods,
 					  const Oid *pfEqOp,
 					  const Oid *ppEqOp,
 					  const Oid *ffEqOp,
@@ -78,7 +79,6 @@ CreateConstraintEntry(const char *constraintName,
 					  bool conIsLocal,
 					  int conInhCount,
 					  bool conNoInherit,
-					  bool conTemporal,
 					  bool is_internal)
 {
 	Relation	conDesc;
@@ -88,6 +88,7 @@ CreateConstraintEntry(const char *constraintName,
 	Datum		values[Natts_pg_constraint];
 	ArrayType  *conkeyArray;
 	ArrayType  *confkeyArray;
+	ArrayType  *conperiodsArray;
 	ArrayType  *conpfeqopArray;
 	ArrayType  *conppeqopArray;
 	ArrayType  *conffeqopArray;
@@ -128,6 +129,10 @@ CreateConstraintEntry(const char *constraintName,
 			fkdatums[i] = Int16GetDatum(foreignKey[i]);
 		confkeyArray = construct_array_builtin(fkdatums, foreignNKeys, INT2OID);
 		for (i = 0; i < foreignNKeys; i++)
+			fkdatums[i] = BoolGetDatum(foreignPeriods[i]);
+		// TODO: Set this for PKs too? (then we should rename struct attrs & params to periods not foreignPeriods
+		conperiodsArray = construct_array_builtin(fkdatums, foreignNKeys, BOOLOID);
+		for (i = 0; i < foreignNKeys; i++)
 			fkdatums[i] = ObjectIdGetDatum(pfEqOp[i]);
 		conpfeqopArray = construct_array_builtin(fkdatums, foreignNKeys, OIDOID);
 		for (i = 0; i < foreignNKeys; i++)
@@ -149,6 +154,7 @@ CreateConstraintEntry(const char *constraintName,
 	else
 	{
 		confkeyArray = NULL;
+		conperiodsArray = NULL;
 		conpfeqopArray = NULL;
 		conppeqopArray = NULL;
 		conffeqopArray = NULL;
@@ -194,7 +200,6 @@ CreateConstraintEntry(const char *constraintName,
 	values[Anum_pg_constraint_conislocal - 1] = BoolGetDatum(conIsLocal);
 	values[Anum_pg_constraint_coninhcount - 1] = Int16GetDatum(conInhCount);
 	values[Anum_pg_constraint_connoinherit - 1] = BoolGetDatum(conNoInherit);
-	values[Anum_pg_constraint_contemporal - 1] = BoolGetDatum(conTemporal);
 
 	if (conkeyArray)
 		values[Anum_pg_constraint_conkey - 1] = PointerGetDatum(conkeyArray);
@@ -205,6 +210,11 @@ CreateConstraintEntry(const char *constraintName,
 		values[Anum_pg_constraint_confkey - 1] = PointerGetDatum(confkeyArray);
 	else
 		nulls[Anum_pg_constraint_confkey - 1] = true;
+
+	if (conperiodsArray)
+		values[Anum_pg_constraint_conperiods - 1] = PointerGetDatum(conperiodsArray);
+	else
+		nulls[Anum_pg_constraint_conperiods - 1] = true;
 
 	if (conpfeqopArray)
 		values[Anum_pg_constraint_conpfeqop - 1] = PointerGetDatum(conpfeqopArray);
@@ -1492,7 +1502,7 @@ get_primary_key_attnos(Oid relid, bool deferrableOk, Oid *constraintOid)
  */
 void
 DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
-						   AttrNumber *conkey, AttrNumber *confkey,
+						   AttrNumber *conkey, AttrNumber *confkey, bool *conperiods,
 						   Oid *pf_eq_oprs, Oid *pp_eq_oprs, Oid *ff_eq_oprs,
 						   int *num_fk_del_set_cols, AttrNumber *fk_del_set_cols)
 {
@@ -1531,6 +1541,21 @@ DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
 	memcpy(confkey, ARR_DATA_PTR(arr), numkeys * sizeof(int16));
 	if ((Pointer) arr != DatumGetPointer(adatum))
 		pfree(arr);				/* free de-toasted copy, if any */
+
+	if (conperiods)
+	{
+		adatum = SysCacheGetAttrNotNull(CONSTROID, tuple,
+										Anum_pg_constraint_conperiods);
+		arr = DatumGetArrayTypeP(adatum);	/* ensure not toasted */
+		if (ARR_NDIM(arr) != 1 ||
+			ARR_DIMS(arr)[0] != numkeys ||
+			ARR_HASNULL(arr) ||
+			ARR_ELEMTYPE(arr) != BOOLOID)
+			elog(ERROR, "conperiods is not a 1-D boolean array");
+		memcpy(conperiods, ARR_DATA_PTR(arr), numkeys * sizeof(bool));
+		if ((Pointer) arr != DatumGetPointer(adatum))
+			pfree(arr);				/* free de-toasted copy, if any */
+	}
 
 	if (pf_eq_oprs)
 	{

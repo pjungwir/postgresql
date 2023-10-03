@@ -4682,6 +4682,7 @@ RelationGetFKeyList(Relation relation)
 		DeconstructFkConstraintRow(htup, &info->nkeys,
 								   info->conkey,
 								   info->confkey,
+								   NULL,
 								   info->conpfeqop,
 								   NULL, NULL, NULL, NULL);
 
@@ -5552,6 +5553,7 @@ RelationGetExclusionInfo(Relation indexRelation,
 	Oid		   *ops;
 	Oid		   *funcs;
 	uint16	   *strats;
+	bool	   *periods;
 	Relation	conrel;
 	SysScanDesc conscan;
 	ScanKeyData skey[1];
@@ -5575,6 +5577,9 @@ RelationGetExclusionInfo(Relation indexRelation,
 		memcpy(strats, indexRelation->rd_exclstrats, sizeof(uint16) * indnkeyatts);
 		return;
 	}
+
+	/* We don't return this but we might need it below */
+	periods = (bool *) palloc(sizeof(bool) * indnkeyatts);
 
 	/*
 	 * Search pg_constraint for the constraint associated with the index. To
@@ -5604,13 +5609,50 @@ RelationGetExclusionInfo(Relation indexRelation,
 		int			nelem;
 
 		/* We want the exclusion constraint owning the index */
-		if ((conform->contype != CONSTRAINT_EXCLUSION &&
-					// TODO: use conform->overlaps array instead
-					!(conform->contemporal && (
-							conform->contype == CONSTRAINT_PRIMARY
-							|| conform->contype == CONSTRAINT_UNIQUE))) ||
-			conform->conindid != RelationGetRelid(indexRelation))
+		if (conform->conindid != RelationGetRelid(indexRelation))
 			continue;
+
+		if (conform->contype != CONSTRAINT_EXCLUSION)
+		{
+			/*
+			 * Temporal constraints appear as UNIQUE or PRIMARY KEY
+			 * but act like exclusion constraints, so they qualify here.
+			 */
+			if (conform->contype == CONSTRAINT_PRIMARY ||
+					conform->contype == CONSTRAINT_UNIQUE)
+			{
+				bool hasOverlaps;
+
+				val = fastgetattr(htup,
+								  Anum_pg_constraint_conperiods,
+								  conrel->rd_att, &isnull);
+				if (isnull)
+					elog(ERROR, "null conperiods for rel %s",
+						 RelationGetRelationName(indexRelation));
+
+				arr = DatumGetArrayTypeP(val);	/* ensure not toasted */
+				nelem = ARR_DIMS(arr)[0];
+				if (ARR_NDIM(arr) != 1 ||
+					nelem != indnkeyatts ||
+					ARR_HASNULL(arr) ||
+					ARR_ELEMTYPE(arr) != BOOLOID)
+					elog(ERROR, "conperiods is not a 1-D Boolean array");
+
+				memcpy(periods, ARR_DATA_PTR(arr), sizeof(bool) * indnkeyatts);
+				for (i = 0; i < indnkeyatts; i++)
+				{
+					if (periods[i])
+					{
+						hasOverlaps = true;
+						break;
+					}
+				}
+
+				if (!hasOverlaps)
+					continue;
+			} else
+				continue;
+		}
 
 		/* There should be only one */
 		if (found)

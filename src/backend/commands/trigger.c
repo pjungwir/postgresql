@@ -829,6 +829,7 @@ CreateTriggerFiringOn(CreateTrigStmt *stmt, const char *queryString,
 											  NULL,
 											  NULL,
 											  NULL,
+											  NULL,
 											  0,
 											  ' ',
 											  ' ',
@@ -841,7 +842,6 @@ CreateTriggerFiringOn(CreateTrigStmt *stmt, const char *queryString,
 											  true, /* islocal */
 											  0,	/* inhcount */
 											  true, /* noinherit */
-											  false, /* contemporal */
 											  isInternal);	/* is_internal */
 	}
 

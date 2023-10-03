@@ -495,23 +495,21 @@ static ObjectAddress ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *
 											   LOCKMODE lockmode);
 static ObjectAddress addFkRecurseReferenced(List **wqueue, Constraint *fkconstraint,
 											Relation rel, Relation pkrel, Oid indexOid, Oid parentConstr,
-											int numfks, int16 *pkattnum, int16 *fkattnum,
+											int numfks, int16 *pkattnum, int16 *fkattnum, bool *fkperiods,
 											Oid *pfeqoperators, Oid *ppeqoperators, Oid *ffeqoperators,
 											int numfkdelsetcols, int16 *fkdelsetcols,
 											bool old_check_ok,
-											Oid parentDelTrigger, Oid parentUpdTrigger,
-											bool is_temporal);
+											Oid parentDelTrigger, Oid parentUpdTrigger);
 static void validateFkOnDeleteSetColumns(int numfks, const int16 *fkattnums,
 										 int numfksetcols, const int16 *fksetcolsattnums,
 										 List *fksetcols);
 static void addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint,
 									Relation rel, Relation pkrel, Oid indexOid, Oid parentConstr,
-									int numfks, int16 *pkattnum, int16 *fkattnum,
+									int numfks, int16 *pkattnum, int16 *fkattnum, bool *fkperiods,
 									Oid *pfeqoperators, Oid *ppeqoperators, Oid *ffeqoperators,
 									int numfkdelsetcols, int16 *fkdelsetcols,
 									bool old_check_ok, LOCKMODE lockmode,
-									Oid parentInsTrigger, Oid parentUpdTrigger,
-									bool is_temporal);
+									Oid parentInsTrigger, Oid parentUpdTrigger);
 
 static void CloneForeignKeyConstraints(List **wqueue, Relation parentRel,
 									   Relation partitionRel);
@@ -9652,14 +9650,14 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 									 numfks,
 									 pkattnum,
 									 fkattnum,
+									 fkperiods,
 									 pfeqoperators,
 									 ppeqoperators,
 									 ffeqoperators,
 									 numfkdelsetcols,
 									 fkdelsetcols,
 									 old_check_ok,
-									 InvalidOid, InvalidOid,
-									 is_temporal);
+									 InvalidOid, InvalidOid);
 
 	/* Now handle the referencing side. */
 	addFkRecurseReferencing(wqueue, fkconstraint, rel, pkrel,
@@ -9668,6 +9666,7 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 							numfks,
 							pkattnum,
 							fkattnum,
+							fkperiods,
 							pfeqoperators,
 							ppeqoperators,
 							ffeqoperators,
@@ -9675,8 +9674,7 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 							fkdelsetcols,
 							old_check_ok,
 							lockmode,
-							InvalidOid, InvalidOid,
-							is_temporal);
+							InvalidOid, InvalidOid);
 
 	/*
 	 * Done.  Close pk table, but keep lock until we've committed.
@@ -9742,6 +9740,7 @@ validateFkOnDeleteSetColumns(int numfks, const int16 *fkattnums,
  * numfks is the number of columns in the foreign key
  * pkattnum is the attnum array of referenced attributes.
  * fkattnum is the attnum array of referencing attributes.
+ * fkperiods is the bool array of PERIOD modifiers.
  * numfkdelsetcols is the number of columns in the ON DELETE SET NULL/DEFAULT
  *      (...) clause
  * fkdelsetcols is the attnum array of the columns in the ON DELETE SET
@@ -9757,12 +9756,11 @@ static ObjectAddress
 addFkRecurseReferenced(List **wqueue, Constraint *fkconstraint, Relation rel,
 					   Relation pkrel, Oid indexOid, Oid parentConstr,
 					   int numfks,
-					   int16 *pkattnum, int16 *fkattnum, Oid *pfeqoperators,
-					   Oid *ppeqoperators, Oid *ffeqoperators,
+					   int16 *pkattnum, int16 *fkattnum, bool *fkperiods,
+					   Oid *pfeqoperators, Oid *ppeqoperators, Oid *ffeqoperators,
 					   int numfkdelsetcols, int16 *fkdelsetcols,
 					   bool old_check_ok,
-					   Oid parentDelTrigger, Oid parentUpdTrigger,
-					   bool is_temporal)
+					   Oid parentDelTrigger, Oid parentUpdTrigger)
 {
 	ObjectAddress address;
 	Oid			constrOid;
@@ -9833,6 +9831,7 @@ addFkRecurseReferenced(List **wqueue, Constraint *fkconstraint, Relation rel,
 									  indexOid,
 									  RelationGetRelid(pkrel),
 									  pkattnum,
+									  fkperiods,
 									  pfeqoperators,
 									  ppeqoperators,
 									  ffeqoperators,
@@ -9848,7 +9847,6 @@ addFkRecurseReferenced(List **wqueue, Constraint *fkconstraint, Relation rel,
 									  conislocal,	/* islocal */
 									  coninhcount,	/* inhcount */
 									  connoinherit, /* conNoInherit */
-									  is_temporal,	/* conTemporal */
 									  false);	/* is_internal */
 
 	ObjectAddressSet(address, ConstraintRelationId, constrOid);
@@ -9920,12 +9918,11 @@ addFkRecurseReferenced(List **wqueue, Constraint *fkconstraint, Relation rel,
 					 indexOid, RelationGetRelationName(partRel));
 			addFkRecurseReferenced(wqueue, fkconstraint, rel, partRel,
 								   partIndexId, constrOid, numfks,
-								   mapped_pkattnum, fkattnum,
+								   mapped_pkattnum, fkattnum, fkperiods,
 								   pfeqoperators, ppeqoperators, ffeqoperators,
 								   numfkdelsetcols, fkdelsetcols,
 								   old_check_ok,
-								   deleteTriggerOid, updateTriggerOid,
-								   is_temporal);
+								   deleteTriggerOid, updateTriggerOid);
 
 			/* Done -- clean up (but keep the lock) */
 			table_close(partRel, NoLock);
@@ -9964,6 +9961,7 @@ addFkRecurseReferenced(List **wqueue, Constraint *fkconstraint, Relation rel,
  * numfks is the number of columns in the foreign key
  * pkattnum is the attnum array of referenced attributes.
  * fkattnum is the attnum array of referencing attributes.
+ * fkperiods is the bool array of PERIOD modifiers.
  * pf/pp/ffeqoperators are OID array of operators between columns.
  * numfkdelsetcols is the number of columns in the ON DELETE SET NULL/DEFAULT
  *      (...) clause
@@ -9979,12 +9977,11 @@ addFkRecurseReferenced(List **wqueue, Constraint *fkconstraint, Relation rel,
 static void
 addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint, Relation rel,
 						Relation pkrel, Oid indexOid, Oid parentConstr,
-						int numfks, int16 *pkattnum, int16 *fkattnum,
+						int numfks, int16 *pkattnum, int16 *fkattnum, bool *fkperiods,
 						Oid *pfeqoperators, Oid *ppeqoperators, Oid *ffeqoperators,
 						int numfkdelsetcols, int16 *fkdelsetcols,
 						bool old_check_ok, LOCKMODE lockmode,
-						Oid parentInsTrigger, Oid parentUpdTrigger,
-						bool is_temporal)
+						Oid parentInsTrigger, Oid parentUpdTrigger)
 {
 	Oid			insertTriggerOid,
 				updateTriggerOid;
@@ -10134,6 +10131,7 @@ addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint, Relation rel,
 									  indexOid,
 									  RelationGetRelid(pkrel),
 									  pkattnum,
+									  fkperiods,
 									  pfeqoperators,
 									  ppeqoperators,
 									  ffeqoperators,
@@ -10149,7 +10147,6 @@ addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint, Relation rel,
 									  false,
 									  1,
 									  false,
-									  is_temporal,	/* conTemporal */
 									  false);
 
 			/*
@@ -10172,6 +10169,7 @@ addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint, Relation rel,
 									numfks,
 									pkattnum,
 									mapped_fkattnum,
+									fkperiods,
 									pfeqoperators,
 									ppeqoperators,
 									ffeqoperators,
@@ -10180,8 +10178,7 @@ addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint, Relation rel,
 									old_check_ok,
 									lockmode,
 									insertTriggerOid,
-									updateTriggerOid,
-									is_temporal);
+									updateTriggerOid);
 
 			table_close(partition, NoLock);
 		}
@@ -10296,6 +10293,7 @@ CloneFkReferenced(Relation parentRel, Relation partitionRel)
 		AttrNumber	conkey[INDEX_MAX_KEYS];
 		AttrNumber	mapped_confkey[INDEX_MAX_KEYS];
 		AttrNumber	confkey[INDEX_MAX_KEYS];
+		bool		conperiods[INDEX_MAX_KEYS];
 		Oid			conpfeqop[INDEX_MAX_KEYS];
 		Oid			conppeqop[INDEX_MAX_KEYS];
 		Oid			conffeqop[INDEX_MAX_KEYS];
@@ -10344,6 +10342,7 @@ CloneFkReferenced(Relation parentRel, Relation partitionRel)
 								   &numfks,
 								   conkey,
 								   confkey,
+								   conperiods,
 								   conpfeqop,
 								   conppeqop,
 								   conffeqop,
@@ -10412,6 +10411,7 @@ CloneFkReferenced(Relation parentRel, Relation partitionRel)
 							   numfks,
 							   mapped_confkey,
 							   conkey,
+							   conperiods,
 							   conpfeqop,
 							   conppeqop,
 							   conffeqop,
@@ -10419,8 +10419,7 @@ CloneFkReferenced(Relation parentRel, Relation partitionRel)
 							   confdelsetcols,
 							   true,
 							   deleteTriggerOid,
-							   updateTriggerOid,
-							   constrForm->contemporal); // TODO
+							   updateTriggerOid);
 
 		table_close(fkRel, NoLock);
 		ReleaseSysCache(tuple);
@@ -10499,6 +10498,7 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 		AttrNumber	conkey[INDEX_MAX_KEYS];
 		AttrNumber	mapped_conkey[INDEX_MAX_KEYS];
 		AttrNumber	confkey[INDEX_MAX_KEYS];
+		bool		conperiods[INDEX_MAX_KEYS];
 		Oid			conpfeqop[INDEX_MAX_KEYS];
 		Oid			conppeqop[INDEX_MAX_KEYS];
 		Oid			conffeqop[INDEX_MAX_KEYS];
@@ -10536,7 +10536,7 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 			(void) find_all_inheritors(RelationGetRelid(pkrel),
 									   ShareRowExclusiveLock, NULL);
 
-		DeconstructFkConstraintRow(tuple, &numfks, conkey, confkey,
+		DeconstructFkConstraintRow(tuple, &numfks, conkey, confkey, conperiods,
 								   conpfeqop, conppeqop, conffeqop,
 								   &numfkdelsetcols, confdelsetcols);
 		for (int i = 0; i < numfks; i++)
@@ -10648,6 +10648,7 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 								  indexOid,
 								  constrForm->confrelid,	/* same foreign rel */
 								  confkey,
+								  conperiods,
 								  conpfeqop,
 								  conppeqop,
 								  conffeqop,
@@ -10663,7 +10664,6 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 								  false,	/* islocal */
 								  1,	/* inhcount */
 								  false,	/* conNoInherit */
-								  constrForm->contemporal,	/* conTemporal */ // TODO
 								  true);
 
 		/* Set up partition dependencies for the new constraint */
@@ -10689,6 +10689,7 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 								numfks,
 								confkey,
 								mapped_conkey,
+								conperiods,
 								conpfeqop,
 								conppeqop,
 								conffeqop,
@@ -10697,8 +10698,7 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 								false,	/* no old check exists */
 								AccessExclusiveLock,
 								insertTriggerOid,
-								updateTriggerOid,
-								constrForm->contemporal); // TODO
+								updateTriggerOid);
 		table_close(pkrel, NoLock);
 	}
 
