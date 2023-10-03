@@ -2248,6 +2248,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 											 Anum_pg_constraint_conkey);
 
 				/* If it is a temporal foreign key then it uses PERIOD. */
+				// TODO: Use conForm->overlaps instead
 				decompile_column_index_array(val, conForm->conrelid, 0,
 											 conForm->contemporal, &buf);
 
@@ -2260,6 +2261,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 				val = SysCacheGetAttrNotNull(CONSTROID, tup,
 											 Anum_pg_constraint_confkey);
 
+				// TODO: Use conForm->overlaps instead
 				decompile_column_index_array(val, conForm->confrelid, 0,
 											 conForm->contemporal, &buf);
 

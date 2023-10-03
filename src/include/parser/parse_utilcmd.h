@@ -40,5 +40,6 @@ extern IndexStmt *generateClonedIndexStmt(RangeVar *heapRel,
 										  Relation source_idx,
 										  const struct AttrMap *attmap,
 										  Oid *constraintOid);
+extern bool	keyHasOverlapElements(List *keyElems);
 
 #endif							/* PARSE_UTILCMD_H */

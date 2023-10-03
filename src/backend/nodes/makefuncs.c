@@ -543,12 +543,13 @@ makeFuncExpr(Oid funcid, Oid rettype, List *args,
  *  build a KeyElem node
  */
 KeyElem *
-makeKeyElem(char *column, bool withoutOverlaps)
+makeKeyElem(const char *column, bool withoutOverlaps, bool period)
 {
 	KeyElem	   *res = makeNode(KeyElem);
 
-	res->column = column;
+	res->column = pstrdup(column);
 	res->withoutOverlaps = withoutOverlaps;
+	res->period = period;
 
 	return res;
 }

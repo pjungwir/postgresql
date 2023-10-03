@@ -5605,6 +5605,7 @@ RelationGetExclusionInfo(Relation indexRelation,
 
 		/* We want the exclusion constraint owning the index */
 		if ((conform->contype != CONSTRAINT_EXCLUSION &&
+					// TODO: use conform->overlaps array instead
 					!(conform->contemporal && (
 							conform->contype == CONSTRAINT_PRIMARY
 							|| conform->contype == CONSTRAINT_UNIQUE))) ||

@@ -1927,6 +1927,8 @@ index_constraint_create(Relation heapRelation,
 	deferrable = (constr_flags & INDEX_CONSTR_CREATE_DEFERRABLE) != 0;
 	initdeferred = (constr_flags & INDEX_CONSTR_CREATE_INIT_DEFERRED) != 0;
 	mark_as_primary = (constr_flags & INDEX_CONSTR_CREATE_MARK_AS_PRIMARY) != 0;
+	// TODO: Probably no need for INDEX_CONSTR_CREATE_TEMPORAL
+	// if we put something on IndexInfo to say where the overlaps/periods are.
 	is_temporal = (constr_flags & INDEX_CONSTR_CREATE_TEMPORAL) != 0;
 
 	/* constraint creation support doesn't work while bootstrapping */

@@ -801,7 +801,7 @@ transformColumnDefinition(CreateStmtContext *cxt, ColumnDef *column)
 							 parser_errposition(cxt->pstate,
 												constraint->location)));
 				if (constraint->keys == NIL)
-					constraint->keys = list_make1(makeKeyElem(column->colname, false));
+					constraint->keys = list_make1(makeKeyElem(column->colname, false, false));
 				cxt->ixconstraints = lappend(cxt->ixconstraints, constraint);
 				break;
 
@@ -823,7 +823,7 @@ transformColumnDefinition(CreateStmtContext *cxt, ColumnDef *column)
 				 * list of FK constraints to be processed later. Single-column
 				 * foreign keys can't have PERIOD qualifiers.
 				 */
-				constraint->fk_attrs = list_make1(makeString(column->colname));
+				constraint->fk_attrs = list_make1(makeKeyElem(column->colname, false, false));
 				cxt->fkconstraints = lappend(cxt->fkconstraints, constraint);
 				break;
 
@@ -2119,6 +2119,27 @@ generateClonedExtStatsStmt(RangeVar *heapRel, Oid heapRelid,
 }
 
 /*
+ * keyHasOverlapElements	- there are WITHOUT OVERLAPS or PERIOD elems
+ *
+ * Takes a List of KeyElem nodes, and returns true iff any have a true
+ * withoutOverlaps and period value.
+ */
+bool
+keyHasOverlapElements(List *keyElems)
+{
+	ListCell   *lc;
+
+	foreach(lc, keyElems)
+	{
+		KeyElem	*elem = lfirst_node(KeyElem, lc);
+		if (elem->withoutOverlaps || elem->period)
+			return true;
+	}
+
+	return false;
+}
+
+/*
  * get_collation		- fetch qualified name of a collation
  *
  * If collation is InvalidOid or is the default for the given actual_datatype,
@@ -2515,7 +2536,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 							 errdetail("Cannot create a primary key or unique constraint using such an index."),
 							 parser_errposition(cxt->pstate, constraint->location)));
 
-				constraint->keys = lappend(constraint->keys, makeKeyElem(attname, false));
+				constraint->keys = lappend(constraint->keys, makeKeyElem(attname, false, false));
 			}
 			else
 				constraint->including = lappend(constraint->including, makeString(attname));

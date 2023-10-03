@@ -786,15 +786,17 @@ typedef struct IndexElem
 } IndexElem;
 
 /*
- * KeyElem - column in a PRIMARY KEY or UNIQUE constraint.
+ * KeyElem - column in a PRIMARY KEY, UNIQUE, or FOREIGN KEY constraint.
  *
  * If WITHOUT OVERLAPS is given that is noted here.
+ * Likewise if a FOREIGN KEY attribute uses PERIOD we note that.
  */
 typedef struct KeyElem
 {
 	NodeTag		type;
 	char	   *column;
 	bool		withoutOverlaps;
+	bool		period;
 } KeyElem;
 
 /*
@@ -2645,9 +2647,7 @@ typedef struct Constraint
 	/* Fields used for FOREIGN KEY constraints: */
 	RangeVar   *pktable;		/* Primary key table */
 	List	   *fk_attrs;		/* Attributes of foreign key */
-	Node	   *fk_period;		/* String node naming Period or range column */
 	List	   *pk_attrs;		/* Corresponding attrs in PK table */
-	Node	   *pk_period;		/* String node naming Period or range column */
 	char		fk_matchtype;	/* FULL, PARTIAL, SIMPLE */
 	char		fk_upd_action;	/* ON UPDATE action */
 	char		fk_del_action;	/* ON DELETE action */
