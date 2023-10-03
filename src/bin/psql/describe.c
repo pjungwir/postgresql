@@ -2385,9 +2385,9 @@ describeOneTableDetails(const char *schemaname,
 				appendPQExpBufferStr(&buf, ", false AS indisreplident");
 			appendPQExpBufferStr(&buf, ", c2.reltablespace");
 			if (pset.sversion >= 160000)
-				appendPQExpBufferStr(&buf, ", con.contemporal");
+				appendPQExpBufferStr(&buf, ", COALESCE(ARRAY[true] && con.conperiods, false) AS hasperiods");
 			else
-				appendPQExpBufferStr(&buf, ", false AS contemporal");
+				appendPQExpBufferStr(&buf, ", false AS hasperiods");
 			appendPQExpBuffer(&buf,
 							  "\nFROM pg_catalog.pg_class c, pg_catalog.pg_class c2, pg_catalog.pg_index i\n"
 							  "  LEFT JOIN pg_catalog.pg_constraint con ON (conrelid = i.indrelid AND conindid = i.indexrelid AND contype IN ('p','u','x'))\n"
