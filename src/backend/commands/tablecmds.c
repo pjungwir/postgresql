@@ -208,7 +208,6 @@ typedef struct NewConstraint
 	Oid			refrelid;		/* PK rel, if FOREIGN */
 	Oid			refindid;		/* OID of PK's index, if FOREIGN */
 	Oid			conid;			/* OID of pg_constraint entry, if FOREIGN */
-	bool		contemporal;	/* Whether the new constraint is temporal */ // TODO: put the info on qual if contype == FOREIGN
 	Node	   *qual;			/* Check expr or CONSTR_FOREIGN Constraint */
 	ExprState  *qualstate;		/* Execution state for CHECK expr */
 } NewConstraint;
@@ -5832,7 +5831,7 @@ ATRewriteTables(AlterTableStmt *parsetree, List **wqueue, LOCKMODE lockmode,
 				validateForeignKeyConstraint(fkconstraint->conname, rel, refrel,
 											 con->refindid,
 											 con->conid,
-											 con->contemporal); // TODO: periods instead
+											 keyHasOverlapElements(fkconstraint->fk_attrs));
 
 				/*
 				 * No need to mark the constraint row as validated, we did
@@ -10033,7 +10032,6 @@ addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint, Relation rel,
 			newcon->refrelid = RelationGetRelid(pkrel);
 			newcon->refindid = indexOid;
 			newcon->conid = parentConstr;
-			newcon->contemporal = is_temporal;
 			newcon->qual = (Node *) fkconstraint;
 
 			tab->constraints = lappend(tab->constraints, newcon);
@@ -11567,7 +11565,6 @@ ATExecValidateConstraint(List **wqueue, Relation rel, char *constrName,
 			newcon->refrelid = con->confrelid;
 			newcon->refindid = con->conindid;
 			newcon->conid = con->oid;
-			newcon->contemporal = con->contemporal; // TODO
 			newcon->qual = (Node *) fkconstraint;
 
 			/* Find or create work queue entry for this table */
