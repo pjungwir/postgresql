@@ -208,7 +208,6 @@ typedef struct NewConstraint
 	Oid			refrelid;		/* PK rel, if FOREIGN */
 	Oid			refindid;		/* OID of PK's index, if FOREIGN */
 	Oid			conid;			/* OID of pg_constraint entry, if FOREIGN */
-	bool		contemporal;	/* Whether the new constraint is temporal */
 	Node	   *qual;			/* Check expr or CONSTR_FOREIGN Constraint */
 	ExprState  *qualstate;		/* Execution state for CHECK expr */
 } NewConstraint;
@@ -10001,10 +10000,10 @@ addFkRecurseReferenced(List **wqueue, Constraint *fkconstraint, Relation rel,
 									  NULL, /* no exclusion constraint */
 									  NULL, /* no check constraint */
 									  NULL,
+									  NULL,	/* no overlaps (yet) */
 									  conislocal,	/* islocal */
 									  coninhcount,	/* inhcount */
 									  connoinherit, /* conNoInherit */
-									  false,	/* conTemporal */
 									  false);	/* is_internal */
 
 	ObjectAddressSet(address, ConstraintRelationId, constrOid);
@@ -10300,10 +10299,10 @@ addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint, Relation rel,
 									  NULL,
 									  NULL,
 									  NULL,
+									  NULL,	/* no overlaps (yet) */
 									  false,
 									  1,
 									  false,
-									  false,	/* conTemporal */
 									  false);
 
 			/*
@@ -10806,10 +10805,10 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 								  NULL,
 								  NULL,
 								  NULL,
+								  NULL,	/* no overlaps (yet) */
 								  false,	/* islocal */
 								  1,	/* inhcount */
 								  false,	/* conNoInherit */
-								  false,	/* conTemporal */
 								  true);
 
 		/* Set up partition dependencies for the new constraint */
@@ -11484,7 +11483,6 @@ ATExecValidateConstraint(List **wqueue, Relation rel, char *constrName,
 			newcon->refrelid = con->confrelid;
 			newcon->refindid = con->conindid;
 			newcon->conid = con->oid;
-			newcon->contemporal = con->contemporal;
 			newcon->qual = (Node *) fkconstraint;
 
 			/* Find or create work queue entry for this table */
@@ -14199,7 +14197,7 @@ TryReuseIndex(Oid oldId, IndexStmt *stmt)
 							 stmt->accessMethod,
 							 stmt->indexParams,
 							 stmt->excludeOpNames,
-							 stmt->istemporal))
+							 stmt->hasoverlaps))
 	{
 		Relation	irel = index_open(oldId, NoLock);
 

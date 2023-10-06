@@ -122,6 +122,7 @@ static void UpdateIndexRelation(Oid indexoid, Oid heapoid,
 								const int16 *coloptions,
 								bool primary,
 								bool isexclusion,
+								bool hasoverlaps,
 								bool immediate,
 								bool isvalid,
 								bool isready);
@@ -555,6 +556,7 @@ UpdateIndexRelation(Oid indexoid,
 					const int16 *coloptions,
 					bool primary,
 					bool isexclusion,
+					bool hasoverlaps,
 					bool immediate,
 					bool isvalid,
 					bool isready)
@@ -628,6 +630,7 @@ UpdateIndexRelation(Oid indexoid,
 	values[Anum_pg_index_indnullsnotdistinct - 1] = BoolGetDatum(indexInfo->ii_NullsNotDistinct);
 	values[Anum_pg_index_indisprimary - 1] = BoolGetDatum(primary);
 	values[Anum_pg_index_indisexclusion - 1] = BoolGetDatum(isexclusion);
+	values[Anum_pg_index_indhasoverlaps - 1] = BoolGetDatum(hasoverlaps);
 	values[Anum_pg_index_indimmediate - 1] = BoolGetDatum(immediate);
 	values[Anum_pg_index_indisclustered - 1] = BoolGetDatum(false);
 	values[Anum_pg_index_indisvalid - 1] = BoolGetDatum(isvalid);
@@ -736,6 +739,7 @@ index_create(Relation heapRelation,
 	bool		shared_relation;
 	bool		mapped_relation;
 	bool		is_exclusion;
+	bool		has_overlaps;
 	Oid			namespaceId;
 	int			i;
 	char		relpersistence;
@@ -756,6 +760,7 @@ index_create(Relation heapRelation,
 
 	relkind = partitioned ? RELKIND_PARTITIONED_INDEX : RELKIND_INDEX;
 	is_exclusion = (indexInfo->ii_ExclusionOps != NULL);
+	has_overlaps = (indexInfo->ii_Overlaps != NULL);
 
 	pg_class = table_open(RelationRelationId, RowExclusiveLock);
 
@@ -1029,7 +1034,7 @@ index_create(Relation heapRelation,
 	UpdateIndexRelation(indexRelationId, heapRelationId, parentIndexRelid,
 						indexInfo,
 						collationIds, opclassIds, coloptions,
-						isprimary, is_exclusion,
+						isprimary, is_exclusion, has_overlaps,
 						(constr_flags & INDEX_CONSTR_CREATE_DEFERRABLE) == 0,
 						!concurrent && !invalid,
 						!concurrent);
@@ -1402,6 +1407,15 @@ index_concurrently_create_copy(Relation heapRelation, Oid oldIndexId,
 			newInfo->ii_OpclassOptions[i] = get_attoptions(oldIndexId, i + 1);
 	}
 
+	/* Extract WITHOUT OVERLAPS parameters, if any */
+	if (oldInfo->ii_Overlaps)
+	{
+		newInfo->ii_Overlaps = palloc0(sizeof(bool) *
+									   newInfo->ii_NumIndexAttrs);
+		for (int i = 0; i < newInfo->ii_NumIndexAttrs; i++)
+			newInfo->ii_Overlaps[i] = oldInfo->ii_Overlaps[i];
+	}
+
 	/*
 	 * Now create the new index.
 	 *
@@ -1593,6 +1607,8 @@ index_concurrently_swap(Oid newIndexId, Oid oldIndexId, const char *oldName)
 	oldIndexForm->indisprimary = false;
 	newIndexForm->indisexclusion = oldIndexForm->indisexclusion;
 	oldIndexForm->indisexclusion = false;
+	newIndexForm->indhasoverlaps = oldIndexForm->indhasoverlaps;
+	oldIndexForm->indhasoverlaps = false;
 	newIndexForm->indimmediate = oldIndexForm->indimmediate;
 	oldIndexForm->indimmediate = true;
 
@@ -1897,7 +1913,6 @@ index_concurrently_set_dead(Oid heapId, Oid indexId)
  *		INDEX_CONSTR_CREATE_UPDATE_INDEX: update the pg_index row
  *		INDEX_CONSTR_CREATE_REMOVE_OLD_DEPS: remove existing dependencies
  *			of index on table's columns
- *		INDEX_CONSTR_CREATE_TEMPORAL: constraint is for a temporal primary key
  * allow_system_table_mods: allow table to be a system catalog
  * is_internal: index is constructed due to internal process
  */
@@ -1921,13 +1936,11 @@ index_constraint_create(Relation heapRelation,
 	bool		mark_as_primary;
 	bool		islocal;
 	bool		noinherit;
-	bool		is_temporal;
 	int			inhcount;
 
 	deferrable = (constr_flags & INDEX_CONSTR_CREATE_DEFERRABLE) != 0;
 	initdeferred = (constr_flags & INDEX_CONSTR_CREATE_INIT_DEFERRED) != 0;
 	mark_as_primary = (constr_flags & INDEX_CONSTR_CREATE_MARK_AS_PRIMARY) != 0;
-	is_temporal = (constr_flags & INDEX_CONSTR_CREATE_TEMPORAL) != 0;
 
 	/* constraint creation support doesn't work while bootstrapping */
 	Assert(!IsBootstrapProcessingMode());
@@ -2001,10 +2014,10 @@ index_constraint_create(Relation heapRelation,
 								   indexInfo->ii_ExclusionOps,
 								   NULL,	/* no check constraint */
 								   NULL,
+								   indexInfo->ii_Overlaps,
 								   islocal,
 								   inhcount,
 								   noinherit,
-								   is_temporal,	/* contemporal */
 								   is_internal);
 
 	/*
@@ -2464,10 +2477,15 @@ BuildIndexInfo(Relation index)
 	if (indexStruct->indisexclusion)
 	{
 		RelationGetExclusionInfo(index,
+								 indexStruct->indhasoverlaps,
 								 &ii->ii_ExclusionOps,
 								 &ii->ii_ExclusionProcs,
 								 &ii->ii_ExclusionStrats);
 	}
+
+	/* fetch overlaps info if any */
+	if (indexStruct->indhasoverlaps)
+		ii->ii_Overlaps = RelationGetConstraintOverlaps(index);
 
 	ii->ii_OpclassOptions = RelationGetIndexRawAttOptions(index);
 

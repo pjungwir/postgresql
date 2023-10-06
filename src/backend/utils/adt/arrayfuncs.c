@@ -3346,6 +3346,7 @@ construct_array_builtin(Datum *elems, int nelems, Oid elmtype)
 	switch (elmtype)
 	{
 		case CHAROID:
+		case BOOLOID:
 			elmlen = 1;
 			elmbyval = true;
 			elmalign = TYPALIGN_CHAR;
@@ -3652,6 +3653,7 @@ deconstruct_array_builtin(ArrayType *array,
 	switch (elmtype)
 	{
 		case CHAROID:
+		case BOOLOID:
 			elmlen = 1;
 			elmbyval = true;
 			elmalign = TYPALIGN_CHAR;

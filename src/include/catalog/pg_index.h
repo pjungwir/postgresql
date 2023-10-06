@@ -33,11 +33,11 @@ CATALOG(pg_index,2610,IndexRelationId) BKI_SCHEMA_MACRO
 												 * indexes */
 	int16		indnatts;		/* total number of columns in index */
 	int16		indnkeyatts;	/* number of key columns in index */
-	int16		indoverlaps;	/* which columns are WITHOUT OVERLAPS */
 	bool		indisunique;	/* is this a unique index? */
 	bool		indnullsnotdistinct;	/* null treatment in unique index */
 	bool		indisprimary;	/* is this index for primary key? */
 	bool		indisexclusion; /* is this index for exclusion constraint? */
+	bool		indhasoverlaps;	/* is this index for WITHOUT OVERLAPS? */
 	bool		indimmediate;	/* is uniqueness enforced immediately? */
 	bool		indisclustered; /* is this the index last clustered by? */
 	bool		indisvalid;		/* is this index valid for use by queries? */
@@ -86,7 +86,6 @@ DECLARE_ARRAY_FOREIGN_KEY_OPT((indrelid, indkey), pg_attribute, (attrelid, attnu
  */
 #define INDOPTION_DESC			0x0001	/* values are in reverse order */
 #define INDOPTION_NULLS_FIRST	0x0002	/* NULLs are first instead of last */
-#define INDOPTION_WITHOUT_OVERLAPS	0x0004 /* WITHOUT OVERLAPS */
 
 #endif							/* EXPOSE_TO_CLIENT_CODE */
 

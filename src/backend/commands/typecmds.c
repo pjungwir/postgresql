@@ -3541,10 +3541,10 @@ domainAddConstraint(Oid domainOid, Oid domainNamespace, Oid baseTypeOid,
 							  NULL, /* not an exclusion constraint */
 							  expr, /* Tree form of check constraint */
 							  ccbin,	/* Binary form of check constraint */
+							  NULL,	/* no overlaps */
 							  true, /* is local */
 							  0,	/* inhcount */
 							  false,	/* connoinherit */
-							  false,	/* contemporal */
 							  false);	/* is_internal */
 	if (constrAddr)
 		ObjectAddressSet(*constrAddr, ConstraintRelationId, ccoid);

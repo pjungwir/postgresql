@@ -838,10 +838,10 @@ CreateTriggerFiringOn(CreateTrigStmt *stmt, const char *queryString,
 											  NULL, /* no exclusion */
 											  NULL, /* no check constraint */
 											  NULL,
+											  NULL,	/* no overlaps */
 											  true, /* islocal */
 											  0,	/* inhcount */
 											  true, /* noinherit */
-											  false, /* contemporal */
 											  isInternal);	/* is_internal */
 	}
 
