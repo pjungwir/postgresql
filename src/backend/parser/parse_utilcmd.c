@@ -1670,10 +1670,12 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 	IndexStmt  *index;
 	List	   *indexprs;
 	ListCell   *indexpr_item;
+	bool	   *conoverlaps = NULL;
 	Oid			indrelid;
 	int			keyno;
 	Oid			keycoltype;
 	Datum		datum;
+	ArrayType  *arr;
 	bool		isnull;
 
 	if (constraintOid)
@@ -1726,7 +1728,7 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 	index->unique = idxrec->indisunique;
 	index->nulls_not_distinct = idxrec->indnullsnotdistinct;
 	index->primary = idxrec->indisprimary;
-	index->istemporal = (idxrec->indisprimary || idxrec->indisunique) && idxrec->indisexclusion;
+	index->hasoverlaps = idxrec->indhasoverlaps;
 	index->transformed = true;	/* don't need transformIndexStmt */
 	index->concurrent = false;
 	index->if_not_exists = false;
@@ -1749,6 +1751,7 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 	if (index->primary || index->unique || idxrec->indisexclusion)
 	{
 		Oid			constraintId = get_index_constraint(source_relid);
+		int			nElems;
 
 		if (OidIsValid(constraintId))
 		{
@@ -1773,11 +1776,10 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 			if (idxrec->indisexclusion)
 			{
 				Datum	   *elems;
-				int			nElems;
 				int			i;
 
 				Assert(conrec->contype == CONSTRAINT_EXCLUSION ||
-						(index->istemporal &&
+						(index->hasoverlaps &&
 						 (conrec->contype == CONSTRAINT_PRIMARY || conrec->contype == CONSTRAINT_UNIQUE)));
 				/* Extract operator OIDs from the pg_constraint tuple */
 				datum = SysCacheGetAttrNotNull(CONSTROID, ht_constr,
@@ -1808,6 +1810,27 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 													namelist);
 					ReleaseSysCache(opertup);
 				}
+			}
+
+			/* Get the WITHOUT OVERLAPS attributes */
+			if (idxrec->indhasoverlaps)
+			{
+				datum = SysCacheGetAttr(CONSTROID, ht_constr,
+										Anum_pg_constraint_conoverlaps, &isnull);
+				if (isnull)
+					elog(ERROR, "null conoverlaps for constraint %d",
+						 constraintId);
+
+				arr = DatumGetArrayTypeP(datum);  /* ensure not toasted */
+				nElems = ARR_DIMS(arr)[0];
+				if (ARR_NDIM(arr) != 1 ||
+					nElems != idxrec->indnkeyatts ||
+					ARR_HASNULL(arr) ||
+					ARR_ELEMTYPE(arr) != BOOLOID)
+					elog(ERROR, "conoverlaps is not a 1-D Boolean array");
+
+				conoverlaps = palloc(sizeof(bool) * nElems);
+				memcpy(conoverlaps, ARR_DATA_PTR(arr), nElems * sizeof(bool));
 			}
 
 			ReleaseSysCache(ht_constr);
@@ -1902,6 +1925,9 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 		iparam->ordering = SORTBY_DEFAULT;
 		iparam->nulls_ordering = SORTBY_NULLS_DEFAULT;
 
+		/* Add the WITHOUT OVERLAPS setting */
+		iparam->without_overlaps = (conoverlaps && conoverlaps[keyno]);
+
 		/* Adjust options if necessary */
 		if (source_idx->rd_indam->amcanorder)
 		{
@@ -1923,7 +1949,6 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 					iparam->nulls_ordering = SORTBY_NULLS_FIRST;
 			}
 		}
-		iparam->withoutOverlaps = opt & INDOPTION_WITHOUT_OVERLAPS;
 
 		index->indexParams = lappend(index->indexParams, iparam);
 	}
@@ -2319,7 +2344,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 	}
 	index->nulls_not_distinct = constraint->nulls_not_distinct;
 	index->isconstraint = true;
-	index->istemporal = false; /* true if any key has WITHOUT OVERLAPS */
+	index->hasoverlaps = false; /* true if any key has WITHOUT OVERLAPS */
 	index->deferrable = constraint->deferrable;
 	index->initdeferred = constraint->initdeferred;
 
@@ -2678,7 +2703,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 			/* Check for WITHOUT OVERLAPS modifiers */
 			if (keyElem->withoutOverlaps)
 			{
-				index->istemporal = true;
+				index->hasoverlaps = true;
 				// TODO: Error out if constraint already has a conflicting access method.
 				// Also why are we setting constraint->access_method here?
 				index->accessMethod = "gist";
@@ -2697,7 +2722,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 			iparam->opclassopts = NIL;
 			iparam->ordering = SORTBY_DEFAULT;
 			iparam->nulls_ordering = SORTBY_NULLS_DEFAULT;
-			iparam->withoutOverlaps = keyElem->withoutOverlaps;
+			iparam->without_overlaps = keyElem->withoutOverlaps;
 			index->indexParams = lappend(index->indexParams, iparam);
 
 			if (constraint->contype == CONSTR_PRIMARY)

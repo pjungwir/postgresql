@@ -8061,6 +8061,7 @@ index_elem_options:
 			$$->opclassopts = NIL;
 			$$->ordering = $3;
 			$$->nulls_ordering = $4;
+			$$->without_overlaps = false;
 		}
 	| opt_collate any_name reloptions opt_asc_desc opt_nulls_order
 		{
@@ -8073,6 +8074,7 @@ index_elem_options:
 			$$->opclassopts = $3;
 			$$->ordering = $4;
 			$$->nulls_ordering = $5;
+			$$->without_overlaps = false;
 		}
 	;
 

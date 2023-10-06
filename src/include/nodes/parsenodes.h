@@ -782,7 +782,7 @@ typedef struct IndexElem
 	List	   *opclassopts;	/* opclass-specific options, or NIL */
 	SortByDir	ordering;		/* ASC/DESC/default */
 	SortByNulls nulls_ordering; /* FIRST/LAST/default */
-	bool		withoutOverlaps;	/* WITHOUT OVERLAPS qualifier */
+	bool		without_overlaps;	/* WITHOUT OVERLAPS qualifier */
 } IndexElem;
 
 /*
@@ -3255,7 +3255,7 @@ typedef struct IndexStmt
 	bool		nulls_not_distinct; /* null treatment for UNIQUE constraints */
 	bool		primary;		/* is index a primary key? */
 	bool		isconstraint;	/* is it for a pkey/unique constraint? */
-	bool		istemporal;		/* is it for a temporal pkey? */
+	bool		hasoverlaps;	/* is it for a temporal pkey/unique constraint? */
 	bool		deferrable;		/* is the constraint DEFERRABLE? */
 	bool		initdeferred;	/* is the constraint INITIALLY DEFERRED? */
 	bool		transformed;	/* true when transformIndexStmt is finished */

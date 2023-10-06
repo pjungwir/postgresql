@@ -75,10 +75,10 @@ CreateConstraintEntry(const char *constraintName,
 					  const Oid *exclOp,
 					  Node *conExpr,
 					  const char *conBin,
+					  const bool *overlaps,
 					  bool conIsLocal,
 					  int conInhCount,
 					  bool conNoInherit,
-					  bool conTemporal,
 					  bool is_internal)
 {
 	Relation	conDesc;
@@ -88,6 +88,7 @@ CreateConstraintEntry(const char *constraintName,
 	Datum		values[Natts_pg_constraint];
 	ArrayType  *conkeyArray;
 	ArrayType  *confkeyArray;
+	ArrayType  *conoverlapsArray;
 	ArrayType  *conpfeqopArray;
 	ArrayType  *conppeqopArray;
 	ArrayType  *conffeqopArray;
@@ -115,9 +116,26 @@ CreateConstraintEntry(const char *constraintName,
 		for (i = 0; i < constraintNKeys; i++)
 			conkey[i] = Int16GetDatum(constraintKey[i]);
 		conkeyArray = construct_array_builtin(conkey, constraintNKeys, INT2OID);
+
+		if (foreignNKeys > 0)
+			Assert(foreignNKeys == constraintNKeys);
+
+		if (overlaps)
+		{
+			for (i = 0; i < constraintNKeys; i++)
+				conkey[i] = BoolGetDatum(overlaps[i]);
+			conoverlapsArray = construct_array_builtin(conkey, constraintNKeys, BOOLOID);
+		}
+		else
+		{
+			conoverlapsArray = NULL;
+		}
 	}
 	else
+	{
 		conkeyArray = NULL;
+		conoverlapsArray = NULL;
+	}
 
 	if (foreignNKeys > 0)
 	{
@@ -194,7 +212,6 @@ CreateConstraintEntry(const char *constraintName,
 	values[Anum_pg_constraint_conislocal - 1] = BoolGetDatum(conIsLocal);
 	values[Anum_pg_constraint_coninhcount - 1] = Int16GetDatum(conInhCount);
 	values[Anum_pg_constraint_connoinherit - 1] = BoolGetDatum(conNoInherit);
-	values[Anum_pg_constraint_contemporal - 1] = BoolGetDatum(conTemporal);
 
 	if (conkeyArray)
 		values[Anum_pg_constraint_conkey - 1] = PointerGetDatum(conkeyArray);
@@ -235,6 +252,11 @@ CreateConstraintEntry(const char *constraintName,
 		values[Anum_pg_constraint_conbin - 1] = CStringGetTextDatum(conBin);
 	else
 		nulls[Anum_pg_constraint_conbin - 1] = true;
+
+	if (conoverlapsArray)
+		values[Anum_pg_constraint_conoverlaps - 1] = PointerGetDatum(conoverlapsArray);
+	else
+		nulls[Anum_pg_constraint_conoverlaps - 1] = true;
 
 	tup = heap_form_tuple(RelationGetDescr(conDesc), values, nulls);
 

@@ -156,6 +156,7 @@ typedef struct ExprState
  *		UniqueStrats
  *		Unique				is it a unique index?
  *		OpclassOptions		opclass-specific options, or NULL if none
+ *		Overlaps			which cols are WITHOUT OVERLAPS or NULL if none
  *		ReadyForInserts		is it valid for inserts?
  *		CheckedUnchanged	IndexUnchanged status determined yet?
  *		IndexUnchanged		aminsert hint, cached for retail inserts
@@ -188,6 +189,7 @@ typedef struct IndexInfo
 	Oid		   *ii_UniqueProcs; /* array with one entry per column */
 	uint16	   *ii_UniqueStrats;	/* array with one entry per column */
 	Datum	   *ii_OpclassOptions;	/* array with one entry per column */
+	bool	   *ii_Overlaps;	/* array with one entry per column */
 	bool		ii_Unique;
 	bool		ii_NullsNotDistinct;
 	bool		ii_ReadyForInserts;

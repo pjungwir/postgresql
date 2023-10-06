@@ -795,6 +795,9 @@ makeIndexInfo(int numattrs, int numkeyattrs, Oid amoid, List *expressions,
 	/* opclass options */
 	n->ii_OpclassOptions = NULL;
 
+	/* WITHOUT OVERLAPS or PERIOD modifiers */
+	n->ii_Overlaps = NULL;
+
 	/* speculative inserts */
 	n->ii_UniqueOps = NULL;
 	n->ii_UniqueProcs = NULL;

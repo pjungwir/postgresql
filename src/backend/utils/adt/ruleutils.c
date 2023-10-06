@@ -2357,7 +2357,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 				Oid			indexId;
 				int			keyatts;
 				HeapTuple	indtup;
-				Datum		indopts;
+				Datum		conoverlaps;
 				bool		isnull;
 
 				/* Start off the constraint definition */
@@ -2381,12 +2381,11 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 				val = SysCacheGetAttrNotNull(CONSTROID, tup,
 											 Anum_pg_constraint_conkey);
 
-				indexId = conForm->conindid;
-				SysCacheGetAttr(CONSTROID, tup,
-						  Anum_pg_constraint_conexclop, &isnull);
-				indopts = SysCacheGetAttrNotNull(INDEXRELID, indtup,
-						Anum_pg_index_indoption);
-				keyatts = decompile_column_index_array(val, conForm->conrelid, indopts, &buf);
+				conoverlaps = SysCacheGetAttr(CONSTROID, tup,
+											  Anum_pg_constraint_conoverlaps, &isnull);
+				if (isnull)
+					conoverlaps = 0;
+				keyatts = decompile_column_index_array(val, conForm->conrelid, conoverlaps, &buf);
 
 				appendStringInfoChar(&buf, ')');
 
@@ -2581,21 +2580,26 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
  * of keys.
  */
 static int
-decompile_column_index_array(Datum column_index_array, Oid relId, Datum index_opts, StringInfo buf)
+decompile_column_index_array(Datum column_index_array, Oid relId, Datum conoverlaps, StringInfo buf)
 {
 	Datum	   *keys;
-	Datum	   *opts = NULL;
+	Datum	   *overlaps = NULL;
 	int			nKeys;
-	int			nOpts = 0;
+	int			nOverlaps = 0;
 	int			j;
 
 	/* Extract data from array of int16 */
 	deconstruct_array_builtin(DatumGetArrayTypeP(column_index_array), INT2OID,
 							  &keys, NULL, &nKeys);
 
-	if (index_opts)
-		deconstruct_array_builtin(DatumGetArrayTypeP(index_opts), INT2OID, &opts,
-								  NULL, &nOpts);
+	/* Extract overlaps from array of bool */
+	if (conoverlaps)
+	{
+		deconstruct_array_builtin(DatumGetArrayTypeP(conoverlaps), BOOLOID, &overlaps,
+								  NULL, &nOverlaps);
+		if (nOverlaps != nKeys)
+			elog(ERROR, "found %d overlaps flags but expected %d", nOverlaps, nKeys);
+	}
 
 	for (j = 0; j < nKeys; j++)
 	{
@@ -2608,7 +2612,7 @@ decompile_column_index_array(Datum column_index_array, Oid relId, Datum index_op
 			appendStringInfo(buf, ", ");
 		appendStringInfoString(buf, quote_identifier(colName));
 
-		if (nOpts && DatumGetInt16(opts[j]) & INDOPTION_WITHOUT_OVERLAPS)
+		if (nOverlaps && DatumGetBool(overlaps[j]))
 			appendStringInfo(buf, " WITHOUT OVERLAPS");
 	}
 

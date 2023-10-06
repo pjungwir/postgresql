@@ -107,12 +107,6 @@ CATALOG(pg_constraint,2606,ConstraintRelationId)
 	/* Has a local definition and cannot be inherited */
 	bool		connoinherit;
 
-	/*
-	 * For primary and foreign keys, signifies the last column is a range
-	 * and should use overlaps instead of equals.
-	 */
-	bool		contemporal;
-
 #ifdef CATALOG_VARLEN			/* variable-length fields start here */
 
 	/*
@@ -125,6 +119,12 @@ CATALOG(pg_constraint,2606,ConstraintRelationId)
 	 * If a foreign key, the referenced columns of confrelid
 	 */
 	int16		confkey[1];
+
+	/*
+	 * For primary/unique and foreign keys, signifies which columns should
+	 * use overlaps instead of equals.
+	 */
+	bool		conoverlaps[1];
 
 	/*
 	 * If a foreign key, the OIDs of the PK = FK equality operators for each
@@ -239,10 +239,10 @@ extern Oid	CreateConstraintEntry(const char *constraintName,
 								  const Oid *exclOp,
 								  Node *conExpr,
 								  const char *conBin,
+								  const bool *overlaps,
 								  bool conIsLocal,
 								  int conInhCount,
 								  bool conNoInherit,
-								  bool conTemporal,
 								  bool is_internal);
 
 extern bool ConstraintNameIsUsed(ConstraintCategory conCat, Oid objId,
