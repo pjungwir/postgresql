@@ -454,6 +454,86 @@ CREATE TABLE temporal_fk_rng2rng (
 		REFERENCES temporal_rng (id, PERIOD valid_at)
 );
 
+-- should fail because of duplicate referenced columns:
+CREATE TABLE temporal_fk_rng2rng (
+	id int4range,
+	valid_at tsrange,
+	parent_id int4range,
+	CONSTRAINT temporal_fk_rng2rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_rng2rng_fk FOREIGN KEY (parent_id, PERIOD parent_id)
+		REFERENCES temporal_rng (id, PERIOD id)
+);
+
+-- Can't create a FK with PERIOD on just the referencing side:
+CREATE TABLE temporal_fk_rng2rng (
+	id int4range,
+	valid_at tsrange,
+	parent_id int4range,
+	CONSTRAINT temporal_fk_rng2rng_pk2 PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_rng2rng_fk2 FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES temporal_rng (id, valid_at)
+);
+
+-- Can't create a FK with PERIOD on just the referenced side:
+CREATE TABLE temporal_fk_rng2rng (
+	id int4range,
+	valid_at tsrange,
+	parent_id int4range,
+	CONSTRAINT temporal_fk_rng2rng_pk2 PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_rng2rng_fk2 FOREIGN KEY (parent_id, valid_at)
+		REFERENCES temporal_rng (id, PERIOD valid_at)
+);
+
+-- PERIOD for referencing table but its PK doesn't have WITHOUT OVERLAPS
+-- This succeeds actually, although the index isn't as helpful.
+CREATE TABLE temporal_fk_rng2rng (
+	id int4range,
+	valid_at tsrange,
+	parent_id int4range,
+	CONSTRAINT temporal_fk_rng2rng_pk2 PRIMARY KEY (id, valid_at),
+	CONSTRAINT temporal_fk_rng2rng_fk2 FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES temporal_rng (id, PERIOD valid_at)
+);
+DROP TABLE temporal_fk_rng2rng;
+
+-- implicit PK columns: no PERIOD in FK but PK has WITHOUT OVERLAPS
+CREATE TABLE temporal_fk_rng2rng (
+	id int4range,
+	valid_at tsrange,
+	parent_id int4range,
+	CONSTRAINT temporal_fk_rng2rng_pk2 PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_rng2rng_fk2 FOREIGN KEY (parent_id, valid_at)
+		REFERENCES temporal_rng
+);
+
+-- PERIOD for referenced table but its PK doesn't have WITHOUT OVERLAPS
+CREATE TABLE temporal_rng3 (
+	id int4range,
+	valid_at tsrange,
+	CONSTRAINT temporal_rng3_pk PRIMARY KEY (id, valid_at) -- omiting WITHOUT OVERLAPS
+);
+CREATE TABLE temporal_fk_rng2rng (
+	id int4range,
+	valid_at tsrange,
+	parent_id int4range,
+	CONSTRAINT temporal_fk_rng2rng_pk2 PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_rng2rng_fk2 FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES temporal_rng3 (id, PERIOD valid_at)
+);
+
+-- implicit PK columns: has PERIOD in FK but PK doesn't have WITHOUT OVERLAPS
+CREATE TABLE temporal_fk_rng2rng (
+	id int4range,
+	valid_at tsrange,
+	parent_id int4range,
+	CONSTRAINT temporal_fk_rng2rng_pk2 PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_rng2rng_fk2 FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES temporal_rng3
+);
+
+DROP TABLE temporal_rng3;
+
+-- Base case works:
 CREATE TABLE temporal_fk_rng2rng (
 	id int4range,
 	valid_at tsrange,
@@ -474,16 +554,6 @@ CREATE TABLE temporal_fk_rng2rng (
 		REFERENCES temporal_rng
 );
 DROP TABLE temporal_fk_rng2rng;
-
--- should fail because of duplicate referenced columns:
-CREATE TABLE temporal_fk_rng2rng (
-	id int4range,
-	valid_at tsrange,
-	parent_id int4range,
-	CONSTRAINT temporal_fk_rng2rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
-	CONSTRAINT temporal_fk_rng2rng_fk FOREIGN KEY (parent_id, PERIOD parent_id)
-		REFERENCES temporal_rng (id, PERIOD id)
-);
 
 --
 -- test ALTER TABLE ADD CONSTRAINT

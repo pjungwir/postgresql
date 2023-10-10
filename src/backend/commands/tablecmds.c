@@ -547,7 +547,7 @@ static void FindFKComparisonOperators(Constraint *fkconstraint,
 					AlteredTableInfo *tab, int i, int16 *fkattnum,
 					bool *old_check_ok, ListCell **old_pfeqop_item,
 					Oid pktype, Oid fktype, Oid opclass,
-					bool attroverlaps, bool hasoverlaps,
+					bool pkoverlaps, bool fkoverlaps, bool hasoverlaps,
 					Oid *pfeqopOut, Oid *ppeqopOut, Oid *ffeqopOut);
 static void ATExecDropConstraint(Relation rel, const char *constrName,
 								 DropBehavior behavior, bool recurse,
@@ -9645,7 +9645,7 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 				fkconstraint, tab, i, fkattnum,
 				&old_check_ok, &old_pfeqop_item,
 				pktypoid[i], fktypoid[i], opclasses[i],
-				fkoverlaps[i], hasoverlaps,
+				fkoverlaps[i], pkoverlaps[i], hasoverlaps,
 				&pfeqoperators[i], &ppeqoperators[i], &ffeqoperators[i]);
 	}
 
@@ -10727,7 +10727,7 @@ FindFKComparisonOperators(Constraint *fkconstraint,
 		bool *old_check_ok,
 		ListCell **old_pfeqop_item,
 		Oid pktype, Oid fktype, Oid opclass,
-		bool attroverlaps, bool hasoverlaps,
+		bool pkoverlaps, bool fkoverlaps, bool hasoverlaps,
 		Oid *pfeqopOut, Oid *ppeqopOut, Oid *ffeqopOut)
 {
 	Oid			fktyped;
@@ -10760,7 +10760,7 @@ FindFKComparisonOperators(Constraint *fkconstraint,
 		 * For the non-overlaps parts, we want either RTEqualStrategyNumber (without btree_gist)
 		 * or BTEqualStrategyNumber (with btree_gist). We'll try the latter first.
 		 */
-		eqstrategy = attroverlaps ? RTOverlapStrategyNumber : BTEqualStrategyNumber;
+		eqstrategy = pkoverlaps ? RTOverlapStrategyNumber : BTEqualStrategyNumber;
 	}
 	else
 	{
@@ -10784,7 +10784,7 @@ FindFKComparisonOperators(Constraint *fkconstraint,
 								 eqstrategy);
 
 	/* Fall back to RTEqualStrategyNumber for temporal overlaps */
-	if (hasoverlaps && !attroverlaps && !OidIsValid(ppeqop))
+	if (hasoverlaps && !pkoverlaps && !OidIsValid(ppeqop))
 	{
 		eqstrategy = RTEqualStrategyNumber;
 		ppeqop = get_opfamily_member(opfamily, opcintype, opcintype,
@@ -10847,8 +10847,6 @@ FindFKComparisonOperators(Constraint *fkconstraint,
 	{
 		KeyElem *fkattr_elem = (KeyElem *) list_nth(fkconstraint->fk_attrs, i);
 		KeyElem *pkattr_elem = (KeyElem *) list_nth(fkconstraint->pk_attrs, i);
-		char *fkattr_name = fkattr_elem->column;
-		char *pkattr_name = pkattr_elem->column;
 
 		ereport(ERROR,
 				(errcode(ERRCODE_DATATYPE_MISMATCH),
@@ -10856,10 +10854,29 @@ FindFKComparisonOperators(Constraint *fkconstraint,
 						fkconstraint->conname),
 				 errdetail("Key columns \"%s\" and \"%s\" "
 						   "are of incompatible types: %s and %s.",
-						   fkattr_name,
-						   pkattr_name,
+						   fkattr_elem->column,
+						   pkattr_elem->column,
 						   format_type_be(fktype),
 						   format_type_be(pktype))));
+	}
+
+	if (pkoverlaps != fkoverlaps)
+	{
+		KeyElem *fkattr_elem = (KeyElem *) list_nth(fkconstraint->fk_attrs, i);
+		KeyElem *pkattr_elem = (KeyElem *) list_nth(fkconstraint->pk_attrs, i);
+		char	*fk_uses = (pkoverlaps ? "uses" : "does not use");
+		char	*pk_uses = (fkoverlaps ? "does": "does not");
+
+		ereport(ERROR,
+				(errcode(ERRCODE_DATATYPE_MISMATCH),
+				 errmsg("foreign key constraint \"%s\" cannot be implemented",
+						fkconstraint->conname),
+				 errdetail("Referencing column \"%s\" %s PERIOD "
+						   "and referenced column \"%s\" %s.",
+						   fkattr_elem->column,
+						   fk_uses,
+						   pkattr_elem->column,
+						   pk_uses)));
 
 		// TODO: Fail if their withoutOverlaps doesn't match.
 	}
@@ -11867,6 +11884,7 @@ transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
  *	Make sure that the attributes of a referenced table belong to a unique
  *	(or primary key) constraint.  Or if this is a temporal foreign key
  *	the primary key should be an exclusion constraint instead.
+ *	The index constraint must have a matching overlaps mask.
  *	Return the OID of the index supporting the constraint,
  *	as well as the opclasses associated with the index
  *	columns.
