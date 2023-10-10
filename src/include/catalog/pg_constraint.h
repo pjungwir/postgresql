@@ -273,11 +273,14 @@ extern Bitmapset *get_relation_constraint_attnos(Oid relid, const char *conname,
 												 bool missing_ok, Oid *constraintOid);
 extern Oid	get_domain_constraint_oid(Oid typid, const char *conname, bool missing_ok);
 extern Oid	get_relation_idx_constraint_oid(Oid relationId, Oid indexId);
+extern void get_index_conexclop(Oid indexrelid, Oid indrelid, int indnkeyatts, bool hasoverlaps, Oid *result);
+extern void get_index_conoverlaps(Oid indexrelid, Oid indrelid, int indnkeyatts, bool *result);
 
 extern Bitmapset *get_primary_key_attnos(Oid relid, bool deferrableOk,
 										 Oid *constraintOid);
 extern void DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
 									   AttrNumber *conkey, AttrNumber *confkey,
+									   bool *conoverlaps, bool *hasoverlaps,
 									   Oid *pf_eq_oprs, Oid *pp_eq_oprs, Oid *ff_eq_oprs,
 									   int *num_fk_del_set_cols, AttrNumber *fk_del_set_cols);
 

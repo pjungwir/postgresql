@@ -298,9 +298,6 @@ static Relation AllocateRelationDesc(Form_pg_class relp);
 static void RelationParseRelOptions(Relation relation, HeapTuple tuple);
 static void RelationBuildTupleDesc(Relation relation);
 static Relation RelationBuildDesc(Oid targetRelId, bool insertIt);
-static HeapTuple IndexRelationFindConstraint(Relation indexRelation,
-											 Relation constraintRelation,
-											 bool is_exclusion);
 static void RelationInitPhysicalAddr(Relation relation);
 static void load_critical_index(Oid indexoid, Oid heapoid);
 static TupleDesc GetPgClassDescriptor(void);
@@ -4687,6 +4684,8 @@ RelationGetFKeyList(Relation relation)
 		DeconstructFkConstraintRow(htup, &info->nkeys,
 								   info->conkey,
 								   info->confkey,
+								   info->conoverlaps,
+								   &info->hasoverlaps,
 								   info->conpfeqop,
 								   NULL, NULL, NULL, NULL);
 
@@ -5538,83 +5537,6 @@ RelationGetIdentityKeyBitmap(Relation relation)
 }
 
 /*
- * IndexRelationFindConstraint -- finds the constraint matching an index
- *
- * This finds either an exclusion constraint or a temporal primary key/
- * unique constraint, depending on the setting of is_exclusion.
- * Raises an error if not found.
- *
- * The caller must open constraintRelation before calling this function.
- */
-static HeapTuple
-IndexRelationFindConstraint(Relation indexRelation, Relation constraintRelation,
-							bool is_exclusion)
-{
-	ScanKeyData	skey[1];
-	SysScanDesc conscan;
-	HeapTuple	htup;
-	HeapTuple	result = NULL;
-	bool		found;
-	char	   *constraint_type;
-
-	/*
-	 * Search pg_constraint for the constraint associated with the index. To
-	 * make this not too painfully slow, we use the index on conrelid; that
-	 * will hold the parent relation's OID not the index's own OID.
-	 *
-	 * Note: if we wanted to rely on the constraint name matching the index's
-	 * name, we could just do a direct lookup using pg_constraint's unique
-	 * index.  For the moment it doesn't seem worth requiring that.
-	 */
-	ScanKeyInit(&skey[0],
-				Anum_pg_constraint_conrelid,
-				BTEqualStrategyNumber, F_OIDEQ,
-				ObjectIdGetDatum(indexRelation->rd_index->indrelid));
-
-	conscan = systable_beginscan(constraintRelation,
-								 ConstraintRelidTypidNameIndexId, true,
-								 NULL, 1, skey);
-	found = false;
-	constraint_type = is_exclusion ? "exclusion" : "temporal";
-
-	while (HeapTupleIsValid(htup = systable_getnext(conscan)))
-	{
-		Form_pg_constraint conform = (Form_pg_constraint) GETSTRUCT(htup);
-
-		/* We want the exclusion constraint owning the index */
-		if (conform->conindid != RelationGetRelid(indexRelation))
-			continue;
-
-		/*
-		 * If the index backs a temporal constraint, look for
-		 * PRIMARY KEY or UNIQUE entries, otherwise EXCLUDE.
-		 */
-		if (is_exclusion
-				? conform->contype != CONSTRAINT_EXCLUSION
-				: (conform->contype != CONSTRAINT_PRIMARY &&
-					 conform->contype != CONSTRAINT_UNIQUE))
-			continue;
-
-		/* There should be only one */
-		if (found)
-			elog(ERROR, "unexpected %s constraint record found for rel %s",
-				 constraint_type,
-				 RelationGetRelationName(indexRelation));
-		found = true;
-		result = heap_copytuple(htup);
-	}
-
-	systable_endscan(conscan);
-
-	if (!found)
-		elog(ERROR, "%s constraint record missing for rel %s",
-			 constraint_type,
-			 RelationGetRelationName(indexRelation));
-
-	return result;
-}
-
-/*
  * RelationGetExclusionInfo -- get info about index's exclusion constraint
  *
  * This should be called only for an index that is known to have an
@@ -5623,12 +5545,9 @@ IndexRelationFindConstraint(Relation indexRelation, Relation constraintRelation,
  * of the exclusion operator OIDs, their underlying functions'
  * OIDs, and their strategy numbers in the index's opclasses.  We cache
  * all this information since it requires a fair amount of work to get.
- *
- * TODO: document is_temporal.
  */
 void
 RelationGetExclusionInfo(Relation indexRelation,
-						 bool is_temporal,
 						 Oid **operators,
 						 Oid **procs,
 						 uint16 **strategies)
@@ -5637,13 +5556,7 @@ RelationGetExclusionInfo(Relation indexRelation,
 	Oid		   *ops;
 	Oid		   *funcs;
 	uint16	   *strats;
-	Relation	conrel;
-	HeapTuple	htup;
 	MemoryContext oldcxt;
-	Datum		val;
-	bool		isnull;
-	ArrayType  *arr;
-	int			nelem;
 	int			i;
 
 	indnkeyatts = IndexRelationGetNumberOfKeyAttributes(indexRelation);
@@ -5662,30 +5575,12 @@ RelationGetExclusionInfo(Relation indexRelation,
 		return;
 	}
 
-	conrel = table_open(ConstraintRelationId, AccessShareLock);
-
-	/* Find the pg_constraint record (or fail) */
-	htup = IndexRelationFindConstraint(indexRelation, conrel, !is_temporal);
-
-	/* Extract the operator OIDS from conexclop */
-	val = fastgetattr(htup,
-					  Anum_pg_constraint_conexclop,
-					  conrel->rd_att, &isnull);
-	if (isnull)
-		elog(ERROR, "null conexclop for rel %s",
-			 RelationGetRelationName(indexRelation));
-
-	arr = DatumGetArrayTypeP(val);	/* ensure not toasted */
-	nelem = ARR_DIMS(arr)[0];
-	if (ARR_NDIM(arr) != 1 ||
-		nelem != indnkeyatts ||
-		ARR_HASNULL(arr) ||
-		ARR_ELEMTYPE(arr) != OIDOID)
-		elog(ERROR, "conexclop is not a 1-D Oid array");
-
-	memcpy(ops, ARR_DATA_PTR(arr), sizeof(Oid) * indnkeyatts);
-
-	table_close(conrel, AccessShareLock);
+	/* Get the exclusion operators from the constraint */
+	get_index_conexclop(RelationGetRelid(indexRelation),
+						indexRelation->rd_index->indrelid,
+						indnkeyatts,
+						indexRelation->rd_index->indhasoverlaps,
+						ops);
 
 	/* We need the func OIDs and strategy numbers too */
 	for (i = 0; i < indnkeyatts; i++)
@@ -5720,53 +5615,28 @@ bool *
 RelationGetConstraintOverlaps(Relation indexrel)
 {
 	int16		natts = RelationGetNumberOfAttributes(indexrel);
-	Relation	conrel;
-	HeapTuple	htup;
-	Datum		val;
-	bool		isnull;
-	ArrayType  *arr;
-	int			nelem;
-	bool       *overlaps = NULL;
+	bool       *overlaps;
 	MemoryContext oldcxt;
+
+	overlaps = (bool *) palloc(sizeof(bool) * natts);
 
 	/* Quick exit if we have the data cached already */
 	if (indexrel->rd_conoverlaps != NULL)
 	{
-		overlaps = (bool *) palloc(sizeof(bool) * natts);
 		memcpy(overlaps, indexrel->rd_conoverlaps, sizeof(bool) * natts);
 		return overlaps;
 	}
 
-	conrel = table_open(ConstraintRelationId, AccessShareLock);
-
-	/* Find the pg_constraint record (or fail) */
-	htup = IndexRelationFindConstraint(indexrel, conrel, false);
-
-	/* Extract the overlaps from conoverlaps */
-	val = fastgetattr(htup, Anum_pg_constraint_conoverlaps,
-					  conrel->rd_att, &isnull);
-	if (isnull)
-		elog(ERROR, "null conoverlaps for rel %s",
-			 RelationGetRelationName(indexrel));
-
-	arr = DatumGetArrayTypeP(val);  /* ensure not toasted */
-	nelem = ARR_DIMS(arr)[0];
-	if (ARR_NDIM(arr) != 1 ||
-		nelem != natts ||
-		ARR_HASNULL(arr) ||
-		ARR_ELEMTYPE(arr) != BOOLOID)
-		elog(ERROR, "conoverlaps is not a 1-D Boolean array");
-
-	overlaps = (bool *) palloc(sizeof(bool) * natts);
-	memcpy(overlaps, ARR_DATA_PTR(arr), sizeof(bool) * natts);
+	/* Get the overlaps mask from the constraint */
+	get_index_conoverlaps(RelationGetRelid(indexrel),
+						  indexrel->rd_index->indrelid,
+						  natts, overlaps);
 
 	/* Save a copy of the results in the relcache entry. */
 	oldcxt = MemoryContextSwitchTo(indexrel->rd_indexcxt);
 	indexrel->rd_conoverlaps = (bool *) palloc(sizeof(bool) * natts);
 	memcpy(indexrel->rd_conoverlaps, overlaps, sizeof(bool) * natts);
 	MemoryContextSwitchTo(oldcxt);
-
-	table_close(conrel, AccessShareLock);
 
 	return overlaps;
 }

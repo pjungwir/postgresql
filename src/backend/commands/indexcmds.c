@@ -322,7 +322,7 @@ CheckIndexCompatible(Oid oldId,
 				   *old_procs;
 		uint16	   *old_strats;
 
-		RelationGetExclusionInfo(irel, hasoverlaps, &old_operators, &old_procs, &old_strats);
+		RelationGetExclusionInfo(irel, &old_operators, &old_procs, &old_strats);
 		ret = memcmp(old_operators, indexInfo->ii_ExclusionOps,
 					 old_natts * sizeof(Oid)) == 0;
 

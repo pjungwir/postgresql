@@ -283,6 +283,8 @@ typedef struct ForeignKeyCacheInfo
 	Oid			confrelid;
 	/* number of columns in the foreign key */
 	int			nkeys;
+	/* whether conoverlaps is valid */
+	bool		hasoverlaps;
 
 	/*
 	 * these arrays each have nkeys valid entries:
@@ -293,6 +295,8 @@ typedef struct ForeignKeyCacheInfo
 	AttrNumber	confkey[INDEX_MAX_KEYS] pg_node_attr(array_size(nkeys));
 	/* PK = FK operator OIDs */
 	Oid			conpfeqop[INDEX_MAX_KEYS] pg_node_attr(array_size(nkeys));
+	/* cols with PERIOD modifiers */
+	bool		conoverlaps[INDEX_MAX_KEYS] pg_node_attr(array_size(nkeys));
 } ForeignKeyCacheInfo;
 
 

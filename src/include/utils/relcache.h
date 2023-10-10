@@ -72,7 +72,6 @@ extern Bitmapset *RelationGetIndexAttrBitmap(Relation relation,
 extern Bitmapset *RelationGetIdentityKeyBitmap(Relation relation);
 
 extern void RelationGetExclusionInfo(Relation indexRelation,
-									 bool is_temporal,
 									 Oid **operators,
 									 Oid **procs,
 									 uint16 **strategies);

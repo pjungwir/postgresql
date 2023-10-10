@@ -2237,6 +2237,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 		case CONSTRAINT_FOREIGN:
 			{
 				Datum		val;
+				Datum		conoverlaps;
 				bool		isnull;
 				const char *string;
 
@@ -2247,8 +2248,14 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 				val = SysCacheGetAttrNotNull(CONSTROID, tup,
 											 Anum_pg_constraint_conkey);
 
+				/* Fetch and build overlaps */
+				conoverlaps = SysCacheGetAttr(CONSTROID, tup,
+											 Anum_pg_constraint_conoverlaps, &isnull);
+				if (isnull)
+					conoverlaps = 0;
+
 				/* If it is a temporal foreign key then it uses PERIOD. */
-				decompile_column_index_array(val, conForm->conrelid, 0,
+				decompile_column_index_array(val, conForm->conrelid, conoverlaps,
 											 true, &buf);
 
 				/* add foreign relation name */
@@ -2260,7 +2267,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 				val = SysCacheGetAttrNotNull(CONSTROID, tup,
 											 Anum_pg_constraint_confkey);
 
-				decompile_column_index_array(val, conForm->confrelid, 0,
+				decompile_column_index_array(val, conForm->confrelid, conoverlaps,
 											 true, &buf);
 
 				appendStringInfoChar(&buf, ')');
@@ -2388,7 +2395,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 											  Anum_pg_constraint_conoverlaps, &isnull);
 				if (isnull)
 					conoverlaps = 0;
-				keyatts = decompile_column_index_array(val, conForm->conrelid, conoverlaps, true, &buf);
+				keyatts = decompile_column_index_array(val, conForm->conrelid, conoverlaps, false, &buf);
 
 				appendStringInfoChar(&buf, ')');
 
@@ -2614,12 +2621,12 @@ decompile_column_index_array(Datum column_index_array, Oid relId, Datum conoverl
 		if (j > 0)
 			appendStringInfoString(buf, ", ");
 
-		if (foreignKey && j == nKeys - 1)
+		if (foreignKey && nOverlaps && DatumGetBool(overlaps[j]))
 			appendStringInfoString(buf, "PERIOD ");
 
 		appendStringInfoString(buf, quote_identifier(colName));
 
-		if (nOverlaps && DatumGetBool(overlaps[j]))
+		if (!foreignKey && nOverlaps && DatumGetBool(overlaps[j]))
 			appendStringInfoString(buf, " WITHOUT OVERLAPS");
 	}
 

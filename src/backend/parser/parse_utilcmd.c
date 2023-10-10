@@ -823,7 +823,7 @@ transformColumnDefinition(CreateStmtContext *cxt, ColumnDef *column)
 				 * list of FK constraints to be processed later. Single-column
 				 * foreign keys can't have PERIOD qualifiers.
 				 */
-				constraint->fk_attrs = list_make1(makeString(column->colname));
+				constraint->fk_attrs = list_make1(makeKeyElem(column->colname, false));
 				cxt->fkconstraints = lappend(cxt->fkconstraints, constraint);
 				break;
 
@@ -2141,6 +2141,27 @@ generateClonedExtStatsStmt(RangeVar *heapRel, Oid heapRelid,
 	ReleaseSysCache(ht_stats);
 
 	return stats;
+}
+
+/*
+ * keyElemHasOverlaps		- there are WITHOUT OVERLAPS or PERIOD elems
+ *
+ * Takes a List of KeyElem nodes, and returns true iff any have a true
+ * withoutOverlaps value.
+ */
+bool
+keyElemHasOverlaps(List *keyElems)
+{
+	ListCell   *lc;
+
+	foreach(lc, keyElems)
+	{
+		KeyElem *elem = lfirst_node(KeyElem, lc);
+		if (elem->withoutOverlaps)
+			return true;
+	}
+
+	return false;
 }
 
 /*

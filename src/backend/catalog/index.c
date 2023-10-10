@@ -2477,7 +2477,6 @@ BuildIndexInfo(Relation index)
 	if (indexStruct->indisexclusion)
 	{
 		RelationGetExclusionInfo(index,
-								 indexStruct->indhasoverlaps,
 								 &ii->ii_ExclusionOps,
 								 &ii->ii_ExclusionProcs,
 								 &ii->ii_ExclusionStrats);

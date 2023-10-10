@@ -430,6 +430,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 				old_aggr_definition old_aggr_list
 				oper_argtypes RuleActionList RuleActionMulti
 				opt_column_list columnList uniqueKeyList opt_name_list
+				optKeyList keyList
 				sort_clause opt_sort_clause sortby_list index_params
 				stats_params
 				opt_include opt_c_include index_including_params
@@ -523,12 +524,12 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 %type <node>	TableElement TypedTableElement ConstraintElem TableFuncElement
 %type <node>	columnDef columnOptions
 %type <defelt>	def_elem reloption_elem old_aggr_elem operator_def_elem
-%type <node>	def_arg columnElem uniqueKeyElem optionalPeriodName
+%type <node>	def_arg columnElem keyElem uniqueKeyElem riKeyElem
 				where_clause where_or_current_clause
 				a_expr b_expr c_expr AexprConst indirection_el opt_slice_bound
 				columnref in_expr having_clause func_table xmltable array_expr
 				OptWhereClause operator_def_arg
-%type <list>	opt_column_and_period_list
+%type <list>	riKeyList optRiKeyList
 %type <list>	rowsfrom_item rowsfrom_list opt_col_def_list
 %type <boolean> opt_ordinality
 %type <list>	ExclusionConstraintList ExclusionConstraintElem
@@ -3940,7 +3941,7 @@ ColConstraintElem:
 
 					$$ = (Node *) n;
 				}
-			| REFERENCES qualified_name opt_column_list key_match key_actions
+			| REFERENCES qualified_name optRiKeyList key_match key_actions
 				{
 					Constraint *n = makeNode(Constraint);
 
@@ -4185,23 +4186,21 @@ ConstraintElem:
 								   NULL, yyscanner);
 					$$ = (Node *) n;
 				}
-			| FOREIGN KEY '(' columnList optionalPeriodName ')' REFERENCES qualified_name
-				opt_column_and_period_list key_match key_actions ConstraintAttributeSpec
+			| FOREIGN KEY '(' riKeyList ')' REFERENCES qualified_name
+				optRiKeyList key_match key_actions ConstraintAttributeSpec
 				{
 					Constraint *n = makeNode(Constraint);
 
 					n->contype = CONSTR_FOREIGN;
 					n->location = @1;
-					n->pktable = $8;
+					n->pktable = $7;
 					n->fk_attrs = $4;
-					n->fk_period = $5;
-					n->pk_attrs = linitial($9);
-					n->pk_period = lsecond($9);
-					n->fk_matchtype = $10;
-					n->fk_upd_action = ($11)->updateAction->action;
-					n->fk_del_action = ($11)->deleteAction->action;
-					n->fk_del_set_cols = ($11)->deleteAction->cols;
-					processCASbits($12, @12, "FOREIGN KEY",
+					n->pk_attrs = $8;
+					n->fk_matchtype = $9;
+					n->fk_upd_action = ($10)->updateAction->action;
+					n->fk_del_action = ($10)->deleteAction->action;
+					n->fk_del_set_cols = ($10)->deleteAction->cols;
+					processCASbits($11, @11, "FOREIGN KEY",
 								   &n->deferrable, &n->initdeferred,
 								   &n->skip_validation, NULL,
 								   yyscanner);
@@ -4224,30 +4223,51 @@ columnList:
 			| columnList ',' columnElem				{ $$ = lappend($1, $3); }
 		;
 
-optionalPeriodName:
-			',' PERIOD columnElem { $$ = $3; }
-			| /*EMPTY*/               { $$ = NULL; }
-	;
-
-opt_column_and_period_list:
-			'(' columnList optionalPeriodName ')'			{ $$ = list_make2($2, $3); }
-			| /*EMPTY*/								{ $$ = list_make2(NIL, NULL); }
-		;
-
 columnElem: ColId
 				{
 					$$ = (Node *) makeString($1);
 				}
 		;
 
+optKeyList:
+			'(' keyList ')'						{ $$ = $2; }
+			| /*EMPTY*/							{ $$ = NIL; }
+		;
+
+keyList:
+			keyElem								{ $$ = list_make1($1); }
+			| keyList ',' keyElem				{ $$ = lappend($1, $3); }
+		;
+
+keyElem: ColId
+				{
+					$$ = (Node *) makeKeyElem($1, false);
+				}
+		;
+
 uniqueKeyList:
-			uniqueKeyElem							{ $$ = list_make1($1); }
-			| uniqueKeyList ',' uniqueKeyElem		{ $$ = lappend($1, $3); }
+			uniqueKeyElem						{ $$ = list_make1($1); }
+			| uniqueKeyList ',' uniqueKeyElem	{ $$ = lappend($1, $3); }
 		;
 
 uniqueKeyElem:
-			ColId							{ $$ = (Node *) makeKeyElem($1, false); }
-			| ColId WITHOUT OVERLAPS		{ $$ = (Node *) makeKeyElem($1, true); }
+			ColId								{ $$ = (Node *) makeKeyElem($1, false); }
+			| ColId WITHOUT OVERLAPS			{ $$ = (Node *) makeKeyElem($1, true); }
+		;
+
+optRiKeyList:
+			'(' riKeyList ')'					{ $$ = $2; }
+			| /*EMPTY*/							{ $$ = NIL; }
+		;
+
+riKeyList:
+			riKeyElem							{ $$ = list_make1($1); }
+			| riKeyList ',' riKeyElem			{ $$ = lappend($1, $3); }
+		;
+
+riKeyElem:
+			ColId								{ $$ = (Node *) makeKeyElem($1, false); }
+			| PERIOD ColId						{ $$ = (Node *) makeKeyElem($2, true); }
 		;
 
 opt_c_include:	INCLUDE '(' columnList ')'			{ $$ = $3; }
@@ -4392,7 +4412,7 @@ key_action:
 					n->cols = NIL;
 					$$ = n;
 				}
-			| SET NULL_P opt_column_list
+			| SET NULL_P optKeyList
 				{
 					KeyAction *n = palloc(sizeof(KeyAction));
 
@@ -4400,7 +4420,7 @@ key_action:
 					n->cols = $3;
 					$$ = n;
 				}
-			| SET DEFAULT opt_column_list
+			| SET DEFAULT optKeyList
 				{
 					KeyAction *n = palloc(sizeof(KeyAction));
 

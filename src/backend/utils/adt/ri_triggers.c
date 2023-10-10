@@ -120,10 +120,11 @@ typedef struct RI_ConstraintInfo
 	int16		confdelsetcols[RI_MAX_NUMKEYS]; /* attnums of cols to set on
 												 * delete */
 	char		confmatchtype;	/* foreign key's match type */
-	bool		temporal;		/* if the foreign key is temporal */
+	bool		hasoverlaps;	/* set if any overlaps is true */
 	int			nkeys;			/* number of key columns */
 	int16		pk_attnums[RI_MAX_NUMKEYS]; /* attnums of referenced cols */
 	int16		fk_attnums[RI_MAX_NUMKEYS]; /* attnums of referencing cols */
+	bool		overlaps[RI_MAX_NUMKEYS];	/* bools for PERIOD attributes */
 	Oid			pf_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (PK = FK) */
 	Oid			pp_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (PK = PK) */
 	Oid			ff_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (FK = FK) */
@@ -391,7 +392,7 @@ RI_FKey_check(TriggerData *trigdata)
 		pk_only = pk_rel->rd_rel->relkind == RELKIND_PARTITIONED_TABLE ?
 			"" : "ONLY ";
 		quoteRelationName(pkrelname, pk_rel);
-		if (riinfo->temporal)
+		if (riinfo->hasoverlaps)
 		{
 			quoteOneName(attname,
 					RIAttName(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]));
@@ -426,7 +427,7 @@ RI_FKey_check(TriggerData *trigdata)
 			queryoids[i] = fk_type;
 		}
 		appendStringInfoString(&querybuf, " FOR KEY SHARE OF x");
-		if (riinfo->temporal)
+		if (riinfo->hasoverlaps)
 			appendStringInfo(&querybuf, ") x1 HAVING $%d <@ pg_catalog.range_agg(x1.r)", riinfo->nkeys);
 
 		/* Prepare and save the plan */
@@ -555,7 +556,7 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 		pk_only = pk_rel->rd_rel->relkind == RELKIND_PARTITIONED_TABLE ?
 			"" : "ONLY ";
 		quoteRelationName(pkrelname, pk_rel);
-		if (riinfo->temporal)
+		if (riinfo->hasoverlaps)
 		{
 			quoteOneName(attname, RIAttName(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]));
 
@@ -587,7 +588,7 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 			queryoids[i] = pk_type;
 		}
 		appendStringInfoString(&querybuf, " FOR KEY SHARE OF x");
-		if (riinfo->temporal)
+		if (riinfo->hasoverlaps)
 			appendStringInfo(&querybuf, ") x1 HAVING $%d <@ pg_catalog.range_agg(x1.r)", riinfo->nkeys);
 
 		/* Prepare and save the plan */
@@ -2368,12 +2369,13 @@ ri_LoadConstraintInfo(Oid constraintOid)
 	riinfo->confupdtype = conForm->confupdtype;
 	riinfo->confdeltype = conForm->confdeltype;
 	riinfo->confmatchtype = conForm->confmatchtype;
-	riinfo->temporal = conForm->contemporal;
 
 	DeconstructFkConstraintRow(tup,
 							   &riinfo->nkeys,
 							   riinfo->fk_attnums,
 							   riinfo->pk_attnums,
+							   riinfo->overlaps,
+							   &riinfo->hasoverlaps,
 							   riinfo->pf_eq_oprs,
 							   riinfo->pp_eq_oprs,
 							   riinfo->ff_eq_oprs,
@@ -3035,7 +3037,7 @@ ri_KeysStable(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
 
 		if (rel_is_pk)
 		{
-			if (riinfo->temporal && i == riinfo->nkeys - 1)
+			if (riinfo->hasoverlaps && i == riinfo->nkeys - 1)
 			{
 				if (ri_RangeAttributeNeedsCheck(true, oldvalue, newvalue))
 					return false;
@@ -3058,7 +3060,7 @@ ri_KeysStable(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
 		}
 		else
 		{
-			if (riinfo->temporal && i == riinfo->nkeys - 1)
+			if (riinfo->hasoverlaps && i == riinfo->nkeys - 1)
 			{
 				if (ri_RangeAttributeNeedsCheck(false, oldvalue, newvalue))
 					return false;

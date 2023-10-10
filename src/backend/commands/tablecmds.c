@@ -376,23 +376,20 @@ static ObjectAddress ATExecValidateConstraint(List **wqueue,
 											  Relation rel, char *constrName,
 											  bool recurse, bool recursing, LOCKMODE lockmode);
 static int	transformColumnNameList(Oid relId, List *colList,
-									int16 *attnums, Oid *atttypids);
+									int16 *attnums, Oid *atttypids, bool *overlaps);
 static int	transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 									   List **attnamelist,
-									   Node **pk_period,
 									   int16 *attnums, Oid *atttypids,
-									   int16 *periodattnums, Oid *periodatttypids,
-									   Oid *opclasses);
+									   Oid *opclasses, bool *overlaps);
 static Oid	transformFkeyCheckAttrs(Relation pkrel,
-									int numattrs, int16 *attnums,
-									bool is_temporal, int16 periodattnum,
+									int numattrs, int16 *attnums, bool hasoverlaps,
 									Oid *opclasses);
 static void checkFkeyPermissions(Relation rel, int16 *attnums, int natts);
 static CoercionPathType findFkeyCast(Oid targetTypeId, Oid sourceTypeId,
 									 Oid *funcid);
 static void validateForeignKeyConstraint(char *conname,
 										 Relation rel, Relation pkrel,
-										 Oid pkindOid, Oid constraintOid, bool temporal);
+										 Oid pkindOid, Oid constraintOid, bool hasoverlaps);
 static void ATController(AlterTableStmt *parsetree,
 						 Relation rel, List *cmds, bool recurse, LOCKMODE lockmode,
 						 AlterTableUtilityContext *context);
@@ -498,23 +495,22 @@ static ObjectAddress ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *
 											   LOCKMODE lockmode);
 static ObjectAddress addFkRecurseReferenced(List **wqueue, Constraint *fkconstraint,
 											Relation rel, Relation pkrel, Oid indexOid, Oid parentConstr,
-											int numfks, int16 *pkattnum, int16 *fkattnum,
+											int numfks, int16 *pkattnum, int16 *fkattnum, bool *overlaps,
 											Oid *pfeqoperators, Oid *ppeqoperators, Oid *ffeqoperators,
 											int numfkdelsetcols, int16 *fkdelsetcols,
 											bool old_check_ok,
-											Oid parentDelTrigger, Oid parentUpdTrigger,
-											bool is_temporal);
+											Oid parentDelTrigger, Oid parentUpdTrigger);
 static void validateFkOnDeleteSetColumns(int numfks, const int16 *fkattnums,
 										 int numfksetcols, const int16 *fksetcolsattnums,
 										 List *fksetcols);
 static void addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint,
 									Relation rel, Relation pkrel, Oid indexOid, Oid parentConstr,
 									int numfks, int16 *pkattnum, int16 *fkattnum,
+									bool *overlaps,
 									Oid *pfeqoperators, Oid *ppeqoperators, Oid *ffeqoperators,
 									int numfkdelsetcols, int16 *fkdelsetcols,
 									bool old_check_ok, LOCKMODE lockmode,
-									Oid parentInsTrigger, Oid parentUpdTrigger,
-									bool is_temporal);
+									Oid parentInsTrigger, Oid parentUpdTrigger);
 
 static void CloneForeignKeyConstraints(List **wqueue, Relation parentRel,
 									   Relation partitionRel);
@@ -551,7 +547,7 @@ static void FindFKComparisonOperators(Constraint *fkconstraint,
 					AlteredTableInfo *tab, int i, int16 *fkattnum,
 					bool *old_check_ok, ListCell **old_pfeqop_item,
 					Oid pktype, Oid fktype, Oid opclass,
-					bool is_temporal, bool for_overlaps,
+					bool attroverlaps, bool hasoverlaps,
 					Oid *pfeqopOut, Oid *ppeqopOut, Oid *ffeqopOut);
 static void ATExecDropConstraint(Relation rel, const char *constrName,
 								 DropBehavior behavior, bool recurse,
@@ -5834,7 +5830,7 @@ ATRewriteTables(AlterTableStmt *parsetree, List **wqueue, LOCKMODE lockmode,
 				validateForeignKeyConstraint(fkconstraint->conname, rel, refrel,
 											 con->refindid,
 											 con->conid,
-											 con->contemporal);
+											 keyElemHasOverlaps(fkconstraint->fk_attrs));
 
 				/*
 				 * No need to mark the constraint row as validated, we did
@@ -9248,7 +9244,7 @@ ChooseForeignKeyConstraintNameAddition(List *colnames)
 	buf[0] = '\0';
 	foreach(lc, colnames)
 	{
-		const char *name = strVal(lfirst(lc));
+		KeyElem *keyelem = lfirst_node(KeyElem, lc);
 
 		if (buflen > 0)
 			buf[buflen++] = '_';	/* insert _ between names */
@@ -9257,7 +9253,7 @@ ChooseForeignKeyConstraintNameAddition(List *colnames)
 		 * At this point we have buflen <= NAMEDATALEN.  name should be less
 		 * than NAMEDATALEN already, but use strlcpy for paranoia.
 		 */
-		strlcpy(buf + buflen, name, NAMEDATALEN);
+		strlcpy(buf + buflen, keyelem->column, NAMEDATALEN);
 		buflen += strlen(buf + buflen);
 		if (buflen >= NAMEDATALEN)
 			break;
@@ -9445,20 +9441,18 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	int16		fkattnum[INDEX_MAX_KEYS] = {0};
 	Oid			pktypoid[INDEX_MAX_KEYS] = {0};
 	Oid			fktypoid[INDEX_MAX_KEYS] = {0};
+	bool		pkoverlaps[INDEX_MAX_KEYS] = {0};	// TODO: check that pkoverlaps and fkoverlaps are equal
+	bool		fkoverlaps[INDEX_MAX_KEYS] = {0};
 	Oid			opclasses[INDEX_MAX_KEYS] = {0};
 	Oid			pfeqoperators[INDEX_MAX_KEYS] = {0};
 	Oid			ppeqoperators[INDEX_MAX_KEYS] = {0};
 	Oid			ffeqoperators[INDEX_MAX_KEYS] = {0};
 	int16		fkdelsetcols[INDEX_MAX_KEYS] = {0};
-	bool		is_temporal = (fkconstraint->fk_period != NULL);
-	int16		pkperiodattnums[1] = {0};
-	int16		fkperiodattnums[1] = {0};
-	Oid			pkperiodtypoids[1] = {0};
-	Oid			fkperiodtypoids[1] = {0};
 	int			i;
 	int			numfks,
 				numpks,
 				numfkdelsetcols;
+	bool		hasoverlaps = false;
 	Oid			indexOid;
 	bool		old_check_ok;
 	ObjectAddress address;
@@ -9548,18 +9542,24 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	 */
 	numfks = transformColumnNameList(RelationGetRelid(rel),
 									 fkconstraint->fk_attrs,
-									 fkattnum, fktypoid);
-	if (is_temporal)
-		transformColumnNameList(RelationGetRelid(rel),
-							  list_make1(fkconstraint->fk_period),
-							  fkperiodattnums, fkperiodtypoids);
+									 fkattnum, fktypoid, fkoverlaps);
 
 	numfkdelsetcols = transformColumnNameList(RelationGetRelid(rel),
 											  fkconstraint->fk_del_set_cols,
-											  fkdelsetcols, NULL);
+											  fkdelsetcols, NULL, NULL);
 	validateFkOnDeleteSetColumns(numfks, fkattnum,
 								 numfkdelsetcols, fkdelsetcols,
 								 fkconstraint->fk_del_set_cols);
+
+	/* Do we have any overlaps? */
+	for (i = 0; i < numfks; i++)
+	{
+		if (fkoverlaps[i])
+		{
+			hasoverlaps = true;
+			break;
+		}
+	}
 
 	/*
 	 * If the attribute list for the referenced table was omitted, lookup the
@@ -9571,25 +9571,19 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	{
 		numpks = transformFkeyGetPrimaryKey(pkrel, &indexOid,
 											&fkconstraint->pk_attrs,
-											&fkconstraint->pk_period,
-											pkattnum, pktypoid,
-											pkperiodattnums, pkperiodtypoids,
-											opclasses);
+											pkattnum, pktypoid, opclasses,
+											pkoverlaps);
 	}
 	else
 	{
 		numpks = transformColumnNameList(RelationGetRelid(pkrel),
 										 fkconstraint->pk_attrs,
-										 pkattnum, pktypoid);
-		if (is_temporal)
-			transformColumnNameList(RelationGetRelid(pkrel),
-									list_make1(fkconstraint->pk_period),
-									pkperiodattnums, pkperiodtypoids);
+										 pkattnum, pktypoid, pkoverlaps);
 
 		/* Look for an index matching the column list */
-		indexOid = transformFkeyCheckAttrs(pkrel, numpks, pkattnum,
-										   is_temporal, pkperiodattnums[0],
-										   opclasses);
+		indexOid = transformFkeyCheckAttrs(pkrel, numpks, pkattnum, hasoverlaps, opclasses);
+
+		// TODO: fail if pkoverlaps != fkoverlaps
 	}
 
 	/*
@@ -9651,23 +9645,8 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 				fkconstraint, tab, i, fkattnum,
 				&old_check_ok, &old_pfeqop_item,
 				pktypoid[i], fktypoid[i], opclasses[i],
-				is_temporal, false,
+				fkoverlaps[i], hasoverlaps,
 				&pfeqoperators[i], &ppeqoperators[i], &ffeqoperators[i]);
-	}
-	if (is_temporal) {
-		pkattnum[numpks] = pkperiodattnums[0];
-		pktypoid[numpks] = pkperiodtypoids[0];
-		fkattnum[numpks] = fkperiodattnums[0];
-		fktypoid[numpks] = fkperiodtypoids[0];
-
-		FindFKComparisonOperators(
-				fkconstraint, tab, numpks, fkattnum,
-				&old_check_ok, &old_pfeqop_item,
-				pkperiodtypoids[0], fkperiodtypoids[0], opclasses[numpks],
-				is_temporal, true,
-				&pfeqoperators[numpks], &ppeqoperators[numpks], &ffeqoperators[numpks]);
-		numfks += 1;
-		numpks += 1;
 	}
 
 	/*
@@ -9680,14 +9659,14 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 									 numfks,
 									 pkattnum,
 									 fkattnum,
+									 hasoverlaps ? fkoverlaps : NULL,
 									 pfeqoperators,
 									 ppeqoperators,
 									 ffeqoperators,
 									 numfkdelsetcols,
 									 fkdelsetcols,
 									 old_check_ok,
-									 InvalidOid, InvalidOid,
-									 is_temporal);
+									 InvalidOid, InvalidOid);
 
 	/* Now handle the referencing side. */
 	addFkRecurseReferencing(wqueue, fkconstraint, rel, pkrel,
@@ -9696,6 +9675,7 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 							numfks,
 							pkattnum,
 							fkattnum,
+							hasoverlaps ? fkoverlaps : NULL,
 							pfeqoperators,
 							ppeqoperators,
 							ffeqoperators,
@@ -9703,8 +9683,7 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 							fkdelsetcols,
 							old_check_ok,
 							lockmode,
-							InvalidOid, InvalidOid,
-							is_temporal);
+							InvalidOid, InvalidOid);
 
 	/*
 	 * Done.  Close pk table, but keep lock until we've committed.
@@ -9740,7 +9719,8 @@ validateFkOnDeleteSetColumns(int numfks, const int16 *fkattnums,
 
 		if (!seen)
 		{
-			char	   *col = strVal(list_nth(fksetcols, i));
+			KeyElem	   *keyelem = (KeyElem *) list_nth(fksetcols, i);
+			char	   *col = keyelem->column;
 
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
@@ -9770,6 +9750,7 @@ validateFkOnDeleteSetColumns(int numfks, const int16 *fkattnums,
  * numfks is the number of columns in the foreign key
  * pkattnum is the attnum array of referenced attributes.
  * fkattnum is the attnum array of referencing attributes.
+ * overlaps is the bool array of overlaps.
  * numfkdelsetcols is the number of columns in the ON DELETE SET NULL/DEFAULT
  *      (...) clause
  * fkdelsetcols is the attnum array of the columns in the ON DELETE SET
@@ -9785,12 +9766,11 @@ static ObjectAddress
 addFkRecurseReferenced(List **wqueue, Constraint *fkconstraint, Relation rel,
 					   Relation pkrel, Oid indexOid, Oid parentConstr,
 					   int numfks,
-					   int16 *pkattnum, int16 *fkattnum, Oid *pfeqoperators,
-					   Oid *ppeqoperators, Oid *ffeqoperators,
+					   int16 *pkattnum, int16 *fkattnum, bool *overlaps,
+					   Oid *pfeqoperators, Oid *ppeqoperators, Oid *ffeqoperators,
 					   int numfkdelsetcols, int16 *fkdelsetcols,
 					   bool old_check_ok,
-					   Oid parentDelTrigger, Oid parentUpdTrigger,
-					   bool is_temporal)
+					   Oid parentDelTrigger, Oid parentUpdTrigger)
 {
 	ObjectAddress address;
 	Oid			constrOid;
@@ -9873,7 +9853,7 @@ addFkRecurseReferenced(List **wqueue, Constraint *fkconstraint, Relation rel,
 									  NULL, /* no exclusion constraint */
 									  NULL, /* no check constraint */
 									  NULL,
-									  NULL,	/* no overlaps (yet) */
+									  overlaps,
 									  conislocal,	/* islocal */
 									  coninhcount,	/* inhcount */
 									  connoinherit, /* conNoInherit */
@@ -9949,11 +9929,11 @@ addFkRecurseReferenced(List **wqueue, Constraint *fkconstraint, Relation rel,
 			addFkRecurseReferenced(wqueue, fkconstraint, rel, partRel,
 								   partIndexId, constrOid, numfks,
 								   mapped_pkattnum, fkattnum,
+								   overlaps,
 								   pfeqoperators, ppeqoperators, ffeqoperators,
 								   numfkdelsetcols, fkdelsetcols,
 								   old_check_ok,
-								   deleteTriggerOid, updateTriggerOid,
-								   is_temporal);
+								   deleteTriggerOid, updateTriggerOid);
 
 			/* Done -- clean up (but keep the lock) */
 			table_close(partRel, NoLock);
@@ -9992,6 +9972,7 @@ addFkRecurseReferenced(List **wqueue, Constraint *fkconstraint, Relation rel,
  * numfks is the number of columns in the foreign key
  * pkattnum is the attnum array of referenced attributes.
  * fkattnum is the attnum array of referencing attributes.
+ * periods is the bool array of PERIOD elements.
  * pf/pp/ffeqoperators are OID array of operators between columns.
  * numfkdelsetcols is the number of columns in the ON DELETE SET NULL/DEFAULT
  *      (...) clause
@@ -10008,11 +9989,11 @@ static void
 addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint, Relation rel,
 						Relation pkrel, Oid indexOid, Oid parentConstr,
 						int numfks, int16 *pkattnum, int16 *fkattnum,
+						bool *overlaps,
 						Oid *pfeqoperators, Oid *ppeqoperators, Oid *ffeqoperators,
 						int numfkdelsetcols, int16 *fkdelsetcols,
 						bool old_check_ok, LOCKMODE lockmode,
-						Oid parentInsTrigger, Oid parentUpdTrigger,
-						bool is_temporal)
+						Oid parentInsTrigger, Oid parentUpdTrigger)
 {
 	Oid			insertTriggerOid,
 				updateTriggerOid;
@@ -10060,7 +10041,6 @@ addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint, Relation rel,
 			newcon->refrelid = RelationGetRelid(pkrel);
 			newcon->refindid = indexOid;
 			newcon->conid = parentConstr;
-			newcon->contemporal = fkconstraint->fk_period != NULL;
 			newcon->qual = (Node *) fkconstraint;
 
 			tab->constraints = lappend(tab->constraints, newcon);
@@ -10175,7 +10155,7 @@ addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint, Relation rel,
 									  NULL,
 									  NULL,
 									  NULL,
-									  NULL,	/* no overlaps (yet) */
+									  overlaps,
 									  false,
 									  1,
 									  false,
@@ -10201,6 +10181,7 @@ addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint, Relation rel,
 									numfks,
 									pkattnum,
 									mapped_fkattnum,
+									overlaps,
 									pfeqoperators,
 									ppeqoperators,
 									ffeqoperators,
@@ -10209,8 +10190,7 @@ addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint, Relation rel,
 									old_check_ok,
 									lockmode,
 									insertTriggerOid,
-									updateTriggerOid,
-									is_temporal);
+									updateTriggerOid);
 
 			table_close(partition, NoLock);
 		}
@@ -10325,6 +10305,7 @@ CloneFkReferenced(Relation parentRel, Relation partitionRel)
 		AttrNumber	conkey[INDEX_MAX_KEYS];
 		AttrNumber	mapped_confkey[INDEX_MAX_KEYS];
 		AttrNumber	confkey[INDEX_MAX_KEYS];
+		bool		conoverlaps[INDEX_MAX_KEYS];
 		Oid			conpfeqop[INDEX_MAX_KEYS];
 		Oid			conppeqop[INDEX_MAX_KEYS];
 		Oid			conffeqop[INDEX_MAX_KEYS];
@@ -10333,6 +10314,7 @@ CloneFkReferenced(Relation parentRel, Relation partitionRel)
 		Constraint *fkconstraint;
 		Oid			deleteTriggerOid,
 					updateTriggerOid;
+		bool		hasoverlaps;
 
 		tuple = SearchSysCache1(CONSTROID, ObjectIdGetDatum(constrOid));
 		if (!HeapTupleIsValid(tuple))
@@ -10373,6 +10355,8 @@ CloneFkReferenced(Relation parentRel, Relation partitionRel)
 								   &numfks,
 								   conkey,
 								   confkey,
+								   conoverlaps,
+								   &hasoverlaps,
 								   conpfeqop,
 								   conppeqop,
 								   conffeqop,
@@ -10404,11 +10388,13 @@ CloneFkReferenced(Relation parentRel, Relation partitionRel)
 		for (int i = 0; i < numfks; i++)
 		{
 			Form_pg_attribute att;
+			KeyElem	*keyelem;
 
 			att = TupleDescAttr(RelationGetDescr(fkRel),
 								conkey[i] - 1);
-			fkconstraint->fk_attrs = lappend(fkconstraint->fk_attrs,
-											 makeString(NameStr(att->attname)));
+			keyelem = makeKeyElem(NameStr(att->attname),
+								  hasoverlaps && conoverlaps[i]);
+			fkconstraint->fk_attrs = lappend(fkconstraint->fk_attrs, keyelem);
 		}
 
 		/*
@@ -10439,6 +10425,7 @@ CloneFkReferenced(Relation parentRel, Relation partitionRel)
 							   numfks,
 							   mapped_confkey,
 							   conkey,
+							   hasoverlaps ? conoverlaps : NULL,
 							   conpfeqop,
 							   conppeqop,
 							   conffeqop,
@@ -10446,8 +10433,7 @@ CloneFkReferenced(Relation parentRel, Relation partitionRel)
 							   confdelsetcols,
 							   true,
 							   deleteTriggerOid,
-							   updateTriggerOid,
-							   constrForm->contemporal);
+							   updateTriggerOid);
 
 		table_close(fkRel, NoLock);
 		ReleaseSysCache(tuple);
@@ -10526,6 +10512,7 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 		AttrNumber	conkey[INDEX_MAX_KEYS];
 		AttrNumber	mapped_conkey[INDEX_MAX_KEYS];
 		AttrNumber	confkey[INDEX_MAX_KEYS];
+		bool		conoverlaps[INDEX_MAX_KEYS];
 		Oid			conpfeqop[INDEX_MAX_KEYS];
 		Oid			conppeqop[INDEX_MAX_KEYS];
 		Oid			conffeqop[INDEX_MAX_KEYS];
@@ -10540,6 +10527,7 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 		ListCell   *lc;
 		Oid			insertTriggerOid,
 					updateTriggerOid;
+		bool		hasoverlaps;
 
 		tuple = SearchSysCache1(CONSTROID, ObjectIdGetDatum(parentConstrOid));
 		if (!HeapTupleIsValid(tuple))
@@ -10564,6 +10552,7 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 									   ShareRowExclusiveLock, NULL);
 
 		DeconstructFkConstraintRow(tuple, &numfks, conkey, confkey,
+								   conoverlaps, &hasoverlaps,
 								   conpfeqop, conppeqop, conffeqop,
 								   &numfkdelsetcols, confdelsetcols);
 		for (int i = 0; i < numfks; i++)
@@ -10637,11 +10626,13 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 		for (int i = 0; i < numfks; i++)
 		{
 			Form_pg_attribute att;
+			KeyElem	*keyelem;
 
 			att = TupleDescAttr(RelationGetDescr(partRel),
 								mapped_conkey[i] - 1);
-			fkconstraint->fk_attrs = lappend(fkconstraint->fk_attrs,
-											 makeString(NameStr(att->attname)));
+			keyelem = makeKeyElem(NameStr(att->attname),
+								  hasoverlaps && conoverlaps[i]);
+			fkconstraint->fk_attrs = lappend(fkconstraint->fk_attrs, keyelem);
 		}
 		if (ConstraintNameIsUsed(CONSTRAINT_RELATION,
 								 RelationGetRelid(partRel),
@@ -10683,7 +10674,7 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 								  NULL,
 								  NULL,
 								  NULL,
-								  NULL,	/* no overlaps (yet) */
+								  hasoverlaps ? conoverlaps : NULL,
 								  false,	/* islocal */
 								  1,	/* inhcount */
 								  false,	/* conNoInherit */
@@ -10712,6 +10703,7 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 								numfks,
 								confkey,
 								mapped_conkey,
+								hasoverlaps ? conoverlaps : NULL,
 								conpfeqop,
 								conppeqop,
 								conffeqop,
@@ -10720,8 +10712,7 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 								false,	/* no old check exists */
 								AccessExclusiveLock,
 								insertTriggerOid,
-								updateTriggerOid,
-								constrForm->contemporal);
+								updateTriggerOid);
 		table_close(pkrel, NoLock);
 	}
 
@@ -10736,7 +10727,7 @@ FindFKComparisonOperators(Constraint *fkconstraint,
 		bool *old_check_ok,
 		ListCell **old_pfeqop_item,
 		Oid pktype, Oid fktype, Oid opclass,
-		bool is_temporal, bool for_overlaps,
+		bool attroverlaps, bool hasoverlaps,
 		Oid *pfeqopOut, Oid *ppeqopOut, Oid *ffeqopOut)
 {
 	Oid			fktyped;
@@ -10761,7 +10752,7 @@ FindFKComparisonOperators(Constraint *fkconstraint,
 	opcintype = cla_tup->opcintype;
 	ReleaseSysCache(cla_ht);
 
-	if (is_temporal)
+	if (hasoverlaps)
 	{
 		if (amid != GIST_AM_OID)
 			elog(ERROR, "only GiST indexes are supported for temporal foreign keys");
@@ -10769,7 +10760,7 @@ FindFKComparisonOperators(Constraint *fkconstraint,
 		 * For the non-overlaps parts, we want either RTEqualStrategyNumber (without btree_gist)
 		 * or BTEqualStrategyNumber (with btree_gist). We'll try the latter first.
 		 */
-		eqstrategy = for_overlaps ? RTOverlapStrategyNumber : BTEqualStrategyNumber;
+		eqstrategy = attroverlaps ? RTOverlapStrategyNumber : BTEqualStrategyNumber;
 	}
 	else
 	{
@@ -10793,7 +10784,7 @@ FindFKComparisonOperators(Constraint *fkconstraint,
 								 eqstrategy);
 
 	/* Fall back to RTEqualStrategyNumber for temporal overlaps */
-	if (is_temporal && !for_overlaps && !OidIsValid(ppeqop))
+	if (hasoverlaps && !attroverlaps && !OidIsValid(ppeqop))
 	{
 		eqstrategy = RTEqualStrategyNumber;
 		ppeqop = get_opfamily_member(opfamily, opcintype, opcintype,
@@ -10854,19 +10845,10 @@ FindFKComparisonOperators(Constraint *fkconstraint,
 
 	if (!(OidIsValid(pfeqop) && OidIsValid(ffeqop)))
 	{
-		char *fkattr_name;
-		char *pkattr_name;
-
-		if (for_overlaps)
-		{
-			fkattr_name = strVal(fkconstraint->fk_period);
-			pkattr_name = strVal(fkconstraint->pk_period);
-		}
-		else
-		{
-			fkattr_name = strVal(list_nth(fkconstraint->fk_attrs, i));
-			pkattr_name = strVal(list_nth(fkconstraint->pk_attrs, i));
-		}
+		KeyElem *fkattr_elem = (KeyElem *) list_nth(fkconstraint->fk_attrs, i);
+		KeyElem *pkattr_elem = (KeyElem *) list_nth(fkconstraint->pk_attrs, i);
+		char *fkattr_name = fkattr_elem->column;
+		char *pkattr_name = pkattr_elem->column;
 
 		ereport(ERROR,
 				(errcode(ERRCODE_DATATYPE_MISMATCH),
@@ -10878,6 +10860,8 @@ FindFKComparisonOperators(Constraint *fkconstraint,
 						   pkattr_name,
 						   format_type_be(fktype),
 						   format_type_be(pktype))));
+
+		// TODO: Fail if their withoutOverlaps doesn't match.
 	}
 
 	if (*old_check_ok)
@@ -11711,6 +11695,7 @@ ATExecValidateConstraint(List **wqueue, Relation rel, char *constrName,
  * transformColumnNameList - transform list of column names
  *
  * Lookup each name and return its attnum and, optionally, type OID
+ * and whether it is used as a PERIOD.
  *
  * Note: the name of this function suggests that it's general-purpose,
  * but actually it's only used to look up names appearing in foreign-key
@@ -11719,7 +11704,7 @@ ATExecValidateConstraint(List **wqueue, Relation rel, char *constrName,
  */
 static int
 transformColumnNameList(Oid relId, List *colList,
-						int16 *attnums, Oid *atttypids)
+						int16 *attnums, Oid *atttypids, bool *overlaps)
 {
 	ListCell   *l;
 	int			attnum;
@@ -11727,7 +11712,8 @@ transformColumnNameList(Oid relId, List *colList,
 	attnum = 0;
 	foreach(l, colList)
 	{
-		char	   *attname = strVal(lfirst(l));
+		KeyElem	   *keyElem = lfirst_node(KeyElem, l);
+		char	   *attname = keyElem->column;
 		HeapTuple	atttuple;
 		Form_pg_attribute attform;
 
@@ -11750,6 +11736,8 @@ transformColumnNameList(Oid relId, List *colList,
 		attnums[attnum] = attform->attnum;
 		if (atttypids != NULL)
 			atttypids[attnum] = attform->atttypid;
+		if (overlaps != NULL)
+			overlaps[attnum] = keyElem->withoutOverlaps;
 		ReleaseSysCache(atttuple);
 		attnum++;
 	}
@@ -11760,24 +11748,24 @@ transformColumnNameList(Oid relId, List *colList,
 /*
  * transformFkeyGetPrimaryKey -
  *
- *	Look up the names, attnums, and types of the primary key attributes
+ *	Look up the keyElems, attnums, and types of the primary key attributes
  *	for the pkrel.  Also return the index OID and index opclasses of the
- *	index supporting the primary key.  If this is a temporal primary key,
- *	also set the WITHOUT OVERLAPS attribute name, attnum, and atttypid.
+ *	index supporting the primary key.
+ *
+ *	If any pk attributes use WITHOUT OVERLAPS, we set the KeyElem
+ *	withoutOverlaps attribute.  For convenience we also set the overlaps
+ *	array.
  *
  *	All parameters except pkrel are output parameters.  Also, the function
- *	return value is the number of attributes in the primary key,
- *	not including the WITHOUT OVERLAPS if any.
+ *	return value is the number of attributes in the primary key.
  *
  *	Used when the column list in the REFERENCES specification is omitted.
  */
 static int
 transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 						   List **attnamelist,
-						   Node **pk_period,
 						   int16 *attnums, Oid *atttypids,
-						   int16 *periodattnums, Oid *periodatttypids,
-						   Oid *opclasses)
+						   Oid *opclasses, bool *overlaps)
 {
 	List	   *indexoidlist;
 	ListCell   *indexoidscan;
@@ -11839,41 +11827,38 @@ transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 										   Anum_pg_index_indclass);
 	indclass = (oidvector *) DatumGetPointer(indclassDatum);
 
+	if (indexStruct->indhasoverlaps)
+		get_index_conoverlaps(*indexOid,
+							  indexStruct->indrelid,
+							  indexStruct->indnkeyatts,
+							  overlaps);
+	else
+		/*
+		 * overlaps should be 0 already when called from
+		 * ATAddForeignKeyConstraint, but it's safer not to assume
+		 */
+		memset(overlaps, 0, sizeof(bool) * INDEX_MAX_KEYS);
+
 	/*
 	 * Now build the list of PK attributes from the indkey definition (we
-	 * assume a primary key cannot have expressional elements, unless it
-	 * has a PERIOD)
+	 * assume a primary key cannot have expressional elements)
 	 */
 	*attnamelist = NIL;
 	for (i = 0; i < indexStruct->indnkeyatts; i++)
 	{
 		int			pkattno = indexStruct->indkey.values[i];
 
-		if (i == indexStruct->indnkeyatts - 1 && indexStruct->indisexclusion)
-		{
-			/* we have a range */
-			/* The caller will set attnums[i] */
-			periodattnums[0] = pkattno;
-			periodatttypids[0] = attnumTypeId(pkrel, pkattno);
-			opclasses[i] = indclass->values[i];
-
-			Assert(*pk_period == NULL);
-			*pk_period = (Node *) makeString(pstrdup(NameStr(*attnumAttName(pkrel, pkattno))));
-		}
-		else
-		{
-			attnums[i] = pkattno;
-			atttypids[i] = attnumTypeId(pkrel, pkattno);
-			opclasses[i] = indclass->values[i];
-			*attnamelist = lappend(*attnamelist,
-								  makeString(pstrdup(NameStr(*attnumAttName(pkrel, pkattno)))));
-		}
+		attnums[i] = pkattno;
+		atttypids[i] = attnumTypeId(pkrel, pkattno);
+		opclasses[i] = indclass->values[i];
+		*attnamelist = lappend(*attnamelist,
+							   makeKeyElem(pstrdup(NameStr(*attnumAttName(pkrel, pkattno))),
+										   indexStruct->indhasoverlaps && overlaps[i]));
 	}
 
 	ReleaseSysCache(indexTuple);
 
-	if (indexStruct->indisexclusion) return i - 1;
-	else return i;
+	return i;
 }
 
 /*
@@ -11888,8 +11873,7 @@ transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
  */
 static Oid
 transformFkeyCheckAttrs(Relation pkrel,
-						int numattrs, int16 *attnums,
-						bool is_temporal, int16 periodattnum,
+						int numattrs, int16 *attnums, bool hasoverlaps,
 						Oid *opclasses) /* output parameter */
 {
 	Oid			indexoid = InvalidOid;
@@ -11916,10 +11900,6 @@ transformFkeyCheckAttrs(Relation pkrel,
 						(errcode(ERRCODE_INVALID_FOREIGN_KEY),
 						 errmsg("foreign key referenced-columns list must not contain duplicates")));
 		}
-		if (is_temporal && attnums[i] == periodattnum)
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_FOREIGN_KEY),
-					 errmsg("foreign key referenced-columns list must not contain duplicates")));
 	}
 
 	/*
@@ -11946,11 +11926,10 @@ transformFkeyCheckAttrs(Relation pkrel,
 		 * partial index; forget it if there are any expressions, too.
 		 * Invalid indexes are out as well.
 		 */
-		if ((is_temporal
-			  ? (indexStruct->indnkeyatts == numattrs + 1 &&
-				 indexStruct->indisexclusion)
-			  : (indexStruct->indnkeyatts == numattrs &&
-				 indexStruct->indisunique)) &&
+		if (indexStruct->indnkeyatts == numattrs &&
+			(hasoverlaps
+			  ? indexStruct->indisexclusion
+			  : indexStruct->indisunique) &&
 			indexStruct->indisvalid &&
 			heap_attisnull(indexTuple, Anum_pg_index_indpred, NULL) &&
 			heap_attisnull(indexTuple, Anum_pg_index_indexprs, NULL))
@@ -11987,19 +11966,6 @@ transformFkeyCheckAttrs(Relation pkrel,
 				}
 				if (!found)
 					break;
-			}
-			if (found && is_temporal)
-			{
-				found = false;
-				for (j = 0; j < numattrs + 1; j++)
-				{
-					if (periodattnum == indexStruct->indkey.values[j])
-					{
-						opclasses[numattrs] = indclass->values[j];
-						found = true;
-						break;
-					}
-				}
 			}
 
 			/*
@@ -12111,7 +12077,7 @@ validateForeignKeyConstraint(char *conname,
 							 Relation pkrel,
 							 Oid pkindOid,
 							 Oid constraintOid,
-							 bool temporal)
+							 bool hasoverlaps)
 {
 	TupleTableSlot *slot;
 	TableScanDesc scan;
@@ -12137,13 +12103,17 @@ validateForeignKeyConstraint(char *conname,
 	trig.tginitdeferred = false;
 	/* we needn't fill in remaining fields */
 
+	// TODO: I think the temporal code here is out of date.
+	// Can RI_Initial_Check work?
+	// If not then we probably need to cal TRI_FKey_check_ins instead.....
+	// And why aren't we really using the overlaps parameter?
 	/*
 	 * See if we can do it with a single LEFT JOIN query.  A false result
 	 * indicates we must proceed with the fire-the-trigger method.
 	 * We can't do a LEFT JOIN for temporal FKs yet,
 	 * but we can once we support temporal left joins.
 	 */
-	if (!temporal && RI_Initial_Check(&trig, rel, pkrel))
+	if (!hasoverlaps && RI_Initial_Check(&trig, rel, pkrel))
 		return;
 
 	/*
@@ -12212,7 +12182,7 @@ CreateFKCheckTrigger(Oid myRelOid, Oid refRelOid, Constraint *fkconstraint,
 {
 	ObjectAddress trigAddress;
 	CreateTrigStmt *fk_trigger;
-	bool is_temporal = fkconstraint->fk_period;
+	bool has_overlaps = keyElemHasOverlaps(fkconstraint->fk_attrs);
 
 	/*
 	 * Note: for a self-referential FK (referencing and referenced tables are
@@ -12232,7 +12202,7 @@ CreateFKCheckTrigger(Oid myRelOid, Oid refRelOid, Constraint *fkconstraint,
 	/* Either ON INSERT or ON UPDATE */
 	if (on_insert)
 	{
-		if (is_temporal)
+		if (has_overlaps)
 			fk_trigger->funcname = SystemFuncName("TRI_FKey_check_ins");
 		else
 			fk_trigger->funcname = SystemFuncName("RI_FKey_check_ins");
@@ -12240,7 +12210,7 @@ CreateFKCheckTrigger(Oid myRelOid, Oid refRelOid, Constraint *fkconstraint,
 	}
 	else
 	{
-		if (is_temporal)
+		if (has_overlaps)
 			fk_trigger->funcname = SystemFuncName("TRI_FKey_check_upd");
 		else
 			fk_trigger->funcname = SystemFuncName("RI_FKey_check_upd");
@@ -12301,7 +12271,7 @@ createForeignKeyActionTriggers(Relation rel, Oid refRelOid, Constraint *fkconstr
 	fk_trigger->whenClause = NULL;
 	fk_trigger->transitionRels = NIL;
 	fk_trigger->constrrel = NULL;
-	if (fkconstraint->fk_period != NULL)
+	if (keyElemHasOverlaps(fkconstraint->fk_attrs))
 	{
 		/* Temporal foreign keys */
 		switch (fkconstraint->fk_del_action)
@@ -12392,7 +12362,7 @@ createForeignKeyActionTriggers(Relation rel, Oid refRelOid, Constraint *fkconstr
 	fk_trigger->whenClause = NULL;
 	fk_trigger->transitionRels = NIL;
 	fk_trigger->constrrel = NULL;
-	if (fkconstraint->fk_period != NULL)
+	if (keyElemHasOverlaps(fkconstraint->fk_attrs))
 	{
 		/* Temporal foreign keys */
 		switch (fkconstraint->fk_upd_action)

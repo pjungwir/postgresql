@@ -1363,6 +1363,192 @@ get_relation_idx_constraint_oid(Oid relationId, Oid indexId)
 }
 
 /*
+ * index_get_conexclop - Gets exclusion operators for the index
+ *
+ * Find the pg_constraint record matching this index.
+ * Fails if we can't find it.
+ * Populates a passed-in Oid array.
+ *
+ * If the index has indhasoverlaps, then this is a temporal
+ * PRIMARY KEY/UNIQUE constraint instead of an exclusion constraint,
+ * so we search for a constraint of one of those types instead.
+ */
+void
+get_index_conexclop(Oid indexrelid, Oid indrelid, int indnkeyatts, bool hasoverlaps, Oid *result)
+{
+	Relation	conrel;
+	ScanKeyData	skey[1];
+	SysScanDesc conscan;
+	HeapTuple	htup;
+	bool		found;
+	char	   *constraint_type;
+
+	/*
+	 * Search pg_constraint for the constraint associated with the index. To
+	 * make this not too painfully slow, we use the index on conrelid; that
+	 * will hold the parent relation's OID not the index's own OID.
+	 *
+	 * Note: if we wanted to rely on the constraint name matching the index's
+	 * name, we could just do a direct lookup using pg_constraint's unique
+	 * index.  For the moment it doesn't seem worth requiring that.
+	 */
+	ScanKeyInit(&skey[0],
+				Anum_pg_constraint_conrelid,
+				BTEqualStrategyNumber, F_OIDEQ,
+				ObjectIdGetDatum(indrelid));
+
+	conrel = table_open(ConstraintRelationId, AccessShareLock);
+	conscan = systable_beginscan(conrel,
+								 ConstraintRelidTypidNameIndexId, true,
+								 NULL, 1, skey);
+	found = false;
+	constraint_type = hasoverlaps ? "temporal" : "exclusion";
+
+	while (HeapTupleIsValid(htup = systable_getnext(conscan)))
+	{
+		Form_pg_constraint conform = (Form_pg_constraint) GETSTRUCT(htup);
+		Datum	val;
+		bool	isnull;
+		ArrayType *arr;
+		int nelem;
+
+		/* We want the exclusion constraint owning the index */
+		if (conform->conindid != indexrelid)
+			continue;
+
+		/*
+		 * If the index backs a temporal constraint, look for
+		 * PRIMARY KEY or UNIQUE entries, otherwise EXCLUDE.
+		 */
+		if (hasoverlaps
+				? (conform->contype != CONSTRAINT_PRIMARY &&
+					 conform->contype != CONSTRAINT_UNIQUE)
+				: conform->contype != CONSTRAINT_EXCLUSION)
+			continue;
+
+		/* There should be only one */
+		if (found)
+			elog(ERROR, "unexpected %s constraint record found for rel %s",
+				 constraint_type, get_rel_name(indexrelid));
+		found = true;
+
+		/* Extract the operator OIDS from conexclop */
+		val = fastgetattr(htup,
+						  Anum_pg_constraint_conexclop,
+						  conrel->rd_att, &isnull);
+		if (isnull)
+			elog(ERROR, "null conexclop for rel %s",
+				 get_rel_name(indexrelid));
+
+		arr = DatumGetArrayTypeP(val);	/* ensure not toasted */
+		nelem = ARR_DIMS(arr)[0];
+		if (ARR_NDIM(arr) != 1 ||
+			nelem != indnkeyatts ||
+			ARR_HASNULL(arr) ||
+			ARR_ELEMTYPE(arr) != OIDOID)
+			elog(ERROR, "conexclop is not a 1-D Oid array");
+
+		memcpy(result, ARR_DATA_PTR(arr), sizeof(Oid) * indnkeyatts);
+	}
+
+	systable_endscan(conscan);
+	table_close(conrel, AccessShareLock);
+
+	if (!found)
+		elog(ERROR, "%s constraint record missing for rel %s",
+			 constraint_type, get_rel_name(indexrelid));
+}
+
+/*
+ * index_get_conoverlaps - Gets overlaps mask for the index
+ *
+ * Find the pg_constraint record matching this index.
+ * Fails if we can't find it.
+ * Populates a passed-in bool array.
+ */
+void
+get_index_conoverlaps(Oid indexrelid, Oid indrelid, int indnkeyatts, bool *result)
+{
+	Relation	conrel;
+	ScanKeyData	skey[1];
+	SysScanDesc conscan;
+	HeapTuple	htup;
+	bool		found;
+
+	/*
+	 * Search pg_constraint for the constraint associated with the index. To
+	 * make this not too painfully slow, we use the index on conrelid; that
+	 * will hold the parent relation's OID not the index's own OID.
+	 *
+	 * Note: if we wanted to rely on the constraint name matching the index's
+	 * name, we could just do a direct lookup using pg_constraint's unique
+	 * index.  For the moment it doesn't seem worth requiring that.
+	 */
+	ScanKeyInit(&skey[0],
+				Anum_pg_constraint_conrelid,
+				BTEqualStrategyNumber, F_OIDEQ,
+				ObjectIdGetDatum(indrelid));
+
+	conrel = table_open(ConstraintRelationId, AccessShareLock);
+	conscan = systable_beginscan(conrel,
+								 ConstraintRelidTypidNameIndexId, true,
+								 NULL, 1, skey);
+	found = false;
+
+	while (HeapTupleIsValid(htup = systable_getnext(conscan)))
+	{
+		Form_pg_constraint conform = (Form_pg_constraint) GETSTRUCT(htup);
+		Datum	val;
+		bool	isnull;
+		ArrayType *arr;
+		int nelem;
+
+		/* We want the exclusion constraint owning the index */
+		if (conform->conindid != indexrelid)
+			continue;
+
+		/*
+		 * If the index backs a temporal constraint, look for
+		 * PRIMARY KEY or UNIQUE entries, otherwise EXCLUDE.
+		 */
+		if (conform->contype != CONSTRAINT_PRIMARY &&
+				conform->contype != CONSTRAINT_UNIQUE)
+			continue;
+
+		/* There should be only one */
+		if (found)
+			elog(ERROR, "unexpected temporal constraint record found for rel %s",
+				 get_rel_name(indexrelid));
+		found = true;
+
+		/* Extract the array from conoverlaps */
+		val = fastgetattr(htup,
+						  Anum_pg_constraint_conoverlaps,
+						  conrel->rd_att, &isnull);
+		if (isnull)
+			elog(ERROR, "null conoverlaps for rel %s",
+				 get_rel_name(indexrelid));
+
+		arr = DatumGetArrayTypeP(val);	/* ensure not toasted */
+		nelem = ARR_DIMS(arr)[0];
+		if (ARR_NDIM(arr) != 1 ||
+			nelem != indnkeyatts ||
+			ARR_HASNULL(arr) ||
+			ARR_ELEMTYPE(arr) != BOOLOID)
+			elog(ERROR, "conoverlaps is not a 1-D Bool array");
+
+		memcpy(result, ARR_DATA_PTR(arr), sizeof(bool) * indnkeyatts);
+	}
+
+	systable_endscan(conscan);
+	table_close(conrel, AccessShareLock);
+
+	if (!found)
+		elog(ERROR, "temporal constraint record missing for rel %s",
+			 get_rel_name(indexrelid));
+}
+
+/*
  * get_domain_constraint_oid
  *		Find a constraint on the specified domain with the specified name.
  *		Returns constraint's OID.
@@ -1515,6 +1701,7 @@ get_primary_key_attnos(Oid relid, bool deferrableOk, Oid *constraintOid)
 void
 DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
 						   AttrNumber *conkey, AttrNumber *confkey,
+						   bool *conoverlaps, bool *hasoverlaps,
 						   Oid *pf_eq_oprs, Oid *pp_eq_oprs, Oid *ff_eq_oprs,
 						   int *num_fk_del_set_cols, AttrNumber *fk_del_set_cols)
 {
@@ -1553,6 +1740,27 @@ DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
 	memcpy(confkey, ARR_DATA_PTR(arr), numkeys * sizeof(int16));
 	if ((Pointer) arr != DatumGetPointer(adatum))
 		pfree(arr);				/* free de-toasted copy, if any */
+
+	adatum = SysCacheGetAttr(CONSTROID, tuple,
+							 Anum_pg_constraint_conoverlaps, &isNull);
+	if (isNull)
+	{
+		*hasoverlaps = false;
+		memset(conoverlaps, 0, numkeys * sizeof(bool)); // TODO: not necessary...
+	}
+	else
+	{
+		*hasoverlaps = true;
+		arr = DatumGetArrayTypeP(adatum);	/* ensure not toasted */
+		if (ARR_NDIM(arr) != 1 ||
+			ARR_DIMS(arr)[0] != numkeys ||
+			ARR_HASNULL(arr) ||
+			ARR_ELEMTYPE(arr) != BOOLOID)
+			elog(ERROR, "conoverlaps is not a 1-D bool array");
+		memcpy(conoverlaps, ARR_DATA_PTR(arr), numkeys * sizeof(bool));
+		if ((Pointer) arr != DatumGetPointer(adatum))
+			pfree(arr);				/* free de-toasted copy, if any */
+	}
 
 	if (pf_eq_oprs)
 	{
