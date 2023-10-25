@@ -56,6 +56,8 @@ alter table pt alter column ds type timestamp;
 /* column/period namespace conflicts */
 alter table pt add column p integer;
 alter table pt rename column id to p;
+alter table pt add period for tableoid (ds, de);
+alter table pt add period for "........pg.dropped.4........" (ds, de);
 
 /* adding columns and the period at the same time */
 create table pt2 (id integer);
