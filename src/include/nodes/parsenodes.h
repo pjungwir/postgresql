@@ -782,6 +782,7 @@ typedef struct IndexElem
 	List	   *opclassopts;	/* opclass-specific options, or NIL */
 	SortByDir	ordering;		/* ASC/DESC/default */
 	SortByNulls nulls_ordering; /* FIRST/LAST/default */
+	bool		without_overlaps;	/* WITHOUT OVERLAPS qualifier */
 } IndexElem;
 
 /*
@@ -2641,8 +2642,10 @@ typedef struct Constraint
 	Oid			old_pktable_oid;	/* pg_constraint.confrelid of my former
 									 * self */
 
-	/* Fields used for temporal PRIMARY KEY and FOREIGN KEY constraints: */
+	/* Fields used for temporal PRIMARY KEY, UNIQUE, and FOREIGN KEY: */
 	Node	   *without_overlaps; /* String node naming range column */
+	int16		overlaps;		/* attnum of WITHOUT OVERLAPS (if PK/UQ)
+								 * or PERIOD (if FK) element */
 
 	/* Fields used for constraints that allow a NOT VALID specification */
 	bool		skip_validation;	/* skip validation of existing rows? */
@@ -3245,7 +3248,6 @@ typedef struct IndexStmt
 	bool		nulls_not_distinct; /* null treatment for UNIQUE constraints */
 	bool		primary;		/* is index a primary key? */
 	bool		isconstraint;	/* is it for a pkey/unique constraint? */
-	bool		istemporal;		/* is it for a temporal pkey? */
 	bool		deferrable;		/* is the constraint DEFERRABLE? */
 	bool		initdeferred;	/* is the constraint INITIALLY DEFERRED? */
 	bool		transformed;	/* true when transformIndexStmt is finished */

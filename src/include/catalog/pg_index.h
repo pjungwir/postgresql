@@ -37,6 +37,7 @@ CATALOG(pg_index,2610,IndexRelationId) BKI_SCHEMA_MACRO
 	bool		indnullsnotdistinct;	/* null treatment in unique index */
 	bool		indisprimary;	/* is this index for primary key? */
 	bool		indisexclusion; /* is this index for exclusion constraint? */
+	bool		indhasoverlaps;	/* is this index for WITHOUT OVERLAPS */
 	bool		indimmediate;	/* is uniqueness enforced immediately? */
 	bool		indisclustered; /* is this the index last clustered by? */
 	bool		indisvalid;		/* is this index valid for use by queries? */

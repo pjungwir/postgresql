@@ -1727,7 +1727,6 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 	index->unique = idxrec->indisunique;
 	index->nulls_not_distinct = idxrec->indnullsnotdistinct;
 	index->primary = idxrec->indisprimary;
-	index->istemporal = (idxrec->indisprimary || idxrec->indisunique) && idxrec->indisexclusion;
 	index->transformed = true;	/* don't need transformIndexStmt */
 	index->concurrent = false;
 	index->if_not_exists = false;
@@ -1777,8 +1776,9 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 				int			nElems;
 				int			i;
 
+				Assert(source_idx->rd_overlaps >= 0);
 				Assert(conrec->contype == CONSTRAINT_EXCLUSION ||
-						(index->istemporal &&
+						(AttributeNumberIsValid(source_idx->rd_overlaps) &&
 						 (conrec->contype == CONSTRAINT_PRIMARY || conrec->contype == CONSTRAINT_UNIQUE)));
 				/* Extract operator OIDs from the pg_constraint tuple */
 				datum = SysCacheGetAttrNotNull(CONSTROID, ht_constr,
@@ -1902,6 +1902,7 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 
 		iparam->ordering = SORTBY_DEFAULT;
 		iparam->nulls_ordering = SORTBY_NULLS_DEFAULT;
+		iparam->without_overlaps = (attnum == source_idx->rd_overlaps);
 
 		/* Adjust options if necessary */
 		if (source_idx->rd_indam->amcanorder)
@@ -2319,7 +2320,6 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 	}
 	index->nulls_not_distinct = constraint->nulls_not_distinct;
 	index->isconstraint = true;
-	index->istemporal = constraint->without_overlaps != NULL;
 	index->deferrable = constraint->deferrable;
 	index->initdeferred = constraint->initdeferred;
 
@@ -2735,6 +2735,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 			iparam->opclassopts = NIL;
 			iparam->ordering = SORTBY_DEFAULT;
 			iparam->nulls_ordering = SORTBY_NULLS_DEFAULT;
+			iparam->without_overlaps = true;
 			index->indexParams = lappend(index->indexParams, iparam);
 
 			index->accessMethod = "gist";

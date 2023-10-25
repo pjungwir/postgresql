@@ -2137,10 +2137,10 @@ StoreRelCheck(Relation rel, const char *ccname, Node *expr,
 							  NULL, /* not an exclusion constraint */
 							  expr, /* Tree form of check constraint */
 							  ccbin,	/* Binary form of check constraint */
+							  InvalidAttrNumber,	/* no WITHOUT OVERLAPS */
 							  is_local, /* conislocal */
 							  inhcount, /* coninhcount */
 							  is_no_inherit,	/* connoinherit */
-							  false,	/* contemporal */
 							  is_internal); /* internally constructed? */
 
 	pfree(ccbin);
@@ -2188,10 +2188,10 @@ StoreRelNotNull(Relation rel, const char *nnname, AttrNumber attnum,
 							  NULL, /* not an exclusion constraint */
 							  NULL,
 							  NULL,
+							  InvalidAttrNumber,	/* no WITHOUT OVERLAPS */
 							  is_local,
 							  inhcount,
 							  is_no_inherit,
-							  false,	/* contemporal */
 							  false);
 	return constrOid;
 }

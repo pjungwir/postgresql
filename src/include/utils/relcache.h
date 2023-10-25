@@ -71,6 +71,7 @@ extern Bitmapset *RelationGetIndexAttrBitmap(Relation relation,
 
 extern Bitmapset *RelationGetIdentityKeyBitmap(Relation relation);
 
+extern int16 RelationGetConstraintOverlaps(Relation indexRelation);
 extern void RelationGetExclusionInfo(Relation indexRelation,
 									 Oid **operators,
 									 Oid **procs,

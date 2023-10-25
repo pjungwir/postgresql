@@ -841,7 +841,7 @@ CreateTriggerFiringOn(CreateTrigStmt *stmt, const char *queryString,
 											  true, /* islocal */
 											  0,	/* inhcount */
 											  true, /* noinherit */
-											  false, /* contemporal */
+											  InvalidAttrNumber, /* conoverlaps */
 											  isInternal);	/* is_internal */
 	}
 

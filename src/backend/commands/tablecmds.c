@@ -208,7 +208,6 @@ typedef struct NewConstraint
 	Oid			refrelid;		/* PK rel, if FOREIGN */
 	Oid			refindid;		/* OID of PK's index, if FOREIGN */
 	Oid			conid;			/* OID of pg_constraint entry, if FOREIGN */
-	bool		contemporal;	/* Whether the new constraint is temporal */
 	Node	   *qual;			/* Check expr or CONSTR_FOREIGN Constraint */
 	ExprState  *qualstate;		/* Execution state for CHECK expr */
 } NewConstraint;
@@ -10004,7 +10003,7 @@ addFkRecurseReferenced(List **wqueue, Constraint *fkconstraint, Relation rel,
 									  conislocal,	/* islocal */
 									  coninhcount,	/* inhcount */
 									  connoinherit, /* conNoInherit */
-									  false,	/* conTemporal */
+									  InvalidAttrNumber,	/* conOverlaps */
 									  false);	/* is_internal */
 
 	ObjectAddressSet(address, ConstraintRelationId, constrOid);
@@ -10303,7 +10302,7 @@ addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint, Relation rel,
 									  false,
 									  1,
 									  false,
-									  false,	/* conTemporal */
+									  InvalidAttrNumber,	/* conOverlaps */
 									  false);
 
 			/*
@@ -10809,7 +10808,7 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 								  false,	/* islocal */
 								  1,	/* inhcount */
 								  false,	/* conNoInherit */
-								  false,	/* conTemporal */
+								  InvalidAttrNumber,	/* conOverlaps */
 								  true);
 
 		/* Set up partition dependencies for the new constraint */
@@ -11484,7 +11483,6 @@ ATExecValidateConstraint(List **wqueue, Relation rel, char *constrName,
 			newcon->refrelid = con->confrelid;
 			newcon->refindid = con->conindid;
 			newcon->conid = con->oid;
-			newcon->contemporal = con->contemporal;
 			newcon->qual = (Node *) fkconstraint;
 
 			/* Find or create work queue entry for this table */
@@ -14198,8 +14196,7 @@ TryReuseIndex(Oid oldId, IndexStmt *stmt)
 	if (CheckIndexCompatible(oldId,
 							 stmt->accessMethod,
 							 stmt->indexParams,
-							 stmt->excludeOpNames,
-							 stmt->istemporal))
+							 stmt->excludeOpNames))
 	{
 		Relation	irel = index_open(oldId, NoLock);
 
@@ -18802,6 +18799,8 @@ AttachPartitionEnsureIndexes(List **wqueue, Relation rel, Relation attachrel)
 		AttrMap    *attmap;
 		bool		found = false;
 		Oid			constraintOid;
+
+		// TODO: looks like index_open isn't enough to load rd_overlaps, but we need it.
 
 		/*
 		 * Ignore indexes in the partitioned table other than partitioned

@@ -75,10 +75,10 @@ CreateConstraintEntry(const char *constraintName,
 					  const Oid *exclOp,
 					  Node *conExpr,
 					  const char *conBin,
+					  int16 conOverlaps,
 					  bool conIsLocal,
 					  int conInhCount,
 					  bool conNoInherit,
-					  bool conTemporal,
 					  bool is_internal)
 {
 	Relation	conDesc;
@@ -194,7 +194,7 @@ CreateConstraintEntry(const char *constraintName,
 	values[Anum_pg_constraint_conislocal - 1] = BoolGetDatum(conIsLocal);
 	values[Anum_pg_constraint_coninhcount - 1] = Int16GetDatum(conInhCount);
 	values[Anum_pg_constraint_connoinherit - 1] = BoolGetDatum(conNoInherit);
-	values[Anum_pg_constraint_contemporal - 1] = BoolGetDatum(conTemporal);
+	values[Anum_pg_constraint_conoverlaps - 1] = Int16GetDatum(conOverlaps);
 
 	if (conkeyArray)
 		values[Anum_pg_constraint_conkey - 1] = PointerGetDatum(conkeyArray);

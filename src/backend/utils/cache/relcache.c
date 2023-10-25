@@ -1561,13 +1561,15 @@ RelationInitIndexAccessInfo(Relation relation)
 	(void) RelationGetIndexAttOptions(relation, false);
 
 	/*
-	 * expressions, predicate, exclusion caches will be filled later
+	 * expressions, predicate, exclusion, and WITHOUT OVERLAPS
+	 * caches will be filled later
 	 */
 	relation->rd_indexprs = NIL;
 	relation->rd_indpred = NIL;
 	relation->rd_exclops = NULL;
 	relation->rd_exclprocs = NULL;
 	relation->rd_exclstrats = NULL;
+	relation->rd_overlaps = -1;
 	relation->rd_amcache = NULL;
 }
 
@@ -2299,6 +2301,7 @@ RelationReloadIndexInfo(Relation relation)
 		relation->rd_index->indnullsnotdistinct = index->indnullsnotdistinct;
 		relation->rd_index->indisprimary = index->indisprimary;
 		relation->rd_index->indisexclusion = index->indisexclusion;
+		relation->rd_index->indhasoverlaps = index->indhasoverlaps;
 		relation->rd_index->indimmediate = index->indimmediate;
 		relation->rd_index->indisclustered = index->indisclustered;
 		relation->rd_index->indisvalid = index->indisvalid;
@@ -5533,6 +5536,89 @@ RelationGetIdentityKeyBitmap(Relation relation)
 }
 
 /*
+ * RelationGetConstraintOverlaps -- get WITHOUT OVERLAPS for the index
+ *
+ * Returns InvalidAttrNumber if this is just a regular PRIMARY KEY/UNIQUE
+ * index, not a temporal one.
+ */
+int16
+RelationGetConstraintOverlaps(Relation indexRelation)
+{
+	Relation	conrel;
+	ScanKeyData	skey[1];
+	SysScanDesc	conscan;
+	HeapTuple	htup;
+	bool		found;
+	int16		overlaps;
+
+	/* Quick exit if we have the data cached already */
+	if (indexRelation->rd_overlaps >= 0)
+		return indexRelation->rd_overlaps;
+
+	/* Search pg_constraint for the constraint associated with the index. To
+	 * make this not too painfully slow, we use the index on conrelid; that
+	 * will hold the parent relation's OID not the index's own OID.
+	 *
+	 * Note: if we wanted to rely on the constraint name matching the index's
+	 * name, we could just do a direct lookup using pg_constraint's unique
+	 * index.  For the moment it doesn't seem worth requiring that.
+	 */
+	ScanKeyInit(&skey[0],
+				Anum_pg_constraint_conrelid,
+				BTEqualStrategyNumber, F_OIDEQ,
+				ObjectIdGetDatum(indexRelation->rd_index->indrelid));
+
+	conrel = table_open(ConstraintRelationId, AccessShareLock);
+	conscan = systable_beginscan(conrel,
+								 ConstraintRelidTypidNameIndexId, true,
+								 NULL, 1, skey);
+	found = false;
+
+	while (HeapTupleIsValid(htup = systable_getnext(conscan)))
+	{
+		Form_pg_constraint conform = (Form_pg_constraint) GETSTRUCT(htup);
+		Datum		val;
+		bool		isnull;
+
+		/* We want the constraint owning the index */
+		if (conform->conindid != RelationGetRelid(indexRelation))
+			continue;
+
+		/* Look for PRIMARY KEY or UNIQUE entries */
+		if (conform->contype != CONSTRAINT_PRIMARY &&
+			conform->contype != CONSTRAINT_UNIQUE)
+			continue;
+
+		/* There should be only one */
+		if (found)
+			elog(ERROR, "unexpected temporal constraint record found for rel %s",
+				 RelationGetRelationName(indexRelation));
+		found = true;
+
+		/* Extract the overlaps from conoverlaps */
+		val = fastgetattr(htup, Anum_pg_constraint_conoverlaps,
+						  conrel->rd_att, &isnull);
+		if (isnull)
+			elog(ERROR, "null conoverlaps for rel %s",
+				 RelationGetRelationName(indexRelation));
+
+		overlaps = DatumGetInt16(val);
+	}
+
+	systable_endscan(conscan);
+	table_close(conrel, AccessShareLock);
+
+	if (!found)
+		elog(ERROR, "temporal constraint record missing for rel %s",
+			 RelationGetRelationName(indexRelation));
+
+	/* Save a copy of the results in the relcache entry */
+	indexRelation->rd_overlaps = overlaps;
+
+	return overlaps;
+}
+
+/*
  * RelationGetExclusionInfo -- get info about index's exclusion constraint
  *
  * This should be called only for an index that is known to have an
@@ -5553,8 +5639,10 @@ RelationGetExclusionInfo(Relation indexRelation,
 	Oid		   *funcs;
 	uint16	   *strats;
 	Relation	conrel;
-	SysScanDesc conscan;
-	ScanKeyData skey[1];
+	ScanKeyData	skey[1];
+	SysScanDesc	conscan;
+	bool		is_exclusion;
+	char	   *constraint_type;
 	HeapTuple	htup;
 	bool		found;
 	MemoryContext oldcxt;
@@ -5576,8 +5664,7 @@ RelationGetExclusionInfo(Relation indexRelation,
 		return;
 	}
 
-	/*
-	 * Search pg_constraint for the constraint associated with the index. To
+	/* Search pg_constraint for the constraint associated with the index. To
 	 * make this not too painfully slow, we use the index on conrelid; that
 	 * will hold the parent relation's OID not the index's own OID.
 	 *
@@ -5591,9 +5678,15 @@ RelationGetExclusionInfo(Relation indexRelation,
 				ObjectIdGetDatum(indexRelation->rd_index->indrelid));
 
 	conrel = table_open(ConstraintRelationId, AccessShareLock);
-	conscan = systable_beginscan(conrel, ConstraintRelidTypidNameIndexId, true,
+	conscan = systable_beginscan(conrel,
+								 ConstraintRelidTypidNameIndexId, true,
 								 NULL, 1, skey);
 	found = false;
+
+	/* overlaps must be loaded by now */
+	Assert(indexRelation->rd_overlaps >= 0);
+	is_exclusion = !AttributeNumberIsValid(indexRelation->rd_overlaps);
+	constraint_type = is_exclusion ? "exclusion" : "temporal";
 
 	while (HeapTupleIsValid(htup = systable_getnext(conscan)))
 	{
@@ -5603,17 +5696,24 @@ RelationGetExclusionInfo(Relation indexRelation,
 		ArrayType  *arr;
 		int			nelem;
 
-		/* We want the exclusion constraint owning the index */
-		if ((conform->contype != CONSTRAINT_EXCLUSION &&
-					!(conform->contemporal && (
-							conform->contype == CONSTRAINT_PRIMARY
-							|| conform->contype == CONSTRAINT_UNIQUE))) ||
-			conform->conindid != RelationGetRelid(indexRelation))
+		/* We want the constraint owning the index */
+		if (conform->conindid != RelationGetRelid(indexRelation))
+			continue;
+
+		/*
+		 * If the index backs a temporal constraint, look for
+		 * PRIMARY KEY or UNIQUE entries, otherwise EXCLUDE.
+		 */
+		if (is_exclusion
+				? conform->contype != CONSTRAINT_EXCLUSION
+				: (conform->contype != CONSTRAINT_PRIMARY &&
+				   conform->contype != CONSTRAINT_UNIQUE))
 			continue;
 
 		/* There should be only one */
 		if (found)
-			elog(ERROR, "unexpected exclusion constraint record found for rel %s",
+			elog(ERROR, "unexpected %s constraint record found for rel %s",
+				 constraint_type,
 				 RelationGetRelationName(indexRelation));
 		found = true;
 
@@ -5640,7 +5740,8 @@ RelationGetExclusionInfo(Relation indexRelation,
 	table_close(conrel, AccessShareLock);
 
 	if (!found)
-		elog(ERROR, "exclusion constraint record missing for rel %s",
+		elog(ERROR, "%s constraint record missing for rel %s",
+			 constraint_type,
 			 RelationGetRelationName(indexRelation));
 
 	/* We need the func OIDs and strategy numbers too */
@@ -6335,7 +6436,7 @@ load_relcache_init_file(bool shared)
 		 * needed by RelationCacheInitializePhase3.  This is not expected to
 		 * be a big performance hit since few system catalogs have such. Ditto
 		 * for RLS policy data, partition info, index expressions, predicates,
-		 * exclusion info, and FDW info.
+		 * exclusion info, WITHOUT OVERLAPS, and FDW info.
 		 */
 		rel->rd_rules = NULL;
 		rel->rd_rulescxt = NULL;
@@ -6356,6 +6457,7 @@ load_relcache_init_file(bool shared)
 		rel->rd_exclops = NULL;
 		rel->rd_exclprocs = NULL;
 		rel->rd_exclstrats = NULL;
+		rel->rd_overlaps = -1;
 		rel->rd_fdwroutine = NULL;
 
 		/*

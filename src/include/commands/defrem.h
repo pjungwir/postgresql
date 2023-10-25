@@ -41,11 +41,11 @@ extern char *makeObjectName(const char *name1, const char *name2,
 extern char *ChooseRelationName(const char *name1, const char *name2,
 								const char *label, Oid namespaceid,
 								bool isconstraint);
+extern bool IndexHasWithoutOverlaps(const List *indexElems);
 extern bool CheckIndexCompatible(Oid oldId,
 								 const char *accessMethodName,
 								 const List *attributeList,
-								 const List *exclusionOpNames,
-								 bool istemporal);
+								 const List *exclusionOpNames);
 extern Oid	GetDefaultOpClass(Oid type_id, Oid am_id);
 extern Oid	ResolveOpClass(const List *opclass, Oid attrType,
 						   const char *accessMethodName, Oid accessMethodId);

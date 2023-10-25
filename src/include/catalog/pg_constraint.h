@@ -108,10 +108,11 @@ CATALOG(pg_constraint,2606,ConstraintRelationId)
 	bool		connoinherit;
 
 	/*
-	 * For primary and foreign keys, signifies the last column is a range
-	 * and should use overlaps instead of equals.
+	 * For PRIMARY KEY, UNIQUE, or FOREIGN KEY constraints,
+	 * gives the attnum of the WITHOUT OVERLAPS or PERIOD element,
+	 * or zero if there is none.
 	 */
-	bool		contemporal;
+	int16		conoverlaps;
 
 #ifdef CATALOG_VARLEN			/* variable-length fields start here */
 
@@ -239,10 +240,10 @@ extern Oid	CreateConstraintEntry(const char *constraintName,
 								  const Oid *exclOp,
 								  Node *conExpr,
 								  const char *conBin,
+								  int16 conOverlaps,
 								  bool conIsLocal,
 								  int conInhCount,
 								  bool conNoInherit,
-								  bool conTemporal,
 								  bool is_internal);
 
 extern bool ConstraintNameIsUsed(ConstraintCategory conCat, Oid objId,
