@@ -77,6 +77,10 @@ alter table pt add column p integer;
 ERROR:  column name "p" conflicts with a period name
 alter table pt rename column id to p;
 ERROR:  column name "p" conflicts with a period name
+alter table pt add period for tableoid (ds, de);
+ERROR:  period name "tableoid" conflicts with a system column name
+alter table pt add period for "........pg.dropped.4........" (ds, de);
+ERROR:  period name "........pg.dropped.4........" conflicts with a column name
 /* adding columns and the period at the same time */
 create table pt2 (id integer);
 alter table pt2 add column ds date, add column de date, add period for p (ds, de);
