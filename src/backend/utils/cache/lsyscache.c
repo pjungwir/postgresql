@@ -2247,6 +2247,7 @@ get_typname_and_namespace(Oid typid, char **typname, char **typnamespace)
 		*typname = pstrdup(NameStr(typtup->typname));
 		*typnamespace = get_namespace_name(typtup->typnamespace);
 		ReleaseSysCache(tp);
+		/* *typnamespace is NULL if it wasn't found: */
 		return *typnamespace;
 	}
 	else
