@@ -7995,8 +7995,6 @@ check_for_period_name_collision(Relation rel, const char *pername,
 	/*
 	 * this test is deliberately not attisdropped-aware, since if one tries to
 	 * add a column matching a dropped column name, it's gonna fail anyway.
-	 *
-	 * XXX: Does this hold for periods?
 	 */
 	attTuple = SearchSysCache2(ATTNAME,
 							   ObjectIdGetDatum(RelationGetRelid(rel)),
