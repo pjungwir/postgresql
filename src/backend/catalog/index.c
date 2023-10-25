@@ -1292,7 +1292,6 @@ index_concurrently_create_copy(Relation heapRelation, Oid oldIndexId,
 				colOptionDatum,
 				reloptionsDatum;
 	Datum	   *opclassOptions;
-	Oid			periodid;
 	oidvector  *indclass;
 	int2vector *indcoloptions;
 	bool		isnull;
