@@ -162,6 +162,17 @@ ALTER TABLE temporal3
 	UNIQUE USING INDEX idx_temporal3_uq;
 DROP TABLE temporal3;
 
+-- UNIQUE with USING [UNIQUE] INDEX (possible but not a temporal constraint):
+CREATE TABLE temporal3 (
+	id int4range,
+	valid_at tsrange
+);
+CREATE UNIQUE INDEX idx_temporal3_uq ON temporal3 (id, valid_at);
+ALTER TABLE temporal3
+	ADD CONSTRAINT temporal3_uq
+	UNIQUE USING INDEX idx_temporal3_uq;
+DROP TABLE temporal3;
+
 -- Add range column and the PK at the same time
 CREATE TABLE temporal3 (
 	id int4range
