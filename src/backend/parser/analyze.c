@@ -1305,9 +1305,6 @@ transformForPortionOfClause(ParseState *pstate,
 						RelationGetRelationName(targetrel)),
 				 parser_errposition(pstate, forPortionOf->range_name_location)));
 	attr = TupleDescAttr(targetrel->rd_att, range_attno - 1);
-	// TODO: check attr->attisdropped (?),
-	// and figure out concurrency issues with that in general.
-	// It should work the same as updating any other column.
 
 	/* Make sure it's a range column */
 	if (!type_is_range(attr->atttypid))
