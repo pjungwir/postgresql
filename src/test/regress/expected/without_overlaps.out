@@ -62,6 +62,7 @@ SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'te
 (1 row)
 
 -- PK with two columns plus a range:
+-- We don't drop this table because tests below also need multiple scalar columns.
 CREATE TABLE temporal_rng2 (
 	id1 int4range,
 	id2 int4range,
@@ -90,72 +91,69 @@ SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'te
  CREATE UNIQUE INDEX temporal_rng2_pk ON temporal_rng2 USING gist (id1, id2, valid_at)
 (1 row)
 
-DROP TABLE temporal_rng2;
 -- PK with a custom range type:
 CREATE TYPE textrange2 AS range (subtype=text, collation="C");
-CREATE TABLE temporal_rng2 (
+CREATE TABLE temporal_rng3 (
 	id int4range,
 	valid_at textrange2,
-	CONSTRAINT temporal_rng2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+	CONSTRAINT temporal_rng3_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
-ALTER TABLE temporal_rng2 DROP CONSTRAINT temporal_rng2_pk;
-DROP TABLE temporal_rng2;
+ALTER TABLE temporal_rng3 DROP CONSTRAINT temporal_rng3_pk;
+DROP TABLE temporal_rng3;
 DROP TYPE textrange2;
 -- UNIQUE with no columns just WITHOUT OVERLAPS:
-CREATE TABLE temporal_rng2 (
+CREATE TABLE temporal_rng3 (
 	valid_at tsrange,
-	CONSTRAINT temporal_rng2_uq UNIQUE (valid_at WITHOUT OVERLAPS)
+	CONSTRAINT temporal_rng3_uq UNIQUE (valid_at WITHOUT OVERLAPS)
 );
 ERROR:  syntax error at or near "WITHOUT"
-LINE 3:  CONSTRAINT temporal_rng2_uq UNIQUE (valid_at WITHOUT OVERLA...
+LINE 3:  CONSTRAINT temporal_rng3_uq UNIQUE (valid_at WITHOUT OVERLA...
                                                       ^
 -- UNIQUE with a range column/PERIOD that isn't there:
-CREATE TABLE temporal_rng2 (
+CREATE TABLE temporal_rng3 (
 	id INTEGER,
-	CONSTRAINT temporal_rng2_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
+	CONSTRAINT temporal_rng3_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
 );
 ERROR:  column "valid_at" named in key does not exist
-LINE 3:  CONSTRAINT temporal_rng2_uq UNIQUE (id, valid_at WITHOUT OV...
+LINE 3:  CONSTRAINT temporal_rng3_uq UNIQUE (id, valid_at WITHOUT OV...
          ^
 -- UNIQUE with a non-range column:
-CREATE TABLE temporal_rng2 (
+CREATE TABLE temporal_rng3 (
 	id INTEGER,
 	valid_at TEXT,
-	CONSTRAINT temporal_rng2_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
+	CONSTRAINT temporal_rng3_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
 );
 ERROR:  column "valid_at" in WITHOUT OVERLAPS is not a range type
-LINE 4:  CONSTRAINT temporal_rng2_uq UNIQUE (id, valid_at WITHOUT OV...
+LINE 4:  CONSTRAINT temporal_rng3_uq UNIQUE (id, valid_at WITHOUT OV...
          ^
 -- UNIQUE with one column plus a range:
-CREATE TABLE temporal_rng2 (
-	-- Since we can't depend on having btree_gist here,
-	-- use an int4range instead of an int.
-	-- (The rangetypes regression test uses the same trick.)
+CREATE TABLE temporal_rng3 (
 	id int4range,
 	valid_at tsrange,
-	CONSTRAINT temporal_rng2_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
+	CONSTRAINT temporal_rng3_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
 );
-\d temporal_rng2
-             Table "public.temporal_rng2"
+\d temporal_rng3
+             Table "public.temporal_rng3"
   Column  |   Type    | Collation | Nullable | Default 
 ----------+-----------+-----------+----------+---------
  id       | int4range |           |          | 
  valid_at | tsrange   |           |          | 
 Indexes:
-    "temporal_rng2_uq" UNIQUE (id, valid_at WITHOUT OVERLAPS)
+    "temporal_rng3_uq" UNIQUE (id, valid_at WITHOUT OVERLAPS)
 
-SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rng2_uq';
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rng3_uq';
           pg_get_constraintdef          
 ----------------------------------------
  UNIQUE (id, valid_at WITHOUT OVERLAPS)
 (1 row)
 
-SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng2_uq';
+SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng3_uq';
                                  pg_get_indexdef                                 
 ---------------------------------------------------------------------------------
- CREATE UNIQUE INDEX temporal_rng2_uq ON temporal_rng2 USING gist (id, valid_at)
+ CREATE UNIQUE INDEX temporal_rng3_uq ON temporal_rng3 USING gist (id, valid_at)
 (1 row)
 
+DROP TABLE temporal_rng3;
 -- UNIQUE with two columns plus a range:
 CREATE TABLE temporal_rng3 (
 	id1 int4range,
