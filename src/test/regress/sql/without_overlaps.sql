@@ -357,6 +357,19 @@ CREATE TABLE temporal_fk_rng2rng (
 		REFERENCES temporal_rng (id, PERIOD id)
 );
 
+-- Two scalar columns
+CREATE TABLE temporal_fk2_rng2rng (
+	id int4range,
+	valid_at tsrange,
+	parent_id1 int4range,
+	parent_id2 int4range,
+	CONSTRAINT temporal_fk2_rng2rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk2_rng2rng_fk FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
+		REFERENCES temporal_rng2 (id1, id2, PERIOD valid_at)
+);
+\d temporal_fk2_rng2rng
+DROP TABLE temporal_fk2_rng2rng;
+
 --
 -- test ALTER TABLE ADD CONSTRAINT
 --
@@ -371,6 +384,19 @@ ALTER TABLE temporal_fk_rng2rng
 	ADD CONSTRAINT temporal_fk_rng2rng_fk
 	FOREIGN KEY (parent_id, PERIOD valid_at)
 	REFERENCES temporal_rng (id, PERIOD valid_at);
+-- Two scalar columns:
+CREATE TABLE temporal_fk2_rng2rng (
+	id int4range,
+	valid_at tsrange,
+	parent_id1 int4range,
+	parent_id2 int4range,
+	CONSTRAINT temporal_fk2_rng2rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+ALTER TABLE temporal_fk2_rng2rng
+	ADD CONSTRAINT temporal_fk2_rng2rng_fk
+	FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
+	REFERENCES temporal_rng2 (id1, id2, PERIOD valid_at);
+\d temporal_fk2_rng2rng
 
 -- with inferred PK on the referenced table, and wrong column type:
 ALTER TABLE temporal_fk_rng2rng
