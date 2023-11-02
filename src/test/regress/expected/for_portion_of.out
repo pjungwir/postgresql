@@ -74,6 +74,73 @@ SELECT * FROM for_portion_of_test;
  [1,2) | ["Mon Jan 15 00:00:00 2018","Sat Jan 20 00:00:00 2018") | ["Mon Jan 15 00:00:00 2018","Sat Jan 20 00:00:00 2018") | bar
 (4 rows)
 
+-- Test with NULLs in the scalar/range key columns.
+-- This won't happen if there is a PRIMARY KEY or UNIQUE constraint
+-- but FOR PORTION OF shouldn't require that.
+DROP TABLE for_portion_of_test;
+CREATE UNLOGGED TABLE for_portion_of_test (
+  id int4range,
+  valid_at tsrange,
+  name text
+);
+INSERT INTO for_portion_of_test VALUES
+  ('[1,1]', NULL, '1 null'),
+  ('[1,1]', '(,)', '1 unbounded'),
+  ('[1,1]', 'empty', '1 empty'),
+  (NULL, NULL, NULL),
+  (NULL, tsrange('2018-01-01', '2019-01-01'), 'null key');
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM NULL TO NULL
+  SET name = 'NULL to NULL';
+SELECT * FROM for_portion_of_test;
+  id   |                        valid_at                         |     name     
+-------+---------------------------------------------------------+--------------
+ [1,2) |                                                         | 1 null
+ [1,2) | empty                                                   | 1 empty
+       |                                                         | 
+ [1,2) | (,)                                                     | NULL to NULL
+       | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | NULL to NULL
+(5 rows)
+
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM NULL TO UNBOUNDED
+  SET name = 'NULL to UNBOUNDED';
+SELECT * FROM for_portion_of_test;
+  id   |                        valid_at                         |       name        
+-------+---------------------------------------------------------+-------------------
+ [1,2) |                                                         | 1 null
+ [1,2) | empty                                                   | 1 empty
+       |                                                         | 
+ [1,2) | (,)                                                     | NULL to UNBOUNDED
+       | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | NULL to UNBOUNDED
+(5 rows)
+
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM UNBOUNDED TO NULL
+  SET name = 'UNBOUNDED to NULL';
+SELECT * FROM for_portion_of_test;
+  id   |                        valid_at                         |       name        
+-------+---------------------------------------------------------+-------------------
+ [1,2) |                                                         | 1 null
+ [1,2) | empty                                                   | 1 empty
+       |                                                         | 
+ [1,2) | (,)                                                     | UNBOUNDED to NULL
+       | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | UNBOUNDED to NULL
+(5 rows)
+
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM UNBOUNDED TO UNBOUNDED
+  SET name = 'UNBOUNDED to UNBOUNDED';
+SELECT * FROM for_portion_of_test;
+  id   |                        valid_at                         |          name          
+-------+---------------------------------------------------------+------------------------
+ [1,2) |                                                         | 1 null
+ [1,2) | empty                                                   | 1 empty
+       |                                                         | 
+ [1,2) | (,)                                                     | UNBOUNDED to UNBOUNDED
+       | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | UNBOUNDED to UNBOUNDED
+(5 rows)
+
 DROP TABLE for_portion_of_test;
 CREATE TABLE for_portion_of_test (
   id int4range NOT NULL,
