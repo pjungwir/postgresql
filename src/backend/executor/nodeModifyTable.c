@@ -1251,6 +1251,8 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	TupleTableSlot *oldtupleSlot = fpoState->fp_Existing;
 	TupleTableSlot *leftoverTuple1 = fpoState->fp_Leftover1;
 	TupleTableSlot *leftoverTuple2 = fpoState->fp_Leftover2;
+	HeapTuple oldtuple = NULL;
+	bool shouldFree = false;
 
 	/*
 	 * Get the range of the old pre-UPDATE/DELETE tuple,
@@ -1306,9 +1308,7 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 
 	if (!RangeIsEmpty(leftoverRangeType1))
 	{
-		// TODO: anything we need to clear here?
-		// Are we in the row context?
-		HeapTuple oldtuple = ExecFetchSlotHeapTuple(oldtupleSlot, false, NULL);
+		oldtuple = ExecFetchSlotHeapTuple(oldtupleSlot, false, &shouldFree);
 		ExecForceStoreHeapTuple(oldtuple, leftoverTuple1, false);
 
 		set_leftover_tuple_bounds(leftoverTuple1, forPortionOf, typcache, leftoverRangeType1);
@@ -1327,7 +1327,8 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 
 	if (!RangeIsEmpty(leftoverRangeType2))
 	{
-		HeapTuple oldtuple = ExecFetchSlotHeapTuple(oldtupleSlot, false, NULL);
+		if (!oldtuple)
+			oldtuple = ExecFetchSlotHeapTuple(oldtupleSlot, false, &shouldFree);
 		ExecForceStoreHeapTuple(oldtuple, leftoverTuple2, false);
 
 		set_leftover_tuple_bounds(leftoverTuple2, forPortionOf, typcache, leftoverRangeType2);
@@ -1336,6 +1337,9 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 		// TODO: Need to save context->mtstate->mt_transition_capture? (See comment on ExecInsert)
 		ExecInsert(context, resultRelInfo, leftoverTuple2, node->canSetTag, NULL, NULL);
 	}
+
+	if (shouldFree)
+		heap_freetuple(oldtuple);
 }
 
 /* ----------------------------------------------------------------
