@@ -19,7 +19,7 @@ CREATE TABLE temporal_rng (
 	id INTEGER,
 	CONSTRAINT temporal_rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
-ERROR:  range or PERIOD "valid_at" does not exist
+ERROR:  column "valid_at" named in key does not exist
 LINE 3:  CONSTRAINT temporal_rng_pk PRIMARY KEY (id, valid_at WITHOU...
          ^
 -- PK with a non-range column:
@@ -28,7 +28,7 @@ CREATE TABLE temporal_rng (
 	valid_at TEXT,
 	CONSTRAINT temporal_rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
-ERROR:  column "valid_at" is not a range type
+ERROR:  column "valid_at" in WITHOUT OVERLAPS is not a range type
 LINE 4:  CONSTRAINT temporal_rng_pk PRIMARY KEY (id, valid_at WITHOU...
          ^
 -- PK with one column plus a range:
@@ -114,7 +114,7 @@ CREATE TABLE temporal_rng2 (
 	id INTEGER,
 	CONSTRAINT temporal_rng2_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
 );
-ERROR:  range or PERIOD "valid_at" does not exist
+ERROR:  column "valid_at" named in key does not exist
 LINE 3:  CONSTRAINT temporal_rng2_uq UNIQUE (id, valid_at WITHOUT OV...
          ^
 -- UNIQUE with a non-range column:
@@ -123,7 +123,7 @@ CREATE TABLE temporal_rng2 (
 	valid_at TEXT,
 	CONSTRAINT temporal_rng2_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
 );
-ERROR:  column "valid_at" is not a range type
+ERROR:  column "valid_at" in WITHOUT OVERLAPS is not a range type
 LINE 4:  CONSTRAINT temporal_rng2_uq UNIQUE (id, valid_at WITHOUT OV...
          ^
 -- UNIQUE with one column plus a range:
