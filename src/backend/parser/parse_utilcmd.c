@@ -124,8 +124,7 @@ static List *get_opclass(Oid opclass, Oid actual_datatype);
 static void transformIndexConstraints(CreateStmtContext *cxt);
 static IndexStmt *transformIndexConstraint(Constraint *constraint,
 										   CreateStmtContext *cxt);
-static bool findNewOrOldColumn(CreateStmtContext *cxt, char *colname, char **typname,
-							   Oid *typid);
+static void validateWithoutOverlaps(CreateStmtContext *cxt, char *colname, int location);
 static void transformExtendedStatistics(CreateStmtContext *cxt);
 static void transformFKConstraints(CreateStmtContext *cxt,
 								   bool skipValidation,
@@ -2689,36 +2688,19 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 		 * Anything in without_overlaps should be included,
 		 * but with the overlaps operator (&&) instead of equality.
 		 */
-		if (constraint->without_overlaps != NULL) {
+		if (constraint->without_overlaps != NULL)
+		{
 			char *without_overlaps_str = strVal(constraint->without_overlaps);
 			IndexElem *iparam = makeNode(IndexElem);
-			char   *typname;
-			Oid		typid;
 
 			/*
 			 * Iterate through the table's columns
 			 * (like just a little bit above).
-			 * If we find one whose name is the same as without_overlaps,
-			 * validate that it's a range type.
-			 *
-			 * Otherwise report an error.
+			 * Raise an error if we can't find the column named in WITHOUT OVERLAPS,
+			 * or if it's not a range type.
 			 */
 
-			if (findNewOrOldColumn(cxt, without_overlaps_str, &typname, &typid))
-			{
-				if (!type_is_range(typid))
-					ereport(ERROR,
-							(errcode(ERRCODE_DATATYPE_MISMATCH),
-							 errmsg("column \"%s\" is not a range type",
-									without_overlaps_str),
-							 parser_errposition(cxt->pstate, constraint->location)));
-			}
-			else
-				ereport(ERROR,
-						(errcode(ERRCODE_UNDEFINED_COLUMN),
-						 errmsg("range or PERIOD \"%s\" does not exist",
-								without_overlaps_str),
-						 parser_errposition(cxt->pstate, constraint->location)));
+			validateWithoutOverlaps(cxt, without_overlaps_str, constraint->location);
 
 			iparam->name = pstrdup(without_overlaps_str);
 			iparam->expr = NULL;
@@ -2737,6 +2719,8 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 			{
 				/*
 				 * Force the column to NOT NULL since it is part of the primary key.
+				 * The loop above does not include the WITHOUT OVERLAPS attribute,
+				 * so we must do it here.
 				 */
 				AlterTableCmd *notnullcmd = makeNode(AlterTableCmd);
 
@@ -2865,26 +2849,33 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 }
 
 /*
+ * validateWithoutOverlaps -
+ *
  * Tries to find a column by name among the existing ones (if it's an ALTER TABLE)
- * and the new ones. Sets typname and typid if one is found. Returns false if we
- * couldn't find a match.
+ * and the new ones. Raises an error if we can't find one or it's not a range type.
  */
-static bool
-findNewOrOldColumn(CreateStmtContext *cxt, char *colname, char **typname, Oid *typid)
+static void
+validateWithoutOverlaps(CreateStmtContext *cxt, char *colname, int location)
 {
 	/* Check the new columns first in case their type is changing. */
 
 	ColumnDef  *column = NULL;
 	ListCell   *columns;
+	Oid			typid;
 
 	foreach(columns, cxt->columns)
 	{
 		column = lfirst_node(ColumnDef, columns);
 		if (strcmp(column->colname, colname) == 0)
 		{
-			*typid = typenameTypeId(NULL, column->typeName);
-			*typname = TypeNameToString(column->typeName);
-			return true;
+			typid = typenameTypeId(NULL, column->typeName);
+			if (!type_is_range(typid))
+				ereport(ERROR,
+						(errcode(ERRCODE_DATATYPE_MISMATCH),
+						 errmsg("column \"%s\" in WITHOUT OVERLAPS is not a range type",
+								colname),
+						 parser_errposition(cxt->pstate, location)));
+			return;
 		}
 	}
 
@@ -2899,21 +2890,29 @@ findNewOrOldColumn(CreateStmtContext *cxt, char *colname, char **typname, Oid *t
 			const char *attname;
 
 			if (attr->attisdropped)
-				continue;
+				break;
 
 			attname = NameStr(attr->attname);
 			if (strcmp(attname, colname) == 0)
 			{
-				Type type = typeidType(attr->atttypid);
-				*typid = attr->atttypid;
-				*typname = pstrdup(typeTypeName(type));
-				ReleaseSysCache(type);
-				return true;
+				if (!type_is_range(attr->atttypid))
+					ereport(ERROR,
+							(errcode(ERRCODE_DATATYPE_MISMATCH),
+							 errmsg("column \"%s\" in WITHOUT OVERLAPS is not a range type",
+									colname),
+							 parser_errposition(cxt->pstate, location)));
+
+				return;
 			}
 		}
 	}
 
-	return false;
+	/* no such column, report an error */
+
+	ereport(ERROR,
+			(errcode(ERRCODE_UNDEFINED_COLUMN),
+			 errmsg("column \"%s\" named in key does not exist", colname),
+			 parser_errposition(cxt->pstate, location)));
 }
 
 /*
