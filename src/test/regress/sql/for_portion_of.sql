@@ -47,6 +47,37 @@ DELETE FROM for_portion_of_test
 FOR PORTION OF valid2_at FROM '2018-01-20' TO UNBOUNDED;
 SELECT * FROM for_portion_of_test;
 
+-- Test with NULLs in the scalar/range key columns.
+-- This won't happen if there is a PRIMARY KEY or UNIQUE constraint
+-- but FOR PORTION OF shouldn't require that.
+DROP TABLE for_portion_of_test;
+CREATE UNLOGGED TABLE for_portion_of_test (
+  id int4range,
+  valid_at tsrange,
+  name text
+);
+INSERT INTO for_portion_of_test VALUES
+  ('[1,1]', NULL, '1 null'),
+  ('[1,1]', '(,)', '1 unbounded'),
+  ('[1,1]', 'empty', '1 empty'),
+  (NULL, NULL, NULL),
+  (NULL, tsrange('2018-01-01', '2019-01-01'), 'null key');
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM NULL TO NULL
+  SET name = 'NULL to NULL';
+SELECT * FROM for_portion_of_test;
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM NULL TO UNBOUNDED
+  SET name = 'NULL to UNBOUNDED';
+SELECT * FROM for_portion_of_test;
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM UNBOUNDED TO NULL
+  SET name = 'UNBOUNDED to NULL';
+SELECT * FROM for_portion_of_test;
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM UNBOUNDED TO UNBOUNDED
+  SET name = 'UNBOUNDED to UNBOUNDED';
+SELECT * FROM for_portion_of_test;
 
 DROP TABLE for_portion_of_test;
 CREATE TABLE for_portion_of_test (
