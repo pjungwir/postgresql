@@ -45,6 +45,7 @@ SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rn
 SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng_pk';
 
 -- PK with two columns plus a range:
+-- We don't drop this table because tests below also need multiple scalar columns.
 CREATE TABLE temporal_rng2 (
 	id1 int4range,
 	id2 int4range,
@@ -54,55 +55,52 @@ CREATE TABLE temporal_rng2 (
 \d temporal_rng2
 SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rng2_pk';
 SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng2_pk';
-DROP TABLE temporal_rng2;
 
 
 -- PK with a custom range type:
 CREATE TYPE textrange2 AS range (subtype=text, collation="C");
-CREATE TABLE temporal_rng2 (
+CREATE TABLE temporal_rng3 (
 	id int4range,
 	valid_at textrange2,
-	CONSTRAINT temporal_rng2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+	CONSTRAINT temporal_rng3_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
-ALTER TABLE temporal_rng2 DROP CONSTRAINT temporal_rng2_pk;
-DROP TABLE temporal_rng2;
+ALTER TABLE temporal_rng3 DROP CONSTRAINT temporal_rng3_pk;
+DROP TABLE temporal_rng3;
 DROP TYPE textrange2;
 
 -- UNIQUE with no columns just WITHOUT OVERLAPS:
 
-CREATE TABLE temporal_rng2 (
+CREATE TABLE temporal_rng3 (
 	valid_at tsrange,
-	CONSTRAINT temporal_rng2_uq UNIQUE (valid_at WITHOUT OVERLAPS)
+	CONSTRAINT temporal_rng3_uq UNIQUE (valid_at WITHOUT OVERLAPS)
 );
 
 -- UNIQUE with a range column/PERIOD that isn't there:
 
-CREATE TABLE temporal_rng2 (
+CREATE TABLE temporal_rng3 (
 	id INTEGER,
-	CONSTRAINT temporal_rng2_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
+	CONSTRAINT temporal_rng3_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
 );
 
 -- UNIQUE with a non-range column:
 
-CREATE TABLE temporal_rng2 (
+CREATE TABLE temporal_rng3 (
 	id INTEGER,
 	valid_at TEXT,
-	CONSTRAINT temporal_rng2_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
+	CONSTRAINT temporal_rng3_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
 );
 
 -- UNIQUE with one column plus a range:
 
-CREATE TABLE temporal_rng2 (
-	-- Since we can't depend on having btree_gist here,
-	-- use an int4range instead of an int.
-	-- (The rangetypes regression test uses the same trick.)
+CREATE TABLE temporal_rng3 (
 	id int4range,
 	valid_at tsrange,
-	CONSTRAINT temporal_rng2_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
+	CONSTRAINT temporal_rng3_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
 );
-\d temporal_rng2
-SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rng2_uq';
-SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng2_uq';
+\d temporal_rng3
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rng3_uq';
+SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng3_uq';
+DROP TABLE temporal_rng3;
 
 -- UNIQUE with two columns plus a range:
 CREATE TABLE temporal_rng3 (
