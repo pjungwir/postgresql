@@ -819,10 +819,10 @@ DELETE FROM temporal_rng WHERE id IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
 CREATE TYPE mydaterange AS range(subtype=date);
 
-CREATE TABLE temporal_rng2 (
+CREATE TABLE temporal_rng3 (
 	id int4range,
 	valid_at mydaterange,
-	CONSTRAINT temporal_rng2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+	CONSTRAINT temporal_rng3_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
 CREATE TABLE temporal_fk2_rng2rng (
 	id int4range,
@@ -830,15 +830,15 @@ CREATE TABLE temporal_fk2_rng2rng (
 	parent_id int4range,
 	CONSTRAINT temporal_fk2_rng2rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
 	CONSTRAINT temporal_fk2_rng2rng_fk FOREIGN KEY (parent_id, PERIOD valid_at)
-		REFERENCES temporal_rng2 (id, PERIOD valid_at) ON DELETE CASCADE
+		REFERENCES temporal_rng3 (id, PERIOD valid_at) ON DELETE CASCADE
 );
-INSERT INTO temporal_rng2 VALUES ('[8,8]', mydaterange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_rng3 VALUES ('[8,8]', mydaterange('2018-01-01', '2021-01-01'));
 INSERT INTO temporal_fk2_rng2rng VALUES ('[5,5]', mydaterange('2018-01-01', '2021-01-01'), '[8,8]');
-DELETE FROM temporal_rng2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[8,8]';
+DELETE FROM temporal_rng3 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[8,8]';
 SELECT * FROM temporal_fk2_rng2rng WHERE id = '[5,5]';
 
 DROP TABLE temporal_fk2_rng2rng;
-DROP TABLE temporal_rng2;
+DROP TABLE temporal_rng3;
 DROP TYPE mydaterange;
 
 -- FK between partitioned tables
