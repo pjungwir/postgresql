@@ -505,7 +505,7 @@ static ObjectAddress addFkRecurseReferenced(List **wqueue, Constraint *fkconstra
 											bool old_check_ok,
 											Oid parentDelTrigger, Oid parentUpdTrigger,
 											bool is_temporal);
-static void validateFkOnDeleteSetColumns(int numfks, const int16 *fkattnums,
+static void validateFkOnDeleteSetColumns(int numfks, const int16 *fkattnums, const int16 *fkperiodattnums,
 										 int numfksetcols, const int16 *fksetcolsattnums,
 										 List *fksetcols);
 static void addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint,
@@ -9650,7 +9650,7 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	numfkdelsetcols = transformColumnNameList(RelationGetRelid(rel),
 											  fkconstraint->fk_del_set_cols,
 											  fkdelsetcols, NULL);
-	validateFkOnDeleteSetColumns(numfks, fkattnum,
+	validateFkOnDeleteSetColumns(numfks, fkattnum, fkperiodattnums,
 								 numfkdelsetcols, fkdelsetcols,
 								 fkconstraint->fk_del_set_cols);
 
@@ -9822,12 +9822,15 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
  */
 void
 validateFkOnDeleteSetColumns(int numfks, const int16 *fkattnums,
+							 const int16 *fkperiodattnums,
 							 int numfksetcols, const int16 *fksetcolsattnums,
 							 List *fksetcols)
 {
 	for (int i = 0; i < numfksetcols; i++)
 	{
 		int16		setcol_attnum = fksetcolsattnums[i];
+		/* assume only one PERIOD key column in a foreign key */
+		int16		fkperiod_attnum = fkperiodattnums[0];
 		bool		seen = false;
 
 		for (int j = 0; j < numfks; j++)
@@ -9836,6 +9839,13 @@ validateFkOnDeleteSetColumns(int numfks, const int16 *fkattnums,
 			{
 				seen = true;
 				break;
+			}
+			if (fkperiod_attnum == setcol_attnum)
+			{
+				char	   *col = strVal(list_nth(fksetcols, i));
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+						 errmsg("column \"%s\" referenced in ON DELETE SET action cannot be PERIOD", col)));
 			}
 		}
 
