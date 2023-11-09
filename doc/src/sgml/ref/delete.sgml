@@ -130,8 +130,7 @@ DELETE FROM [ ONLY ] <replaceable class="parameter">table_name</replaceable> [ *
     <term><replaceable class="parameter">range_or_period_name</replaceable></term>
     <listitem>
      <para>
-      The range column or period to use when performing a temporal delete. This
-      must match the range or period used in the table's temporal primary key.
+      The range column or period to use when performing a temporal delete.
      </para>
     </listitem>
    </varlistentry>
@@ -143,7 +142,7 @@ DELETE FROM [ ONLY ] <replaceable class="parameter">table_name</replaceable> [ *
       The earliest time (inclusive) to change in a temporal delete.
       This must be a value matching the base type of the range or period from
       <replaceable class="parameter">range_or_period_name</replaceable>. It may also
-      be the special value <literal>MINVALUE</literal> to indicate a delete whose
+      be the special value <literal>UNBOUNDED</literal> to indicate a delete whose
       beginning is unbounded.
      </para>
     </listitem>
@@ -156,7 +155,7 @@ DELETE FROM [ ONLY ] <replaceable class="parameter">table_name</replaceable> [ *
       The latest time (exclusive) to change in a temporal delete.
       This must be a value matching the base type of the range or period from
       <replaceable class="parameter">range_or_period_name</replaceable>. It may also
-      be the special value <literal>MAXVALUE</literal> to indicate a delete whose
+      be the special value <literal>UNBOUNDED</literal> to indicate a delete whose
       end is unbounded.
      </para>
     </listitem>
