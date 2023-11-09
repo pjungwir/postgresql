@@ -68,7 +68,6 @@ static Query *transformDeleteStmt(ParseState *pstate, DeleteStmt *stmt);
 static Query *transformInsertStmt(ParseState *pstate, InsertStmt *stmt);
 static OnConflictExpr *transformOnConflictClause(ParseState *pstate,
 												 OnConflictClause *onConflictClause);
-static Node *transformForPortionOfBound(Node *n, bool isLowerBound);
 static ForPortionOfExpr *transformForPortionOfClause(ParseState *pstate,
 													 int rtindex,
 													 ForPortionOfClause *forPortionOfClause,
@@ -1232,38 +1231,6 @@ transformOnConflictClause(ParseState *pstate,
 }
 
 /*
- * transformForPortionOfBound
- *    transforms UNBOUNDED pseudo-column references to NULL
- *    (which represent "unbounded" in a range type, otherwise returns
- *    its input unchanged.
- */
-static Node *
-transformForPortionOfBound(Node *n, bool isLowerBound)
-{
-	if (nodeTag(n) == T_ColumnRef)
-	{
-		ColumnRef  *cref = (ColumnRef *) n;
-		char	   *cname = "";
-		A_Const	   *n2;
-
-		if (list_length(cref->fields) == 1 &&
-			IsA(linitial(cref->fields), String))
-			cname = strVal(linitial(cref->fields));
-
-		if (strcmp("unbounded", cname) != 0)
-			return n;
-
-		n2 = makeNode(A_Const);
-		n2->isnull = true;
-		n2->location = ((ColumnRef *)n)->location;
-
-		return (Node *)n2;
-	}
-	else
-		return n;
-}
-
-/*
  * transformForPortionOfClause
  *
  *	  Transforms a ForPortionOfClause in an UPDATE/DELETE statement.
@@ -1289,7 +1256,6 @@ transformForPortionOfClause(ParseState *pstate,
 	Form_pg_attribute attr;
 	ForPortionOfExpr *result;
 	List *targetList;
-	Node *target_start, *target_end;
 	Var *rangeVar;
 	FuncCall *fc;
 
@@ -1336,11 +1302,9 @@ transformForPortionOfClause(ParseState *pstate,
 	 *
 	 * It also permits UNBOUNDED in either place.
 	 */
-	target_start = transformForPortionOfBound(forPortionOf->target_start, true);
-	target_end   = transformForPortionOfBound(forPortionOf->target_end, false);
 	fc = makeFuncCall(
 			list_make2(makeString(range_type_namespace), makeString(range_type_name)),
-			list_make2(target_start, target_end),
+			list_make2(forPortionOf->target_start, forPortionOf->target_end),
 			COERCE_EXPLICIT_CALL,
 			forPortionOf->range_name_location);
 	result->targetRange = transformExpr(pstate, (Node *) fc, EXPR_KIND_UPDATE_PORTION);
