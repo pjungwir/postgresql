@@ -976,6 +976,14 @@ DELETE FROM temporal_rng2 WHERE id1 IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 -- test FK parent deletes SET NULL (two scalar cols, SET NULL subset)
 INSERT INTO temporal_rng2 VALUES ('[6,6]', '[6,6]', tsrange('2018-01-01', '2021-01-01'));
 INSERT INTO temporal_fk2_rng2rng VALUES ('[100,100]', tsrange('2018-01-01', '2021-01-01'), '[6,6]', '[6,6]');
+-- fails because you can't set the PERIOD column:
+ALTER TABLE temporal_fk2_rng2rng
+	DROP CONSTRAINT temporal_fk2_rng2rng_fk,
+	ADD CONSTRAINT temporal_fk2_rng2rng_fk
+		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
+		REFERENCES temporal_rng2
+		ON DELETE SET NULL (valid_at) ON UPDATE SET NULL;
+-- ok:
 ALTER TABLE temporal_fk2_rng2rng
 	DROP CONSTRAINT temporal_fk2_rng2rng_fk,
 	ADD CONSTRAINT temporal_fk2_rng2rng_fk
@@ -1049,6 +1057,15 @@ DELETE FROM temporal_rng2 WHERE id1 IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 INSERT INTO temporal_rng2 VALUES ('[-1,-1]', '[6,6]', tsrange(null, null));
 INSERT INTO temporal_rng2 VALUES ('[6,6]', '[6,6]', tsrange('2018-01-01', '2021-01-01'));
 INSERT INTO temporal_fk2_rng2rng VALUES ('[100,100]', tsrange('2018-01-01', '2021-01-01'), '[6,6]', '[6,6]');
+-- fails because you can't set the PERIOD column:
+ALTER TABLE temporal_fk2_rng2rng
+  ALTER COLUMN parent_id1 SET DEFAULT '[-1,-1]',
+	DROP CONSTRAINT temporal_fk2_rng2rng_fk,
+	ADD CONSTRAINT temporal_fk2_rng2rng_fk
+		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
+		REFERENCES temporal_rng2
+		ON DELETE SET DEFAULT (valid_at) ON UPDATE SET DEFAULT;
+-- ok:
 ALTER TABLE temporal_fk2_rng2rng
   ALTER COLUMN parent_id1 SET DEFAULT '[-1,-1]',
 	DROP CONSTRAINT temporal_fk2_rng2rng_fk,
