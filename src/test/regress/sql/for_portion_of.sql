@@ -14,7 +14,7 @@ FOR PORTION OF valid_at FROM '2018-01-15' TO '2019-01-01'
 SET name = 'foo';
 
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid_at FROM '2019-01-15' TO UNBOUNDED;
+FOR PORTION OF valid_at FROM '2019-01-15' TO NULL;
 
 SELECT * FROM for_portion_of_test;
 
@@ -30,21 +30,21 @@ INSERT INTO for_portion_of_test VALUES
 ('[1,1]', '[2018-01-02,2018-02-03)', '[2015-01-01,2025-01-01)', 'one');
 
 UPDATE for_portion_of_test
-FOR PORTION OF valid1_at FROM '2018-01-15' TO UNBOUNDED
+FOR PORTION OF valid1_at FROM '2018-01-15' TO NULL
 SET name = 'foo';
 SELECT * FROM for_portion_of_test;
 
 UPDATE for_portion_of_test
-FOR PORTION OF valid2_at FROM '2018-01-15' TO UNBOUNDED
+FOR PORTION OF valid2_at FROM '2018-01-15' TO NULL
 SET name = 'bar';
 SELECT * FROM for_portion_of_test;
 
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid1_at FROM '2018-01-20' TO UNBOUNDED;
+FOR PORTION OF valid1_at FROM '2018-01-20' TO NULL;
 SELECT * FROM for_portion_of_test;
 
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid2_at FROM '2018-01-20' TO UNBOUNDED;
+FOR PORTION OF valid2_at FROM '2018-01-20' TO NULL;
 SELECT * FROM for_portion_of_test;
 
 -- Test with NULLs in the scalar/range key columns.
@@ -65,18 +65,6 @@ INSERT INTO for_portion_of_test VALUES
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM NULL TO NULL
   SET name = 'NULL to NULL';
-SELECT * FROM for_portion_of_test;
-UPDATE for_portion_of_test
-  FOR PORTION OF valid_at FROM NULL TO UNBOUNDED
-  SET name = 'NULL to UNBOUNDED';
-SELECT * FROM for_portion_of_test;
-UPDATE for_portion_of_test
-  FOR PORTION OF valid_at FROM UNBOUNDED TO NULL
-  SET name = 'UNBOUNDED to NULL';
-SELECT * FROM for_portion_of_test;
-UPDATE for_portion_of_test
-  FOR PORTION OF valid_at FROM UNBOUNDED TO UNBOUNDED
-  SET name = 'UNBOUNDED to UNBOUNDED';
 SELECT * FROM for_portion_of_test;
 
 DROP TABLE for_portion_of_test;
@@ -103,13 +91,13 @@ VALUES
 
 -- Setting with a missing column fails
 UPDATE for_portion_of_test
-FOR PORTION OF invalid_at FROM '2018-06-01' TO UNBOUNDED
+FOR PORTION OF invalid_at FROM '2018-06-01' TO NULL
 SET name = 'foo'
 WHERE id = '[5,5]';
 
 -- Setting the range fails
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-06-01' TO UNBOUNDED
+FOR PORTION OF valid_at FROM '2018-06-01' TO NULL
 SET valid_at = '[1990-01-01,1999-01-01)'
 WHERE id = '[5,5]';
 
@@ -133,7 +121,7 @@ WHERE id = '[3,3]';
 
 -- Setting with a column fails
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM lower(valid_at) TO UNBOUNDED
+FOR PORTION OF valid_at FROM lower(valid_at) TO NULL
 SET name = 'nope'
 WHERE id = '[3,3]';
 
@@ -145,25 +133,25 @@ WHERE id = '[3,3]';
 
 -- Updating a finite/open portion with a finite/open target
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-06-01' TO UNBOUNDED
+FOR PORTION OF valid_at FROM '2018-06-01' TO NULL
 SET name = 'three^1'
 WHERE id = '[3,3]';
 
 -- Updating a finite/open portion with an open/finite target
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM UNBOUNDED TO '2018-03-01'
+FOR PORTION OF valid_at FROM NULL TO '2018-03-01'
 SET name = 'three^2'
 WHERE id = '[3,3]';
 
 -- Updating an open/finite portion with an open/finite target
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM UNBOUNDED TO '2018-02-01'
+FOR PORTION OF valid_at FROM NULL TO '2018-02-01'
 SET name = 'four^1'
 WHERE id = '[4,4]';
 
 -- Updating an open/finite portion with a finite/open target
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2017-01-01' TO UNBOUNDED
+FOR PORTION OF valid_at FROM '2017-01-01' TO NULL
 SET name = 'four^2'
 WHERE id = '[4,4]';
 
@@ -175,7 +163,7 @@ WHERE id = '[4,4]';
 
 -- Updating an enclosed span
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM UNBOUNDED TO UNBOUNDED
+FOR PORTION OF valid_at FROM NULL TO NULL
 SET name = 'two^2'
 WHERE id = '[2,2]';
 
