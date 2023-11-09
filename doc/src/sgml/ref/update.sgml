@@ -140,9 +140,9 @@ UPDATE [ ONLY ] <replaceable class="parameter">table_name</replaceable> [ * ] [ 
      <para>
       The earliest time (inclusive) to change in a temporal update.
       This must be a value matching the base type of the range or period from
-      <replaceable class="parameter">range_or_period_name</replaceable>. It may also
-      be the special value <literal>UNBOUNDED</literal> to indicate an update whose
-      beginning is unbounded.
+      <replaceable class="parameter">range_or_period_name</replaceable>. A
+      <literal>NULL</literal> here indicates an update whose beginning is
+      unbounded (as with range types).
      </para>
     </listitem>
    </varlistentry>
@@ -153,9 +153,9 @@ UPDATE [ ONLY ] <replaceable class="parameter">table_name</replaceable> [ * ] [ 
      <para>
       The latest time (exclusive) to change in a temporal update.
       This must be a value matching the base type of the range or period from
-      <replaceable class="parameter">range_or_period_name</replaceable>. It may also
-      be the special value <literal>UNBOUNDED</literal> to indicate an update whose
-      end is unbounded.
+      <replaceable class="parameter">range_or_period_name</replaceable>. A
+      <literal>NULL</literal> here indicates an update whose end is unbounded
+      (as with range types).
      </para>
     </listitem>
    </varlistentry>
