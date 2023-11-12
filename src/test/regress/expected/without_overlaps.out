@@ -11,9 +11,7 @@ CREATE TABLE temporal_rng (
 	valid_at tsrange,
 	CONSTRAINT temporal_rng_pk PRIMARY KEY (valid_at WITHOUT OVERLAPS)
 );
-ERROR:  syntax error at or near "WITHOUT"
-LINE 3:  CONSTRAINT temporal_rng_pk PRIMARY KEY (valid_at WITHOUT OV...
-                                                          ^
+ERROR:  constraint using WITHOUT OVERLAPS needs at least two columns
 -- PK with a range column/PERIOD that isn't there:
 CREATE TABLE temporal_rng (
 	id INTEGER,
@@ -106,9 +104,7 @@ CREATE TABLE temporal_rng3 (
 	valid_at tsrange,
 	CONSTRAINT temporal_rng3_uq UNIQUE (valid_at WITHOUT OVERLAPS)
 );
-ERROR:  syntax error at or near "WITHOUT"
-LINE 3:  CONSTRAINT temporal_rng3_uq UNIQUE (valid_at WITHOUT OVERLA...
-                                                      ^
+ERROR:  constraint using WITHOUT OVERLAPS needs at least two columns
 -- UNIQUE with a range column/PERIOD that isn't there:
 CREATE TABLE temporal_rng3 (
 	id INTEGER,
