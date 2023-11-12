@@ -9775,6 +9775,11 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 		transformColumnNameList(RelationGetRelid(rel),
 							  list_make1(fkconstraint->fk_period),
 							  fkperiodattnums, fkperiodtypoids);
+	else
+		if (fkconstraint->pk_period)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_FOREIGN_KEY),
+					errmsg("foreign key uses PERIOD on the referenced table but not the referencing table")));
 
 	numfkdelsetcols = transformColumnNameList(RelationGetRelid(rel),
 											  fkconstraint->fk_del_set_cols,
@@ -9804,9 +9809,17 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 										 fkconstraint->pk_attrs,
 										 pkattnum, pktypoid);
 		if (is_temporal)
+		{
+			/* Since we got pk_attrs, we should have pk_period too. */
+			if (!fkconstraint->pk_period)
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_FOREIGN_KEY),
+						errmsg("foreign key uses PERIOD on the referencing table but not the referenced table")));
+
 			transformColumnNameList(RelationGetRelid(pkrel),
 									list_make1(fkconstraint->pk_period),
 									pkperiodattnums, pkperiodtypoids);
+		}
 
 		/* Look for an index matching the column list */
 		indexOid = transformFkeyCheckAttrs(pkrel, numpks, pkattnum,
