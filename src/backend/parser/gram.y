@@ -523,13 +523,12 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 %type <node>	TableElement TypedTableElement ConstraintElem TableFuncElement
 %type <node>	columnDef columnOptions
 %type <defelt>	def_elem reloption_elem old_aggr_elem operator_def_elem
-%type <node>	def_arg columnElem without_overlaps_clause
-				where_clause where_or_current_clause
+%type <node>	def_arg columnElem where_clause where_or_current_clause
 				a_expr b_expr c_expr AexprConst indirection_el opt_slice_bound
 				columnref in_expr having_clause func_table xmltable array_expr
 				OptWhereClause operator_def_arg
 %type <list>	rowsfrom_item rowsfrom_list opt_col_def_list
-%type <boolean> opt_ordinality
+%type <boolean> opt_ordinality opt_without_overlaps
 %type <list>	ExclusionConstraintList ExclusionConstraintElem
 %type <list>	func_arg_list func_arg_list_opt
 %type <node>	func_arg_expr
@@ -4118,7 +4117,7 @@ ConstraintElem:
 					n->initially_valid = true;
 					$$ = (Node *) n;
 				}
-			| UNIQUE opt_unique_null_treatment '(' columnList without_overlaps_clause ')' opt_c_include opt_definition OptConsTableSpace
+			| UNIQUE opt_unique_null_treatment '(' columnList opt_without_overlaps ')' opt_c_include opt_definition OptConsTableSpace
 				ConstraintAttributeSpec
 				{
 					Constraint *n = makeNode(Constraint);
@@ -4153,7 +4152,7 @@ ConstraintElem:
 								   NULL, yyscanner);
 					$$ = (Node *) n;
 				}
-			| PRIMARY KEY '(' columnList without_overlaps_clause ')' opt_c_include opt_definition OptConsTableSpace
+			| PRIMARY KEY '(' columnList opt_without_overlaps ')' opt_c_include opt_definition OptConsTableSpace
 				ConstraintAttributeSpec
 				{
 					Constraint *n = makeNode(Constraint);
@@ -4234,6 +4233,11 @@ opt_no_inherit:	NO INHERIT							{  $$ = true; }
 			| /* EMPTY */							{  $$ = false; }
 		;
 
+opt_without_overlaps:
+			WITHOUT OVERLAPS						{ $$ = true; }
+			| /*EMPTY*/								{ $$ = false; }
+	;
+
 opt_column_list:
 			'(' columnList ')'						{ $$ = $2; }
 			| /*EMPTY*/								{ $$ = NIL; }
@@ -4243,11 +4247,6 @@ columnList:
 			columnElem								{ $$ = list_make1($1); }
 			| columnList ',' columnElem				{ $$ = lappend($1, $3); }
 		;
-
-without_overlaps_clause:
-			',' columnElem WITHOUT OVERLAPS { $$ = $2; }
-			| /*EMPTY*/               { $$ = NULL; }
-	;
 
 columnElem: ColId
 				{

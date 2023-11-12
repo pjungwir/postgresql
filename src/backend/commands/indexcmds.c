@@ -91,7 +91,7 @@ static void ComputeIndexAttrs(IndexInfo *indexInfo,
 							  Oid accessMethodId,
 							  bool amcanorder,
 							  bool isconstraint,
-							  bool istemporal,
+							  bool iswithoutoverlaps,
 							  Oid ddl_userid,
 							  int ddl_sec_context,
 							  int *ddl_save_nestlevel);
@@ -149,7 +149,7 @@ typedef struct ReindexErrorInfo
  *		to index on.
  * 'exclusionOpNames': list of names of exclusion-constraint operators,
  *		or NIL if not an exclusion constraint.
- * 'istemporal': true iff this index has a WITHOUT OVERLAPS clause.
+ * 'isWithoutOverlaps': true iff this index has a WITHOUT OVERLAPS clause.
  *
  * This is tailored to the needs of ALTER TABLE ALTER TYPE, which recreates
  * any indexes that depended on a changing column from their pg_get_indexdef
@@ -180,7 +180,7 @@ CheckIndexCompatible(Oid oldId,
 					 const char *accessMethodName,
 					 const List *attributeList,
 					 const List *exclusionOpNames,
-					 bool istemporal)
+					 bool isWithoutOverlaps)
 {
 	bool		isconstraint;
 	Oid		   *typeIds;
@@ -255,7 +255,7 @@ CheckIndexCompatible(Oid oldId,
 					  coloptions, attributeList,
 					  exclusionOpNames, relationId,
 					  accessMethodName, accessMethodId,
-					  amcanorder, isconstraint, istemporal, InvalidOid,
+					  amcanorder, isconstraint, isWithoutOverlaps, InvalidOid,
 					  0, NULL);
 
 	/* Get the soon-obsolete pg_index tuple. */
@@ -689,7 +689,7 @@ DefineIndex(Oid tableId,
 	 * It has exclusion constraint behavior if it's an EXCLUDE constraint
 	 * or a temporal PRIMARY KEY/UNIQUE constraint
 	 */
-	exclusion = stmt->excludeOpNames || stmt->istemporal;
+	exclusion = stmt->excludeOpNames || stmt->iswithoutoverlaps;
 
 	/* Ensure that it makes sense to index this kind of relation */
 	switch (rel->rd_rel->relkind)
@@ -859,7 +859,7 @@ DefineIndex(Oid tableId,
 	pgstat_progress_update_param(PROGRESS_CREATEIDX_ACCESS_METHOD_OID,
 								 accessMethodId);
 
-	if (stmt->unique && !stmt->istemporal && !amRoutine->amcanunique)
+	if (stmt->unique && !stmt->iswithoutoverlaps && !amRoutine->amcanunique)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("access method \"%s\" does not support unique indexes",
@@ -927,7 +927,7 @@ DefineIndex(Oid tableId,
 					  coloptions, allIndexParams,
 					  stmt->excludeOpNames, tableId,
 					  accessMethodName, accessMethodId,
-					  amcanorder, stmt->isconstraint, stmt->istemporal,
+					  amcanorder, stmt->isconstraint, stmt->iswithoutoverlaps,
 					  root_save_userid, root_save_sec_context,
 					  &root_save_nestlevel);
 
@@ -955,8 +955,6 @@ DefineIndex(Oid tableId,
 
 		if (stmt->primary)
 			constraint_type = "PRIMARY KEY";
-		else if (stmt->unique && stmt->istemporal)
-			constraint_type = "temporal UNIQUE";
 		else if (stmt->unique)
 			constraint_type = "UNIQUE";
 		else if (stmt->excludeOpNames)
@@ -1006,7 +1004,7 @@ DefineIndex(Oid tableId,
 			 * we have an exclusion constraint (or a temporal PK), it already
 			 * knows the operators, so we don't have to infer them.
 			 */
-			if (stmt->unique && !stmt->istemporal && accessMethodId != BTREE_AM_OID)
+			if (stmt->unique && !stmt->iswithoutoverlaps && accessMethodId != BTREE_AM_OID)
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("cannot match partition key to an index using access method \"%s\"",
@@ -1045,7 +1043,7 @@ DefineIndex(Oid tableId,
 					{
 						Oid			idx_eqop = InvalidOid;
 
-						if (stmt->unique && !stmt->istemporal)
+						if (stmt->unique && !stmt->iswithoutoverlaps)
 							idx_eqop = get_opfamily_member(idx_opfamily,
 														   idx_opcintype,
 														   idx_opcintype,
@@ -1203,8 +1201,8 @@ DefineIndex(Oid tableId,
 		constr_flags |= INDEX_CONSTR_CREATE_DEFERRABLE;
 	if (stmt->initdeferred)
 		constr_flags |= INDEX_CONSTR_CREATE_INIT_DEFERRED;
-	if (stmt->istemporal)
-		constr_flags |= INDEX_CONSTR_CREATE_TEMPORAL;
+	if (stmt->iswithoutoverlaps)
+		constr_flags |= INDEX_CONSTR_CREATE_WITHOUT_OVERLAPS;
 
 	indexRelationId =
 		index_create(rel, indexRelationName, indexRelationId, parentIndexId,
@@ -1954,7 +1952,7 @@ ComputeIndexAttrs(IndexInfo *indexInfo,
 				  Oid accessMethodId,
 				  bool amcanorder,
 				  bool isconstraint,
-				  bool istemporal,
+				  bool iswithoutoverlaps,
 				  Oid ddl_userid,
 				  int ddl_sec_context,
 				  int *ddl_save_nestlevel)
@@ -1979,7 +1977,7 @@ ComputeIndexAttrs(IndexInfo *indexInfo,
 		nextExclOp = NULL;
 
 	/* exclusionOpNames can be non-NIL if we are creating a partition */
-	if (istemporal && exclusionOpNames == NIL)
+	if (iswithoutoverlaps && exclusionOpNames == NIL)
 	{
 		indexInfo->ii_ExclusionOps = palloc_array(Oid, nkeycols);
 		indexInfo->ii_ExclusionProcs = palloc_array(Oid, nkeycols);
@@ -2262,7 +2260,7 @@ ComputeIndexAttrs(IndexInfo *indexInfo,
 			indexInfo->ii_ExclusionStrats[attn] = strat;
 			nextExclOp = lnext(exclusionOpNames, nextExclOp);
 		}
-		else if (istemporal)
+		else if (iswithoutoverlaps)
 		{
 			int strat;
 			Oid opid;
