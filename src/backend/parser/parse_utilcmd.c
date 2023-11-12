@@ -124,7 +124,7 @@ static List *get_opclass(Oid opclass, Oid actual_datatype);
 static void transformIndexConstraints(CreateStmtContext *cxt);
 static IndexStmt *transformIndexConstraint(Constraint *constraint,
 										   CreateStmtContext *cxt);
-static void validateWithoutOverlaps(CreateStmtContext *cxt, char *colname, int location);
+static void validateWithoutOverlaps(CreateStmtContext *cxt, const char *colname, int location);
 static void transformExtendedStatistics(CreateStmtContext *cxt);
 static void transformFKConstraints(CreateStmtContext *cxt,
 								   bool skipValidation,
@@ -1717,7 +1717,7 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 	index->unique = idxrec->indisunique;
 	index->nulls_not_distinct = idxrec->indnullsnotdistinct;
 	index->primary = idxrec->indisprimary;
-	index->istemporal = (idxrec->indisprimary || idxrec->indisunique) && idxrec->indisexclusion;
+	index->iswithoutoverlaps = (idxrec->indisprimary || idxrec->indisunique) && idxrec->indisexclusion;
 	index->transformed = true;	/* don't need transformIndexStmt */
 	index->concurrent = false;
 	index->if_not_exists = false;
@@ -1768,7 +1768,7 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 				int			i;
 
 				Assert(conrec->contype == CONSTRAINT_EXCLUSION ||
-						(index->istemporal &&
+						(index->iswithoutoverlaps &&
 						 (conrec->contype == CONSTRAINT_PRIMARY || conrec->contype == CONSTRAINT_UNIQUE)));
 				/* Extract operator OIDs from the pg_constraint tuple */
 				datum = SysCacheGetAttrNotNull(CONSTROID, ht_constr,
@@ -2309,7 +2309,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 	}
 	index->nulls_not_distinct = constraint->nulls_not_distinct;
 	index->isconstraint = true;
-	index->istemporal = constraint->without_overlaps != NULL;
+	index->iswithoutoverlaps = constraint->without_overlaps;
 	index->deferrable = constraint->deferrable;
 	index->initdeferred = constraint->initdeferred;
 
@@ -2555,6 +2555,10 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 			ListCell   *columns;
 			IndexElem  *iparam;
 
+			/* handled below */
+			if (constraint->without_overlaps && lc == list_last_cell(constraint->keys))
+				break;
+
 			/* Make sure referenced column exists. */
 			foreach(columns, cxt->columns)
 			{
@@ -2688,10 +2692,20 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 		 * Anything in without_overlaps should be included,
 		 * but with the overlaps operator (&&) instead of equality.
 		 */
-		if (constraint->without_overlaps != NULL)
+		if (constraint->without_overlaps)
 		{
-			char *without_overlaps_str = strVal(constraint->without_overlaps);
+			char *without_overlaps_str = strVal(llast(constraint->keys));
 			IndexElem *iparam = makeNode(IndexElem);
+
+			/*
+			 * This enforces that there is at least one equality column besides
+			 * the WITHOUT OVERLAPS columns.  This is per SQL standard.  XXX
+			 * Do we need this?
+			 */
+			if (list_length(constraint->keys) < 2)
+				ereport(ERROR,
+						errcode(ERRCODE_SYNTAX_ERROR),
+						errmsg("constraint using WITHOUT OVERLAPS needs at least two columns"));
 
 			/*
 			 * Iterate through the table's columns
@@ -2855,7 +2869,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
  * and the new ones. Raises an error if we can't find one or it's not a range type.
  */
 static void
-validateWithoutOverlaps(CreateStmtContext *cxt, char *colname, int location)
+validateWithoutOverlaps(CreateStmtContext *cxt, const char *colname, int location)
 {
 	/* Check the new columns first in case their type is changing. */
 
