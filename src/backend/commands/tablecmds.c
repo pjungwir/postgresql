@@ -208,7 +208,6 @@ typedef struct NewConstraint
 	Oid			refrelid;		/* PK rel, if FOREIGN */
 	Oid			refindid;		/* OID of PK's index, if FOREIGN */
 	Oid			conid;			/* OID of pg_constraint entry, if FOREIGN */
-	bool		contemporal;	/* Whether the new constraint is temporal */
 	Node	   *qual;			/* Check expr or CONSTR_FOREIGN Constraint */
 	ExprState  *qualstate;		/* Execution state for CHECK expr */
 } NewConstraint;
@@ -10094,7 +10093,7 @@ addFkRecurseReferenced(List **wqueue, Constraint *fkconstraint, Relation rel,
 									  conislocal,	/* islocal */
 									  coninhcount,	/* inhcount */
 									  connoinherit, /* conNoInherit */
-									  false,	/* conTemporal */
+									  false,	/* conWithoutOverlaps */
 									  false);	/* is_internal */
 
 	ObjectAddressSet(address, ConstraintRelationId, constrOid);
@@ -10393,7 +10392,7 @@ addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint, Relation rel,
 									  false,
 									  1,
 									  false,
-									  false,	/* conTemporal */
+									  false,	/* conWithoutOverlaps */
 									  false);
 
 			/*
@@ -10899,7 +10898,7 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 								  false,	/* islocal */
 								  1,	/* inhcount */
 								  false,	/* conNoInherit */
-								  false,	/* conTemporal */
+								  false,	/* conWithoutOverlaps */
 								  true);
 
 		/* Set up partition dependencies for the new constraint */
@@ -11574,7 +11573,6 @@ ATExecValidateConstraint(List **wqueue, Relation rel, char *constrName,
 			newcon->refrelid = con->confrelid;
 			newcon->refindid = con->conindid;
 			newcon->conid = con->oid;
-			newcon->contemporal = con->contemporal;
 			newcon->qual = (Node *) fkconstraint;
 
 			/* Find or create work queue entry for this table */
@@ -11741,12 +11739,10 @@ transformColumnNameList(Oid relId, List *colList,
  *
  *	Look up the names, attnums, and types of the primary key attributes
  *	for the pkrel.  Also return the index OID and index opclasses of the
- *	index supporting the primary key.  If this is a temporal primary key,
- *	also set the WITHOUT OVERLAPS attribute name, attnum, and atttypid.
+ *	index supporting the primary key.
  *
  *	All parameters except pkrel are output parameters.  Also, the function
- *	return value is the number of attributes in the primary key,
- *	not including the WITHOUT OVERLAPS if any.
+ *	return value is the number of attributes in the primary key.
  *
  *	Used when the column list in the REFERENCES specification is omitted.
  */
@@ -14292,7 +14288,7 @@ TryReuseIndex(Oid oldId, IndexStmt *stmt)
 							 stmt->accessMethod,
 							 stmt->indexParams,
 							 stmt->excludeOpNames,
-							 stmt->istemporal))
+							 stmt->iswithoutoverlaps))
 	{
 		Relation	irel = index_open(oldId, NoLock);
 

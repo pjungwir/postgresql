@@ -2711,13 +2711,11 @@ SCRAM-SHA-256$<replaceable>&lt;iteration count&gt;</replaceable>:<replaceable>&l
 
      <row>
       <entry role="catalog_table_entry"><para role="column_definition">
-       <structfield>contemporal</structfield> <type>bool</type>
+       <structfield>conwithoutoverlaps</structfield> <type>bool</type>
       </para>
       <para>
-       This constraint is a application-time temporal constraint,
-       defined with <literal>WITHOUT OVERLAPS</literal> (for primary
-       key and unique constraints) or <literal>PERIOD</literal> (for
-       foreign keys).
+       This constraint is defined with <literal>WITHOUT OVERLAPS</literal>
+       (for primary keys and unique constraints).
       </para></entry>
      </row>
 

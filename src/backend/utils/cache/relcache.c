@@ -5568,12 +5568,14 @@ RelationGetIdentityKeyBitmap(Relation relation)
 /*
  * RelationGetExclusionInfo -- get info about index's exclusion constraint
  *
- * This should be called only for an index that is known to have an
- * associated exclusion constraint or temporal primary key/unique
- * constraint. It returns arrays (palloc'd in caller's context)
- * of the exclusion operator OIDs, their underlying functions'
- * OIDs, and their strategy numbers in the index's opclasses.  We cache
- * all this information since it requires a fair amount of work to get.
+ * This should be called only for an index that is known to have an associated
+ * exclusion constraint or primary key/unique constraint using WITHOUT
+ * OVERLAPS.
+
+ * It returns arrays (palloc'd in caller's context) of the exclusion operator
+ * OIDs, their underlying functions' OIDs, and their strategy numbers in the
+ * index's opclasses.  We cache all this information since it requires a fair
+ * amount of work to get.
  */
 void
 RelationGetExclusionInfo(Relation indexRelation,
@@ -5638,7 +5640,7 @@ RelationGetExclusionInfo(Relation indexRelation,
 
 		/* We want the exclusion constraint owning the index */
 		if ((conform->contype != CONSTRAINT_EXCLUSION &&
-					!(conform->contemporal && (
+					!(conform->conwithoutoverlaps && (
 							conform->contype == CONSTRAINT_PRIMARY
 							|| conform->contype == CONSTRAINT_UNIQUE))) ||
 			conform->conindid != RelationGetRelid(indexRelation))
