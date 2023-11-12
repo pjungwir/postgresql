@@ -2143,7 +2143,7 @@ StoreRelCheck(Relation rel, const char *ccname, Node *expr,
 							  is_local, /* conislocal */
 							  inhcount, /* coninhcount */
 							  is_no_inherit,	/* connoinherit */
-							  false,	/* contemporal */
+							  false,	/* conwithoutoverlaps */
 							  is_internal); /* internally constructed? */
 
 	pfree(ccbin);
@@ -2194,7 +2194,7 @@ StoreRelNotNull(Relation rel, const char *nnname, AttrNumber attnum,
 							  is_local,
 							  inhcount,
 							  is_no_inherit,
-							  false,	/* contemporal */
+							  false,	/* conwithoutoverlaps */
 							  false);
 	return constrOid;
 }
