@@ -207,6 +207,7 @@ typedef struct NewConstraint
 	ConstrType	contype;		/* CHECK or FOREIGN */
 	Oid			refrelid;		/* PK rel, if FOREIGN */
 	Oid			refindid;		/* OID of PK's index, if FOREIGN */
+	bool		conwithperiod;	/* Whether the new FOREIGN KEY uses PERIOD */
 	Oid			conid;			/* OID of pg_constraint entry, if FOREIGN */
 	Node	   *qual;			/* Check expr or CONSTR_FOREIGN Constraint */
 	ExprState  *qualstate;		/* Execution state for CHECK expr */
@@ -5908,7 +5909,7 @@ ATRewriteTables(AlterTableStmt *parsetree, List **wqueue, LOCKMODE lockmode,
 				validateForeignKeyConstraint(fkconstraint->conname, rel, refrel,
 											 con->refindid,
 											 con->conid,
-											 con->contemporal);
+											 con->conwithperiod);
 
 				/*
 				 * No need to mark the constraint row as validated, we did
@@ -10160,7 +10161,7 @@ addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint, Relation rel,
 			newcon->refrelid = RelationGetRelid(pkrel);
 			newcon->refindid = indexOid;
 			newcon->conid = parentConstr;
-			newcon->contemporal = fkconstraint->fk_period != NULL;
+			newcon->conwithperiod = fkconstraint->fk_period != NULL;
 			newcon->qual = (Node *) fkconstraint;
 
 			tab->constraints = lappend(tab->constraints, newcon);
@@ -10547,7 +10548,7 @@ CloneFkReferenced(Relation parentRel, Relation partitionRel)
 							   true,
 							   deleteTriggerOid,
 							   updateTriggerOid,
-							   constrForm->contemporal);
+							   constrForm->conwithoutoverlaps);
 
 		table_close(fkRel, NoLock);
 		ReleaseSysCache(tuple);
@@ -10821,7 +10822,7 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 								AccessExclusiveLock,
 								insertTriggerOid,
 								updateTriggerOid,
-								constrForm->contemporal);
+								constrForm->conwithoutoverlaps);
 		table_close(pkrel, NoLock);
 	}
 
