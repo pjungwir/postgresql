@@ -1862,44 +1862,50 @@ get_index_attr_temporal_operator(Oid opclass,
 								 int *strat)
 {
 	Oid opfamily;
+	Oid opcintype;
 	const char *opname;
 
-	opfamily = get_opclass_family(opclass);
-	/*
-	 * If we have a range type, fall back on anyrange.
-	 * This seems like a hack
-	 * but I can't find any existing lookup function
-	 * that knows about pseudotypes.
-	 * compatible_oper is close but wants a *name*,
-	 * and the point here is to avoid hardcoding a name
-	 * (although it should always be = and &&).
-	 *
-	 * In addition for the normal key elements
-	 * try both RTEqualStrategyNumber and BTEqualStrategyNumber.
-	 * If you're using btree_gist then you'll need the latter.
-	 */
-	if (isoverlaps)
-	{
-		*strat = RTOverlapStrategyNumber;
-		opname = "overlaps";
-		*opid = get_opfamily_member(opfamily, atttype, atttype, *strat);
-		if (!OidIsValid(*opid) && type_is_range(atttype))
-			*opid = get_opfamily_member(opfamily, ANYRANGEOID, ANYRANGEOID, *strat);
-	}
-	else
-	{
-		*strat = RTEqualStrategyNumber;
-		opname = "equality";
-		*opid = get_opfamily_member(opfamily, atttype, atttype, *strat);
-		if (!OidIsValid(*opid) && type_is_range(atttype))
-			*opid = get_opfamily_member(opfamily, ANYRANGEOID, ANYRANGEOID, *strat);
+	*opid = InvalidOid;
 
-		if (!OidIsValid(*opid))
+	if (get_opclass_opfamily_and_input_type(opclass,
+											&opfamily,
+											&opcintype))
+	{
+		if (isoverlaps)
 		{
-			*strat = BTEqualStrategyNumber;
-			*opid = get_opfamily_member(opfamily, atttype, atttype, *strat);
-			if (!OidIsValid(*opid) && type_is_range(atttype))
-				*opid = get_opfamily_member(opfamily, ANYRANGEOID, ANYRANGEOID, *strat);
+			*strat = RTOverlapStrategyNumber;
+			opname = "overlaps";
+			*opid = get_opfamily_member(opfamily, opcintype, opcintype, *strat);
+		}
+		else
+		{
+			*strat = RTEqualStrategyNumber;
+			opname = "equality";
+			*opid = get_opfamily_member(opfamily, opcintype, opcintype, *strat);
+
+			/*
+			 * For the non-overlaps key elements,
+			 * try both RTEqualStrategyNumber and BTEqualStrategyNumber.
+			 * If you're using btree_gist then you'll need the latter.
+			 *
+			 * TODO: This is scary
+			 * because what if there is ever an RTSomethingStrategyNumber
+			 * that happens to equal BTEqualStrategyNumber,
+			 * and we actually find an opid above,
+			 * but not one for equality?
+			 *
+			 * If we tried this lookup in reverse order (BTEqual first, then RTEqual),
+			 * that coincidence would happen, and we'd get weird results.
+			 *
+			 * So I guess what we need is a way for an opclass to tell us
+			 * what method's strategy numbers it uses,
+			 * or at least what is its strategy number for equality?
+			 */
+			if (!OidIsValid(*opid))
+			{
+				*strat = BTEqualStrategyNumber;
+				*opid = get_opfamily_member(opfamily, opcintype, opcintype, *strat);
+			}
 		}
 	}
 
@@ -2267,7 +2273,7 @@ ComputeIndexAttrs(IndexInfo *indexInfo,
 			Oid opid;
 			get_index_attr_temporal_operator(opclassOids[attn],
 											 atttype,
-											 attn == nkeycols - 1,	/* TODO: Don't assume it's last? */
+											 attn == nkeycols - 1,
 											 &opid,
 											 &strat);
 			indexInfo->ii_ExclusionOps[attn] = opid;
