@@ -25,7 +25,7 @@ CREATE TABLE temporal_rng (
 -- PK with a non-range column:
 
 CREATE TABLE temporal_rng (
-	id INTEGER,
+	id int4range,
 	valid_at TEXT,
 	CONSTRAINT temporal_rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
@@ -85,7 +85,7 @@ CREATE TABLE temporal_rng3 (
 -- UNIQUE with a non-range column:
 
 CREATE TABLE temporal_rng3 (
-	id INTEGER,
+	id int4range,
 	valid_at TEXT,
 	CONSTRAINT temporal_rng3_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
 );
