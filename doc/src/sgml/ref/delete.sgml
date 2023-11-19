@@ -60,8 +60,33 @@ DELETE FROM [ ONLY ] <replaceable class="parameter">table_name</replaceable> [ *
    <link linkend="ddl-periods-application-periods"><literal>PERIOD</literal></link>,
    you may supply a <literal>FOR PORTION OF</literal> clause, and your delete will
    only affect rows that overlap the given interval. Furthermore, if a row's span
-   extends outside the <literal>FOR PORTION OF</literal> bounds, then new rows
-   spanning the "cut off" duration will be inserted to preserve the old values.
+   extends outside the <literal>FOR PORTION OF</literal> bounds, then your delete
+   will only change the span within those bounds. In effect you are deleting any
+   moment targeted by <literal>FOR PORTION OF</literal> and no moments outside.
+  </para>
+
+  <para>
+   Specifically, after <productname>PostgreSQL</productname> deletes the existing row,
+   it will <literal>INSERT</literal>
+   new rows whose range or start/end column(s) receive the remaining span outside
+   the targeted bounds, containing the original values in other columns.
+   There will be zero to two inserted records,
+   depending on whether the original span extended before the targeted
+   <literal>FROM</literal>, after the targeted <literal>TO</literal>, both, or neither.
+  </para>
+
+  <para>
+   These secondary inserts fire <literal>INSERT</literal> triggers. First
+   <literal>BEFORE DELETE</literal> triggers first, then
+   <literal>BEFORE INSERT</literal>, then <literal>AFTER INSERT</literal>,
+   then <literal>AFTER DELETE</literal>.
+  </para>
+
+  <para>
+   These secondary inserts do not require <literal>INSERT</literal> privilege on the table.
+   This is because conceptually no new information has been added. The inserted rows only preserve
+   existing data about the untargeted time period. Note this may result in users firing <literal>INSERT</literal>
+   triggers who don't have insert privileges, so be careful about <literal>SECURITY DEFINER</literal> trigger functions!
   </para>
 
   <para>
