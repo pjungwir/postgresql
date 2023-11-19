@@ -56,12 +56,12 @@ DELETE FROM [ ONLY ] <replaceable class="parameter">table_name</replaceable> [ *
   </para>
 
   <para>
-   If the table has a <link linkend="ddl-periods-application-periods">range column
-   or <literal>PERIOD</literal></link>, you may supply a
-   <literal>FOR PORTION OF</literal> clause, and your delete will only affect rows
-   that overlap the given interval. Furthermore, if a row's span extends outside
-   the <literal>FOR PORTION OF</literal> bounds, then new rows spanning the "cut
-   off" duration will be inserted to preserve the old values.
+   If the table has a range column or
+   <link linkend="ddl-periods-application-periods"><literal>PERIOD</literal></link>,
+   you may supply a <literal>FOR PORTION OF</literal> clause, and your delete will
+   only affect rows that overlap the given interval. Furthermore, if a row's span
+   extends outside the <literal>FOR PORTION OF</literal> bounds, then new rows
+   spanning the "cut off" duration will be inserted to preserve the old values.
   </para>
 
   <para>
