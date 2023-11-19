@@ -355,28 +355,12 @@ BEGIN
 END;
 $$
 LANGUAGE plpgsql;
-CREATE TRIGGER trg_for_portion_of_before_insert
-  BEFORE INSERT ON for_portion_of_test
+CREATE TRIGGER trg_for_portion_of_before
+  BEFORE INSERT OR UPDATE OR DELETE ON for_portion_of_test
   FOR EACH ROW
   EXECUTE FUNCTION for_portion_of_trigger();
-CREATE TRIGGER trg_for_portion_of_after_insert
-  AFTER INSERT ON for_portion_of_test
-  FOR EACH ROW
-  EXECUTE FUNCTION for_portion_of_trigger();
-CREATE TRIGGER trg_for_portion_of_before_update
-  BEFORE UPDATE ON for_portion_of_test
-  FOR EACH ROW
-  EXECUTE FUNCTION for_portion_of_trigger();
-CREATE TRIGGER trg_for_portion_of_after_update
-  AFTER UPDATE ON for_portion_of_test
-  FOR EACH ROW
-  EXECUTE FUNCTION for_portion_of_trigger();
-CREATE TRIGGER trg_for_portion_of_before_delete
-  BEFORE DELETE ON for_portion_of_test
-  FOR EACH ROW
-  EXECUTE FUNCTION for_portion_of_trigger();
-CREATE TRIGGER trg_for_portion_of_after_delete
-  AFTER DELETE ON for_portion_of_test
+CREATE TRIGGER trg_for_portion_of_after
+  AFTER INSERT OR UPDATE OR DELETE ON for_portion_of_test
   FOR EACH ROW
   EXECUTE FUNCTION for_portion_of_trigger();
 UPDATE for_portion_of_test
