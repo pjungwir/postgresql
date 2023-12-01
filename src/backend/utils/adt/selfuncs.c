@@ -2170,7 +2170,7 @@ estimate_array_length(PlannerInfo *root, Node *arrayexpr)
 		{
 			if (get_attstatsslot(&sslot, vardata.statsTuple, STATISTIC_KIND_DECHIST, InvalidOid, ATTSTATSSLOT_NUMBERS))
 			{
-				nelem = sslot.numbers[sslot.nnumbers - 1];
+				nelem = clamp_row_est(sslot.numbers[sslot.nnumbers - 1]);
 				free_attstatsslot(&sslot);
 			}
 		}

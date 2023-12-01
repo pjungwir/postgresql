@@ -827,5 +827,12 @@ SELECT array_sample('{1,2,3,4,5,6}'::int[], -1); -- fail
 SELECT array_sample('{1,2,3,4,5,6}'::int[], 7); --fail
 
 -- test rowcount estimate of unnest(column)
-analyze arrtest;
-explain select elem from arrtest, unnest(a) x(elem);
+EXPLAIN (COSTS OFF)
+WITH flat AS (
+  SELECT  UNNEST(i) AS elem
+  FROM    array_op_test
+  WHERE   seqno <= 50
+)
+SELECT  flat.*
+FROM    flat
+JOIN    tenk1 ON thousand = elem;
