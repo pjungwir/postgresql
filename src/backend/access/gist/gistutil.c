@@ -23,6 +23,7 @@
 #include "storage/indexfsm.h"
 #include "storage/lmgr.h"
 #include "utils/float.h"
+#include "utils/fmgrprotos.h"
 #include "utils/lsyscache.h"
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
@@ -1055,4 +1056,34 @@ gistGetFakeLSN(Relation rel)
 		Assert(rel->rd_rel->relpersistence == RELPERSISTENCE_UNLOGGED);
 		return GetFakeLSNForUnloggedRel();
 	}
+}
+
+/*
+ * Returns the same number that was received.
+ *
+ * This is for GiST opclasses that use the RT*StrategyNumber constants.
+ */
+Datum
+gist_stratnum_identity(PG_FUNCTION_ARGS)
+{
+	StrategyNumber strat = PG_GETARG_UINT16(1);
+
+	PG_RETURN_UINT16(strat);
+}
+
+/*
+ * Returns the btree number for equals, otherwise invalid.
+ *
+ * This is for GiST opclasses in btree_gist (and maybe elsewhere)
+ * that use the BT*StrategyNumber constants.
+ */
+Datum
+gist_stratnum_btree(PG_FUNCTION_ARGS)
+{
+	StrategyNumber strat = PG_GETARG_UINT16(1);
+
+	if (strat == RTEqualStrategyNumber)
+		PG_RETURN_UINT16(BTEqualStrategyNumber);
+	else
+		PG_RETURN_UINT16(InvalidStrategy);
 }
