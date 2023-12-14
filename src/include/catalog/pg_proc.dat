@@ -12143,4 +12143,14 @@
   proargnames => '{tli,start_lsn,end_lsn,relfilenode,reltablespace,reldatabase,relforknumber,relblocknumber,is_limit_block}',
   prosrc => 'pg_wal_summary_contents' },
 
+# GiST stratnum implementations
+{ oid => '6108', descr => 'GiST support',
+  proname => 'gist_stratnum_identity', prorettype => 'int2',
+  proargtypes => 'int2',
+  prosrc => 'gist_stratnum_identity' },
+{ oid => '6109', descr => 'GiST support',
+  proname => 'gist_stratnum_btree', prorettype => 'int2',
+  proargtypes => 'int2',
+  prosrc => 'gist_stratnum_btree' },
+
 ]
