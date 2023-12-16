@@ -24,7 +24,9 @@
 
 #include "postgres.h"
 
+#include "access/stratnum.h"
 #include "access/sysattr.h"
+#include "catalog/pg_am.h"
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "commands/defrem.h"
@@ -1254,8 +1256,10 @@ transformForPortionOfClause(ParseState *pstate,
 	char *range_type_name = NULL;
 	int range_attno = InvalidAttrNumber;
 	Form_pg_attribute attr;
+	Oid	opclass;
+	StrategyNumber strat;
+	Oid	opid;
 	ForPortionOfExpr *result;
-	List *targetList;
 	Var *rangeVar;
 	FuncCall *fc;
 
@@ -1309,8 +1313,15 @@ transformForPortionOfClause(ParseState *pstate,
 			forPortionOf->range_name_location);
 	result->targetRange = transformExpr(pstate, (Node *) fc, EXPR_KIND_UPDATE_PORTION);
 
-	/* overlapsExpr is something we can add to the whereClause */
-	result->overlapsExpr = (Node *) makeSimpleA_Expr(AEXPR_OP, "&&",
+	/*
+	 * Build overlapsExpr to use in the whereClause.
+	 * This means we only hit rows matching the FROM & TO bounds.
+	 * We must look up the overlaps operator (usually "&&").
+	 */
+	opclass = GetDefaultOpClass(attr->atttypid, GIST_AM_OID);
+	strat = RTOverlapStrategyNumber;
+	GetOperatorFromCanonicalStrategy(opclass, attr->atttypid, "overlaps", &opid, &strat);
+	result->overlapsExpr = (Node *) makeSimpleA_Expr(AEXPR_OP, get_opname(opid),
 			(Node *) copyObject(rangeVar), (Node *) fc,
 			forPortionOf->range_name_location);
 
@@ -1320,25 +1331,24 @@ transformForPortionOfClause(ParseState *pstate,
 		 * Now make sure we update the start/end time of the record.
 		 * For a range col (r) this is `r = r * targetRange`.
 		 */
-		Expr *rangeSetExpr = (Expr *) makeSimpleA_Expr(AEXPR_OP, "*",
-				(Node *) copyObject(rangeVar), (Node *) fc,
-				forPortionOf->range_name_location);
+		Expr *rangeSetExpr;
 		TargetEntry *tle;
 
-		targetList = NIL;
+		strat = RTIntersectStrategyNumber;
+		GetOperatorFromCanonicalStrategy(opclass, attr->atttypid, "intersects", &opid, &strat);
+		rangeSetExpr = (Expr *) makeSimpleA_Expr(AEXPR_OP, get_opname(opid),
+				(Node *) copyObject(rangeVar), (Node *) fc,
+				forPortionOf->range_name_location);
 		rangeSetExpr = (Expr *) transformExpr(pstate, (Node *) rangeSetExpr, EXPR_KIND_UPDATE_PORTION);
-		tle = makeTargetEntry(rangeSetExpr,
-							  range_attno,
-							  range_name,
-							  false);
 
-		targetList = lappend(targetList, tle);
+		/* Make a TLE to set the range column */
+		result->rangeSet = NIL;
+		tle = makeTargetEntry(rangeSetExpr, range_attno, range_name, false);
+		result->rangeSet = lappend(result->rangeSet, tle);
 
 		/* Mark the range column as requiring update permissions */
 		target_perminfo->updatedCols = bms_add_member(target_perminfo->updatedCols,
 													  range_attno - FirstLowInvalidHeapAttributeNumber);
-
-		result->rangeSet = targetList;
 	}
 	else
 		result->rangeSet = NIL;
