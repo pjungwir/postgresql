@@ -74,11 +74,6 @@
 /* non-export function prototypes */
 static bool CompareOpclassOptions(const Datum *opts1, const Datum *opts2, int natts);
 static void CheckPredicate(Expr *predicate);
-static void get_index_attr_temporal_operator(Oid opclass,
-											 Oid atttype,
-											 bool isoverlaps,
-											 Oid *opid,
-											 int *strat);
 static void ComputeIndexAttrs(IndexInfo *indexInfo,
 							  Oid *typeOids,
 							  Oid *collationOids,
@@ -1847,83 +1842,6 @@ CheckPredicate(Expr *predicate)
 }
 
 /*
- * get_index_attr_temporal_operator
- *
- * Finds an operator for a temporal index attribute.
- * We need an equality operator for normal keys
- * and an overlaps operator for the range.
- * Returns the operator oid and strategy in opid and strat,
- * respectively.
- */
-static void
-get_index_attr_temporal_operator(Oid opclass,
-								 Oid atttype,
-								 bool isoverlaps,
-								 Oid *opid,
-								 int *strat)
-{
-	Oid opfamily;
-	Oid opcintype;
-	StrategyNumber opstrat;
-	const char *opname;
-
-	*opid = InvalidOid;
-
-	if (get_opclass_opfamily_and_input_type(opclass,
-											&opfamily,
-											&opcintype))
-	{
-		if (isoverlaps)
-		{
-			opstrat = RTOverlapStrategyNumber;
-			opname = "overlaps";
-		}
-		else
-		{
-			opstrat = RTEqualStrategyNumber;
-			opname = "equality";
-		}
-
-		*strat = gistTranslateStratnum(opclass, opstrat);
-		if (!StrategyIsValid(*strat))
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("no %s operator found for WITHOUT OVERLAPS constraint", opname),
-					 errdetail("Could not translate strategy number %d for opclass %d.",
-						 opstrat, opclass),
-					 errhint("Define a stratnum support function for your GiST opclass.")));
-
-		*opid = get_opfamily_member(opfamily, opcintype, opcintype, *strat);
-	}
-
-	if (!OidIsValid(*opid))
-	{
-		HeapTuple	opftuple;
-		Form_pg_opfamily opfform;
-
-		/*
-		 * attribute->opclass might not explicitly name the opfamily,
-		 * so fetch the name of the selected opfamily for use in the
-		 * error message.
-		 */
-		opftuple = SearchSysCache1(OPFAMILYOID,
-								   ObjectIdGetDatum(opfamily));
-		if (!HeapTupleIsValid(opftuple))
-			elog(ERROR, "cache lookup failed for opfamily %u",
-				 opfamily);
-		opfform = (Form_pg_opfamily) GETSTRUCT(opftuple);
-
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_OBJECT),
-				 errmsg("no %s operator found for WITHOUT OVERLAPS constraint", opname),
-				 errdetail("There must be an %s operator within opfamily \"%s\" for type \"%s\".",
-						   opname,
-						   NameStr(opfform->opfname),
-						   format_type_be(atttype))));
-	}
-}
-
-/*
  * Compute per-index-column information, including indexed column numbers
  * or index expressions, opclasses and their options. Note, all output vectors
  * should be allocated for all columns, including "including" ones.
@@ -2256,11 +2174,23 @@ ComputeIndexAttrs(IndexInfo *indexInfo,
 		}
 		else if (iswithoutoverlaps)
 		{
-			int strat;
+			StrategyNumber strat;
 			Oid opid;
-			get_index_attr_temporal_operator(opclassOids[attn],
+			char *opname;
+
+			if (attn == nkeycols - 1)
+			{
+				strat = RTOverlapStrategyNumber;
+				opname = "overlaps";
+			}
+			else
+			{
+				strat = RTEqualStrategyNumber;
+				opname = "equals";
+			}
+			GetOperatorFromCanonicalStrategy(opclassOids[attn],
 											 atttype,
-											 attn == nkeycols - 1,
+											 opname,
 											 &opid,
 											 &strat);
 			indexInfo->ii_ExclusionOps[attn] = opid;
@@ -2495,6 +2425,87 @@ GetDefaultOpClass(Oid type_id, Oid am_id)
 		return result;
 
 	return InvalidOid;
+}
+
+/*
+ * GetOperatorFromCanonicalStrategy
+ *
+ * opclass - the opclass to use
+ * atttype - the type to ask about
+ * opname - used to build error messages
+ * opid - holds the operator we found
+ * strat - holds the input and output strategy number
+ *
+ * Finds an operator from a "well-known" strategy number.
+ * This is used for temporal index constraints
+ * (and other temporal features)
+ * to look up equality and overlaps operators, since
+ * the strategy numbers for non-btree indexams need not
+ * follow any fixed scheme. We ask an opclass support
+ * function to translate from the well-known number
+ * to the internal value. If the function isn't defined
+ * or it gives no result, we retrun InvalidStrategy.
+ */
+void
+GetOperatorFromCanonicalStrategy(Oid opclass,
+								 Oid atttype,
+								 const char *opname,
+								 Oid *opid,
+								 StrategyNumber *strat)
+{
+	Oid opfamily;
+	Oid opcintype;
+	StrategyNumber opstrat = *strat;
+
+	*opid = InvalidOid;
+
+	if (get_opclass_opfamily_and_input_type(opclass,
+											&opfamily,
+											&opcintype))
+	{
+		/*
+		 * Ask the opclass to translate to its internal stratnum
+		 *
+		 * For now we only need GiST support, but this could support
+		 * other indexams if we wanted.
+		 */
+		*strat = gistTranslateStratnum(opclass, opstrat);
+		if (!StrategyIsValid(*strat))
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("no %s operator found for WITHOUT OVERLAPS constraint", opname),
+					 errdetail("Could not translate strategy number %u for opclass %d.",
+						 opstrat, opclass),
+					 errhint("Define a stratnum support function for your GiST opclass.")));
+
+		*opid = get_opfamily_member(opfamily, opcintype, opcintype, *strat);
+	}
+
+	if (!OidIsValid(*opid))
+	{
+		HeapTuple	opftuple;
+		Form_pg_opfamily opfform;
+
+		/*
+		 * attribute->opclass might not explicitly name the opfamily,
+		 * so fetch the name of the selected opfamily for use in the
+		 * error message.
+		 */
+		opftuple = SearchSysCache1(OPFAMILYOID,
+								   ObjectIdGetDatum(opfamily));
+		if (!HeapTupleIsValid(opftuple))
+			elog(ERROR, "cache lookup failed for opfamily %u",
+				 opfamily);
+		opfform = (Form_pg_opfamily) GETSTRUCT(opftuple);
+
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("no %s operator found for WITHOUT OVERLAPS constraint", opname),
+				 errdetail("There must be an %s operator within opfamily \"%s\" for type \"%s\".",
+						   opname,
+						   NameStr(opfform->opfname),
+						   format_type_be(atttype))));
+	}
 }
 
 /*
