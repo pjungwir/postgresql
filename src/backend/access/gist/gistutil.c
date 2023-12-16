@@ -1066,7 +1066,7 @@ gistGetFakeLSN(Relation rel)
 Datum
 gist_stratnum_identity(PG_FUNCTION_ARGS)
 {
-	StrategyNumber strat = PG_GETARG_UINT16(1);
+	StrategyNumber strat = PG_GETARG_UINT16(0);
 
 	PG_RETURN_UINT16(strat);
 }
@@ -1080,10 +1080,21 @@ gist_stratnum_identity(PG_FUNCTION_ARGS)
 Datum
 gist_stratnum_btree(PG_FUNCTION_ARGS)
 {
-	StrategyNumber strat = PG_GETARG_UINT16(1);
+	StrategyNumber strat = PG_GETARG_UINT16(0);
 
-	if (strat == RTEqualStrategyNumber)
-		PG_RETURN_UINT16(BTEqualStrategyNumber);
-	else
-		PG_RETURN_UINT16(InvalidStrategy);
+	switch (strat)
+	{
+		case RTEqualStrategyNumber:
+			PG_RETURN_UINT16(BTEqualStrategyNumber);
+		case RTLessStrategyNumber:
+			PG_RETURN_UINT16(BTLessStrategyNumber);
+		case RTLessEqualStrategyNumber:
+			PG_RETURN_UINT16(BTLessEqualStrategyNumber);
+		case RTGreaterStrategyNumber:
+			PG_RETURN_UINT16(BTGreaterStrategyNumber);
+		case RTGreaterEqualStrategyNumber:
+			PG_RETURN_UINT16(BTGreaterEqualStrategyNumber);
+		default:
+			PG_RETURN_UINT16(InvalidStrategy);
+	}
 }
