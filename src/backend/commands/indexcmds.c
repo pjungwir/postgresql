@@ -16,6 +16,7 @@
 #include "postgres.h"
 
 #include "access/amapi.h"
+#include "access/gist_private.h"
 #include "access/heapam.h"
 #include "access/htup_details.h"
 #include "access/reloptions.h"
@@ -1863,6 +1864,7 @@ get_index_attr_temporal_operator(Oid opclass,
 {
 	Oid opfamily;
 	Oid opcintype;
+	StrategyNumber opstrat;
 	const char *opname;
 
 	*opid = InvalidOid;
@@ -1873,40 +1875,25 @@ get_index_attr_temporal_operator(Oid opclass,
 	{
 		if (isoverlaps)
 		{
-			*strat = RTOverlapStrategyNumber;
+			opstrat = RTOverlapStrategyNumber;
 			opname = "overlaps";
-			*opid = get_opfamily_member(opfamily, opcintype, opcintype, *strat);
 		}
 		else
 		{
-			*strat = RTEqualStrategyNumber;
+			opstrat = RTEqualStrategyNumber;
 			opname = "equality";
-			*opid = get_opfamily_member(opfamily, opcintype, opcintype, *strat);
-
-			/*
-			 * For the non-overlaps key elements,
-			 * try both RTEqualStrategyNumber and BTEqualStrategyNumber.
-			 * If you're using btree_gist then you'll need the latter.
-			 *
-			 * TODO: This is scary
-			 * because what if there is ever an RTSomethingStrategyNumber
-			 * that happens to equal BTEqualStrategyNumber,
-			 * and we actually find an opid above,
-			 * but not one for equality?
-			 *
-			 * If we tried this lookup in reverse order (BTEqual first, then RTEqual),
-			 * that coincidence would happen, and we'd get weird results.
-			 *
-			 * So I guess what we need is a way for an opclass to tell us
-			 * what method's strategy numbers it uses,
-			 * or at least what is its strategy number for equality?
-			 */
-			if (!OidIsValid(*opid))
-			{
-				*strat = BTEqualStrategyNumber;
-				*opid = get_opfamily_member(opfamily, opcintype, opcintype, *strat);
-			}
 		}
+
+		*strat = gistTranslateStratnum(opclass, opstrat);
+		if (!StrategyIsValid(*strat))
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("no %s operator found for WITHOUT OVERLAPS constraint", opname),
+					 errdetail("Could not translate strategy number %d for opclass %d.",
+						 opstrat, opclass),
+					 errhint("Define a stratnum support function for your GiST opclass.")));
+
+		*opid = get_opfamily_member(opfamily, opcintype, opcintype, *strat);
 	}
 
 	if (!OidIsValid(*opid))
