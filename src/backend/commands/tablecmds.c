@@ -16,6 +16,7 @@
 
 #include "access/attmap.h"
 #include "access/genam.h"
+#include "access/gist_private.h"
 #include "access/heapam.h"
 #include "access/heapam_xlog.h"
 #include "access/multixact.h"
@@ -10984,8 +10985,10 @@ FindFKComparisonOperators(Constraint *fkconstraint,
 	Oid			pfeqop;
 	Oid			ppeqop;
 	Oid			ffeqop;
+	StrategyNumber	rtstrategy;
 	int16		eqstrategy;
 	Oid			pfeqop_right;
+	char	   *stratname;
 
 	/* We need several fields out of the pg_opclass entry */
 	cla_ht = SearchSysCache1(CLAOID, ObjectIdGetDatum(opclass));
@@ -11005,7 +11008,24 @@ FindFKComparisonOperators(Constraint *fkconstraint,
 		 * For the non-overlaps parts, we want either RTEqualStrategyNumber (without btree_gist)
 		 * or BTEqualStrategyNumber (with btree_gist). We'll try the latter first.
 		 */
-		eqstrategy = for_overlaps ? RTOverlapStrategyNumber : BTEqualStrategyNumber;
+		if (for_overlaps)
+		{
+			stratname = "overlaps";
+			rtstrategy = RTOverlapStrategyNumber;
+		}
+		else
+		{
+			stratname = "equality";
+			rtstrategy = RTEqualStrategyNumber;
+		}
+		eqstrategy = gistTranslateStratnum(opclass, rtstrategy);
+		if (!StrategyIsValid(eqstrategy))
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("no %s operator found for foreign key", stratname),
+					 errdetail("Could not translate strategy number %d for opclass %d.",
+						 rtstrategy, opclass),
+					 errhint("Define a stratnum support function for your GiST opclass.")));
 	}
 	else
 	{
@@ -11027,15 +11047,6 @@ FindFKComparisonOperators(Constraint *fkconstraint,
 	 */
 	ppeqop = get_opfamily_member(opfamily, opcintype, opcintype,
 								 eqstrategy);
-
-	/* Fall back to RTEqualStrategyNumber for temporal overlaps */
-	if (is_temporal && !for_overlaps && !OidIsValid(ppeqop))
-	{
-		eqstrategy = RTEqualStrategyNumber;
-		ppeqop = get_opfamily_member(opfamily, opcintype, opcintype,
-									 eqstrategy);
-	}
-
 
 	if (!OidIsValid(ppeqop))
 		elog(ERROR, "missing operator %d(%u,%u) in opfamily %u",
