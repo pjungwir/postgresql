@@ -2189,8 +2189,9 @@ ComputeIndexAttrs(IndexInfo *indexInfo,
 				opname = "equals";
 			}
 			GetOperatorFromWellKnownStrategy(opclassOids[attn],
-											 atttype,
+											 InvalidOid,
 											 opname,
+											 "WITHOUT OVERLAPS constraint",
 											 &opid,
 											 &strat);
 			indexInfo->ii_ExclusionOps[attn] = opid;
@@ -2431,8 +2432,9 @@ GetDefaultOpClass(Oid type_id, Oid am_id)
  * GetOperatorFromWellKnownStrategy
  *
  * opclass - the opclass to use
- * atttype - the type to ask about
+ * rhstype - the type for the right-hand side
  * opname - used to build error messages
+ * context - used to build error messages
  * opid - holds the operator we found
  * strat - holds the input and output strategy number
  *
@@ -2448,8 +2450,9 @@ GetDefaultOpClass(Oid type_id, Oid am_id)
  */
 void
 GetOperatorFromWellKnownStrategy(Oid opclass,
-								 Oid atttype,
+								 Oid rhstype,
 								 const char *opname,
+								 const char *context,
 								 Oid *opid,
 								 StrategyNumber *strat)
 {
@@ -2473,12 +2476,19 @@ GetOperatorFromWellKnownStrategy(Oid opclass,
 		if (*strat == InvalidStrategy)
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("no %s operator found for WITHOUT OVERLAPS constraint", opname),
+					 errmsg("no %s operator found for %s", opname, context),
 					 errdetail("Could not translate strategy number %u for opclass %d.",
 						 opstrat, opclass),
 					 errhint("Define a stratnum support function for your GiST opclass.")));
 
-		*opid = get_opfamily_member(opfamily, opcintype, opcintype, *strat);
+		/*
+		 * We parameterize rhstype so foreign keys can ask for a <@ operator
+		 * whose rhs matches the aggregate function. For example range_agg
+		 * returns anymultirange.
+		 */
+		if (!OidIsValid(rhstype))
+			rhstype = opcintype;
+		*opid = get_opfamily_member(opfamily, opcintype, rhstype, *strat);
 	}
 
 	if (!OidIsValid(*opid))
@@ -2500,11 +2510,11 @@ GetOperatorFromWellKnownStrategy(Oid opclass,
 
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
-				 errmsg("no %s operator found for WITHOUT OVERLAPS constraint", opname),
+				 errmsg("no %s operator found for %s", opname, context),
 				 errdetail("There must be an %s operator within opfamily \"%s\" for type \"%s\".",
 						   opname,
 						   NameStr(opfform->opfname),
-						   format_type_be(atttype))));
+						   format_type_be(opcintype))));
 	}
 }
 
