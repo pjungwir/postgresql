@@ -127,6 +127,8 @@ typedef struct RI_ConstraintInfo
 	Oid			pf_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (PK = FK) */
 	Oid			pp_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (PK = PK) */
 	Oid			ff_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (FK = FK) */
+	Oid			period_oprs[1];	/* operators for PEROID SQL */
+	Oid			period_procs[1];	/* procs for PERIOD SQL */
 	dlist_node	valid_link;		/* Link in list of valid entries */
 } RI_ConstraintInfo;
 
@@ -2377,6 +2379,8 @@ ri_LoadConstraintInfo(Oid constraintOid)
 							   riinfo->pf_eq_oprs,
 							   riinfo->pp_eq_oprs,
 							   riinfo->ff_eq_oprs,
+							   riinfo->period_oprs,
+							   riinfo->period_procs,
 							   &riinfo->ndelsetcols,
 							   riinfo->confdelsetcols);
 
