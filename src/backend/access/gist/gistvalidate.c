@@ -20,6 +20,7 @@
 #include "catalog/pg_amproc.h"
 #include "catalog/pg_opclass.h"
 #include "catalog/pg_opfamily.h"
+#include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "utils/lsyscache.h"
 #include "utils/regproc.h"
@@ -150,6 +151,11 @@ gistvalidate(Oid opclassoid)
 				ok = check_amproc_signature(procform->amproc, INT2OID, true,
 											1, 1, INT2OID);
 				break;
+			case GIST_REFERENCED_AGG_PROC:
+				ok = check_amproc_signature(procform->amproc, InvalidOid, false,
+											   1, 1, opcintype)
+					&& get_func_prokind(procform->amproc) == PROKIND_AGGREGATE;
+				break;
 			default:
 				ereport(INFO,
 						(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
@@ -271,7 +277,7 @@ gistvalidate(Oid opclassoid)
 		if (i == GIST_DISTANCE_PROC || i == GIST_FETCH_PROC ||
 			i == GIST_COMPRESS_PROC || i == GIST_DECOMPRESS_PROC ||
 			i == GIST_OPTIONS_PROC || i == GIST_SORTSUPPORT_PROC ||
-			i == GIST_STRATNUM_PROC)
+			i == GIST_STRATNUM_PROC || i == GIST_REFERENCED_AGG_PROC)
 			continue;			/* optional methods */
 		ereport(INFO,
 				(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
