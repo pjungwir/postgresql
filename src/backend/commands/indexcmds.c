@@ -2460,7 +2460,9 @@ GetOperatorFromWellKnownStrategy(Oid opclass,
 
 	Assert(instrat == RTEqualStrategyNumber ||
 		   instrat == RTOverlapStrategyNumber ||
-		   instrat == RTContainedByStrategyNumber);
+		   instrat == RTContainedByStrategyNumber ||
+		   instrat == RTWithoutPortionStrategyNumber ||
+		   instrat == RTIntersectStrategyNumber);
 
 	*opid = InvalidOid;
 
