@@ -140,13 +140,30 @@ identify_opfamily_groups(CatCList *oprlist, CatCList *proclist)
 	return result;
 }
 
+bool
+check_amproc_is_aggregate(Oid funcid)
+{
+	bool		result;
+	HeapTuple	tp;
+	Form_pg_proc procform;
+
+	tp = SearchSysCache1(PROCOID, ObjectIdGetDatum(funcid));
+	if (!HeapTupleIsValid(tp))
+		elog(ERROR, "cache lookup failed for function %u", funcid);
+	procform = (Form_pg_proc) GETSTRUCT(tp);
+	result = procform->prokind == 'a';
+	ReleaseSysCache(tp);
+	return result;
+}
+
 /*
  * Validate the signature (argument and result types) of an opclass support
  * function.  Return true if OK, false if not.
  *
  * The "..." represents maxargs argument-type OIDs.  If "exact" is true, they
  * must match the function arg types exactly, else only binary-coercibly.
- * In any case the function result type must match restype exactly.
+ * In any case the function result type must match restype exactly,
+ * unless it is InvalidOid.
  */
 bool
 check_amproc_signature(Oid funcid, Oid restype, bool exact,
@@ -163,8 +180,9 @@ check_amproc_signature(Oid funcid, Oid restype, bool exact,
 		elog(ERROR, "cache lookup failed for function %u", funcid);
 	procform = (Form_pg_proc) GETSTRUCT(tp);
 
-	if (procform->prorettype != restype || procform->proretset ||
-		procform->pronargs < minargs || procform->pronargs > maxargs)
+	if ((procform->prorettype != restype && OidIsValid(restype))
+		|| procform->proretset || procform->pronargs < minargs
+		|| procform->pronargs > maxargs)
 		result = false;
 
 	va_start(ap, maxargs);

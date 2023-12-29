@@ -150,6 +150,11 @@ gistvalidate(Oid opclassoid)
 				ok = check_amproc_signature(procform->amproc, INT2OID, true,
 											1, 1, INT2OID);
 				break;
+			case GIST_REFERENCED_AGG_PROC:
+				ok = check_amproc_signature(procform->amproc, InvalidOid, false,
+											   1, 1, opcintype)
+					&& check_amproc_is_aggregate(procform->amproc);
+				break;
 			default:
 				ereport(INFO,
 						(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
@@ -271,7 +276,7 @@ gistvalidate(Oid opclassoid)
 		if (i == GIST_DISTANCE_PROC || i == GIST_FETCH_PROC ||
 			i == GIST_COMPRESS_PROC || i == GIST_DECOMPRESS_PROC ||
 			i == GIST_OPTIONS_PROC || i == GIST_SORTSUPPORT_PROC ||
-			i == GIST_STRATNUM_PROC)
+			i == GIST_STRATNUM_PROC || i == GIST_REFERENCED_AGG_PROC)
 			continue;			/* optional methods */
 		ereport(INFO,
 				(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
