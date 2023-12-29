@@ -2129,6 +2129,8 @@ StoreRelCheck(Relation rel, const char *ccname, Node *expr,
 							  NULL,
 							  NULL,
 							  NULL,
+							  NULL,
+							  NULL,
 							  0,
 							  ' ',
 							  ' ',
@@ -2176,6 +2178,8 @@ StoreRelNotNull(Relation rel, const char *nnname, AttrNumber attnum,
 							  InvalidOid,	/* not a domain constraint */
 							  InvalidOid,	/* no associated index */
 							  InvalidOid,	/* Foreign key fields */
+							  NULL,
+							  NULL,
 							  NULL,
 							  NULL,
 							  NULL,
