@@ -1320,7 +1320,7 @@ transformForPortionOfClause(ParseState *pstate,
 	 */
 	opclass = GetDefaultOpClass(attr->atttypid, GIST_AM_OID);
 	strat = RTOverlapStrategyNumber;
-	GetOperatorFromCanonicalStrategy(opclass, attr->atttypid, "overlaps", &opid, &strat);
+	GetOperatorFromCanonicalStrategy(opclass, InvalidOid, "overlaps", "FOR PORTION OF", &opid, &strat);
 	result->overlapsExpr = (Node *) makeSimpleA_Expr(AEXPR_OP, get_opname(opid),
 			(Node *) copyObject(rangeVar), (Node *) fc,
 			forPortionOf->range_name_location);
@@ -1335,7 +1335,7 @@ transformForPortionOfClause(ParseState *pstate,
 		TargetEntry *tle;
 
 		strat = RTIntersectStrategyNumber;
-		GetOperatorFromCanonicalStrategy(opclass, attr->atttypid, "intersects", &opid, &strat);
+		GetOperatorFromCanonicalStrategy(opclass, InvalidOid, "intersects", "FOR PORTION OF", &opid, &strat);
 		rangeSetExpr = (Expr *) makeSimpleA_Expr(AEXPR_OP, get_opname(opid),
 				(Node *) copyObject(rangeVar), (Node *) fc,
 				forPortionOf->range_name_location);
