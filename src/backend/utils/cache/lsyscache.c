@@ -1601,6 +1601,37 @@ get_func_name(Oid funcid)
 }
 
 /*
+ * get_func_name_and_namespace
+ *	  returns the schema-qualified name of the function with the given funcid
+ *
+ * Note: returns a palloc'd copy of the string, or NULL if no such function.
+ */
+char *
+get_func_name_and_namespace(Oid funcid)
+{
+	HeapTuple	tp;
+
+	tp = SearchSysCache1(PROCOID, ObjectIdGetDatum(funcid));
+	if (HeapTupleIsValid(tp))
+	{
+		Form_pg_proc functup = (Form_pg_proc) GETSTRUCT(tp);
+		char	   *namesp = get_namespace_name(functup->pronamespace);
+		char	   *func = NameStr(functup->proname);
+		char	   *result;
+		int			len = strlen(namesp) + strlen(func) + 2;
+
+		result = palloc(len * sizeof(char));
+		snprintf(result, len, "%s.%s", namesp, func);
+
+		pfree(namesp);
+		ReleaseSysCache(tp);
+		return result;
+	}
+	else
+		return NULL;
+}
+
+/*
  * get_func_namespace
  *
  *		Returns the pg_namespace OID associated with a given function.
