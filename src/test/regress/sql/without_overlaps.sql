@@ -68,6 +68,14 @@ ALTER TABLE temporal_rng3 DROP CONSTRAINT temporal_rng3_pk;
 DROP TABLE temporal_rng3;
 DROP TYPE textrange2;
 
+-- PK with a multirange:
+CREATE TABLE temporal_mltrng (
+  id int4range,
+  valid_at tsmultirange,
+  CONSTRAINT temporal_mltrng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+\d temporal_mltrng
+
 -- UNIQUE with no columns just WITHOUT OVERLAPS:
 
 CREATE TABLE temporal_rng3 (
