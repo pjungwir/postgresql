@@ -237,6 +237,8 @@ static void ri_ReportViolation(const RI_ConstraintInfo *riinfo,
 							   Relation pk_rel, Relation fk_rel,
 							   TupleTableSlot *violatorslot, TupleDesc tupdesc,
 							   int queryno, bool partgone) pg_attribute_noreturn();
+static void lookupTRIOperAndProc(const RI_ConstraintInfo *riinfo,
+								 char **opname, char **aggname);
 
 
 /*
@@ -429,7 +431,14 @@ RI_FKey_check(TriggerData *trigdata)
 		}
 		appendStringInfoString(&querybuf, " FOR KEY SHARE OF x");
 		if (riinfo->temporal)
-			appendStringInfo(&querybuf, ") x1 HAVING $%d <@ pg_catalog.range_agg(x1.r)", riinfo->nkeys);
+		{
+			char *opname;
+			char *aggname;
+			lookupTRIOperAndProc(riinfo, &opname, &aggname);
+			appendStringInfo(&querybuf, ") x1 HAVING $%d %s %s(x1.r)", riinfo->nkeys, opname, aggname);
+			pfree(opname);
+			pfree(aggname);
+		}
 
 		/* Prepare and save the plan */
 		qplan = ri_PlanCheck(querybuf.data, riinfo->nkeys, queryoids,
@@ -590,7 +599,14 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 		}
 		appendStringInfoString(&querybuf, " FOR KEY SHARE OF x");
 		if (riinfo->temporal)
-			appendStringInfo(&querybuf, ") x1 HAVING $%d <@ pg_catalog.range_agg(x1.r)", riinfo->nkeys);
+		{
+			char *opname;
+			char *aggname;
+			lookupTRIOperAndProc(riinfo, &opname, &aggname);
+			appendStringInfo(&querybuf, ") x1 HAVING $%d %s %s(x1.r)", riinfo->nkeys, opname, aggname);
+			pfree(opname);
+			pfree(aggname);
+		}
 
 		/* Prepare and save the plan */
 		qplan = ri_PlanCheck(querybuf.data, riinfo->nkeys, queryoids,
@@ -3291,4 +3307,35 @@ RI_FKey_trigger_type(Oid tgfoid)
 	}
 
 	return RI_TRIGGER_NONE;
+}
+
+/*
+ * lookupTRIOperAndProc -
+ *
+ * Gets the names of the operator and aggregate function
+ * used to build the SQL for TRI constraints.
+ * Raises an error if either is not found.
+ */
+static void
+lookupTRIOperAndProc(const RI_ConstraintInfo *riinfo, char **opname, char **aggname)
+{
+	Oid	oid;
+
+	oid = riinfo->period_oprs[FKCONSTR_PERIOD_OP_CONTAINED_BY];
+	if (!OidIsValid(oid))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("no ContainedBy operator for foreign key constraint \"%s\"",
+						NameStr(riinfo->conname)),
+				 errhint("You must use an operator class with a matching ContainedBy operator.")));
+	*opname = get_opname(oid);
+
+	oid = riinfo->period_procs[FKCONSTR_PERIOD_PROC_REFERENCED_AGG];
+	if (!OidIsValid(oid))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("no referencedagg support function for foreign key constraint \"%s\"",
+						NameStr(riinfo->conname)),
+				 errhint("You must use an operator class with a referencedagg support function.")));
+	*aggname = get_func_name_and_namespace(oid);
 }
