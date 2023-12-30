@@ -26,9 +26,8 @@ CREATE TABLE temporal_rng (
 	valid_at TEXT,
 	CONSTRAINT temporal_rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
-ERROR:  column "valid_at" in WITHOUT OVERLAPS is not a range type
-LINE 4:  CONSTRAINT temporal_rng_pk PRIMARY KEY (id, valid_at WITHOU...
-         ^
+ERROR:  data type text has no default operator class for access method "gist"
+HINT:  You must specify an operator class for the index or define a default operator class for the data type.
 -- PK with one column plus a range:
 CREATE TABLE temporal_rng (
 	-- Since we can't depend on having btree_gist here,
@@ -99,6 +98,21 @@ CREATE TABLE temporal_rng3 (
 ALTER TABLE temporal_rng3 DROP CONSTRAINT temporal_rng3_pk;
 DROP TABLE temporal_rng3;
 DROP TYPE textrange2;
+-- PK with a multirange:
+CREATE TABLE temporal_mltrng (
+  id int4range,
+  valid_at tsmultirange,
+  CONSTRAINT temporal_mltrng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+\d temporal_mltrng
+              Table "public.temporal_mltrng"
+  Column  |     Type     | Collation | Nullable | Default 
+----------+--------------+-----------+----------+---------
+ id       | int4range    |           | not null | 
+ valid_at | tsmultirange |           | not null | 
+Indexes:
+    "temporal_mltrng_pk" PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+
 -- UNIQUE with no columns just WITHOUT OVERLAPS:
 CREATE TABLE temporal_rng3 (
 	valid_at tsrange,
@@ -119,9 +133,8 @@ CREATE TABLE temporal_rng3 (
 	valid_at TEXT,
 	CONSTRAINT temporal_rng3_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
 );
-ERROR:  column "valid_at" in WITHOUT OVERLAPS is not a range type
-LINE 4:  CONSTRAINT temporal_rng3_uq UNIQUE (id, valid_at WITHOUT OV...
-         ^
+ERROR:  data type text has no default operator class for access method "gist"
+HINT:  You must specify an operator class for the index or define a default operator class for the data type.
 -- UNIQUE with one column plus a range:
 CREATE TABLE temporal_rng3 (
 	id int4range,
