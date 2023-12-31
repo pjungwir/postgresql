@@ -508,7 +508,7 @@
    </table>
 
   <para>
-   GiST indexes have thirteen support functions, eight of which are optional,
+   GiST indexes have fourteen support functions, nine of which are optional,
    as shown in <xref linkend="xindex-gist-support-table"/>.
    (For more information see <xref linkend="gist"/>.)
   </para>
@@ -601,6 +601,12 @@
        <entry>computes remaining duration(s) after deleting
        second parameter from first (optional)</entry>
        <entry>13</entry>
+      </row>
+      <row>
+       <entry><function>intersect</function></entry>
+       <entry>computes intersection with <literal>FOR PORTION OF</literal>
+        bounds (optional)</entry>
+       <entry>14</entry>
       </row>
      </tbody>
     </tgroup>

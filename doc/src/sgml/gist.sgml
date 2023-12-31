@@ -266,7 +266,7 @@ CREATE INDEX ON my_table USING GIST (my_inet_column inet_ops);
 
  <para>
    There are five methods that an index operator class for
-   <acronym>GiST</acronym> must provide, and eight that are optional.
+   <acronym>GiST</acronym> must provide, and nine that are optional.
    Correctness of the index is ensured
    by proper implementation of the <function>same</function>, <function>consistent</function>
    and <function>union</function> methods, while efficiency (size and speed) of the
@@ -296,7 +296,11 @@ CREATE INDEX ON my_table USING GIST (my_inet_column inet_ops);
    temporal constraint indexes.
    The optional thirteenth method <function>without_portion</function> is used by
    <literal>RESTRICT</literal> foreign keys to compute the portion of history
-   that was lost.
+   that was lost and also by <literal>FOR PORTION OF</literal> to compute the
+   leftover records outside the targeted bounds.
+   The optional fourteenth method <function>intersect</function> is used by
+   <literal>FOR PORTION OF</literal> to compute the new bounds of the updated/
+   deleted record.
  </para>
 
  <variablelist>
@@ -1247,7 +1251,8 @@ my_stratnum(PG_FUNCTION_ARGS)
       </para>
       <para>
        This is used by temporal foreign keys to compute the part
-       of history that was lost by an update.
+       of history that was lost by an update and also by temporal update/delete
+       commands to compute the bounds of the untouched duration.
       </para>
 
       <para>
@@ -1335,6 +1340,52 @@ my_range_without_portion(PG_FUNCTION_ARGS)
     else
         /* do when there is no more left */
         SRF_RETURN_DONE(funcctx);
+}
+</programlisting>
+      </para>
+     </listitem>
+    </varlistentry>
+    <varlistentry>
+     <term><function>intersect</function></term>
+     <listitem>
+      <para>
+       Given two values of this opclass, it returns their intersection.
+      </para>
+      <para>
+       This is used for temporal update commands to compute the
+       new bounds of the changed row.
+      </para>
+
+      <para>
+       The <acronym>SQL</acronym> declaration of the function must look like
+       this (using <literal>my_intersect</literal> as an example):
+
+<programlisting>
+CREATE OR REPLACE FUNCTION my_range_intersect(anyrange, anyrange)
+RETURNS anyrange
+AS 'MODULE_PATHNAME'
+LANGUAGE C STRICT;
+</programlisting>
+      </para>
+
+       <para>
+        The matching code in the C module could then follow this example:
+
+<programlisting>
+Datum
+my_range_intersect(PG_FUNCTION_ARGS)
+{
+    RangeType  *r1 = PG_GETARG_RANGE_P(0);
+    RangeType  *r2 = PG_GETARG_RANGE_P(1);
+    TypeCacheEntry *typcache;
+
+    /* Different types should be prevented by ANYRANGE matching rules */
+    if (RangeTypeGetOid(r1) != RangeTypeGetOid(r2))
+        elog(ERROR, "range types do not match");
+
+    typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
+
+    PG_RETURN_RANGE_P(range_intersect_internal(typcache, r1, r2));
 }
 </programlisting>
       </para>
