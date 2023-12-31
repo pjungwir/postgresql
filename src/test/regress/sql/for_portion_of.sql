@@ -207,6 +207,12 @@ FOR PORTION OF valid_at
 SET name = 'one^4'
 WHERE id = '[1,1]';
 
+-- With a direct target
+UPDATE for_portion_of_test
+FOR PORTION OF valid_at (tsrange('2018-03-10', '2018-03-17'))
+SET name = 'one^5'
+WHERE id = '[1,1]';
+
 -- Updating the non-range part of the PK:
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM '2018-02-15' TO NULL
