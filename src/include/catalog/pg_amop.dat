@@ -1403,6 +1403,9 @@
 { amopfamily => 'gist/range_ops', amoplefttype => 'anyrange',
   amoprighttype => 'anyrange', amopstrategy => '31', amoppurpose => 'p',
   amopopr => '*(anyrange,anyrange)', amopmethod => 'gist' },
+{ amopfamily => 'gist/range_ops', amoplefttype => 'anyrange',
+  amoprighttype => 'anyrange', amopstrategy => '32', amoppurpose => 'p',
+  amopopr => '@-(anyrange,anyrange)', amopmethod => 'gist' },
 
 # GiST multirange_ops
 { amopfamily => 'gist/multirange_ops', amoplefttype => 'anymultirange',
@@ -1462,6 +1465,9 @@
 { amopfamily => 'gist/multirange_ops', amoplefttype => 'anymultirange',
   amoprighttype => 'anymultirange', amopstrategy => '31', amoppurpose => 'p',
   amopopr => '*(anymultirange,anymultirange)', amopmethod => 'gist' },
+{ amopfamily => 'gist/multirange_ops', amoplefttype => 'anymultirange',
+  amoprighttype => 'anymultirange', amopstrategy => '32', amoppurpose => 'p',
+  amopopr => '@-(anymultirange,anymultirange)', amopmethod => 'gist' },
 
 # btree multirange_ops
 { amopfamily => 'btree/multirange_ops', amoplefttype => 'anymultirange',
