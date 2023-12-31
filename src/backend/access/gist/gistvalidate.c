@@ -107,36 +107,36 @@ gistvalidate(Oid opclassoid)
 		switch (procform->amprocnum)
 		{
 			case GIST_CONSISTENT_PROC:
-				ok = check_amproc_signature(procform->amproc, BOOLOID, false,
+				ok = check_amproc_signature(procform->amproc, BOOLOID, false, false,
 											5, 5, INTERNALOID, opcintype,
 											INT2OID, OIDOID, INTERNALOID);
 				break;
 			case GIST_UNION_PROC:
-				ok = check_amproc_signature(procform->amproc, opckeytype, false,
+				ok = check_amproc_signature(procform->amproc, opckeytype, false, false,
 											2, 2, INTERNALOID, INTERNALOID);
 				break;
 			case GIST_COMPRESS_PROC:
 			case GIST_DECOMPRESS_PROC:
 			case GIST_FETCH_PROC:
-				ok = check_amproc_signature(procform->amproc, INTERNALOID, true,
+				ok = check_amproc_signature(procform->amproc, INTERNALOID, false, true,
 											1, 1, INTERNALOID);
 				break;
 			case GIST_PENALTY_PROC:
-				ok = check_amproc_signature(procform->amproc, INTERNALOID, true,
+				ok = check_amproc_signature(procform->amproc, INTERNALOID, false, true,
 											3, 3, INTERNALOID,
 											INTERNALOID, INTERNALOID);
 				break;
 			case GIST_PICKSPLIT_PROC:
-				ok = check_amproc_signature(procform->amproc, INTERNALOID, true,
+				ok = check_amproc_signature(procform->amproc, INTERNALOID, false, true,
 											2, 2, INTERNALOID, INTERNALOID);
 				break;
 			case GIST_EQUAL_PROC:
-				ok = check_amproc_signature(procform->amproc, INTERNALOID, false,
+				ok = check_amproc_signature(procform->amproc, INTERNALOID, false, false,
 											3, 3, opckeytype, opckeytype,
 											INTERNALOID);
 				break;
 			case GIST_DISTANCE_PROC:
-				ok = check_amproc_signature(procform->amproc, FLOAT8OID, false,
+				ok = check_amproc_signature(procform->amproc, FLOAT8OID, false, false,
 											5, 5, INTERNALOID, opcintype,
 											INT2OID, OIDOID, INTERNALOID);
 				break;
@@ -144,17 +144,25 @@ gistvalidate(Oid opclassoid)
 				ok = check_amoptsproc_signature(procform->amproc);
 				break;
 			case GIST_SORTSUPPORT_PROC:
-				ok = check_amproc_signature(procform->amproc, VOIDOID, true,
+				ok = check_amproc_signature(procform->amproc, VOIDOID, false, true,
 											1, 1, INTERNALOID);
 				break;
 			case GIST_STRATNUM_PROC:
-				ok = check_amproc_signature(procform->amproc, INT2OID, true,
+				ok = check_amproc_signature(procform->amproc, INT2OID, false, true,
 											1, 1, INT2OID);
 				break;
 			case GIST_REFERENCED_AGG_PROC:
-				ok = check_amproc_signature(procform->amproc, InvalidOid, false,
+				ok = check_amproc_signature(procform->amproc, InvalidOid, false, false,
 											   1, 1, opcintype)
 					&& get_func_prokind(procform->amproc) == PROKIND_AGGREGATE;
+				break;
+			case GIST_INTERSECT_PROC:
+				ok = check_amproc_signature(procform->amproc, InvalidOid, false, true,
+											2, 2, opcintype, opcintype);
+				break;
+			case GIST_WITHOUT_PORTION_PROC:
+				ok = check_amproc_signature(procform->amproc, opcintype, true, true,
+											2, 2, opcintype, opcintype);
 				break;
 			default:
 				ereport(INFO,
@@ -277,7 +285,8 @@ gistvalidate(Oid opclassoid)
 		if (i == GIST_DISTANCE_PROC || i == GIST_FETCH_PROC ||
 			i == GIST_COMPRESS_PROC || i == GIST_DECOMPRESS_PROC ||
 			i == GIST_OPTIONS_PROC || i == GIST_SORTSUPPORT_PROC ||
-			i == GIST_STRATNUM_PROC || i == GIST_REFERENCED_AGG_PROC)
+			i == GIST_STRATNUM_PROC || i == GIST_REFERENCED_AGG_PROC ||
+			i == GIST_INTERSECT_PROC || i == GIST_WITHOUT_PORTION_PROC)
 			continue;			/* optional methods */
 		ereport(INFO,
 				(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
