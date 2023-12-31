@@ -504,7 +504,6 @@ static ObjectAddress addFkRecurseReferenced(List **wqueue, Constraint *fkconstra
 											Relation rel, Relation pkrel, Oid indexOid, Oid parentConstr,
 											int numfks, int16 *pkattnum, int16 *fkattnum,
 											Oid *pfeqoperators, Oid *ppeqoperators, Oid *ffeqoperators,
-											Oid *periodoperoids, Oid *periodprocoids,
 											int numfkdelsetcols, int16 *fkdelsetcols,
 											bool old_check_ok,
 											Oid parentDelTrigger, Oid parentUpdTrigger,
@@ -516,7 +515,6 @@ static void addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint,
 									Relation rel, Relation pkrel, Oid indexOid, Oid parentConstr,
 									int numfks, int16 *pkattnum, int16 *fkattnum,
 									Oid *pfeqoperators, Oid *ppeqoperators, Oid *ffeqoperators,
-									Oid *periodoperoids, Oid *periodprocoids,
 									int numfkdelsetcols, int16 *fkdelsetcols,
 									bool old_check_ok, LOCKMODE lockmode,
 									Oid parentInsTrigger, Oid parentUpdTrigger,
@@ -559,9 +557,6 @@ static void FindFKComparisonOperators(Constraint *fkconstraint,
 					Oid pktype, Oid fktype, Oid opclass,
 					bool is_temporal, bool for_overlaps,
 					Oid *pfeqopOut, Oid *ppeqopOut, Oid *ffeqopOut);
-static void FindFKPeriodOpersAndProcs(Oid opclass,
-									  Oid *periodoperoids,
-									  Oid *periodprocoids);
 static void ATExecDropConstraint(Relation rel, const char *constrName,
 								 DropBehavior behavior, bool recurse,
 								 bool missing_ok, LOCKMODE lockmode);
@@ -9551,8 +9546,8 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	int16		fkperiodattnums[1] = {0};
 	Oid			pkperiodtypoids[1] = {0};
 	Oid			fkperiodtypoids[1] = {0};
-	Oid			periodoperoids[1] = {0};
-	Oid			periodprocoids[1] = {0};
+	Oid			periodoperoid;
+	Oid			periodprocoid;
 	int			i;
 	int			numfks,
 				numpks,
@@ -9786,10 +9781,11 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	 * to check whether the referencing row's range is contained
 	 * by the aggregated ranges of the referenced row(s).
 	 * For rangetypes this is fk.periodatt <@ range_agg(pk.periodatt).
-	 * Ask the opclass for these values.
+	 * FKs will look these up at "runtime", but we should make sure
+	 * the lookup works here.
 	 */
 	if (is_temporal)
-		FindFKPeriodOpersAndProcs(opclasses[numpks - 1], periodoperoids, periodprocoids);
+		FindFKPeriodOpersAndProcs(opclasses[numpks - 1], &periodoperoid, &periodprocoid);
 
 	/*
 	 * Create all the constraint and trigger objects, recursing to partitions
@@ -9804,8 +9800,6 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 									 pfeqoperators,
 									 ppeqoperators,
 									 ffeqoperators,
-									 periodoperoids,
-									 periodprocoids,
 									 numfkdelsetcols,
 									 fkdelsetcols,
 									 old_check_ok,
@@ -9822,8 +9816,6 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 							pfeqoperators,
 							ppeqoperators,
 							ffeqoperators,
-							periodoperoids,
-							periodprocoids,
 							numfkdelsetcols,
 							fkdelsetcols,
 							old_check_ok,
@@ -9912,7 +9904,6 @@ addFkRecurseReferenced(List **wqueue, Constraint *fkconstraint, Relation rel,
 					   int numfks,
 					   int16 *pkattnum, int16 *fkattnum, Oid *pfeqoperators,
 					   Oid *ppeqoperators, Oid *ffeqoperators,
-					   Oid *periodoperoids, Oid *periodprocoids,
 					   int numfkdelsetcols, int16 *fkdelsetcols,
 					   bool old_check_ok,
 					   Oid parentDelTrigger, Oid parentUpdTrigger,
@@ -9990,8 +9981,6 @@ addFkRecurseReferenced(List **wqueue, Constraint *fkconstraint, Relation rel,
 									  pfeqoperators,
 									  ppeqoperators,
 									  ffeqoperators,
-									  is_temporal ? periodoperoids : NULL,
-									  is_temporal ? periodprocoids : NULL,
 									  numfks,
 									  fkconstraint->fk_upd_action,
 									  fkconstraint->fk_del_action,
@@ -10078,7 +10067,6 @@ addFkRecurseReferenced(List **wqueue, Constraint *fkconstraint, Relation rel,
 								   partIndexId, constrOid, numfks,
 								   mapped_pkattnum, fkattnum,
 								   pfeqoperators, ppeqoperators, ffeqoperators,
-								   periodoperoids, periodprocoids,
 								   numfkdelsetcols, fkdelsetcols,
 								   old_check_ok,
 								   deleteTriggerOid, updateTriggerOid,
@@ -10138,7 +10126,6 @@ addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint, Relation rel,
 						Relation pkrel, Oid indexOid, Oid parentConstr,
 						int numfks, int16 *pkattnum, int16 *fkattnum,
 						Oid *pfeqoperators, Oid *ppeqoperators, Oid *ffeqoperators,
-						Oid *periodoperoids, Oid *periodprocoids,
 						int numfkdelsetcols, int16 *fkdelsetcols,
 						bool old_check_ok, LOCKMODE lockmode,
 						Oid parentInsTrigger, Oid parentUpdTrigger,
@@ -10296,8 +10283,6 @@ addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint, Relation rel,
 									  pfeqoperators,
 									  ppeqoperators,
 									  ffeqoperators,
-									  is_temporal ? periodoperoids : NULL,
-									  is_temporal ? periodprocoids : NULL,
 									  numfks,
 									  fkconstraint->fk_upd_action,
 									  fkconstraint->fk_del_action,
@@ -10336,8 +10321,6 @@ addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint, Relation rel,
 									pfeqoperators,
 									ppeqoperators,
 									ffeqoperators,
-									periodoperoids,
-									periodprocoids,
 									numfkdelsetcols,
 									fkdelsetcols,
 									old_check_ok,
@@ -10462,8 +10445,6 @@ CloneFkReferenced(Relation parentRel, Relation partitionRel)
 		Oid			conpfeqop[INDEX_MAX_KEYS];
 		Oid			conppeqop[INDEX_MAX_KEYS];
 		Oid			conffeqop[INDEX_MAX_KEYS];
-		Oid			periodoperoids[1];
-		Oid			periodprocoids[1];
 		int			numfkdelsetcols;
 		AttrNumber	confdelsetcols[INDEX_MAX_KEYS];
 		Constraint *fkconstraint;
@@ -10512,8 +10493,6 @@ CloneFkReferenced(Relation parentRel, Relation partitionRel)
 								   conpfeqop,
 								   conppeqop,
 								   conffeqop,
-								   periodoperoids,
-								   periodprocoids,
 								   &numfkdelsetcols,
 								   confdelsetcols);
 
@@ -10580,8 +10559,6 @@ CloneFkReferenced(Relation parentRel, Relation partitionRel)
 							   conpfeqop,
 							   conppeqop,
 							   conffeqop,
-							   periodoperoids,
-							   periodprocoids,
 							   numfkdelsetcols,
 							   confdelsetcols,
 							   true,
@@ -10669,8 +10646,6 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 		Oid			conpfeqop[INDEX_MAX_KEYS];
 		Oid			conppeqop[INDEX_MAX_KEYS];
 		Oid			conffeqop[INDEX_MAX_KEYS];
-		Oid			periodoperoids[1];
-		Oid			periodprocoids[1];
 		int			numfkdelsetcols;
 		AttrNumber	confdelsetcols[INDEX_MAX_KEYS];
 		Constraint *fkconstraint;
@@ -10708,7 +10683,6 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 
 		DeconstructFkConstraintRow(tuple, &numfks, conkey, confkey,
 								   conpfeqop, conppeqop, conffeqop,
-								   periodoperoids, periodprocoids,
 								   &numfkdelsetcols, confdelsetcols);
 		for (int i = 0; i < numfks; i++)
 			mapped_conkey[i] = attmap->attnums[conkey[i] - 1];
@@ -10819,8 +10793,6 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 								  conpfeqop,
 								  conppeqop,
 								  conffeqop,
-								  is_temporal ? periodoperoids : NULL,
-								  is_temporal ? periodprocoids : NULL,
 								  numfks,
 								  fkconstraint->fk_upd_action,
 								  fkconstraint->fk_del_action,
@@ -10862,8 +10834,6 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 								conpfeqop,
 								conppeqop,
 								conffeqop,
-								periodoperoids,
-								periodprocoids,
 								numfkdelsetcols,
 								confdelsetcols,
 								false,	/* no old check exists */
@@ -11124,10 +11094,10 @@ FindFKComparisonOperators(Constraint *fkconstraint,
  * Looks up the oper and proc oids for confkperiodoperoids and confkperiodprocoids.
  * These are used by foreign keys with a PERIOD element.
  */
-static void
+void
 FindFKPeriodOpersAndProcs(Oid opclass,
-						  Oid *periodoperoids,
-						  Oid *periodprocoids)
+						  Oid *periodoperoid,
+						  Oid *periodprocoid)
 {
 	Oid	opfamily;
 	Oid	opcintype;
@@ -11145,7 +11115,7 @@ FindFKPeriodOpersAndProcs(Oid opclass,
 				 errmsg("no support func %u found for FOREIGN KEY constraint", GIST_REFERENCED_AGG_PROC),
 				 errhint("Define a referencedagg support function for your GiST opclass.")));
 
-	periodprocoids[FKCONSTR_PERIOD_PROC_REFERENCED_AGG] = funcid;
+	*periodprocoid = funcid;
 
 	/* Look up the function's rettype. */
 	aggrettype = get_func_rettype(funcid);
@@ -11159,7 +11129,7 @@ FindFKPeriodOpersAndProcs(Oid opclass,
 									 aggrettype,
 									 "contained by",
 									 "FOREIGN KEY constraint",
-									 &periodoperoids[FKCONSTR_PERIOD_OP_CONTAINED_BY],
+									 periodoperoid,
 									 &strat);
 }
 
