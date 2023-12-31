@@ -161,18 +161,6 @@ CATALOG(pg_constraint,2606,ConstraintRelationId)
 	 * If a check constraint, nodeToString representation of expression
 	 */
 	pg_node_tree conbin;
-
-	/*
-	 * If a FOREIGN KEY constraint with PERIOD, operator oids for generating
-	 * the FK SQL.
-	 */
-	Oid			confkperiodoperoids[1] BKI_LOOKUP(pg_operator);
-
-	/*
-	 * If a FOREIGN KEY constraint with PERIOD, function oids for generating
-	 * the FK SQL.
-	 */
-	Oid			confkperiodprocoids[1] BKI_LOOKUP(pg_proc);
 #endif
 } FormData_pg_constraint;
 
@@ -243,8 +231,6 @@ extern Oid	CreateConstraintEntry(const char *constraintName,
 								  const Oid *pfEqOp,
 								  const Oid *ppEqOp,
 								  const Oid *ffEqOp,
-								  const Oid *foreignPeriodOpers,
-								  const Oid *foreignPeriodProcs,
 								  int foreignNKeys,
 								  char foreignUpdateType,
 								  char foreignDeleteType,
@@ -294,7 +280,6 @@ extern Bitmapset *get_primary_key_attnos(Oid relid, bool deferrableOk,
 extern void DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
 									   AttrNumber *conkey, AttrNumber *confkey,
 									   Oid *pf_eq_oprs, Oid *pp_eq_oprs, Oid *ff_eq_oprs,
-									   Oid *fk_period_oper_oids, Oid *fk_period_proc_oids,
 									   int *num_fk_del_set_cols, AttrNumber *fk_del_set_cols);
 
 extern bool check_functional_grouping(Oid relid,

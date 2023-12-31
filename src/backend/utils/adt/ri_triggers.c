@@ -33,6 +33,7 @@
 #include "catalog/pg_operator.h"
 #include "catalog/pg_range.h"
 #include "catalog/pg_type.h"
+#include "commands/tablecmds.h"
 #include "commands/trigger.h"
 #include "executor/executor.h"
 #include "executor/spi.h"
@@ -127,8 +128,8 @@ typedef struct RI_ConstraintInfo
 	Oid			pf_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (PK = FK) */
 	Oid			pp_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (PK = PK) */
 	Oid			ff_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (FK = FK) */
-	Oid			period_oprs[1];	/* operators for PEROID SQL */
-	Oid			period_procs[1];	/* procs for PERIOD SQL */
+	Oid			period_contained_by_oper;	/* operator for PEROID SQL */
+	Oid			period_referenced_agg_proc;	/* proc for PERIOD SQL */
 	dlist_node	valid_link;		/* Link in list of valid entries */
 } RI_ConstraintInfo;
 
@@ -2395,10 +2396,20 @@ ri_LoadConstraintInfo(Oid constraintOid)
 							   riinfo->pf_eq_oprs,
 							   riinfo->pp_eq_oprs,
 							   riinfo->ff_eq_oprs,
-							   riinfo->period_oprs,
-							   riinfo->period_procs,
 							   &riinfo->ndelsetcols,
 							   riinfo->confdelsetcols);
+
+	/*
+	 * For temporal FKs, get the operator and aggregate function we need.
+	 * We ask the opclass of the PK element for this.
+	 * This all gets cached (as does the generated plan),
+	 * so there's no performance issue.
+	 */
+	if (riinfo->temporal)
+	{
+		Oid	opclass = get_index_column_opclass(conForm->conindid, riinfo->nkeys);
+		FindFKPeriodOpersAndProcs(opclass, &riinfo->period_contained_by_oper, &riinfo->period_referenced_agg_proc);
+	}
 
 	ReleaseSysCache(tup);
 
@@ -3321,7 +3332,7 @@ lookupTRIOperAndProc(const RI_ConstraintInfo *riinfo, char **opname, char **aggn
 {
 	Oid	oid;
 
-	oid = riinfo->period_oprs[FKCONSTR_PERIOD_OP_CONTAINED_BY];
+	oid = riinfo->period_contained_by_oper;
 	if (!OidIsValid(oid))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
@@ -3330,7 +3341,7 @@ lookupTRIOperAndProc(const RI_ConstraintInfo *riinfo, char **opname, char **aggn
 				 errhint("You must use an operator class with a matching ContainedBy operator.")));
 	*opname = get_opname(oid);
 
-	oid = riinfo->period_procs[FKCONSTR_PERIOD_PROC_REFERENCED_AGG];
+	oid = riinfo->period_referenced_agg_proc;
 	if (!OidIsValid(oid))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
