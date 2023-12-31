@@ -1334,6 +1334,15 @@ transformForPortionOfClause(ParseState *pstate,
 			(Node *) copyObject(rangeVar), targetExpr,
 			forPortionOf->range_name_location);
 
+	/*
+	 * Look up the withoutPortionOper so we can compute the leftovers.
+	 * Leftovers will be old_range @- target_range
+	 * (one per element of the result).
+	 */
+	strat = RTWithoutPortionStrategyNumber;
+	GetOperatorFromCanonicalStrategy(opclass, InvalidOid, "without portion", "FOR PORTION OF", &opid, &strat);
+	result->withoutPortionProc = get_opcode(opid);
+
 	if (isUpdate)
 	{
 		/*
