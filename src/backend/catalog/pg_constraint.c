@@ -64,8 +64,6 @@ CreateConstraintEntry(const char *constraintName,
 					  const Oid *pfEqOp,
 					  const Oid *ppEqOp,
 					  const Oid *ffEqOp,
-					  const Oid *foreignPeriodOpers,
-					  const Oid *foreignPeriodProcs,
 					  int foreignNKeys,
 					  char foreignUpdateType,
 					  char foreignDeleteType,
@@ -91,8 +89,6 @@ CreateConstraintEntry(const char *constraintName,
 	ArrayType  *conpfeqopArray;
 	ArrayType  *conppeqopArray;
 	ArrayType  *conffeqopArray;
-	ArrayType  *confkperiodoperoidsArray;
-	ArrayType  *confkperiodprocoidsArray;
 	ArrayType  *conexclopArray;
 	ArrayType  *confdelsetcolsArray;
 	NameData	cname;
@@ -147,26 +143,6 @@ CreateConstraintEntry(const char *constraintName,
 		}
 		else
 			confdelsetcolsArray = NULL;
-
-		if (foreignPeriodOpers || foreignPeriodProcs)
-		{
-			/* If you have one you have both: */
-			Assert(foreignPeriodOpers != NULL);
-			Assert(foreignPeriodProcs != NULL);
-
-			fkdatums[FKCONSTR_PERIOD_OP_CONTAINED_BY] =
-				foreignPeriodOpers[FKCONSTR_PERIOD_OP_CONTAINED_BY];
-			confkperiodoperoidsArray = construct_array_builtin(fkdatums, 1, OIDOID);
-
-			fkdatums[FKCONSTR_PERIOD_PROC_REFERENCED_AGG] =
-				foreignPeriodProcs[FKCONSTR_PERIOD_PROC_REFERENCED_AGG];
-			confkperiodprocoidsArray = construct_array_builtin(fkdatums, 1, OIDOID);
-		}
-		else
-		{
-			confkperiodoperoidsArray = NULL;
-			confkperiodprocoidsArray = NULL;
-		}
 	}
 	else
 	{
@@ -175,8 +151,6 @@ CreateConstraintEntry(const char *constraintName,
 		conppeqopArray = NULL;
 		conffeqopArray = NULL;
 		confdelsetcolsArray = NULL;
-		confkperiodoperoidsArray = NULL;
-		confkperiodprocoidsArray = NULL;
 	}
 
 	if (exclOp != NULL)
@@ -259,16 +233,6 @@ CreateConstraintEntry(const char *constraintName,
 		values[Anum_pg_constraint_conbin - 1] = CStringGetTextDatum(conBin);
 	else
 		nulls[Anum_pg_constraint_conbin - 1] = true;
-
-	if (confkperiodoperoidsArray)
-		values[Anum_pg_constraint_confkperiodoperoids - 1] = PointerGetDatum(confkperiodoperoidsArray);
-	else
-		nulls[Anum_pg_constraint_confkperiodoperoids - 1] = true;
-
-	if (confkperiodprocoidsArray)
-		values[Anum_pg_constraint_confkperiodprocoids - 1] = PointerGetDatum(confkperiodprocoidsArray);
-	else
-		nulls[Anum_pg_constraint_confkperiodprocoids - 1] = true;
 
 	tup = heap_form_tuple(RelationGetDescr(conDesc), values, nulls);
 
@@ -1572,7 +1536,6 @@ void
 DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
 						   AttrNumber *conkey, AttrNumber *confkey,
 						   Oid *pf_eq_oprs, Oid *pp_eq_oprs, Oid *ff_eq_oprs,
-						   Oid *fk_period_oper_oids, Oid *fk_period_proc_oids,
 						   int *num_fk_del_set_cols, AttrNumber *fk_del_set_cols)
 {
 	Datum		adatum;
@@ -1655,42 +1618,6 @@ DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
 		memcpy(ff_eq_oprs, ARR_DATA_PTR(arr), numkeys * sizeof(Oid));
 		if ((Pointer) arr != DatumGetPointer(adatum))
 			pfree(arr);			/* free de-toasted copy, if any */
-	}
-
-	if (fk_period_oper_oids)
-	{
-		adatum = SysCacheGetAttr(CONSTROID, tuple,
-								 Anum_pg_constraint_confkperiodoperoids, &isNull);
-		if (!isNull)
-		{
-			arr = DatumGetArrayTypeP(adatum);	/* ensure not toasted */
-			if (ARR_NDIM(arr) != 1 ||
-				ARR_DIMS(arr)[0] != 1 ||
-				ARR_HASNULL(arr) ||
-				ARR_ELEMTYPE(arr) != OIDOID)
-				elog(ERROR, "confkperiodoperoids is not a 1-D Oid array");
-			memcpy(fk_period_oper_oids, ARR_DATA_PTR(arr), 1 * sizeof(Oid));
-			if ((Pointer) arr != DatumGetPointer(adatum))
-				pfree(arr);			/* free de-toasted copy, if any */
-		}
-	}
-
-	if (fk_period_proc_oids)
-	{
-		adatum = SysCacheGetAttr(CONSTROID, tuple,
-								 Anum_pg_constraint_confkperiodprocoids, &isNull);
-		if (!isNull)
-		{
-			arr = DatumGetArrayTypeP(adatum);	/* ensure not toasted */
-			if (ARR_NDIM(arr) != 1 ||
-				ARR_DIMS(arr)[0] != 1 ||
-				ARR_HASNULL(arr) ||
-				ARR_ELEMTYPE(arr) != OIDOID)
-				elog(ERROR, "confkperiodprocoids is not a 1-D Oid array");
-			memcpy(fk_period_proc_oids, ARR_DATA_PTR(arr), 1 * sizeof(Oid));
-			if ((Pointer) arr != DatumGetPointer(adatum))
-				pfree(arr);			/* free de-toasted copy, if any */
-		}
 	}
 
 	if (fk_del_set_cols)
