@@ -1535,13 +1535,15 @@ typedef struct RowMarkClause
 
 /*
  * ForPortionOfClause
- *		representation of FOR PORTION OF <period-name> FROM <t1> TO <t2>
+ *		representation of FOR PORTION OF <period-name> FROM <ts> TO <te>
+ *		or FOR PORTION OF <period-name> (<target>)
  */
 typedef struct ForPortionOfClause
 {
 	NodeTag		type;
 	char	   *range_name;
 	int			range_name_location;
+	Node	   *target;
 	Node	   *target_start;
 	Node	   *target_end;
 } ForPortionOfClause;

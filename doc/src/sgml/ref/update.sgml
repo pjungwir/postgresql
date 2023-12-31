@@ -23,7 +23,7 @@ PostgreSQL documentation
 <synopsis>
 [ WITH [ RECURSIVE ] <replaceable class="parameter">with_query</replaceable> [, ...] ]
 UPDATE [ ONLY ] <replaceable class="parameter">table_name</replaceable> [ * ] [ [ AS ] <replaceable class="parameter">alias</replaceable> ]
-    [ FOR PORTION OF <replaceable class="parameter">range_or_period_name</replaceable> FROM <replaceable class="parameter">start_time</replaceable> TO <replaceable class="parameter">end_time</replaceable> ]
+    [ FOR PORTION OF <replaceable class="parameter">range_or_period_name</replaceable> <replaceable class="parameter">for_portion_of_target</replaceable> ]
     SET { <replaceable class="parameter">column_name</replaceable> = { <replaceable class="parameter">expression</replaceable> | DEFAULT } |
           ( <replaceable class="parameter">column_name</replaceable> [, ...] ) = [ ROW ] ( { <replaceable class="parameter">expression</replaceable> | DEFAULT } [, ...] ) |
           ( <replaceable class="parameter">column_name</replaceable> [, ...] ) = ( <replaceable class="parameter">sub-SELECT</replaceable> )
@@ -155,6 +155,22 @@ UPDATE [ ONLY ] <replaceable class="parameter">table_name</replaceable> [ * ] [ 
     <listitem>
      <para>
       The range column or period to use when performing a temporal update.
+     </para>
+    </listitem>
+   </varlistentry>
+
+   <varlistentry>
+    <term><replaceable class="parameter">for_portion_of_target</replaceable></term>
+    <listitem>
+     <para>
+      The interval to update. If you are targeting a range column or <literal>PERIOD</literal>,
+      you may give this in the form <literal>FROM</literal>
+      <replaceable class="parameter">start_time</replaceable> <literal>TO</literal>
+      <replaceable class="parameter">end_time</replaceable>.
+      Otherwise you must use
+      <literal>(</literal><replaceable class="parameter">expression</replaceable><literal>)</literal>
+      where the expression yields a value for the same type as
+      <replaceable class="parameter">range_or_period_name</replaceable>.
      </para>
     </listitem>
    </varlistentry>

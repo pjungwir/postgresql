@@ -13766,7 +13766,15 @@ relation_expr_opt_alias: relation_expr					%prec UMINUS
 		;
 
 for_portion_of_clause:
-			FOR PORTION OF ColId FROM a_expr TO a_expr
+			FOR PORTION OF ColId '(' a_expr ')'
+				{
+					ForPortionOfClause *n = makeNode(ForPortionOfClause);
+					n->range_name = $4;
+					n->range_name_location = @4;
+					n->target = $6;
+					$$ = n;
+				}
+			| FOR PORTION OF ColId FROM a_expr TO a_expr
 				{
 					ForPortionOfClause *n = makeNode(ForPortionOfClause);
 					n->range_name = $4;
