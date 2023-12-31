@@ -231,9 +231,9 @@ gistvalidate(Oid opclassoid)
 			/* Search operators must always return bool */
 			op_rettype = BOOLOID;
 		}
-		else if (oprform->amoppurpose == AMOP_OTHER)
+		else if (oprform->amoppurpose == AMOP_PORTION)
 		{
-			/* No restrictions on OTHER */
+			/* No restrictions on PORTION */
 			op_rettype = InvalidOid;
 		}
 		else
