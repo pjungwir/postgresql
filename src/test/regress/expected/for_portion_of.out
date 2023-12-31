@@ -241,6 +241,11 @@ FOR PORTION OF valid_at
   TO '2019-01-01'
 SET name = 'one^4'
 WHERE id = '[1,1]';
+-- With a direct target
+UPDATE for_portion_of_test
+FOR PORTION OF valid_at (tsrange('2018-03-10', '2018-03-17'))
+SET name = 'one^5'
+WHERE id = '[1,1]';
 -- Updating the non-range part of the PK:
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM '2018-02-15' TO NULL
@@ -272,8 +277,10 @@ SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
  [6,7) | ["Thu Feb 15 00:00:00 2018","Thu Mar 01 08:01:00 2018") | one^2
  [6,7) | ["Thu Mar 01 08:01:00 2018","Thu Mar 01 10:00:00 2018") | one^3
  [6,7) | ["Thu Mar 01 10:00:00 2018","Sat Mar 03 00:00:00 2018") | one^4
- [6,7) | ["Sat Mar 03 00:00:00 2018","Wed Apr 04 00:00:00 2018") | one^4
-(20 rows)
+ [6,7) | ["Sat Mar 03 00:00:00 2018","Sat Mar 10 00:00:00 2018") | one^4
+ [6,7) | ["Sat Mar 10 00:00:00 2018","Sat Mar 17 00:00:00 2018") | one^5
+ [6,7) | ["Sat Mar 17 00:00:00 2018","Wed Apr 04 00:00:00 2018") | one^4
+(22 rows)
 
 --
 -- DELETE tests
