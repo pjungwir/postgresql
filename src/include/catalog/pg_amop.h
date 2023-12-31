@@ -96,7 +96,7 @@ DECLARE_UNIQUE_INDEX_PKEY(pg_amop_oid_index, 2756, AccessMethodOperatorOidIndexI
 /* allowed values of amoppurpose: */
 #define AMOP_SEARCH		's'		/* operator is for search */
 #define AMOP_ORDER		'o'		/* operator is for ordering */
-#define AMOP_OTHER		'x'		/* operator is for something else */
+#define AMOP_PORTION	'p'		/* operator is for FOR PORTION OF */
 
 #endif							/* EXPOSE_TO_CLIENT_CODE */
 
