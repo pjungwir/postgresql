@@ -1261,7 +1261,7 @@ transformForPortionOfClause(ParseState *pstate,
 	Oid	opid;
 	ForPortionOfExpr *result;
 	Var *rangeVar;
-	FuncCall *fc;
+	Node *targetExpr;
 
 	result = makeNode(ForPortionOfExpr);
 
@@ -1299,19 +1299,28 @@ transformForPortionOfClause(ParseState *pstate,
 		elog(ERROR, "missing range type %d", attr->atttypid);
 
 
-	/*
-	 * Build a range from the FROM ... TO .... bounds.
-	 * This should give a constant result, so we accept functions like NOW()
-	 * but not column references, subqueries, etc.
-	 *
-	 * It also permits UNBOUNDED in either place.
-	 */
-	fc = makeFuncCall(
-			list_make2(makeString(range_type_namespace), makeString(range_type_name)),
-			list_make2(forPortionOf->target_start, forPortionOf->target_end),
-			COERCE_EXPLICIT_CALL,
-			forPortionOf->range_name_location);
-	result->targetRange = transformExpr(pstate, (Node *) fc, EXPR_KIND_UPDATE_PORTION);
+	if (forPortionOf->target)
+		/*
+		 * We were already given an expression for the target,
+		 * so we don't have to build anything.
+		 */
+		targetExpr = forPortionOf->target;
+	else
+	{
+		/*
+		 * Build a range from the FROM ... TO .... bounds.
+		 * This should give a constant result, so we accept functions like NOW()
+		 * but not column references, subqueries, etc.
+		 *
+		 * It also permits UNBOUNDED in either place.
+		 */
+		targetExpr = (Node *) makeFuncCall(
+				list_make2(makeString(range_type_namespace), makeString(range_type_name)),
+				list_make2(forPortionOf->target_start, forPortionOf->target_end),
+				COERCE_EXPLICIT_CALL,
+				forPortionOf->range_name_location);
+	}
+	result->targetRange = transformExpr(pstate, targetExpr, EXPR_KIND_UPDATE_PORTION);
 
 	/*
 	 * Build overlapsExpr to use in the whereClause.
@@ -1322,7 +1331,7 @@ transformForPortionOfClause(ParseState *pstate,
 	strat = RTOverlapStrategyNumber;
 	GetOperatorFromCanonicalStrategy(opclass, InvalidOid, "overlaps", "FOR PORTION OF", &opid, &strat);
 	result->overlapsExpr = (Node *) makeSimpleA_Expr(AEXPR_OP, get_opname(opid),
-			(Node *) copyObject(rangeVar), (Node *) fc,
+			(Node *) copyObject(rangeVar), targetExpr,
 			forPortionOf->range_name_location);
 
 	if (isUpdate)
@@ -1337,7 +1346,7 @@ transformForPortionOfClause(ParseState *pstate,
 		strat = RTIntersectStrategyNumber;
 		GetOperatorFromCanonicalStrategy(opclass, InvalidOid, "intersects", "FOR PORTION OF", &opid, &strat);
 		rangeSetExpr = (Expr *) makeSimpleA_Expr(AEXPR_OP, get_opname(opid),
-				(Node *) copyObject(rangeVar), (Node *) fc,
+				(Node *) copyObject(rangeVar), targetExpr,
 				forPortionOf->range_name_location);
 		rangeSetExpr = (Expr *) transformExpr(pstate, (Node *) rangeSetExpr, EXPR_KIND_UPDATE_PORTION);
 
