@@ -58,11 +58,11 @@
 #include "rewrite/rewriteHandler.h"
 #include "storage/bufmgr.h"
 #include "storage/lmgr.h"
+#include "utils/array.h"
 #include "utils/builtins.h"
 #include "utils/datum.h"
 #include "utils/memutils.h"
 #include "utils/period.h"
-#include "utils/rangetypes.h"
 #include "utils/lsyscache.h"
 #include "utils/rel.h"
 
@@ -1221,11 +1221,11 @@ ExecInsert(ModifyTableContext *context,
 static void set_leftover_tuple_bounds(TupleTableSlot *leftoverTuple,
 									  ForPortionOfExpr *forPortionOf,
 									  TypeCacheEntry *typcache,
-									  RangeType *leftoverRangeType)
+									  Datum leftover)
 {
 	/* Store the range directly */
 
-	leftoverTuple->tts_values[forPortionOf->rangeVar->varattno - 1] = RangeTypePGetDatum(leftoverRangeType);
+	leftoverTuple->tts_values[forPortionOf->rangeVar->varattno - 1] = leftover;
 	leftoverTuple->tts_isnull[forPortionOf->rangeVar->varattno - 1] = false;
 }
 
@@ -1245,20 +1245,15 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	ModifyTableState *mtstate = context->mtstate;
 	ModifyTable *node = (ModifyTable *) mtstate->ps.plan;
 	ForPortionOfExpr *forPortionOf = (ForPortionOfExpr *) node->forPortionOf;
-	Datum oldRange;
-	RangeType *oldRangeType;
-	RangeType *targetRangeType;
-	RangeType *leftoverRangeType1;
-	RangeType *leftoverRangeType2;
-	Oid rangeTypeOid = forPortionOf->rangeType;
+	Datum	oldRange;
+	Datum	allLeftovers;
+	Datum	*leftovers;
+	int		nleftovers;
 	bool isNull = false;
 	TypeCacheEntry *typcache;
 	ForPortionOfState *fpoState = resultRelInfo->ri_forPortionOf;
 	TupleTableSlot *oldtupleSlot = fpoState->fp_Existing;
-	TupleTableSlot *leftoverTuple1 = fpoState->fp_Leftover1;
-	TupleTableSlot *leftoverTuple2 = fpoState->fp_Leftover2;
-	HeapTuple oldtuple = NULL;
-	bool shouldFree = false;
+	TupleTableSlot *leftoverTuple = fpoState->fp_Leftover;
 
 	/*
 	 * Get the range of the old pre-UPDATE/DELETE tuple,
@@ -1280,72 +1275,50 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 
 	if (isNull)
 		elog(ERROR, "found a NULL range in a temporal table");
-	oldRangeType = DatumGetRangeTypeP(oldRange);
-
-	/* Get the target range. */
-
-	targetRangeType = DatumGetRangeTypeP(fpoState->fp_targetRange);
 
 	/*
 	 * Get the range's type cache entry. This is worth caching for the whole UPDATE
-	 * like range functions do.
+	 * as range functions do.
 	 */
 
-	typcache = fpoState->fp_rangetypcache;
+	typcache = fpoState->fp_leftoverstypcache;
 	if (typcache == NULL)
 	{
-		typcache = lookup_type_cache(rangeTypeOid, TYPECACHE_RANGE_INFO);
-		if (typcache->rngelemtype == NULL)
-			elog(ERROR, "type %u is not a range type", rangeTypeOid);
-		fpoState->fp_rangetypcache = typcache;
+		typcache = lookup_type_cache(forPortionOf->rangeType, 0);
+		fpoState->fp_leftoverstypcache = typcache;
 	}
 
 	/* Get the ranges to the left/right of the targeted range. */
 
-	range_leftover_internal(typcache, oldRangeType, targetRangeType, &leftoverRangeType1,
-			&leftoverRangeType2);
+	allLeftovers = OidFunctionCall2Coll(forPortionOf->withoutPortionProc,
+										InvalidOid, oldRange, fpoState->fp_targetRange);
 
-	/*
-	 * Insert a copy of the tuple with the lower leftover range.
-	 * Even if the table is partitioned,
-	 * our insert won't extend past the current row, so we don't need to re-route.
-	 * TODO: Really? What if you update the partition key?
-	 */
+	deconstruct_array(DatumGetArrayTypeP(allLeftovers), typcache->type_id, typcache->typlen,
+					  typcache->typbyval, typcache->typalign, &leftovers, NULL, &nleftovers);
 
-	if (!RangeIsEmpty(leftoverRangeType1))
+	if (nleftovers > 0)
 	{
-		oldtuple = ExecFetchSlotHeapTuple(oldtupleSlot, false, &shouldFree);
-		ExecForceStoreHeapTuple(oldtuple, leftoverTuple1, false);
+		bool shouldFree;
+		HeapTuple oldtuple = ExecFetchSlotHeapTuple(oldtupleSlot, false, &shouldFree);
+		int i;
+		// TupleDesc tupDesc = resultRelInfo->ri_RelationDesc->rd_att;
 
-		set_leftover_tuple_bounds(leftoverTuple1, forPortionOf, typcache, leftoverRangeType1);
-		ExecMaterializeSlot(leftoverTuple1);
+		for (i = 0; i < nleftovers; i++)
+		{
+			// TODO: okay to keep re-using the same leftoverTuple TTS every iteration?:
+			// leftoverTuple = ExecInitExtraTupleSlot(mtstate->ps.state, tupDesc, &TTSOpsVirtual);
+			ExecForceStoreHeapTuple(oldtuple, leftoverTuple, false);
 
-		// TODO: Need to save context->mtstate->mt_transition_capture? (See comment on ExecInsert)
-		ExecInsert(context, resultRelInfo, leftoverTuple1, node->canSetTag, NULL, NULL);
+			set_leftover_tuple_bounds(leftoverTuple, forPortionOf, typcache, leftovers[i]);
+			ExecMaterializeSlot(leftoverTuple);
+
+			// TODO: Need to save context->mtstate->mt_transition_capture? (See comment on ExecInsert)
+			ExecInsert(context, resultRelInfo, leftoverTuple, node->canSetTag, NULL, NULL);
+		}
+
+		if (shouldFree)
+			heap_freetuple(oldtuple);
 	}
-
-	/*
-	 * Insert a copy of the tuple with the upper leftover range
-	 * Even if the table is partitioned,
-	 * our insert won't extend past the current row, so we don't need to re-route.
-	 * TODO: Really? What if you update the partition key?
-	 */
-
-	if (!RangeIsEmpty(leftoverRangeType2))
-	{
-		if (!oldtuple)
-			oldtuple = ExecFetchSlotHeapTuple(oldtupleSlot, false, &shouldFree);
-		ExecForceStoreHeapTuple(oldtuple, leftoverTuple2, false);
-
-		set_leftover_tuple_bounds(leftoverTuple2, forPortionOf, typcache, leftoverRangeType2);
-		ExecMaterializeSlot(leftoverTuple2);
-
-		// TODO: Need to save context->mtstate->mt_transition_capture? (See comment on ExecInsert)
-		ExecInsert(context, resultRelInfo, leftoverTuple2, node->canSetTag, NULL, NULL);
-	}
-
-	if (shouldFree)
-		heap_freetuple(oldtuple);
 }
 
 /* ----------------------------------------------------------------
@@ -4499,11 +4472,9 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 			table_slot_create(resultRelInfo->ri_RelationDesc,
 							  &mtstate->ps.state->es_tupleTable);
 
-		/* Create the tuple slots for INSERTing the leftovers */
+		/* Create the tuple slot for INSERTing the leftovers */
 
-		fpoState->fp_Leftover1 =
-			ExecInitExtraTupleSlot(mtstate->ps.state, tupDesc, &TTSOpsVirtual);
-		fpoState->fp_Leftover2 =
+		fpoState->fp_Leftover =
 			ExecInitExtraTupleSlot(mtstate->ps.state, tupDesc, &TTSOpsVirtual);
 
 		/*
@@ -4513,6 +4484,8 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 		 *
 		 * They should all have the same tupledesc, so it's okay
 		 * that any one of them can use the tuple table slots there.
+		 * TODO: This is wrong if a column was dropped then added again!
+		 * We should use execute_attr_map_slot to use the correct attnums.
 		 */
 		for (i = 0; i < nrels; i++)
 		{

@@ -2091,6 +2091,7 @@ typedef struct ForPortionOfExpr
 	Oid			rangeType;			/* type of targetRange */
 	Node	   *overlapsExpr;		/* range && targetRange */
 	List	   *rangeSet;			/* List of TargetEntrys to set the time column(s) */
+	Oid			withoutPortionProc;	/* proc for old_range @- target_range */
 } ForPortionOfExpr;
 
 #endif							/* PRIMNODES_H */
