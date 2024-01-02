@@ -1212,23 +1212,6 @@ ExecInsert(ModifyTableContext *context,
 }
 
 /* ----------------------------------------------------------------
- *		set_leftover_tuple_bounds
- *
- *		Saves the new bounds into the range attribute
- * ----------------------------------------------------------------
- */
-static void set_leftover_tuple_bounds(TupleTableSlot *leftoverTuple,
-									  ForPortionOfExpr *forPortionOf,
-									  TypeCacheEntry *typcache,
-									  Datum leftover)
-{
-	/* Store the range directly */
-
-	leftoverTuple->tts_values[forPortionOf->rangeVar->varattno - 1] = leftover;
-	leftoverTuple->tts_isnull[forPortionOf->rangeVar->varattno - 1] = false;
-}
-
-/* ----------------------------------------------------------------
  *		ExecForPortionOfLeftovers
  *
  *		Insert tuples for the untouched timestamp of a row in a FOR
@@ -1244,6 +1227,7 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	ModifyTableState *mtstate = context->mtstate;
 	ModifyTable *node = (ModifyTable *) mtstate->ps.plan;
 	ForPortionOfExpr *forPortionOf = (ForPortionOfExpr *) node->forPortionOf;
+	AttrNumber	rangeAttno;
 	Datum	oldRange;
 	Datum	allLeftovers;
 	Datum	*leftovers;
@@ -1252,7 +1236,9 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	TypeCacheEntry *typcache;
 	ForPortionOfState *fpoState = resultRelInfo->ri_forPortionOf;
 	TupleTableSlot *oldtupleSlot = fpoState->fp_Existing;
-	TupleTableSlot *leftoverTuple = fpoState->fp_Leftover;
+	TupleTableSlot *leftoverSlot = fpoState->fp_Leftover;
+	TupleConversionMap *map = NULL;
+	HeapTuple oldtuple = NULL;
 
 	/*
 	 * Get the range of the old pre-UPDATE/DELETE tuple,
@@ -1270,7 +1256,17 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	if (!table_tuple_fetch_row_version(resultRelInfo->ri_RelationDesc, tupleid, SnapshotAny, oldtupleSlot))
 		elog(ERROR, "failed to fetch tuple for FOR PORTION OF");
 
-	oldRange = slot_getattr(oldtupleSlot, forPortionOf->rangeVar->varattno, &isNull);
+	/*
+	 * Get the old range of the record being updated.
+	 * Must read with the attno of the leaf partition being updated
+	 */
+
+	rangeAttno = forPortionOf->rangeVar->varattno;
+	if (resultRelInfo->ri_RootResultRelInfo)
+		map = ExecGetChildToRootMap(resultRelInfo);
+	if (map != NULL)
+		rangeAttno = map->attrMap->attnums[rangeAttno - 1];
+	oldRange = slot_getattr(oldtupleSlot, rangeAttno, &isNull);
 
 	if (isNull)
 		elog(ERROR, "found a NULL range in a temporal table");
@@ -1297,22 +1293,42 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 
 	if (nleftovers > 0)
 	{
-		bool shouldFree;
-		HeapTuple oldtuple = ExecFetchSlotHeapTuple(oldtupleSlot, false, &shouldFree);
+		bool shouldFree = false;
 		int i;
-		// TupleDesc tupDesc = resultRelInfo->ri_RelationDesc->rd_att;
+
+		/*
+		 * Make a copy of the pre-UPDATE row.
+		 * Then we'll overwrite the range column below.
+		 * Convert oldtuple to the base table's format if necessary.
+		 * We need to insert leftovers through the root partition
+		 * so they get routed correctly.
+		 */
+		if (map != NULL)
+			leftoverSlot = execute_attr_map_slot(map->attrMap,
+												 oldtupleSlot,
+												 leftoverSlot);
+		else
+		{
+			oldtuple = ExecFetchSlotHeapTuple(oldtupleSlot, false, &shouldFree);
+			ExecForceStoreHeapTuple(oldtuple, leftoverSlot, false);
+		}
 
 		for (i = 0; i < nleftovers; i++)
 		{
-			// TODO: okay to keep re-using the same leftoverTuple TTS every iteration?:
-			// leftoverTuple = ExecInitExtraTupleSlot(mtstate->ps.state, tupDesc, &TTSOpsVirtual);
-			ExecForceStoreHeapTuple(oldtuple, leftoverTuple, false);
+			/* store the new range */
+			leftoverSlot->tts_values[forPortionOf->rangeVar->varattno - 1] = leftovers[i];
+			leftoverSlot->tts_isnull[forPortionOf->rangeVar->varattno - 1] = false;
+			ExecMaterializeSlot(leftoverSlot);
 
-			set_leftover_tuple_bounds(leftoverTuple, forPortionOf, typcache, leftovers[i]);
-			ExecMaterializeSlot(leftoverTuple);
-
+			/*
+			 * If there are partitions, we must insert into the root table,
+			 * so we get tuple routing. We already set up leftoverSlot
+			 * with the root tuple descriptor.
+			 */
+			if (resultRelInfo->ri_RootResultRelInfo)
+				resultRelInfo = resultRelInfo->ri_RootResultRelInfo;
 			// TODO: Need to save context->mtstate->mt_transition_capture? (See comment on ExecInsert)
-			ExecInsert(context, resultRelInfo, leftoverTuple, node->canSetTag, NULL, NULL);
+			ExecInsert(context, resultRelInfo, leftoverSlot, node->canSetTag, NULL, NULL);
 		}
 
 		if (shouldFree)
@@ -1891,7 +1907,11 @@ ExecCrossPartitionUpdate(ModifyTableContext *context,
 	if (resultRelInfo == mtstate->rootResultRelInfo)
 		ExecPartitionCheckEmitError(resultRelInfo, slot, estate);
 
-	/* Initialize tuple routing info if not already done. */
+	/*
+	 * Initialize tuple routing info if not already done.
+	 * Note whatever we do here must be done in ExecInitModifyTable
+	 * for FOR PORTION OF as well.
+	 */
 	if (mtstate->mt_partition_tuple_routing == NULL)
 	{
 		Relation	rootRel = mtstate->rootResultRelInfo->ri_RelationDesc;
@@ -4444,6 +4464,9 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 		ForPortionOfState *fpoState;
 
 		resultRelInfo = mtstate->resultRelInfo;
+		if (resultRelInfo->ri_RootResultRelInfo)
+			resultRelInfo = resultRelInfo->ri_RootResultRelInfo;
+
 		tupDesc = resultRelInfo->ri_RelationDesc->rd_att;
 		forPortionOf = (ForPortionOfExpr *) node->forPortionOf;
 
@@ -4480,21 +4503,60 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 		 * We must attach the ForPortionOfState to all result rels,
 		 * in case of a cross-partition update or triggers firing
 		 * on partitions.
-		 *
-		 * They should all have the same tupledesc, so it's okay
-		 * that any one of them can use the tuple table slots there.
-		 * TODO: This is wrong if a column was dropped then added again!
-		 * We should use execute_attr_map_slot to use the correct attnums.
 		 */
 		for (i = 0; i < nrels; i++)
 		{
+			ForPortionOfState	*leafState;
 			resultRelInfo = &mtstate->resultRelInfo[i];
-			resultRelInfo->ri_forPortionOf = fpoState;
+
+			leafState = makeNode(ForPortionOfState);
+			leafState->fp_rangeName = fpoState->fp_rangeName;
+			leafState->fp_rangeType = fpoState->fp_rangeType;
+			leafState->fp_rangeAttno = fpoState->fp_rangeAttno;
+			leafState->fp_targetRange = fpoState->fp_targetRange;
+			leafState->fp_Leftover = fpoState->fp_Leftover;
+			/* Each partition needs a slot matching its tuple descriptor */
+			leafState->fp_Existing =
+				table_slot_create(resultRelInfo->ri_RelationDesc,
+								  &mtstate->ps.state->es_tupleTable);
+
+			resultRelInfo->ri_forPortionOf = leafState;
 		}
 
 		/* Make sure the root relation has the FOR PORTION OF clause too. */
 		if (node->rootRelation > 0)
 			mtstate->rootResultRelInfo->ri_forPortionOf = fpoState;
+
+		if (rel->rd_rel->relkind == RELKIND_PARTITIONED_TABLE &&
+				mtstate->mt_partition_tuple_routing == NULL)
+		{
+			/*
+			 * We will need tuple routing to insert leftovers.
+			 * Since we are initializing things before ExecCrossPartitionUpdate runs,
+			 * we must do everything it needs as well.
+			 */
+			if (mtstate->mt_partition_tuple_routing == NULL)
+			{
+				Relation	rootRel = mtstate->rootResultRelInfo->ri_RelationDesc;
+				MemoryContext oldcxt;
+
+				/* Things built here have to last for the query duration. */
+				oldcxt = MemoryContextSwitchTo(estate->es_query_cxt);
+
+				mtstate->mt_partition_tuple_routing =
+					ExecSetupPartitionTupleRouting(estate, rootRel);
+
+				/*
+				 * Before a partition's tuple can be re-routed, it must first be
+				 * converted to the root's format, so we'll need a slot for storing
+				 * such tuples.
+				 */
+				Assert(mtstate->mt_root_tuple_slot == NULL);
+				mtstate->mt_root_tuple_slot = table_slot_create(rootRel, NULL);
+
+				MemoryContextSwitchTo(oldcxt);
+			}
+		}
 
 		/* Don't free the ExprContext here because the result must last for the whole query */
 	}
