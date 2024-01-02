@@ -347,3 +347,77 @@ SELECT * FROM for_portion_of_test2 ORDER BY id, valid_at;
 
 DROP TABLE for_portion_of_test2;
 DROP TYPE mydaterange;
+
+-- Test FOR PORTION OF against a partitioned table.
+-- temporal_partitioned_1 has the same attnums as the root
+-- temporal_partitioned_3 has the different attnums from the root
+-- temporal_partitioned_5 has the different attnums too, but reversed
+
+CREATE TABLE temporal_partitioned (
+	id int4range,
+	valid_at daterange,
+  name text,
+	CONSTRAINT temporal_paritioned_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
+) PARTITION BY LIST (id);
+CREATE TABLE temporal_partitioned_1 PARTITION OF temporal_partitioned FOR VALUES IN ('[1,1]', '[2,2]');
+CREATE TABLE temporal_partitioned_3 PARTITION OF temporal_partitioned FOR VALUES IN ('[3,3]', '[4,4]');
+CREATE TABLE temporal_partitioned_5 PARTITION OF temporal_partitioned FOR VALUES IN ('[5,5]', '[6,6]');
+
+ALTER TABLE temporal_partitioned DETACH PARTITION temporal_partitioned_3;
+ALTER TABLE temporal_partitioned_3 DROP COLUMN id, DROP COLUMN valid_at;
+ALTER TABLE temporal_partitioned_3 ADD COLUMN id int4range NOT NULL, ADD COLUMN valid_at daterange NOT NULL;
+ALTER TABLE temporal_partitioned ATTACH PARTITION temporal_partitioned_3 FOR VALUES IN ('[3,3]', '[4,4]');
+
+ALTER TABLE temporal_partitioned DETACH PARTITION temporal_partitioned_5;
+ALTER TABLE temporal_partitioned_5 DROP COLUMN id, DROP COLUMN valid_at;
+ALTER TABLE temporal_partitioned_5 ADD COLUMN valid_at daterange NOT NULL, ADD COLUMN id int4range NOT NULL;
+ALTER TABLE temporal_partitioned ATTACH PARTITION temporal_partitioned_5 FOR VALUES IN ('[5,5]', '[6,6]');
+
+INSERT INTO temporal_partitioned VALUES
+  ('[1,1]', daterange('2000-01-01', '2010-01-01'), 'one'),
+  ('[3,3]', daterange('2000-01-01', '2010-01-01'), 'three'),
+  ('[5,5]', daterange('2000-01-01', '2010-01-01'), 'five');
+
+SELECT * FROM temporal_partitioned;
+
+-- Update without moving within partition 1
+UPDATE temporal_partitioned FOR PORTION OF valid_at FROM '2000-03-01' TO '2000-04-01'
+  SET name = 'one^1'
+  WHERE id = '[1,1]';
+
+-- Update without moving within partition 3
+UPDATE temporal_partitioned FOR PORTION OF valid_at FROM '2000-03-01' TO '2000-04-01'
+  SET name = 'three^1'
+  WHERE id = '[3,3]';
+
+-- Update without moving within partition 5
+UPDATE temporal_partitioned FOR PORTION OF valid_at FROM '2000-03-01' TO '2000-04-01'
+  SET name = 'five^1'
+  WHERE id = '[5,5]';
+
+-- Move from partition 1 to partition 3
+UPDATE temporal_partitioned FOR PORTION OF valid_at FROM '2000-06-01' TO '2000-07-01'
+  SET name = 'one^2',
+      id = '[4,4]'
+  WHERE id = '[1,1]';
+
+-- Move from partition 3 to partition 1
+UPDATE temporal_partitioned FOR PORTION OF valid_at FROM '2000-06-01' TO '2000-07-01'
+  SET name = 'three^2',
+      id = '[2,2]'
+  WHERE id = '[3,3]';
+
+-- Move from partition 5 to partition 3
+UPDATE temporal_partitioned FOR PORTION OF valid_at FROM '2000-06-01' TO '2000-07-01'
+  SET name = 'five^2',
+      id = '[3,3]'
+  WHERE id = '[5,5]';
+
+-- Update all partitions at once (each with leftovers)
+
+SELECT * FROM temporal_partitioned ORDER BY id, valid_at;
+SELECT * FROM temporal_partitioned_1 ORDER BY id, valid_at;
+SELECT * FROM temporal_partitioned_3 ORDER BY id, valid_at;
+SELECT * FROM temporal_partitioned_5 ORDER BY id, valid_at;
+
+DROP TABLE temporal_partitioned;
