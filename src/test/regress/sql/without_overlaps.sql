@@ -355,6 +355,15 @@ CREATE TABLE temporal_fk_rng2rng (
 	CONSTRAINT temporal_fk_rng2rng_fk FOREIGN KEY (parent_id, valid_at)
 		REFERENCES temporal_rng (id, PERIOD valid_at)
 );
+-- (parent_id, valid_at) REFERENCES [implicit]
+CREATE TABLE temporal_fk_rng2rng (
+	id int4range,
+	valid_at tsrange,
+	parent_id int4range,
+	CONSTRAINT temporal_fk_rng2rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_rng2rng_fk FOREIGN KEY (parent_id, valid_at)
+		REFERENCES temporal_rng
+);
 -- (parent_id, PERIOD valid_at) REFERENCES (id)
 CREATE TABLE temporal_fk_rng2rng (
 	id int4range,

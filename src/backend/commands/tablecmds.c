@@ -9787,7 +9787,7 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	Oid			ppeqoperators[INDEX_MAX_KEYS] = {0};
 	Oid			ffeqoperators[INDEX_MAX_KEYS] = {0};
 	int16		fkdelsetcols[INDEX_MAX_KEYS] = {0};
-	bool		is_temporal = (fkconstraint->fk_period != NULL);
+	bool		is_temporal;
 	int16		pkperiodattnums[1] = {0};
 	int16		fkperiodattnums[1] = {0};
 	Oid			pkperiodtypoids[1] = {0};
@@ -9888,15 +9888,17 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	numfks = transformColumnNameList(RelationGetRelid(rel),
 									 fkconstraint->fk_attrs,
 									 fkattnum, fktypoid);
+	is_temporal = (fkconstraint->pk_period || fkconstraint->fk_period);
 	if (is_temporal)
-		transformColumnNameList(RelationGetRelid(rel),
-							  list_make1(fkconstraint->fk_period),
-							  fkperiodattnums, fkperiodtypoids);
-	else
-		if (fkconstraint->pk_period)
+	{
+		if (!fkconstraint->fk_period)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_FOREIGN_KEY),
 					errmsg("foreign key uses PERIOD on the referenced table but not the referencing table")));
+		transformColumnNameList(RelationGetRelid(rel),
+							  list_make1(fkconstraint->fk_period),
+							  fkperiodattnums, fkperiodtypoids);
+	}
 
 	numfkdelsetcols = transformColumnNameList(RelationGetRelid(rel),
 											  fkconstraint->fk_del_set_cols,
@@ -9919,6 +9921,12 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 											pkattnum, pktypoid,
 											pkperiodattnums, pkperiodtypoids,
 											opclasses);
+
+		/* If the primary key uses WITHOUT OVERLAPS, the fk must use PERIOD */
+		if (pkperiodattnums[0] && !fkperiodattnums[0])
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_FOREIGN_KEY),
+					errmsg("foreign key uses PERIOD on the referenced table but not the referencing table")));
 	}
 	else
 	{
