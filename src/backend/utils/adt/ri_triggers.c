@@ -462,7 +462,7 @@ RI_FKey_check(TriggerData *trigdata)
 	ri_PerformCheck(riinfo, &qkey, qplan,
 					fk_rel, pk_rel,
 					NULL, newslot,
-					-1, 0,
+					-1, (Datum) 0,
 					pk_rel->rd_rel->relkind == RELKIND_PARTITIONED_TABLE,
 					SPI_OK_SELECT);
 
@@ -631,7 +631,7 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 	result = ri_PerformCheck(riinfo, &qkey, qplan,
 							 fk_rel, pk_rel,
 							 oldslot, NULL,
-							 -1, 0,
+							 -1, (Datum) 0,
 							 true,	/* treat like update */
 							 SPI_OK_SELECT);
 
@@ -732,7 +732,7 @@ ri_restrict(TriggerData *trigdata, bool is_no_action)
 	RI_QueryKey qkey;
 	SPIPlanPtr	qplan;
 	int			targetRangeParam = -1;
-	Datum		targetRange = 0;
+	Datum		targetRange = (Datum) 0;
 
 	riinfo = ri_FetchConstraintInfo(trigdata->tg_trigger,
 									trigdata->tg_relation, true);
@@ -939,7 +939,7 @@ RI_FKey_cascade_del(PG_FUNCTION_ARGS)
 	ri_PerformCheck(riinfo, &qkey, qplan,
 					fk_rel, pk_rel,
 					oldslot, NULL,
-					-1, 0,
+					-1, (Datum) 0,
 					true,		/* must detect new rows */
 					SPI_OK_DELETE);
 
@@ -1061,7 +1061,7 @@ RI_FKey_cascade_upd(PG_FUNCTION_ARGS)
 	ri_PerformCheck(riinfo, &qkey, qplan,
 					fk_rel, pk_rel,
 					oldslot, newslot,
-					-1, 0,
+					-1, (Datum) 0,
 					true,		/* must detect new rows */
 					SPI_OK_UPDATE);
 
@@ -1294,7 +1294,7 @@ ri_set(TriggerData *trigdata, bool is_set_null, int tgkind)
 	ri_PerformCheck(riinfo, &qkey, qplan,
 					fk_rel, pk_rel,
 					oldslot, NULL,
-					-1, 0,
+					-1, (Datum) 0,
 					true,		/* must detect new rows */
 					SPI_OK_UPDATE);
 
