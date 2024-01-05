@@ -6019,7 +6019,7 @@ AfterTriggerPendingOnRel(Oid relid)
 /* ----------
  * ForPortionOfState()
  *
- * Copies a ForPortionOfState into the current memory context.
+ * Copys a ForPortionOfState into the current memory context.
  */
 static ForPortionOfState *
 CopyForPortionOfState(ForPortionOfState *src)
