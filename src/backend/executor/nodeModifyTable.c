@@ -3777,7 +3777,6 @@ ExecModifyTable(PlanState *pstate)
 		 * Reset per-tuple memory context used for processing on conflict and
 		 * returning clauses, to free any expression evaluation storage
 		 * allocated in the previous cycle.
-		 * TODO: It sounds like FOR PORTION OF might need to do something here too?
 		 */
 		if (pstate->ps_ExprContext)
 			ResetExprContext(pstate->ps_ExprContext);
