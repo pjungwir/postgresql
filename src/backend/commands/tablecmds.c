@@ -510,7 +510,7 @@ static ObjectAddress addFkRecurseReferenced(List **wqueue, Constraint *fkconstra
 											bool old_check_ok,
 											Oid parentDelTrigger, Oid parentUpdTrigger,
 											bool with_period);
-static void validateFkOnDeleteSetColumns(int numfks, const int16 *fkattnums, const int16 *fkperiodattnums,
+static void validateFkOnDeleteSetColumns(int numfks, const int16 *fkattnums, const int16 fkperiodattnum,
 										 int numfksetcols, const int16 *fksetcolsattnums,
 										 List *fksetcols);
 static void addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint,
@@ -9817,6 +9817,7 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	int16		fkdelsetcols[INDEX_MAX_KEYS] = {0};
 	bool		with_period;
 	bool		pk_with_period;
+	int16		fkperiodattnum = InvalidOid;
 	int			i;
 	int			numfks,
 				numpks,
@@ -9912,15 +9913,19 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 									 fkconstraint->fk_attrs,
 									 fkattnum, fktypoid);
 	with_period = fkconstraint->fk_with_period || fkconstraint->pk_with_period;
-	if (with_period && !fkconstraint->fk_with_period)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_FOREIGN_KEY),
-				errmsg("foreign key uses PERIOD on the referenced table but not the referencing table")));
+	if (with_period)
+	{
+		if (!fkconstraint->fk_with_period)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_FOREIGN_KEY),
+					errmsg("foreign key uses PERIOD on the referenced table but not the referencing table")));
+		fkperiodattnum = fkattnum[numfks - 1];
+	}
 
 	numfkdelsetcols = transformColumnNameList(RelationGetRelid(rel),
 											  fkconstraint->fk_del_set_cols,
 											  fkdelsetcols, NULL);
-	validateFkOnDeleteSetColumns(numfks, fkattnum, fkperiodattnums,
+	validateFkOnDeleteSetColumns(numfks, fkattnum, fkperiodattnum,
 								 numfkdelsetcols, fkdelsetcols,
 								 fkconstraint->fk_del_set_cols);
 
@@ -10313,7 +10318,7 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
  */
 void
 validateFkOnDeleteSetColumns(int numfks, const int16 *fkattnums,
-							 const int16 *fkperiodattnums,
+							 const int16 fkperiodattnum,
 							 int numfksetcols, const int16 *fksetcolsattnums,
 							 List *fksetcols)
 {
@@ -10321,7 +10326,7 @@ validateFkOnDeleteSetColumns(int numfks, const int16 *fkattnums,
 	{
 		int16		setcol_attnum = fksetcolsattnums[i];
 		/* assume only one PERIOD key column in a foreign key */
-		int16		fkperiod_attnum = fkperiodattnums[0];
+		int16		fkperiod_attnum = fkperiodattnum;
 		bool		seen = false;
 
 		for (int j = 0; j < numfks; j++)
