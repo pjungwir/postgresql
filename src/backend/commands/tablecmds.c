@@ -9847,34 +9847,6 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	checkFkeyPermissions(pkrel, pkattnum, numpks);
 
 	/*
-	 * Check some things for generated columns.
-	 */
-	for (i = 0; i < numfks; i++)
-	{
-		char		attgenerated = TupleDescAttr(RelationGetDescr(rel), fkattnum[i] - 1)->attgenerated;
-
-		if (attgenerated)
-		{
-			/*
-			 * Check restrictions on UPDATE/DELETE actions, per SQL standard
-			 */
-			if (fkconstraint->fk_upd_action == FKCONSTR_ACTION_SETNULL ||
-				fkconstraint->fk_upd_action == FKCONSTR_ACTION_SETDEFAULT ||
-				fkconstraint->fk_upd_action == FKCONSTR_ACTION_CASCADE)
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("invalid %s action for foreign key constraint containing generated column",
-								"ON UPDATE")));
-			if (fkconstraint->fk_del_action == FKCONSTR_ACTION_SETNULL ||
-				fkconstraint->fk_del_action == FKCONSTR_ACTION_SETDEFAULT)
-				ereport(ERROR,
-						(errcode(ERRCODE_SYNTAX_ERROR),
-						 errmsg("invalid %s action for foreign key constraint containing generated column",
-								"ON DELETE")));
-		}
-	}
-
-	/*
 	 * Look up the equality operators to use in the constraint.
 	 *
 	 * Note that we have to be careful about the difference between the actual
@@ -9917,6 +9889,34 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 				&pfeqoperators[numpks], &ppeqoperators[numpks], &ffeqoperators[numpks]);
 		numfks += 1;
 		numpks += 1;
+	}
+
+	/*
+	 * Check some things for generated columns.
+	 */
+	for (i = 0; i < numfks; i++)
+	{
+		char		attgenerated = TupleDescAttr(RelationGetDescr(rel), fkattnum[i] - 1)->attgenerated;
+
+		if (attgenerated)
+		{
+			/*
+			 * Check restrictions on UPDATE/DELETE actions, per SQL standard
+			 */
+			if (fkconstraint->fk_upd_action == FKCONSTR_ACTION_SETNULL ||
+				fkconstraint->fk_upd_action == FKCONSTR_ACTION_SETDEFAULT ||
+				fkconstraint->fk_upd_action == FKCONSTR_ACTION_CASCADE)
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+						 errmsg("invalid %s action for foreign key constraint containing generated column",
+								"ON UPDATE")));
+			if (fkconstraint->fk_del_action == FKCONSTR_ACTION_SETNULL ||
+				fkconstraint->fk_del_action == FKCONSTR_ACTION_SETDEFAULT)
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+						 errmsg("invalid %s action for foreign key constraint containing generated column",
+								"ON DELETE")));
+		}
 	}
 
 	/*
