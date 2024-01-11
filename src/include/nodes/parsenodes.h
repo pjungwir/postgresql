@@ -1542,7 +1542,7 @@ typedef struct ForPortionOfClause
 {
 	NodeTag		type;
 	char	   *range_name;
-	int			range_name_location;
+	int			location;
 	Node	   *target;
 	Node	   *target_start;
 	Node	   *target_end;

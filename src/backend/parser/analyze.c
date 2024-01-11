@@ -1279,7 +1279,7 @@ transformForPortionOfClause(ParseState *pstate,
 				 errmsg("column or period \"%s\" of relation \"%s\" does not exist",
 						range_name,
 						RelationGetRelationName(targetrel)),
-				 parser_errposition(pstate, forPortionOf->range_name_location)));
+				 parser_errposition(pstate, forPortionOf->location)));
 	attr = TupleDescAttr(targetrel->rd_att, range_attno - 1);
 
 	/* Make sure it's a range column */
@@ -1289,7 +1289,7 @@ transformForPortionOfClause(ParseState *pstate,
 				 errmsg("column \"%s\" of relation \"%s\" is not a range type",
 						range_name,
 						RelationGetRelationName(targetrel)),
-				 parser_errposition(pstate, forPortionOf->range_name_location)));
+				 parser_errposition(pstate, forPortionOf->location)));
 
 	rangeVar = makeVar(
 			rtindex,
@@ -1298,7 +1298,7 @@ transformForPortionOfClause(ParseState *pstate,
 			attr->atttypmod,
 			attr->attcollation,
 			0);
-	rangeVar->location = forPortionOf->range_name_location;
+	rangeVar->location = forPortionOf->location;
 	result->rangeVar = rangeVar;
 	result->rangeType = attr->atttypid;
 	if (!get_typname_and_namespace(attr->atttypid, &range_type_name, &range_type_namespace))
@@ -1324,7 +1324,7 @@ transformForPortionOfClause(ParseState *pstate,
 				list_make2(makeString(range_type_namespace), makeString(range_type_name)),
 				list_make2(forPortionOf->target_start, forPortionOf->target_end),
 				COERCE_EXPLICIT_CALL,
-				forPortionOf->range_name_location);
+				forPortionOf->location);
 	}
 	result->targetRange = transformExpr(pstate, targetExpr, EXPR_KIND_UPDATE_PORTION);
 
@@ -1338,7 +1338,7 @@ transformForPortionOfClause(ParseState *pstate,
 	GetOperatorFromCanonicalStrategy(opclass, InvalidOid, "overlaps", "FOR PORTION OF", &opid, &strat);
 	result->overlapsExpr = (Node *) makeSimpleA_Expr(AEXPR_OP, get_opname(opid),
 			(Node *) copyObject(rangeVar), targetExpr,
-			forPortionOf->range_name_location);
+			forPortionOf->location);
 
 	/*
 	 * Look up the withoutPortionOper so we can compute the leftovers.
@@ -1362,7 +1362,7 @@ transformForPortionOfClause(ParseState *pstate,
 		GetOperatorFromCanonicalStrategy(opclass, InvalidOid, "intersects", "FOR PORTION OF", &opid, &strat);
 		rangeSetExpr = (Expr *) makeSimpleA_Expr(AEXPR_OP, get_opname(opid),
 				(Node *) copyObject(rangeVar), targetExpr,
-				forPortionOf->range_name_location);
+				forPortionOf->location);
 		rangeSetExpr = (Expr *) transformExpr(pstate, (Node *) rangeSetExpr, EXPR_KIND_UPDATE_PORTION);
 
 		/* Make a TLE to set the range column */
