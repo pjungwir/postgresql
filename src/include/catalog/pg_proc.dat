@@ -12157,9 +12157,5 @@
   proname => 'gist_stratnum_identity', prorettype => 'int2',
   proargtypes => 'int2',
   prosrc => 'gist_stratnum_identity' },
-{ oid => '8048', descr => 'GiST support',
-  proname => 'gist_stratnum_btree', prorettype => 'int2',
-  proargtypes => 'int2',
-  prosrc => 'gist_stratnum_btree' },
 
 ]

@@ -254,5 +254,3 @@ FROM pg_walfile_name_offset('0/0'::pg_lsn + :segment_size - 1),
 -- test stratnum support funcs
 SELECT gist_stratnum_identity(3::smallint);
 SELECT gist_stratnum_identity(18::smallint);
-SELECT gist_stratnum_btree(3::smallint);
-SELECT gist_stratnum_btree(18::smallint);

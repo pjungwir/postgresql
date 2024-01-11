@@ -1221,15 +1221,14 @@ my_stratnum(PG_FUNCTION_ARGS)
       </para>
 
       <para>
-       Two translation functions are provided by Postgres:
+       One translation function is provided by Postgres:
        <literal>gist_stratnum_identity</literal> is for opclasses that
        already use the <literal>RT*StrategyNumber</literal> constants.
        It returns whatever is passed to it.
-       <literal>gist_stratnum_btree</literal> is for opclasses that
-       use the <literal>BT*StrategyNumber</literal> constants
-       (like those in <literal>btree_gist</literal>).
-       It returns <literal>BTEqualStrategyNumber</literal> for equals,
-       and <literal>InvalidStrategy</literal> for everything else.
+       The <literal>btree_gist</literal> extension defines a second
+       translation function, <literal>gist_stratnum_btree</literal>,
+       for opclasses that use the <literal>BT*StrategyNumber</literal>
+       constants.
       </para>
      </listitem>
     </varlistentry>

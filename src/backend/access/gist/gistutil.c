@@ -1070,31 +1070,3 @@ gist_stratnum_identity(PG_FUNCTION_ARGS)
 
 	PG_RETURN_UINT16(strat);
 }
-
-/*
- * Returns the btree number for equals, otherwise invalid.
- *
- * This is for GiST opclasses in btree_gist (and maybe elsewhere)
- * that use the BT*StrategyNumber constants.
- */
-Datum
-gist_stratnum_btree(PG_FUNCTION_ARGS)
-{
-	StrategyNumber strat = PG_GETARG_UINT16(0);
-
-	switch (strat)
-	{
-		case RTEqualStrategyNumber:
-			PG_RETURN_UINT16(BTEqualStrategyNumber);
-		case RTLessStrategyNumber:
-			PG_RETURN_UINT16(BTLessStrategyNumber);
-		case RTLessEqualStrategyNumber:
-			PG_RETURN_UINT16(BTLessEqualStrategyNumber);
-		case RTGreaterStrategyNumber:
-			PG_RETURN_UINT16(BTGreaterStrategyNumber);
-		case RTGreaterEqualStrategyNumber:
-			PG_RETURN_UINT16(BTGreaterEqualStrategyNumber);
-		default:
-			PG_RETURN_UINT16(InvalidStrategy);
-	}
-}
