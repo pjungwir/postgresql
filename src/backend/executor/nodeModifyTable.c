@@ -1214,7 +1214,7 @@ ExecInsert(ModifyTableContext *context,
 /* ----------------------------------------------------------------
  *		ExecForPortionOfLeftovers
  *
- *		Insert tuples for the untouched timestamp of a row in a FOR
+ *		Insert tuples for the untouched portion of a row in a FOR
  *		PORTION OF UPDATE/DELETE
  * ----------------------------------------------------------------
  */
