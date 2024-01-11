@@ -13784,7 +13784,7 @@ for_portion_of_clause:
 				{
 					ForPortionOfClause *n = makeNode(ForPortionOfClause);
 					n->range_name = $4;
-					n->range_name_location = @4;
+					n->location = @4;
 					n->target = $6;
 					$$ = n;
 				}
@@ -13792,7 +13792,7 @@ for_portion_of_clause:
 				{
 					ForPortionOfClause *n = makeNode(ForPortionOfClause);
 					n->range_name = $4;
-					n->range_name_location = @4;
+					n->location = @4;
 					n->target_start = $6;
 					n->target_end = $8;
 					$$ = n;
