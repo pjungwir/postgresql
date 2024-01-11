@@ -992,7 +992,11 @@ WITH ( MODULUS <replaceable class="parameter">numeric_literal</replaceable>, REM
       <literal>UNIQUE (id, valid_at WITHOUT OVERLAPS)</literal> behaves like
       <literal>EXCLUDE USING GIST (id WITH =, valid_at WITH
       &amp;&amp;)</literal>.  The <literal>WITHOUT OVERLAPS</literal> column
-      must have a range type.  The non-<literal>WITHOUT OVERLAPS</literal>
+      must have a range or multirange type. (Technically any type is allowed
+      whose default GiST opclass includes an overlaps operator. See the
+      <literal>stratnum</literal> support function under
+      <xref linkend="gist-extensibility"/> for details.)
+      The non-<literal>WITHOUT OVERLAPS</literal>
       columns of the constraint can be any type that can be compared for
       equality in a GiST index. By default only range types are supported, but
       you can use other types by adding the <xref linkend="btree-gist"/>

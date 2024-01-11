@@ -16,7 +16,7 @@
 #include "postgres.h"
 
 #include "access/amapi.h"
-#include "access/gist_private.h"
+#include "access/gist.h"
 #include "access/heapam.h"
 #include "access/htup_details.h"
 #include "access/reloptions.h"
@@ -2188,7 +2188,7 @@ ComputeIndexAttrs(IndexInfo *indexInfo,
 				strat = RTEqualStrategyNumber;
 				opname = "equals";
 			}
-			GetOperatorFromCanonicalStrategy(opclassOids[attn],
+			GetOperatorFromWellKnownStrategy(opclassOids[attn],
 											 atttype,
 											 opname,
 											 &opid,
@@ -2428,7 +2428,7 @@ GetDefaultOpClass(Oid type_id, Oid am_id)
 }
 
 /*
- * GetOperatorFromCanonicalStrategy
+ * GetOperatorFromWellKnownStrategy
  *
  * opclass - the opclass to use
  * atttype - the type to ask about
@@ -2444,10 +2444,10 @@ GetDefaultOpClass(Oid type_id, Oid am_id)
  * follow any fixed scheme. We ask an opclass support
  * function to translate from the well-known number
  * to the internal value. If the function isn't defined
- * or it gives no result, we retrun InvalidStrategy.
+ * or it gives no result, we return InvalidStrategy.
  */
 void
-GetOperatorFromCanonicalStrategy(Oid opclass,
+GetOperatorFromWellKnownStrategy(Oid opclass,
 								 Oid atttype,
 								 const char *opname,
 								 Oid *opid,
@@ -2469,8 +2469,8 @@ GetOperatorFromCanonicalStrategy(Oid opclass,
 		 * For now we only need GiST support, but this could support
 		 * other indexams if we wanted.
 		 */
-		*strat = gistTranslateStratnum(opclass, opstrat);
-		if (!StrategyIsValid(*strat))
+		*strat = GistTranslateStratnum(opclass, opstrat);
+		if (*strat == InvalidStrategy)
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_OBJECT),
 					 errmsg("no %s operator found for WITHOUT OVERLAPS constraint", opname),

@@ -532,7 +532,6 @@ extern void gistMakeUnionKey(GISTSTATE *giststate, int attno,
 							 Datum *dst, bool *dstisnull);
 
 extern XLogRecPtr gistGetFakeLSN(Relation rel);
-extern StrategyNumber gistTranslateStratnum(Oid opclass, StrategyNumber strat);
 
 /* gistvacuum.c */
 extern IndexBulkDeleteResult *gistbulkdelete(IndexVacuumInfo *info,

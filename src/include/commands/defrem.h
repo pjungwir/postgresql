@@ -50,7 +50,7 @@ extern bool CheckIndexCompatible(Oid oldId,
 extern Oid	GetDefaultOpClass(Oid type_id, Oid am_id);
 extern Oid	ResolveOpClass(const List *opclass, Oid attrType,
 						   const char *accessMethodName, Oid accessMethodId);
-extern void GetOperatorFromCanonicalStrategy(Oid opclass, Oid atttype,
+extern void GetOperatorFromWellKnownStrategy(Oid opclass, Oid atttype,
 											 const char *opname, Oid *opid,
 											 StrategyNumber *strat);
 

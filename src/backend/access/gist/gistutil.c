@@ -1079,7 +1079,7 @@ gist_stratnum_identity(PG_FUNCTION_ARGS)
  * Returns InvalidStrategy if the function is not defined.
  */
 StrategyNumber
-gistTranslateStratnum(Oid opclass, StrategyNumber strat)
+GistTranslateStratnum(Oid opclass, StrategyNumber strat)
 {
 	Oid	opfamily;
 	Oid	opcintype;
