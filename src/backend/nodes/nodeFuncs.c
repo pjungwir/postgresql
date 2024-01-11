@@ -3448,7 +3448,7 @@ expression_tree_mutator_impl(Node *node,
 				FLATCOPY(newnode, fpo, ForPortionOfExpr);
 				MUTATE(newnode->rangeVar, fpo->rangeVar, Var *);
 				MUTATE(newnode->targetRange, fpo->targetRange, Node *);
-				MUTATE(newnode->rangeSet, fpo->rangeSet, List *);
+				MUTATE(newnode->rangeTargetList, fpo->rangeTargetList, List *);
 
 				return (Node *) newnode;
 			}
