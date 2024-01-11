@@ -1344,7 +1344,7 @@ transformForPortionOfClause(ParseState *pstate,
 	 */
 	opclass = GetDefaultOpClass(attr->atttypid, GIST_AM_OID);
 	strat = RTOverlapStrategyNumber;
-	GetOperatorFromCanonicalStrategy(opclass, InvalidOid, "overlaps", "FOR PORTION OF", &opid, &strat);
+	GetOperatorFromWellKnownStrategy(opclass, InvalidOid, "overlaps", "FOR PORTION OF", &opid, &strat);
 	result->overlapsExpr = (Node *) makeSimpleA_Expr(AEXPR_OP, get_opname(opid),
 			(Node *) copyObject(rangeVar), targetExpr,
 			forPortionOf->location);
@@ -1355,7 +1355,7 @@ transformForPortionOfClause(ParseState *pstate,
 	 * (one per element of the result).
 	 */
 	strat = RTWithoutPortionStrategyNumber;
-	GetOperatorFromCanonicalStrategy(opclass, InvalidOid, "without portion", "FOR PORTION OF", &opid, &strat);
+	GetOperatorFromWellKnownStrategy(opclass, InvalidOid, "without portion", "FOR PORTION OF", &opid, &strat);
 	result->withoutPortionProc = get_opcode(opid);
 
 	if (isUpdate)
@@ -1368,7 +1368,7 @@ transformForPortionOfClause(ParseState *pstate,
 		TargetEntry *tle;
 
 		strat = RTIntersectStrategyNumber;
-		GetOperatorFromCanonicalStrategy(opclass, InvalidOid, "intersects", "FOR PORTION OF", &opid, &strat);
+		GetOperatorFromWellKnownStrategy(opclass, InvalidOid, "intersects", "FOR PORTION OF", &opid, &strat);
 		rangeTLEExpr = (Expr *) makeSimpleA_Expr(AEXPR_OP, get_opname(opid),
 				(Node *) copyObject(rangeVar), targetExpr,
 				forPortionOf->location);
