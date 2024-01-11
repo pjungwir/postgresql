@@ -1246,8 +1246,6 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	 * and see if there are any "leftovers" to insert.
 	 *
 	 * We have already locked the tuple in ExecUpdate/ExecDelete
-	 * (TODO: if it was *not* concurrently updated, does table_tuple_update lock the tuple itself?
-	 * I don't found the code for that yet, and maybe it depends on the AM?)
 	 * and it has passed EvalPlanQual.
 	 * Make sure we're looking at the most recent version.
 	 * Otherwise concurrent updates of the same tuple in READ COMMITTED
