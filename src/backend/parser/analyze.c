@@ -1355,27 +1355,27 @@ transformForPortionOfClause(ParseState *pstate,
 		 * Now make sure we update the start/end time of the record.
 		 * For a range col (r) this is `r = r * targetRange`.
 		 */
-		Expr *rangeSetExpr;
+		Expr *rangeTLEExpr;
 		TargetEntry *tle;
 
 		strat = RTIntersectStrategyNumber;
 		GetOperatorFromCanonicalStrategy(opclass, InvalidOid, "intersects", "FOR PORTION OF", &opid, &strat);
-		rangeSetExpr = (Expr *) makeSimpleA_Expr(AEXPR_OP, get_opname(opid),
+		rangeTLEExpr = (Expr *) makeSimpleA_Expr(AEXPR_OP, get_opname(opid),
 				(Node *) copyObject(rangeVar), targetExpr,
 				forPortionOf->location);
-		rangeSetExpr = (Expr *) transformExpr(pstate, (Node *) rangeSetExpr, EXPR_KIND_UPDATE_PORTION);
+		rangeTLEExpr = (Expr *) transformExpr(pstate, (Node *) rangeTLEExpr, EXPR_KIND_UPDATE_PORTION);
 
 		/* Make a TLE to set the range column */
-		result->rangeSet = NIL;
-		tle = makeTargetEntry(rangeSetExpr, range_attno, range_name, false);
-		result->rangeSet = lappend(result->rangeSet, tle);
+		result->rangeTargetList = NIL;
+		tle = makeTargetEntry(rangeTLEExpr, range_attno, range_name, false);
+		result->rangeTargetList = lappend(result->rangeTargetList, tle);
 
 		/* Mark the range column as requiring update permissions */
 		target_perminfo->updatedCols = bms_add_member(target_perminfo->updatedCols,
 													  range_attno - FirstLowInvalidHeapAttributeNumber);
 	}
 	else
-		result->rangeSet = NIL;
+		result->rangeTargetList = NIL;
 
 	result->range_name = range_name;
 
