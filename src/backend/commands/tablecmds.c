@@ -16,7 +16,7 @@
 
 #include "access/attmap.h"
 #include "access/genam.h"
-#include "access/gist_private.h"
+#include "access/gist.h"
 #include "access/heapam.h"
 #include "access/heapam_xlog.h"
 #include "access/multixact.h"
@@ -11154,8 +11154,8 @@ FindFKComparisonOperators(Constraint *fkconstraint,
 			stratname = "equality";
 			rtstrategy = RTEqualStrategyNumber;
 		}
-		eqstrategy = gistTranslateStratnum(opclass, rtstrategy);
-		if (!StrategyIsValid(eqstrategy))
+		eqstrategy = GistTranslateStratnum(opclass, rtstrategy);
+		if (eqstrategy == InvalidStrategy)
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_OBJECT),
 					 errmsg("no %s operator found for foreign key", stratname),
@@ -11379,7 +11379,7 @@ FindFKPeriodOpersAndProcs(Oid opclass,
 	 * Its left arg must be the type of the column (or rather of the opclass).
 	 * Its right arg must match the return type of the support proc.
 	 */
-	GetOperatorFromCanonicalStrategy(opclass,
+	GetOperatorFromWellKnownStrategy(opclass,
 									 aggrettype,
 									 "contained by",
 									 "FOREIGN KEY constraint",
