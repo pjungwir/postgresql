@@ -1289,6 +1289,7 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	deconstruct_array(DatumGetArrayTypeP(allLeftovers), typcache->type_id, typcache->typlen,
 					  typcache->typbyval, typcache->typalign, &leftovers, NULL, &nleftovers);
 
+	Assert(nleftovers >= 0);
 	if (nleftovers > 0)
 	{
 		bool shouldFree = false;
