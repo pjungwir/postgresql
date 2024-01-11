@@ -3483,7 +3483,7 @@ rewriteTargetView(Query *parsetree, Relation view)
 		 * auxiliary UPDATE targetlist to refer to columns of the base
 		 * relation.
 		 */
-		foreach(lc, parsetree->forPortionOf->rangeSet)
+		foreach(lc, parsetree->forPortionOf->rangeTargetList)
 		{
 			TargetEntry *tle = (TargetEntry *) lfirst(lc);
 			TargetEntry *view_tle;
@@ -3847,7 +3847,7 @@ RewriteQuery(Query *parsetree, List *rewrite_events, int orig_rt_length)
 				rt_entry_relation->rd_rel->relkind != RELKIND_VIEW)
 			{
 				ListCell *tl;
-				foreach(tl, parsetree->forPortionOf->rangeSet)
+				foreach(tl, parsetree->forPortionOf->rangeTargetList)
 				{
 					TargetEntry *tle = (TargetEntry *) lfirst(tl);
 					parsetree->targetList = lappend(parsetree->targetList, tle);
