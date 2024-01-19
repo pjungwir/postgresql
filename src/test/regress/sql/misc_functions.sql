@@ -273,3 +273,7 @@ SELECT pg_column_toast_chunk_id(a) IS NULL,
   pg_column_toast_chunk_id(b) IN (SELECT chunk_id FROM pg_toast.:toastrel)
   FROM test_chunk_id;
 DROP TABLE test_chunk_id;
+
+-- test stratnum support functions
+SELECT gist_stratnum_identity(3::smallint);
+SELECT gist_stratnum_identity(18::smallint);
