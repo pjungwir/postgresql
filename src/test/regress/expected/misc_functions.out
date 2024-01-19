@@ -706,3 +706,16 @@ SELECT pg_column_toast_chunk_id(a) IS NULL,
 (1 row)
 
 DROP TABLE test_chunk_id;
+-- test stratnum support functions
+SELECT gist_stratnum_identity(3::smallint);
+ gist_stratnum_identity 
+------------------------
+                      3
+(1 row)
+
+SELECT gist_stratnum_identity(18::smallint);
+ gist_stratnum_identity 
+------------------------
+                     18
+(1 row)
+
