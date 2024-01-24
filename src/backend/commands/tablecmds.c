@@ -14901,12 +14901,13 @@ RememberAllDependentForRebuilding(AlteredTableInfo *tab, AlterTableType subtype,
 				break;
 
 			case OCLASS_PERIOD:
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("cannot alter type of a column used by a period"),
-						 errdetail("%s depends on column \"%s\"",
-								   getObjectDescription(&foundObject, false),
-								   colName)));
+				if (subtype == AT_AlterColumnType)
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("cannot alter type of a column used by a period"),
+							 errdetail("%s depends on column \"%s\"",
+									   getObjectDescription(&foundObject, false),
+									   colName)));
 				break;
 
 			case OCLASS_REWRITE:
@@ -14973,6 +14974,15 @@ RememberAllDependentForRebuilding(AlteredTableInfo *tab, AlterTableType subtype,
 					}
 					else
 					{
+						/*
+						 * If this GENERATED column is implementing a PERIOD,
+						 * keep going and we'll fail from the PERIOD instead.
+						 * This gives a more clear error message.
+						 */
+						Bitmapset *periodatts = get_period_attnos(RelationGetRelid(rel));
+						if (bms_is_member(col.objectSubId, periodatts))
+							break;
+
 						/*
 						 * This must be a reference from the expression of a
 						 * generated column elsewhere in the same table.
