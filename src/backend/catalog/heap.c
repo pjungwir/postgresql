@@ -2115,8 +2115,7 @@ StorePeriod(Relation rel, const char *periodname, AttrNumber startnum,
 	 * and a NORMAL dependency the other way we will forbid dropping the column directly.
 	 */
 	ObjectAddressSubSet(referenced, RelationRelationId, RelationGetRelid(rel), rangenum);
-	recordDependencyOn(&referenced, &myself, DEPENDENCY_AUTO);
-	recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
+	recordDependencyOn(&referenced, &myself, DEPENDENCY_INTERNAL);
 
 	/*
 	 * The constraint is an implementation detail, so we mark it as such.
