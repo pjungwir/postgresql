@@ -410,6 +410,96 @@ SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
  [5,6) | ["Mon Jan 01 00:00:00 2024","Wed Jan 01 00:00:00 2025") | five
 (16 rows)
 
+DROP FUNCTION for_portion_of_trigger CASCADE;
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to trigger trg_for_portion_of_before on table for_portion_of_test
+drop cascades to trigger trg_for_portion_of_after on table for_portion_of_test
+-- Triggers with a custom transition table name:
+DROP TABLE for_portion_of_test;
+CREATE TABLE for_portion_of_test (
+  id int4range,
+  valid_at daterange,
+  name text
+);
+INSERT INTO for_portion_of_test VALUES ('[1,1]', '[2018-01-01,2020-01-01)', 'one');
+CREATE FUNCTION dump_trigger()
+RETURNS TRIGGER LANGUAGE plpgsql AS
+$$
+BEGIN
+  RAISE NOTICE 'TG_OP = %', TG_OP;
+  IF TG_OP = 'INSERT' THEN
+    RAISE NOTICE 'trigger = %, TG_LEVEL = %, NEW table = %',
+      TG_NAME, TG_LEVEL, (SELECT string_agg(new_table::text, ', ' ORDER BY id) FROM new_table);
+  ELSIF TG_OP = 'UPDATE' THEN
+    RAISE NOTICE 'trigger = %, TG_LEVEL = %, OLD table = %, NEW table = %',
+      TG_NAME, TG_LEVEL,
+      (SELECT string_agg(old_table::text, ', ' ORDER BY id) FROM old_table),
+      (SELECT string_agg(new_table::text, ', ' ORDER BY id) FROM new_table);
+  ELSIF TG_OP = 'DELETE' THEN
+    RAISE NOTICE 'trigger = %, TG_LEVEL = %, OLD table = %',
+      TG_NAME, TG_LEVEL, (SELECT string_agg(old_table::text, ', ' ORDER BY id) FROM old_table);
+  END IF;
+  RETURN NULL;
+END;
+$$;
+CREATE TRIGGER for_portion_of_test_insert_trig
+AFTER INSERT ON for_portion_of_test
+REFERENCING NEW TABLE AS new_table
+FOR EACH ROW EXECUTE PROCEDURE dump_trigger();
+CREATE TRIGGER for_portion_of_test_insert_trig_stmt
+AFTER INSERT ON for_portion_of_test
+REFERENCING NEW TABLE AS new_table
+FOR EACH STATEMENT EXECUTE PROCEDURE dump_trigger();
+CREATE TRIGGER for_portion_of_test_update_trig
+AFTER UPDATE ON for_portion_of_test
+REFERENCING OLD TABLE AS old_table NEW TABLE AS new_table
+FOR EACH ROW EXECUTE PROCEDURE dump_trigger();
+CREATE TRIGGER for_portion_of_test_update_trig_stmt
+AFTER UPDATE ON for_portion_of_test
+REFERENCING OLD TABLE AS old_table NEW TABLE AS new_table
+FOR EACH STATEMENT EXECUTE PROCEDURE dump_trigger();
+CREATE TRIGGER for_portion_of_test_delete_trig
+AFTER DELETE ON for_portion_of_test
+REFERENCING OLD TABLE AS old_table
+FOR EACH ROW EXECUTE PROCEDURE dump_trigger();
+CREATE TRIGGER for_portion_of_test_delete_trig_stmt
+AFTER DELETE ON for_portion_of_test
+REFERENCING OLD TABLE AS old_table
+FOR EACH STATEMENT EXECUTE PROCEDURE dump_trigger();
+BEGIN;
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM '2018-01-15' TO '2019-01-01'
+  SET name = '2018-01-15_to_2019-01-01';
+NOTICE:  TG_OP = INSERT
+NOTICE:  trigger = for_portion_of_test_insert_trig, TG_LEVEL = ROW, NEW table = ("[1,2)","[01-01-2018,01-15-2018)",one), ("[1,2)","[01-01-2019,01-01-2020)",one)
+NOTICE:  TG_OP = INSERT
+NOTICE:  trigger = for_portion_of_test_insert_trig, TG_LEVEL = ROW, NEW table = ("[1,2)","[01-01-2018,01-15-2018)",one), ("[1,2)","[01-01-2019,01-01-2020)",one)
+NOTICE:  TG_OP = UPDATE
+NOTICE:  trigger = for_portion_of_test_update_trig, TG_LEVEL = ROW, OLD table = ("[1,2)","[01-01-2018,01-01-2020)",one), NEW table = ("[1,2)","[01-15-2018,01-01-2019)",2018-01-15_to_2019-01-01)
+NOTICE:  TG_OP = UPDATE
+NOTICE:  trigger = for_portion_of_test_update_trig_stmt, TG_LEVEL = STATEMENT, OLD table = ("[1,2)","[01-01-2018,01-01-2020)",one), NEW table = ("[1,2)","[01-15-2018,01-01-2019)",2018-01-15_to_2019-01-01)
+ROLLBACK;
+BEGIN;
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM NULL TO '2018-01-21';
+NOTICE:  TG_OP = INSERT
+NOTICE:  trigger = for_portion_of_test_insert_trig, TG_LEVEL = ROW, NEW table = ("[1,2)","[01-21-2018,01-01-2020)",one)
+NOTICE:  TG_OP = DELETE
+NOTICE:  trigger = for_portion_of_test_delete_trig, TG_LEVEL = ROW, OLD table = ("[1,2)","[01-01-2018,01-01-2020)",one)
+NOTICE:  TG_OP = DELETE
+NOTICE:  trigger = for_portion_of_test_delete_trig_stmt, TG_LEVEL = STATEMENT, OLD table = ("[1,2)","[01-01-2018,01-01-2020)",one)
+ROLLBACK;
+BEGIN;
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM NULL TO '2018-01-02'
+  SET name = 'NULL_to_2018-01-01';
+NOTICE:  TG_OP = INSERT
+NOTICE:  trigger = for_portion_of_test_insert_trig, TG_LEVEL = ROW, NEW table = ("[1,2)","[01-02-2018,01-01-2020)",one)
+NOTICE:  TG_OP = UPDATE
+NOTICE:  trigger = for_portion_of_test_update_trig, TG_LEVEL = ROW, OLD table = ("[1,2)","[01-01-2018,01-01-2020)",one), NEW table = ("[1,2)","[01-01-2018,01-02-2018)",NULL_to_2018-01-01)
+NOTICE:  TG_OP = UPDATE
+NOTICE:  trigger = for_portion_of_test_update_trig_stmt, TG_LEVEL = STATEMENT, OLD table = ("[1,2)","[01-01-2018,01-01-2020)",one), NEW table = ("[1,2)","[01-01-2018,01-02-2018)",NULL_to_2018-01-01)
+ROLLBACK;
 -- Test with a custom range type
 CREATE TYPE mydaterange AS range(subtype=date);
 CREATE TABLE for_portion_of_test2 (
