@@ -624,6 +624,15 @@ findDependentObjects(const ObjectAddress *object,
 					}
 
 					/*
+					 * If a table attribute is an internal part of something else
+					 * (e.g. the GENERATED column used by a PERIOD),
+					 * and we are deleting the whole table,
+					 * then it's okay.
+					 */
+					if (foundDep->objsubid && !object->objectSubId)
+						break;
+
+					/*
 					 * We postpone actually issuing the error message until
 					 * after this loop, so that we can make the behavior
 					 * independent of the ordering of pg_depend entries, at
