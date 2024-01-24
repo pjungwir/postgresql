@@ -161,6 +161,7 @@ static TupleTableSlot *ExecMergeMatched(ModifyTableContext *context,
 static TupleTableSlot *ExecMergeNotMatched(ModifyTableContext *context,
 										   ResultRelInfo *resultRelInfo,
 										   bool canSetTag);
+static void ExecSetupTransitionCaptureState(ModifyTableState *mtstate, EState *estate);
 
 
 /*
@@ -1234,6 +1235,8 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	TupleTableSlot *leftoverSlot = fpoState->fp_Leftover;
 	TupleConversionMap *map = NULL;
 	HeapTuple oldtuple = NULL;
+	CmdType	oldOperation;
+	TransitionCaptureState *oldTcs;
 
 	/*
 	 * Get the range of the old pre-UPDATE/DELETE tuple,
@@ -1307,6 +1310,13 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 			ExecForceStoreHeapTuple(oldtuple, leftoverSlot, false);
 		}
 
+		/* Save some mtstate things so we can restore them below. */
+		// TODO: Do we need a more systematic way of doing this,
+		// e.g. a new mtstate or even a separate ForPortionOfLeftovers node?
+		oldOperation = mtstate->operation;
+		mtstate->operation = CMD_INSERT;
+		oldTcs = mtstate->mt_transition_capture;
+
 		for (i = 0; i < nleftovers; i++)
 		{
 			/* store the new range */
@@ -1321,9 +1331,13 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 			 */
 			if (resultRelInfo->ri_RootResultRelInfo)
 				resultRelInfo = resultRelInfo->ri_RootResultRelInfo;
-			// TODO: Need to save context->mtstate->mt_transition_capture? (See comment on ExecInsert)
+
+			ExecSetupTransitionCaptureState(mtstate, estate);
 			ExecInsert(context, resultRelInfo, leftoverSlot, node->canSetTag, NULL, NULL);
 		}
+
+		mtstate->operation = oldOperation;
+		mtstate->mt_transition_capture = oldTcs;
 
 		if (shouldFree)
 			heap_freetuple(oldtuple);
