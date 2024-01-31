@@ -24,6 +24,7 @@
 
 #include "postgres.h"
 
+#include "access/gist.h"
 #include "access/stratnum.h"
 #include "access/sysattr.h"
 #include "catalog/pg_am.h"
@@ -1267,6 +1268,9 @@ transformForPortionOfClause(ParseState *pstate,
 	int range_attno = InvalidAttrNumber;
 	Form_pg_attribute attr;
 	Oid	opclass;
+	Oid opfamily;
+	Oid opcintype;
+	Oid funcid = InvalidOid;
 	StrategyNumber strat;
 	Oid	opid;
 	ForPortionOfExpr *result;
@@ -1355,9 +1359,18 @@ transformForPortionOfClause(ParseState *pstate,
 	 * Leftovers will be old_range @- target_range
 	 * (one per element of the result).
 	 */
-	strat = RTWithoutPortionStrategyNumber;
-	GetOperatorFromWellKnownStrategy(opclass, InvalidOid, "without portion", "FOR PORTION OF", &opid, &strat);
-	result->withoutPortionProc = get_opcode(opid);
+	funcid = InvalidOid;
+	if (get_opclass_opfamily_and_input_type(opclass, &opfamily, &opcintype))
+		funcid = get_opfamily_proc(opfamily, opcintype, opcintype, GIST_WITHOUT_PORTION_PROC);
+
+	if (!OidIsValid(funcid))
+		ereport(ERROR,
+				errcode(ERRCODE_UNDEFINED_OBJECT),
+				errmsg("could not identify a without_overlaps support function for type %s", format_type_be(opcintype)),
+				errhint("Define a without_overlaps support function for operator class \"%d\" for access method \"%s\".",
+					 opclass, "gist"));
+
+	result->withoutPortionProc = funcid;
 
 	if (isUpdate)
 	{
@@ -1365,13 +1378,33 @@ transformForPortionOfClause(ParseState *pstate,
 		 * Now make sure we update the start/end time of the record.
 		 * For a range col (r) this is `r = r * targetRange`.
 		 */
+		Oid funcnamespace;
+		char *funcname;
+		char *funcnamespacename;
 		Expr *rangeTLEExpr;
 		TargetEntry *tle;
 
-		strat = RTIntersectStrategyNumber;
-		GetOperatorFromWellKnownStrategy(opclass, InvalidOid, "intersects", "FOR PORTION OF", &opid, &strat);
-		rangeTLEExpr = (Expr *) makeSimpleA_Expr(AEXPR_OP, get_opname(opid),
-				(Node *) copyObject(rangeVar), targetExpr,
+		funcid = get_opfamily_proc(opfamily, opcintype, opcintype, GIST_INTERSECT_PROC);
+		if (!OidIsValid(funcid))
+			ereport(ERROR,
+					errcode(ERRCODE_UNDEFINED_OBJECT),
+					errmsg("could not identify an intersect support function for type %s", format_type_be(opcintype)),
+					errhint("Define an intersect support function for operator class \"%d\" for access method \"%s\".",
+						 opclass, "gist"));
+
+		// TODO: do we really need to go through the name here?
+		funcname = get_func_name(funcid);
+		if (!funcname)
+			elog(ERROR, "cache lookup failed for function %u", funcid);
+		funcnamespace = get_func_namespace(funcid, false);
+		funcnamespacename = get_namespace_name(funcnamespace);
+		if (!funcnamespacename)
+			elog(ERROR, "cache lookup failed for namespace %u", funcnamespace);
+
+		rangeTLEExpr = (Expr *) makeFuncCall(
+				list_make2(makeString(funcnamespacename), makeString(funcname)),
+				list_make2(copyObject(rangeVar), targetExpr),
+				COERCE_EXPLICIT_CALL,
 				forPortionOf->location);
 		rangeTLEExpr = (Expr *) transformExpr(pstate, (Node *) rangeTLEExpr, EXPR_KIND_UPDATE_PORTION);
 
