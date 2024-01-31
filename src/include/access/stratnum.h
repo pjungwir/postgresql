@@ -78,8 +78,6 @@ typedef uint16 StrategyNumber;
 #define RTPrefixStrategyNumber			28	/* for text ^@ */
 #define RTOldBelowStrategyNumber		29	/* for old spelling of <<| */
 #define RTOldAboveStrategyNumber		30	/* for old spelling of |>> */
-#define RTIntersectStrategyNumber		31	/* for * */
-#define RTWithoutPortionStrategyNumber	32	/* for @- */
 
 #define RTMaxStrategyNumber				32
 
