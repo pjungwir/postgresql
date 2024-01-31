@@ -1607,7 +1607,7 @@ get_func_name(Oid funcid)
  *		Returns the pg_namespace OID associated with a given function.
  */
 Oid
-get_func_namespace(Oid funcid)
+get_func_namespace(Oid funcid, bool missing_ok)
 {
 	HeapTuple	tp;
 
@@ -1621,6 +1621,8 @@ get_func_namespace(Oid funcid)
 		ReleaseSysCache(tp);
 		return result;
 	}
+	else if (!missing_ok)
+		elog(ERROR, "cache lookup failed for function %u", funcid);
 	else
 		return InvalidOid;
 }
