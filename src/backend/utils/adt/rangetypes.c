@@ -31,6 +31,7 @@
 #include "postgres.h"
 
 #include "common/hashfn.h"
+#include "funcapi.h"
 #include "libpq/pqformat.h"
 #include "miscadmin.h"
 #include "nodes/makefuncs.h"
@@ -1218,34 +1219,72 @@ range_split_internal(TypeCacheEntry *typcache, const RangeType *r1, const RangeT
 Datum
 range_without_portion(PG_FUNCTION_ARGS)
 {
-	RangeType  *r1 = PG_GETARG_RANGE_P(0);
-	RangeType  *r2 = PG_GETARG_RANGE_P(1);
-	RangeType  *rs[2];
-	int			n;
-	TypeCacheEntry *typcache;
+	typedef struct {
+		RangeType  *rs[2];
+		int			n;
+	} range_without_portion_fctx;
 
-	/* Different types should be prevented by ANYRANGE matching rules */
-	if (RangeTypeGetOid(r1) != RangeTypeGetOid(r2))
-		elog(ERROR, "range types do not match");
+	FuncCallContext *funcctx;
+	range_without_portion_fctx *fctx;
+	MemoryContext oldcontext;
 
-	typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
-
-	range_without_portion_internal(typcache, r1, r2, rs, &n);
-
-	if (n == 0)
-		PG_RETURN_ARRAYTYPE_P(construct_empty_array(typcache->type_id));
-	else
+	/* stuff done only on the first call of the function */
+	if (SRF_IS_FIRSTCALL())
 	{
-		Datum		xs[2];
-		int			i;
-		ArrayType	*ret;
+		RangeType	   *r1;
+		RangeType	   *r2;
+		Oid				rngtypid;
+		TypeCacheEntry *typcache;
 
-		for (i = 0; i < n; i++)
-			xs[i] = RangeTypePGetDatum(rs[i]);
+		/* create a function context for cross-call persistence */
+		funcctx = SRF_FIRSTCALL_INIT();
 
-		ret = construct_array(xs, n, typcache->type_id, typcache->typlen, typcache->typbyval, typcache->typalign);
-		PG_RETURN_ARRAYTYPE_P(ret);
+		/*
+		 * switch to memory context appropriate for multiple function calls
+		 */
+		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+		r1 = PG_GETARG_RANGE_P(0);
+		r2 = PG_GETARG_RANGE_P(1);
+
+		/* Different types should be prevented by ANYRANGE matching rules */
+		if (RangeTypeGetOid(r1) != RangeTypeGetOid(r2))
+			elog(ERROR, "range types do not match");
+
+		/* allocate memory for user context */
+		fctx = (range_without_portion_fctx *) palloc(sizeof(range_without_portion_fctx));
+
+		/*
+		 * Initialize state.
+		 * We can't store the range typcache in fn_extra because the caller
+		 * uses that for the SRF state.
+		 */
+		rngtypid = RangeTypeGetOid(r1);
+		typcache = lookup_type_cache(rngtypid, TYPECACHE_RANGE_INFO);
+		if (typcache->rngelemtype == NULL)
+			elog(ERROR, "type %u is not a range type", rngtypid);
+		range_without_portion_internal(typcache, r1, r2, fctx->rs, &fctx->n);
+
+		funcctx->user_fctx = fctx;
+		MemoryContextSwitchTo(oldcontext);
 	}
+
+	/* stuff done on every call of the function */
+	funcctx = SRF_PERCALL_SETUP();
+	fctx = funcctx->user_fctx;
+
+	if (funcctx->call_cntr < fctx->n)
+	{
+		/*
+		 * We must keep these on separate lines
+		 * because SRF_RETURN_NEXT does call_cntr++:
+		 */
+		RangeType *ret = fctx->rs[funcctx->call_cntr];
+		SRF_RETURN_NEXT(funcctx, RangeTypePGetDatum(ret));
+	}
+	else
+		/* do when there is no more left */
+		SRF_RETURN_DONE(funcctx);
 }
 
 /*
