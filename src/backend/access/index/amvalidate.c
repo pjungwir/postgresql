@@ -150,7 +150,7 @@ identify_opfamily_groups(CatCList *oprlist, CatCList *proclist)
  * unless it is InvalidOid.
  */
 bool
-check_amproc_signature(Oid funcid, Oid restype, bool exact,
+check_amproc_signature(Oid funcid, Oid restype, bool retset, bool exact,
 					   int minargs, int maxargs,...)
 {
 	bool		result = true;
@@ -165,7 +165,7 @@ check_amproc_signature(Oid funcid, Oid restype, bool exact,
 	procform = (Form_pg_proc) GETSTRUCT(tp);
 
 	if ((procform->prorettype != restype && OidIsValid(restype))
-		|| procform->proretset || procform->pronargs < minargs
+		|| procform->proretset != retset || procform->pronargs < minargs
 		|| procform->pronargs > maxargs)
 		result = false;
 
@@ -193,7 +193,7 @@ check_amproc_signature(Oid funcid, Oid restype, bool exact,
 bool
 check_amoptsproc_signature(Oid funcid)
 {
-	return check_amproc_signature(funcid, VOIDOID, true, 1, 1, INTERNALOID);
+	return check_amproc_signature(funcid, VOIDOID, false, true, 1, 1, INTERNALOID);
 }
 
 /*
