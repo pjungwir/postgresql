@@ -1228,9 +1228,6 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	ForPortionOfExpr *forPortionOf = (ForPortionOfExpr *) node->forPortionOf;
 	AttrNumber	rangeAttno;
 	Datum	oldRange;
-	Datum	allLeftovers;
-	Datum	*leftovers;
-	int		nleftovers;
 	bool isNull = false;
 	TypeCacheEntry *typcache;
 	ForPortionOfState *fpoState = resultRelInfo->ri_forPortionOf;
@@ -1240,6 +1237,11 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	HeapTuple oldtuple = NULL;
 	CmdType	oldOperation;
 	TransitionCaptureState *oldTcs;
+	FmgrInfo flinfo;
+	ReturnSetInfo rsi;
+	bool didInit = false;
+	bool shouldFree = false;
+	LOCAL_FCINFO(fcinfo, 2);
 
 	/*
 	 * Get the range of the old pre-UPDATE/DELETE tuple,
@@ -1282,63 +1284,87 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 		fpoState->fp_leftoverstypcache = typcache;
 	}
 
-	/* Get the ranges to the left/right of the targeted range. */
+	/*
+	 * Get the ranges to the left/right of the targeted range.
+	 * We call a SETOF support function and insert as many leftovers
+	 * as it gives us. Although rangetypes have 0/1/2 leftovers,
+	 * multiranges have 0/1, and other types may have more.
+	 */
 
-	allLeftovers = OidFunctionCall2Coll(forPortionOf->withoutPortionProc,
-										InvalidOid, oldRange, fpoState->fp_targetRange);
+	fmgr_info(forPortionOf->withoutPortionProc, &flinfo);
+	rsi.type = T_ReturnSetInfo;
+	rsi.econtext = mtstate->ps.ps_ExprContext;
+	rsi.expectedDesc = NULL;
+	rsi.allowedModes = (int) (SFRM_ValuePerCall);
+	rsi.returnMode = SFRM_ValuePerCall;
+	rsi.setResult = NULL;
+	rsi.setDesc = NULL;
 
-	deconstruct_array(DatumGetArrayTypeP(allLeftovers), typcache->type_id, typcache->typlen,
-					  typcache->typbyval, typcache->typalign, &leftovers, NULL, &nleftovers);
+	InitFunctionCallInfoData(*fcinfo, &flinfo, 2, InvalidOid, NULL, (Node *) &rsi);
+	fcinfo->args[0].value = oldRange;
+	fcinfo->args[0].isnull = false;
+	fcinfo->args[1].value = fpoState->fp_targetRange;
+	fcinfo->args[1].isnull = false;
 
-	Assert(nleftovers >= 0);
-	if (nleftovers > 0)
+	while (true)
 	{
-		bool shouldFree = false;
-		int i;
+		Datum leftover = FunctionCallInvoke(fcinfo);
+
+		/* Are we done? */
+		if (rsi.isDone == ExprEndResult)
+			break;
+
+		if (fcinfo->isnull)
+			elog(ERROR, "Got a null from without_portion function");
+
+		if (!didInit)
+		{
+			/*
+			 * Make a copy of the pre-UPDATE row.
+			 * Then we'll overwrite the range column below.
+			 * Convert oldtuple to the base table's format if necessary.
+			 * We need to insert leftovers through the root partition
+			 * so they get routed correctly.
+			 */
+			if (map != NULL)
+				leftoverSlot = execute_attr_map_slot(map->attrMap,
+													 oldtupleSlot,
+													 leftoverSlot);
+			else
+			{
+				oldtuple = ExecFetchSlotHeapTuple(oldtupleSlot, false, &shouldFree);
+				ExecForceStoreHeapTuple(oldtuple, leftoverSlot, false);
+			}
+
+			/* Save some mtstate things so we can restore them below. */
+			// TODO: Do we need a more systematic way of doing this,
+			// e.g. a new mtstate or even a separate ForPortionOfLeftovers node?
+			oldOperation = mtstate->operation;
+			mtstate->operation = CMD_INSERT;
+			oldTcs = mtstate->mt_transition_capture;
+
+			didInit = true;
+		}
+
+		/* store the new range */
+		leftoverSlot->tts_values[forPortionOf->rangeVar->varattno - 1] = leftover;
+		leftoverSlot->tts_isnull[forPortionOf->rangeVar->varattno - 1] = false;
+		ExecMaterializeSlot(leftoverSlot);
 
 		/*
-		 * Make a copy of the pre-UPDATE row.
-		 * Then we'll overwrite the range column below.
-		 * Convert oldtuple to the base table's format if necessary.
-		 * We need to insert leftovers through the root partition
-		 * so they get routed correctly.
+		 * If there are partitions, we must insert into the root table,
+		 * so we get tuple routing. We already set up leftoverSlot
+		 * with the root tuple descriptor.
 		 */
-		if (map != NULL)
-			leftoverSlot = execute_attr_map_slot(map->attrMap,
-												 oldtupleSlot,
-												 leftoverSlot);
-		else
-		{
-			oldtuple = ExecFetchSlotHeapTuple(oldtupleSlot, false, &shouldFree);
-			ExecForceStoreHeapTuple(oldtuple, leftoverSlot, false);
-		}
+		if (resultRelInfo->ri_RootResultRelInfo)
+			resultRelInfo = resultRelInfo->ri_RootResultRelInfo;
 
-		/* Save some mtstate things so we can restore them below. */
-		// TODO: Do we need a more systematic way of doing this,
-		// e.g. a new mtstate or even a separate ForPortionOfLeftovers node?
-		oldOperation = mtstate->operation;
-		mtstate->operation = CMD_INSERT;
-		oldTcs = mtstate->mt_transition_capture;
+		ExecSetupTransitionCaptureState(mtstate, estate);
+		ExecInsert(context, resultRelInfo, leftoverSlot, node->canSetTag, NULL, NULL);
+	}
 
-		for (i = 0; i < nleftovers; i++)
-		{
-			/* store the new range */
-			leftoverSlot->tts_values[forPortionOf->rangeVar->varattno - 1] = leftovers[i];
-			leftoverSlot->tts_isnull[forPortionOf->rangeVar->varattno - 1] = false;
-			ExecMaterializeSlot(leftoverSlot);
-
-			/*
-			 * If there are partitions, we must insert into the root table,
-			 * so we get tuple routing. We already set up leftoverSlot
-			 * with the root tuple descriptor.
-			 */
-			if (resultRelInfo->ri_RootResultRelInfo)
-				resultRelInfo = resultRelInfo->ri_RootResultRelInfo;
-
-			ExecSetupTransitionCaptureState(mtstate, estate);
-			ExecInsert(context, resultRelInfo, leftoverSlot, node->canSetTag, NULL, NULL);
-		}
-
+	if (didInit)
+	{
 		mtstate->operation = oldOperation;
 		mtstate->mt_transition_capture = oldTcs;
 
