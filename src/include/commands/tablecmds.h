@@ -105,8 +105,5 @@ extern void RangeVarCallbackOwnsRelation(const RangeVar *relation,
 										 Oid relId, Oid oldRelId, void *arg);
 extern bool PartConstraintImpliedByRelConstraint(Relation scanrel,
 												 List *partConstraint);
-extern void FindFKPeriodOpersAndProcs(Oid opclass,
-									  Oid *periodoperoid,
-									  Oid *periodprocoid);
 
 #endif							/* TABLECMDS_H */
