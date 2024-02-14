@@ -45,9 +45,9 @@ INSERT INTO temporal_fk_rng2rng VALUES
 -- key is missing
 INSERT INTO temporal_fk_rng2rng VALUES
   (3, '[2000-01-01,2001-01-01)', 3);
--- key exusts but is outside range
+-- key exist but is outside range
 INSERT INTO temporal_fk_rng2rng VALUES
   (4, '[2001-01-01,2002-01-01)', 2);
--- key exusts but is partly outside range
+-- key exist but is partly outside range
 INSERT INTO temporal_fk_rng2rng VALUES
   (5, '[2000-01-01,2002-01-01)', 2);
