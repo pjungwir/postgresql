@@ -201,7 +201,7 @@ static int	ri_NullCheck(TupleDesc tupDesc, TupleTableSlot *slot,
 static void ri_BuildQueryKey(RI_QueryKey *key,
 							 const RI_ConstraintInfo *riinfo,
 							 int32 constr_queryno);
-static bool ri_KeysStable(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
+static bool ri_KeysEqual(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
 						 const RI_ConstraintInfo *riinfo, bool rel_is_pk);
 static bool ri_RangeAttributeNeedsCheck(bool rel_is_pk, Datum oldvalue, Datum newvalue);
 static bool ri_AttributesEqual(Oid eq_opr, Oid typeid,
@@ -1438,7 +1438,7 @@ RI_FKey_pk_upd_check_required(Trigger *trigger, Relation pk_rel,
 		return false;
 
 	/* If all old and new key values are equal, no check is needed */
-	if (newslot && ri_KeysStable(pk_rel, oldslot, newslot, riinfo, true))
+	if (newslot && ri_KeysEqual(pk_rel, oldslot, newslot, riinfo, true))
 		return false;
 
 	/* Else we need to fire the trigger. */
@@ -1537,7 +1537,7 @@ RI_FKey_fk_upd_check_required(Trigger *trigger, Relation fk_rel,
 		return true;
 
 	/* If all old and new key values are equal, no check is needed */
-	if (ri_KeysStable(fk_rel, oldslot, newslot, riinfo, false))
+	if (ri_KeysEqual(fk_rel, oldslot, newslot, riinfo, false))
 		return false;
 
 	/* Else we need to fire the trigger. */
@@ -3004,7 +3004,7 @@ ri_HashPreparedPlan(RI_QueryKey *key, SPIPlanPtr plan)
 
 
 /*
- * ri_KeysStable -
+ * ri_KeysEqual -
  *
  * Check if all key values in OLD and NEW are "equivalent":
  * For normal FKs we check for equality.
@@ -3017,7 +3017,7 @@ ri_HashPreparedPlan(RI_QueryKey *key, SPIPlanPtr plan)
  * previously found at least one of the rows to contain no nulls.
  */
 static bool
-ri_KeysStable(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
+ri_KeysEqual(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
 			 const RI_ConstraintInfo *riinfo, bool rel_is_pk)
 {
 	const int16 *attnums;
