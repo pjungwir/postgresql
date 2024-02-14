@@ -1658,6 +1658,7 @@ DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
 void
 FindFKPeriodOpersAndProcs(Oid opclass,
 						  Oid *periodoperoid,
+						  Oid *aggedperiodoperoid,
 						  Oid *periodprocoid)
 {
 	Oid	opfamily;
@@ -1666,7 +1667,18 @@ FindFKPeriodOpersAndProcs(Oid opclass,
 	Oid	funcid = InvalidOid;
 	StrategyNumber strat = RTContainedByStrategyNumber;
 
-	/* First look up the support proc for aggregation. */
+	/*
+	 * Look up the ContainedBy operator with symmetric types.
+	 * We use this to optimize RI checks: if the new value includes all
+	 * of the old value, then we can treat the attribute as if it didn't change,
+	 * and skip the RI check.
+	 */
+	GetOperatorFromWellKnownStrategy(opclass,
+									 InvalidOid,
+									 periodoperoid,
+									 &strat);
+
+	/* Now look up the support proc for aggregation. */
 	if (get_opclass_opfamily_and_input_type(opclass, &opfamily, &opcintype))
 		funcid = get_opfamily_proc(opfamily, opcintype, opcintype, GIST_REFERENCED_AGG_PROC);
 
@@ -1686,9 +1698,10 @@ FindFKPeriodOpersAndProcs(Oid opclass,
 	 * Its left arg must be the type of the column (or rather of the opclass).
 	 * Its right arg must match the return type of the support proc.
 	 */
+	strat = RTContainedByStrategyNumber;
 	GetOperatorFromWellKnownStrategy(opclass,
 									 aggrettype,
-									 periodoperoid,
+									 aggedperiodoperoid,
 									 &strat);
 }
 
