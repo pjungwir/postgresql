@@ -213,8 +213,6 @@ typedef struct NewConstraint
 	bool		conwithperiod;	/* Whether the new FOREIGN KEY uses PERIOD */
 	Oid			conid;			/* OID of pg_constraint entry, if FOREIGN */
 	Node	   *qual;			/* Check expr or CONSTR_FOREIGN Constraint */
-	Oid		   *operoids;		/* oper oids for FOREIGN KEY with PERIOD */
-	Oid		   *procoids;		/* proc oids for FOREIGN KEY with PERIOD */
 	ExprState  *qualstate;		/* Execution state for CHECK expr */
 } NewConstraint;
 
