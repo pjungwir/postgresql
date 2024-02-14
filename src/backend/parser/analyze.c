@@ -1349,7 +1349,7 @@ transformForPortionOfClause(ParseState *pstate,
 	 */
 	opclass = GetDefaultOpClass(attr->atttypid, GIST_AM_OID);
 	strat = RTOverlapStrategyNumber;
-	GetOperatorFromWellKnownStrategy(opclass, InvalidOid, "overlaps", "FOR PORTION OF", &opid, &strat);
+	GetOperatorFromWellKnownStrategy(opclass, InvalidOid, &opid, &strat);
 	result->overlapsExpr = (Node *) makeSimpleA_Expr(AEXPR_OP, get_opname(opid),
 			(Node *) copyObject(rangeVar), targetExpr,
 			forPortionOf->location);
