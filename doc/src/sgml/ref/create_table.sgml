@@ -1287,7 +1287,10 @@ WITH ( MODULUS <replaceable class="parameter">numeric_literal</replaceable>, REM
          </para>
 
          <para>
-          In a temporal foreign key, this option is not supported.
+          In a temporal foreign key, the change will use <literal>FOR PORTION
+          OF</literal> semantics to constrain the effect to the bounds being
+          deleted/updated in the referenced row. The column maked with
+          <literal>PERIOD</literal> will not be set to null.
          </para>
         </listitem>
        </varlistentry>
@@ -1304,7 +1307,10 @@ WITH ( MODULUS <replaceable class="parameter">numeric_literal</replaceable>, REM
          </para>
 
          <para>
-          In a temporal foreign key, this option is not supported.
+          In a temporal foreign key, the change will use <literal>FOR PORTION
+          OF</literal> semantics to constrain the effect to the bounds being
+          deleted/updated in the referenced row. The column marked with
+          <literal>PERIOD</literal> with not be set to a default value.
          </para>
         </listitem>
        </varlistentry>
