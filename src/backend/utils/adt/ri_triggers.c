@@ -30,7 +30,6 @@
 #include "access/xact.h"
 #include "catalog/pg_collation.h"
 #include "catalog/pg_constraint.h"
-#include "catalog/pg_range.h"
 #include "commands/tablecmds.h"
 #include "commands/trigger.h"
 #include "executor/executor.h"
@@ -125,7 +124,7 @@ typedef struct RI_ConstraintInfo
 	Oid			pf_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (PK = FK) */
 	Oid			pp_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (PK = PK) */
 	Oid			ff_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (FK = FK) */
-	Oid			period_contained_by_oper;	/* operator for PEROID SQL */
+	Oid			period_contained_by_oper;	/* operator for PERIOD SQL */
 	Oid			period_referenced_agg_proc;	/* proc for PERIOD SQL */
 	dlist_node	valid_link;		/* Link in list of valid entries */
 } RI_ConstraintInfo;
@@ -367,9 +366,8 @@ RI_FKey_check(TriggerData *trigdata)
 
 		/* ----------
 		 * The query string built is
-		 *	SELECT 1
-		 *	FROM [ONLY] <pktable> x WHERE pkatt1 = $1 [AND ...]
-		 *	FOR KEY SHARE OF x
+		 *	SELECT 1 FROM [ONLY] <pktable> x WHERE pkatt1 = $1 [AND ...]
+		 *		FOR KEY SHARE OF x
 		 * The type id's for the $ parameters are those of the
 		 * corresponding FK attributes.
 		 *
@@ -410,14 +408,11 @@ RI_FKey_check(TriggerData *trigdata)
 		querysep = "WHERE";
 		for (int i = 0; i < riinfo->nkeys; i++)
 		{
-			Oid	pk_type;
-			Oid	fk_type;
+			Oid		pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
+			Oid		fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
 
-			pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
 			quoteOneName(attname,
 						 RIAttName(pk_rel, riinfo->pk_attnums[i]));
-
-			fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
 
 			sprintf(paramname, "$%d", i + 1);
 			ri_GenerateQual(&querybuf, querysep,
@@ -581,9 +576,8 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 		querysep = "WHERE";
 		for (int i = 0; i < riinfo->nkeys; i++)
 		{
-			Oid		pk_type;
+			Oid		pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
 
-			pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
 			quoteOneName(attname,
 						 RIAttName(pk_rel, riinfo->pk_attnums[i]));
 
@@ -779,16 +773,10 @@ ri_restrict(TriggerData *trigdata, bool is_no_action)
 		querysep = "WHERE";
 		for (int i = 0; i < riinfo->nkeys; i++)
 		{
-			Oid		pk_type;
-			Oid		fk_type;
-			Oid		pk_coll;
-			Oid		fk_coll;
-
-			pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
-			pk_coll = RIAttCollation(pk_rel, riinfo->pk_attnums[i]);
-
-			fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
-			fk_coll = RIAttCollation(fk_rel, riinfo->fk_attnums[i]);
+			Oid		pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
+			Oid		fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
+			Oid		pk_coll = RIAttCollation(pk_rel, riinfo->pk_attnums[i]);
+			Oid		fk_coll = RIAttCollation(fk_rel, riinfo->fk_attnums[i]);
 
 			quoteOneName(attname,
 						 RIAttName(fk_rel, riinfo->fk_attnums[i]));
