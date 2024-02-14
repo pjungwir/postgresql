@@ -11393,49 +11393,6 @@ FindFKComparisonOperators(Constraint *fkconstraint,
 }
 
 /*
- * FindFkPeriodOpersAndProcs -
- *
- * Looks up the oper and proc oids for confkperiodoperoids and confkperiodprocoids.
- * These are used by foreign keys with a PERIOD element.
- */
-void
-FindFKPeriodOpersAndProcs(Oid opclass,
-						  Oid *periodoperoid,
-						  Oid *periodprocoid)
-{
-	Oid	opfamily;
-	Oid	opcintype;
-	Oid	aggrettype;
-	Oid	funcid = InvalidOid;
-	StrategyNumber strat = RTContainedByStrategyNumber;
-
-	/* First look up the support proc for aggregation. */
-	if (get_opclass_opfamily_and_input_type(opclass, &opfamily, &opcintype))
-		funcid = get_opfamily_proc(opfamily, opcintype, opcintype, GIST_REFERENCED_AGG_PROC);
-
-	if (!OidIsValid(funcid))
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_OBJECT),
-				 errmsg("no support func %u found for FOREIGN KEY constraint", GIST_REFERENCED_AGG_PROC),
-				 errhint("Define a referencedagg support function for your GiST opclass.")));
-
-	*periodprocoid = funcid;
-
-	/* Look up the function's rettype. */
-	aggrettype = get_func_rettype(funcid);
-
-	/*
-	 * Now look up the ContainedBy operator.
-	 * Its left arg must be the type of the column (or rather of the opclass).
-	 * Its right arg must match the return type of the support proc.
-	 */
-	GetOperatorFromWellKnownStrategy(opclass,
-									 aggrettype,
-									 periodoperoid,
-									 &strat);
-}
-
-/*
  * When the parent of a partition receives [the referencing side of] a foreign
  * key, we must propagate that foreign key to the partition.  However, the
  * partition might already have an equivalent foreign key; this routine
