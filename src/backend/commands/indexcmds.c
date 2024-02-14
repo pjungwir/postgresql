@@ -2179,23 +2179,14 @@ ComputeIndexAttrs(IndexInfo *indexInfo,
 		else if (iswithoutoverlaps)
 		{
 			StrategyNumber strat;
-			char	   *opname;
 			Oid			opid;
 
 			if (attn == nkeycols - 1)
-			{
 				strat = RTOverlapStrategyNumber;
-				opname = "overlaps";
-			}
 			else
-			{
 				strat = RTEqualStrategyNumber;
-				opname = "equals";
-			}
 			GetOperatorFromWellKnownStrategy(opclassOids[attn],
 											 InvalidOid,
-											 opname,
-											 "WITHOUT OVERLAPS constraint",
 											 &opid,
 											 &strat);
 			indexInfo->ii_ExclusionOps[attn] = opid;
@@ -2437,8 +2428,6 @@ GetDefaultOpClass(Oid type_id, Oid am_id)
  *
  * opclass - the opclass to use
  * rhstype - the type for the right-hand side
- * opname - used to build error messages
- * context - used to build error messages
  * opid - holds the operator we found
  * strat - holds the input and output strategy number
  *
@@ -2453,18 +2442,28 @@ GetDefaultOpClass(Oid type_id, Oid am_id)
 void
 GetOperatorFromWellKnownStrategy(Oid opclass,
 								 Oid rhstype,
-								 const char *opname,
-								 const char *context,
 								 Oid *opid,
 								 StrategyNumber *strat)
 {
 	Oid			opfamily;
 	Oid			opcintype;
 	StrategyNumber instrat = *strat;
+	char	   *errstr;
 
-	Assert(instrat == RTEqualStrategyNumber ||
-		   instrat == RTOverlapStrategyNumber ||
-		   instrat == RTContainedByStrategyNumber);
+	switch (instrat)
+	{
+		case RTEqualStrategyNumber:
+			errstr = "could not identify an equality operator for type %s";
+			break;
+		case RTOverlapStrategyNumber:
+			errstr = "could not identify an overlaps operator for type %s";
+			break;
+		case RTContainedByStrategyNumber:
+			errstr = "could not identify a contained by operator for type %s";
+			break;
+		default:
+			elog(ERROR, "unsupported strategy number %u", instrat);
+	}
 
 	*opid = InvalidOid;
 
@@ -2487,9 +2486,9 @@ GetOperatorFromWellKnownStrategy(Oid opclass,
 
 			ereport(ERROR,
 					errcode(ERRCODE_UNDEFINED_OBJECT),
-					errmsg("could not identify a %s operator for type %s for %s", opname, format_type_be(opcintype), context),
+					errmsg(errstr, format_type_be(opcintype)),
 					errdetail("Could not translate strategy number %d for operator class \"%s\" for access method \"%s\".",
-						 instrat, NameStr(((Form_pg_opclass) GETSTRUCT(tuple))->opcname), "gist"));
+							  instrat, NameStr(((Form_pg_opclass) GETSTRUCT(tuple))->opcname), "gist"));
 			ReleaseSysCache(tuple);
 		}
 
@@ -2513,7 +2512,7 @@ GetOperatorFromWellKnownStrategy(Oid opclass,
 
 		ereport(ERROR,
 				errcode(ERRCODE_UNDEFINED_OBJECT),
-				errmsg("could not identify an %s operator for type %s for %s", opname, format_type_be(opcintype), context),
+				errmsg(errstr, format_type_be(opcintype)),
 				errdetail("There is no suitable operator in operator family \"%s\" for access method \"%s\".",
 						  NameStr(((Form_pg_opfamily) GETSTRUCT(tuple))->opfname), "gist"));
 	}
