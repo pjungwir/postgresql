@@ -11433,8 +11433,6 @@ FindFKPeriodOpersAndProcs(Oid opclass,
 	 */
 	GetOperatorFromWellKnownStrategy(opclass,
 									 aggrettype,
-									 "contained by",
-									 "FOREIGN KEY constraint",
 									 periodoperoid,
 									 &strat);
 }
