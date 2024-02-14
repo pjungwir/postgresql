@@ -124,6 +124,7 @@ typedef struct RI_ConstraintInfo
 	Oid			pp_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (PK = PK) */
 	Oid			ff_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (FK = FK) */
 	Oid			period_contained_by_oper;	/* operator for PERIOD SQL */
+	Oid			agged_period_contained_by_oper;	/* operator for PERIOD SQL */
 	Oid			period_referenced_agg_proc;	/* proc for PERIOD SQL */
 	dlist_node	valid_link;		/* Link in list of valid entries */
 } RI_ConstraintInfo;
@@ -203,7 +204,6 @@ static void ri_BuildQueryKey(RI_QueryKey *key,
 							 int32 constr_queryno);
 static bool ri_KeysEqual(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
 						 const RI_ConstraintInfo *riinfo, bool rel_is_pk);
-static bool ri_RangeAttributeNeedsCheck(bool rel_is_pk, Datum oldvalue, Datum newvalue);
 static bool ri_AttributesEqual(Oid eq_opr, Oid typeid,
 							   Datum oldvalue, Datum newvalue);
 
@@ -2392,7 +2392,10 @@ ri_LoadConstraintInfo(Oid constraintOid)
 	if (riinfo->temporal)
 	{
 		Oid	opclass = get_index_column_opclass(conForm->conindid, riinfo->nkeys);
-		FindFKPeriodOpersAndProcs(opclass, &riinfo->period_contained_by_oper, &riinfo->period_referenced_agg_proc);
+		FindFKPeriodOpersAndProcs(opclass,
+								  &riinfo->period_contained_by_oper,
+								  &riinfo->agged_period_contained_by_oper,
+								  &riinfo->period_referenced_agg_proc);
 	}
 
 	ReleaseSysCache(tup);
@@ -3050,85 +3053,38 @@ ri_KeysEqual(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
 
 		if (rel_is_pk)
 		{
-			if (riinfo->temporal && i == riinfo->nkeys - 1)
-			{
-				if (ri_RangeAttributeNeedsCheck(true, oldvalue, newvalue))
-					return false;
-			}
-			else
-			{
-				/*
-				 * If we are looking at the PK table, then do a bytewise
-				 * comparison.  We must propagate PK changes if the value is
-				 * changed to one that "looks" different but would compare as
-				 * equal using the equality operator.  This only makes a
-				 * difference for ON UPDATE CASCADE, but for consistency we treat
-				 * all changes to the PK the same.
-				 */
-				Form_pg_attribute att = TupleDescAttr(oldslot->tts_tupleDescriptor, attnums[i] - 1);
+			/*
+			 * If we are looking at the PK table, then do a bytewise
+			 * comparison.  We must propagate PK changes if the value is
+			 * changed to one that "looks" different but would compare as
+			 * equal using the equality operator.  This only makes a
+			 * difference for ON UPDATE CASCADE, but for consistency we treat
+			 * all changes to the PK the same.
+			 */
+			Form_pg_attribute att = TupleDescAttr(oldslot->tts_tupleDescriptor, attnums[i] - 1);
 
-				if (!datum_image_eq(oldvalue, newvalue, att->attbyval, att->attlen))
-					return false;
-			}
+			if (!datum_image_eq(oldvalue, newvalue, att->attbyval, att->attlen))
+				return false;
 		}
 		else
 		{
+			Oid eq_opr = riinfo->ff_eq_oprs[i];
+
+			/*
+			 * When comparing the PERIOD columns we can skip the check
+			 * whenever the referencing column stayed equal or shrank,
+			 * so test with the contained-by operator instead.
+			 */
 			if (riinfo->temporal && i == riinfo->nkeys - 1)
-			{
-				if (ri_RangeAttributeNeedsCheck(false, oldvalue, newvalue))
-					return false;
-			}
-			else
-			{
-				/*
-				 * For the FK table, compare with the appropriate equality
-				 * operator.  Changes that compare equal will still satisfy the
-				 * constraint after the update.
-				 */
-				if (!ri_AttributesEqual(riinfo->ff_eq_oprs[i], RIAttType(rel, attnums[i]),
-										oldvalue, newvalue))
-					return false;
-			}
+				eq_opr = riinfo->period_contained_by_oper;
+
+			if (!ri_AttributesEqual(eq_opr, RIAttType(rel, attnums[i]),
+									newvalue, oldvalue))
+				return false;
 		}
 	}
 
 	return true;
-}
-
-/*
- * ri_RangeAttributeNeedsCheck -
- *
- * Compare old and new values, and return true if we need to check the FK.
- *
- * NB: we have already checked that neither value is null.
- */
-static bool
-ri_RangeAttributeNeedsCheck(bool rel_is_pk, Datum oldvalue, Datum newvalue)
-{
-	RangeType *oldrange, *newrange;
-	Oid oldrngtype, newrngtype;
-	TypeCacheEntry *typcache;
-
-	oldrange = DatumGetRangeTypeP(oldvalue);
-	newrange = DatumGetRangeTypeP(newvalue);
-	oldrngtype = RangeTypeGetOid(oldrange);
-	newrngtype = RangeTypeGetOid(newrange);
-
-	if (oldrngtype != newrngtype)
-		elog(ERROR, "range types are inconsistent");
-
-	typcache = lookup_type_cache(oldrngtype, TYPECACHE_RANGE_INFO);
-	if (typcache->rngelemtype == NULL)
-		elog(ERROR, "type %u is not a range type", oldrngtype);
-
-	if (rel_is_pk)
-		/* If the PK's range shrunk, a conflict is possible. */
-		return !range_eq_internal(typcache, oldrange, newrange) &&
-			!range_contains_internal(typcache, newrange, oldrange);
-	else
-		/* If the FK's range grew, a conflict is possible. */
-		return !range_eq_internal(typcache, oldrange, newrange) &&
-			range_contains_internal(typcache, newrange, oldrange);
 }
 
 /*
@@ -3234,6 +3190,8 @@ ri_HashCompareOp(Oid eq_opr, Oid typeid)
 		 * moment since that will never be generated for implicit coercions.
 		 */
 		op_input_types(eq_opr, &lefttype, &righttype);
+		if (lefttype != righttype)
+			ereport(NOTICE, (errmsg("%u != %u", lefttype, righttype)));
 		Assert(lefttype == righttype);
 		if (typeid == lefttype)
 			castfunc = InvalidOid;	/* simplest case */
@@ -3316,7 +3274,7 @@ lookupTRIOperAndProc(const RI_ConstraintInfo *riinfo, char **opname, char **aggn
 {
 	Oid	oid;
 
-	oid = riinfo->period_contained_by_oper;
+	oid = riinfo->agged_period_contained_by_oper;
 	if (!OidIsValid(oid))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
