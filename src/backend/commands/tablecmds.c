@@ -9838,8 +9838,6 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	int16		fkperiodattnum = 0;
 	Oid			pkperiodtypoid = 0;
 	Oid			fkperiodtypoid = 0;
-	Oid			periodoperoid;
-	Oid			periodprocoid;
 	int			i;
 	int			numfks,
 				numpks,
@@ -10081,10 +10079,16 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	 * by the aggregated ranges of the referenced row(s).
 	 * For rangetypes this is fk.periodatt <@ range_agg(pk.periodatt).
 	 * FKs will look these up at "runtime", but we should make sure
-	 * the lookup works here.
+	 * the lookup works here, even if we don't use the values.
 	 */
 	if (is_temporal)
-		FindFKPeriodOpersAndProcs(opclasses[numpks - 1], &periodoperoid, &periodprocoid);
+	{
+		Oid			periodoperoid;
+		Oid			aggedperiodoperoid;
+		Oid			periodprocoid;
+
+		FindFKPeriodOpersAndProcs(opclasses[numpks - 1], &periodoperoid, &aggedperiodoperoid, &periodprocoid);
+	}
 
 	/*
 	 * Create all the constraint and trigger objects, recursing to partitions
