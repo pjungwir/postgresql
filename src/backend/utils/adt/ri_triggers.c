@@ -3016,7 +3016,7 @@ ri_HashPreparedPlan(RI_QueryKey *key, SPIPlanPtr plan)
  * Check if all key values in OLD and NEW are "equivalent":
  * For normal FKs we check for equality.
  * For temporal FKs we check that the PK side is a superset of its old value,
- * or the FK side is a subset.
+ * or the FK side is a subset of its old value.
  *
  * Note: at some point we might wish to redefine this as checking for
  * "IS NOT DISTINCT" rather than "=", that is, allow two nulls to be
