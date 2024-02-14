@@ -12792,7 +12792,8 @@ createForeignKeyActionTriggers(Relation rel, Oid refRelOid, Constraint *fkconstr
 			case FKCONSTR_ACTION_SETDEFAULT:
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("action not supported for temporal foreign keys")));
+						 errmsg("invalid %s action for foreign key constraint using PERIOD",
+								"ON DELETE")));
 				break;
 			default:
 				elog(ERROR, "unrecognized FK action type: %d",
@@ -12883,7 +12884,8 @@ createForeignKeyActionTriggers(Relation rel, Oid refRelOid, Constraint *fkconstr
 			case FKCONSTR_ACTION_SETDEFAULT:
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("action not supported for temporal foreign keys")));
+						 errmsg("invalid %s action for foreign key constraint using PERIOD",
+								"ON UPDATE")));
 				break;
 			default:
 				elog(ERROR, "unrecognized FK action type: %d",
