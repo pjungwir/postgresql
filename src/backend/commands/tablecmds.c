@@ -12352,8 +12352,10 @@ transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 
 	ReleaseSysCache(indexTuple);
 
-	if (indexStruct->indisexclusion) return i - 1;
-	else return i;
+	if (indexStruct->indisexclusion)
+		return i - 1;
+	else
+		return i;
 }
 
 /*
