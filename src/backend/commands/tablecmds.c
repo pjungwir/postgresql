@@ -12471,16 +12471,10 @@ transformFkeyCheckAttrs(Relation pkrel,
 			}
 			if (found && is_temporal)
 			{
-				found = false;
-				for (j = 0; j < numattrs + 1; j++)
-				{
-					if (periodattnum == indexStruct->indkey.values[j])
-					{
-						opclasses[numattrs] = indclass->values[j];
-						found = true;
-						break;
-					}
-				}
+				/* The last attribute in the index must be the PERIOD FK part */
+				found = (periodattnum == indexStruct->indkey.values[numattrs]);
+				if (found)
+					opclasses[numattrs] = indclass->values[numattrs];
 			}
 
 			/*
