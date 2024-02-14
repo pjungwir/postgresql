@@ -797,7 +797,7 @@ ALTER TABLE temporal_fk_rng2rng
 		FOREIGN KEY (parent_id, PERIOD valid_at)
 		REFERENCES temporal_rng
 		ON DELETE CASCADE ON UPDATE CASCADE;
-ERROR:  action not supported for temporal foreign keys
+ERROR:  invalid ON DELETE action for foreign key constraint using PERIOD
 -- test FK parent updates SET NULL
 INSERT INTO temporal_rng VALUES ('[9,9]', daterange('2018-01-01', '2021-01-01'));
 INSERT INTO temporal_fk_rng2rng VALUES ('[6,6]', daterange('2018-01-01', '2021-01-01'), '[9,9]');
@@ -807,7 +807,7 @@ ALTER TABLE temporal_fk_rng2rng
 		FOREIGN KEY (parent_id, PERIOD valid_at)
 		REFERENCES temporal_rng
 		ON DELETE SET NULL ON UPDATE SET NULL;
-ERROR:  action not supported for temporal foreign keys
+ERROR:  invalid ON DELETE action for foreign key constraint using PERIOD
 -- test FK parent updates SET DEFAULT
 INSERT INTO temporal_rng VALUES ('[-1,-1]', daterange(null, null));
 INSERT INTO temporal_rng VALUES ('[12,12]', daterange('2018-01-01', '2021-01-01'));
@@ -819,7 +819,7 @@ ALTER TABLE temporal_fk_rng2rng
 		FOREIGN KEY (parent_id, PERIOD valid_at)
 		REFERENCES temporal_rng
 		ON DELETE SET DEFAULT ON UPDATE SET DEFAULT;
-ERROR:  action not supported for temporal foreign keys
+ERROR:  invalid ON DELETE action for foreign key constraint using PERIOD
 -- FK between partitioned tables
 CREATE TABLE temporal_partitioned_rng (
 	id int4range,
@@ -932,7 +932,7 @@ ALTER TABLE temporal_partitioned_fk_rng2rng
 		FOREIGN KEY (parent_id, PERIOD valid_at)
 		REFERENCES temporal_partitioned_rng
 		ON DELETE CASCADE ON UPDATE CASCADE;
-ERROR:  action not supported for temporal foreign keys
+ERROR:  invalid ON DELETE action for foreign key constraint using PERIOD
 -- partitioned FK parent deletes CASCADE
 -- partitioned FK parent updates SET NULL
 ALTER TABLE temporal_partitioned_fk_rng2rng
@@ -941,7 +941,7 @@ ALTER TABLE temporal_partitioned_fk_rng2rng
 		FOREIGN KEY (parent_id, PERIOD valid_at)
 		REFERENCES temporal_partitioned_rng
 		ON DELETE SET NULL ON UPDATE SET NULL;
-ERROR:  action not supported for temporal foreign keys
+ERROR:  invalid ON DELETE action for foreign key constraint using PERIOD
 -- partitioned FK parent deletes SET NULL
 -- partitioned FK parent updates SET DEFAULT
 ALTER TABLE temporal_partitioned_fk_rng2rng
@@ -951,7 +951,7 @@ ALTER TABLE temporal_partitioned_fk_rng2rng
 		FOREIGN KEY (parent_id, PERIOD valid_at)
 		REFERENCES temporal_partitioned_rng
 		ON DELETE SET DEFAULT ON UPDATE SET DEFAULT;
-ERROR:  action not supported for temporal foreign keys
+ERROR:  invalid ON DELETE action for foreign key constraint using PERIOD
 -- partitioned FK parent deletes SET DEFAULT
 DROP TABLE temporal_partitioned_fk_rng2rng;
 DROP TABLE temporal_partitioned_rng;
