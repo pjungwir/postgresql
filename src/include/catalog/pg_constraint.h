@@ -285,6 +285,7 @@ extern void DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
 									   int *num_fk_del_set_cols, AttrNumber *fk_del_set_cols);
 extern void FindFKPeriodOpersAndProcs(Oid opclass,
 									  Oid *periodoperoid,
+									  Oid *aggedperiodoperoid,
 									  Oid *periodprocoid);
 
 extern bool check_functional_grouping(Oid relid,
