@@ -1890,6 +1890,22 @@ UPDATE temporal_mltrng SET id = '[7,8)'
 WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
 ERROR:  update or delete on table "temporal_mltrng" violates foreign key constraint "temporal_fk_mltrng2mltrng_fk" on table "temporal_fk_mltrng2mltrng"
 DETAIL:  Key (id, valid_at)=([5,6), {[2018-01-01,2018-02-01)}) is still referenced from table "temporal_fk_mltrng2mltrng".
+-- changing an unreferenced part is okay:
+UPDATE temporal_mltrng
+FOR PORTION OF valid_at (datemultirange(daterange('2018-01-02', '2018-01-03')))
+SET id = '[7,7]'
+WHERE id = '[5,5]';
+-- changing just a part fails:
+UPDATE temporal_mltrng
+FOR PORTION OF valid_at (datemultirange(daterange('2018-01-05', '2018-01-10')))
+SET id = '[7,7]'
+WHERE id = '[5,5]';
+ERROR:  update or delete on table "temporal_mltrng" violates foreign key constraint "temporal_fk_mltrng2mltrng_fk" on table "temporal_fk_mltrng2mltrng"
+DETAIL:  Key (id, valid_at)=([5,6), {[2018-01-01,2018-02-01),[2018-01-03,2018-02-01)}) is still referenced from table "temporal_fk_mltrng2mltrng".
+-- then delete the objecting FK record and the same PK update succeeds:
+DELETE FROM temporal_fk_mltrng2mltrng WHERE id = '[3,3]';
+UPDATE temporal_mltrng SET valid_at = datemultirange(daterange('2016-01-01', '2016-02-01'))
+WHERE id = '[5,5]' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
 --
 -- test FK referenced updates RESTRICT
 --
@@ -1922,6 +1938,22 @@ UPDATE temporal_mltrng SET id = '[7,8)'
 WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
 ERROR:  update or delete on table "temporal_mltrng" violates foreign key constraint "temporal_fk_mltrng2mltrng_fk" on table "temporal_fk_mltrng2mltrng"
 DETAIL:  Key (id, valid_at)=([5,6), {[2018-01-01,2018-02-01)}) is still referenced from table "temporal_fk_mltrng2mltrng".
+-- changing an unreferenced part is okay:
+UPDATE temporal_mltrng
+FOR PORTION OF valid_at (datemultirange(daterange('2018-01-02', '2018-01-03')))
+SET id = '[7,7]'
+WHERE id = '[5,5]';
+-- changing just a part fails:
+UPDATE temporal_mltrng
+FOR PORTION OF valid_at (datemultirange(daterange('2018-01-05', '2018-01-10')))
+SET id = '[7,7]'
+WHERE id = '[5,5]';
+ERROR:  update or delete on table "temporal_mltrng" violates foreign key constraint "temporal_fk_mltrng2mltrng_fk" on table "temporal_fk_mltrng2mltrng"
+DETAIL:  Key (id, valid_at)=([5,6), {[2018-01-01,2018-01-02),[2018-01-03,2018-02-01)}) is still referenced from table "temporal_fk_mltrng2mltrng".
+-- then delete the objecting FK record and the same PK update succeeds:
+DELETE FROM temporal_fk_mltrng2mltrng WHERE id = '[3,3]';
+UPDATE temporal_mltrng SET valid_at = datemultirange(daterange('2016-01-01', '2016-02-01'))
+WHERE id = '[5,5]' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
 --
 -- test FK referenced deletes NO ACTION
 --
@@ -1945,6 +1977,19 @@ DELETE FROM temporal_mltrng WHERE id = '[5,6)' AND valid_at = datemultirange(dat
 DELETE FROM temporal_mltrng WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
 ERROR:  update or delete on table "temporal_mltrng" violates foreign key constraint "temporal_fk_mltrng2mltrng_fk" on table "temporal_fk_mltrng2mltrng"
 DETAIL:  Key (id, valid_at)=([5,6), {[2018-01-01,2018-02-01)}) is still referenced from table "temporal_fk_mltrng2mltrng".
+-- deleting an unreferenced part is okay:
+DELETE FROM temporal_mltrng
+FOR PORTION OF valid_at (datemultirange(daterange('2018-01-02', '2018-01-03')))
+WHERE id = '[5,5]';
+-- deleting just a part fails:
+DELETE FROM temporal_mltrng
+FOR PORTION OF valid_at (datemultirange(daterange('2018-01-05', '2018-01-10')))
+WHERE id = '[5,5]';
+ERROR:  update or delete on table "temporal_mltrng" violates foreign key constraint "temporal_fk_mltrng2mltrng_fk" on table "temporal_fk_mltrng2mltrng"
+DETAIL:  Key (id, valid_at)=([5,6), {[2018-01-01,2018-01-02),[2018-01-03,2018-02-01)}) is still referenced from table "temporal_fk_mltrng2mltrng".
+-- then delete the objecting FK record and the same PK delete succeeds:
+DELETE FROM temporal_fk_mltrng2mltrng WHERE id = '[3,3]';
+DELETE FROM temporal_mltrng WHERE id = '[5,5]' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
 --
 -- test FK referenced deletes RESTRICT
 --
@@ -1968,6 +2013,19 @@ DELETE FROM temporal_mltrng WHERE id = '[5,6)' AND valid_at = datemultirange(dat
 DELETE FROM temporal_mltrng WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
 ERROR:  update or delete on table "temporal_mltrng" violates foreign key constraint "temporal_fk_mltrng2mltrng_fk" on table "temporal_fk_mltrng2mltrng"
 DETAIL:  Key (id, valid_at)=([5,6), {[2018-01-01,2018-02-01)}) is still referenced from table "temporal_fk_mltrng2mltrng".
+-- deleting an unreferenced part is okay:
+DELETE FROM temporal_mltrng
+FOR PORTION OF valid_at (datemultirange(daterange('2018-01-02', '2018-01-03')))
+WHERE id = '[5,5]';
+-- deleting just a part fails:
+DELETE FROM temporal_mltrng
+FOR PORTION OF valid_at (datemultirange(daterange('2018-01-05', '2018-01-10')))
+WHERE id = '[5,5]';
+ERROR:  update or delete on table "temporal_mltrng" violates foreign key constraint "temporal_fk_mltrng2mltrng_fk" on table "temporal_fk_mltrng2mltrng"
+DETAIL:  Key (id, valid_at)=([5,6), {[2018-01-01,2018-01-02),[2018-01-03,2018-02-01)}) is still referenced from table "temporal_fk_mltrng2mltrng".
+-- then delete the objecting FK record and the same PK delete succeeds:
+DELETE FROM temporal_fk_mltrng2mltrng WHERE id = '[3,3]';
+DELETE FROM temporal_mltrng WHERE id = '[5,5]' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
 -- FK with a custom range type
 CREATE TYPE mydaterange AS range(subtype=date);
 CREATE TABLE temporal_rng3 (
