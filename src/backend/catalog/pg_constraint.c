@@ -1622,9 +1622,10 @@ DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
  */
 void
 FindFKPeriodOpersAndProcs(Oid opclass,
-						  Oid *periodoperoid,
-						  Oid *aggedperiodoperoid,
-						  Oid *periodprocoid)
+						  Oid *containedbyoperoid,
+						  Oid *aggedcontainedbyoperoid,
+						  Oid *aggprocoid,
+						  Oid *intersectprocoid)
 {
 	Oid	opfamily;
 	Oid	opcintype;
@@ -1641,7 +1642,7 @@ FindFKPeriodOpersAndProcs(Oid opclass,
 	strat = RTContainedByStrategyNumber;
 	GetOperatorFromWellKnownStrategy(opclass,
 									 InvalidOid,
-									 periodoperoid,
+									 containedbyoperoid,
 									 &strat);
 
 	/* Now look up the support proc for aggregation. */
@@ -1654,7 +1655,7 @@ FindFKPeriodOpersAndProcs(Oid opclass,
 				 errmsg("no support func %u found for FOREIGN KEY constraint", GIST_REFERENCED_AGG_PROC),
 				 errhint("Define a referencedagg support function for your GiST opclass.")));
 
-	*periodprocoid = funcid;
+	*aggprocoid = funcid;
 
 	/* Look up the function's rettype. */
 	aggrettype = get_func_rettype(funcid);
@@ -1667,8 +1668,16 @@ FindFKPeriodOpersAndProcs(Oid opclass,
 	strat = RTContainedByStrategyNumber;
 	GetOperatorFromWellKnownStrategy(opclass,
 									 aggrettype,
-									 aggedperiodoperoid,
+									 aggedcontainedbyoperoid,
 									 &strat);
+
+	/*
+	 * If the command uses FOR PORTION OF,
+	 * we will also need an intersect support proc.
+	 * If this is missing we don't need to complain here,
+	 * because FOR PORTION OF will not be allowed.
+	 */
+	*intersectprocoid = get_opfamily_proc(opfamily, opcintype, opcintype, GIST_INTERSECT_PROC);
 }
 
 /*
