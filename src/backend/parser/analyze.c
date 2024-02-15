@@ -1286,15 +1286,6 @@ transformForPortionOfClause(ParseState *pstate,
 				 parser_errposition(pstate, forPortionOf->location)));
 	attr = TupleDescAttr(targetrel->rd_att, range_attno - 1);
 
-	/* Make sure it's a range column */
-	if (!type_is_range(attr->atttypid))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
-				 errmsg("column \"%s\" of relation \"%s\" is not a range type",
-						range_name,
-						RelationGetRelationName(targetrel)),
-				 parser_errposition(pstate, forPortionOf->location)));
-
 	rangeVar = makeVar(
 			rtindex,
 			range_attno,
@@ -1317,6 +1308,15 @@ transformForPortionOfClause(ParseState *pstate,
 		targetExpr = forPortionOf->target;
 	else
 	{
+		/* Make sure it's a range column */
+		if (!type_is_range(attr->atttypid))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+					 errmsg("column \"%s\" of relation \"%s\" is not a range type",
+							range_name,
+							RelationGetRelationName(targetrel)),
+					 parser_errposition(pstate, forPortionOf->location)));
+
 		/*
 		 * Build a range from the FROM ... TO .... bounds.
 		 * This should give a constant result, so we accept functions like NOW()
