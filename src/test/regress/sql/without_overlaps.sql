@@ -1390,6 +1390,20 @@ WHERE id = '[5,5]' AND valid_at = datemultirange(daterange('2018-01-01', '2018-0
 -- changing the scalar part fails:
 UPDATE temporal_mltrng SET id = '[7,7]'
 WHERE id = '[5,5]' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
+-- changing an unreferenced part is okay:
+UPDATE temporal_mltrng
+FOR PORTION OF valid_at (datemultirange(daterange('2018-01-02', '2018-01-03')))
+SET id = '[7,7]'
+WHERE id = '[5,5]';
+-- changing just a part fails:
+UPDATE temporal_mltrng
+FOR PORTION OF valid_at (datemultirange(daterange('2018-01-05', '2018-01-10')))
+SET id = '[7,7]'
+WHERE id = '[5,5]';
+-- then delete the objecting FK record and the same PK update succeeds:
+DELETE FROM temporal_fk_mltrng2mltrng WHERE id = '[3,3]';
+UPDATE temporal_mltrng SET valid_at = datemultirange(daterange('2016-01-01', '2016-02-01'))
+WHERE id = '[5,5]' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
 -- clean up:
 DELETE FROM temporal_fk_mltrng2mltrng WHERE parent_id = '[5,5]';
 DELETE FROM temporal_mltrng WHERE id IN ('[5,5]', '[7,7]');
@@ -1422,6 +1436,20 @@ WHERE id = '[5,5]' AND valid_at = datemultirange(daterange('2018-01-01', '2018-0
 -- changing the scalar part fails:
 UPDATE temporal_mltrng SET id = '[7,7]'
 WHERE id = '[5,5]' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
+-- changing an unreferenced part is okay:
+UPDATE temporal_mltrng
+FOR PORTION OF valid_at (datemultirange(daterange('2018-01-02', '2018-01-03')))
+SET id = '[7,7]'
+WHERE id = '[5,5]';
+-- changing just a part fails:
+UPDATE temporal_mltrng
+FOR PORTION OF valid_at (datemultirange(daterange('2018-01-05', '2018-01-10')))
+SET id = '[7,7]'
+WHERE id = '[5,5]';
+-- then delete the objecting FK record and the same PK update succeeds:
+DELETE FROM temporal_fk_mltrng2mltrng WHERE id = '[3,3]';
+UPDATE temporal_mltrng SET valid_at = datemultirange(daterange('2016-01-01', '2016-02-01'))
+WHERE id = '[5,5]' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
 -- clean up:
 DELETE FROM temporal_fk_mltrng2mltrng WHERE parent_id = '[5,5]';
 DELETE FROM temporal_mltrng WHERE id IN ('[5,5]', '[7,7]');
@@ -1444,6 +1472,17 @@ INSERT INTO temporal_mltrng VALUES
 INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[3,3]', datemultirange(daterange('2018-01-05', '2018-01-10')), '[5,5]');
 DELETE FROM temporal_mltrng WHERE id = '[5,5]' AND valid_at = datemultirange(daterange('2018-02-01', '2018-03-01'));
 -- a PK delete that fails because both are referenced:
+DELETE FROM temporal_mltrng WHERE id = '[5,5]' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
+-- deleting an unreferenced part is okay:
+DELETE FROM temporal_mltrng
+FOR PORTION OF valid_at (datemultirange(daterange('2018-01-02', '2018-01-03')))
+WHERE id = '[5,5]';
+-- deleting just a part fails:
+DELETE FROM temporal_mltrng
+FOR PORTION OF valid_at (datemultirange(daterange('2018-01-05', '2018-01-10')))
+WHERE id = '[5,5]';
+-- then delete the objecting FK record and the same PK delete succeeds:
+DELETE FROM temporal_fk_mltrng2mltrng WHERE id = '[3,3]';
 DELETE FROM temporal_mltrng WHERE id = '[5,5]' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
 -- clean up:
 DELETE FROM temporal_fk_mltrng2mltrng WHERE parent_id = '[5,5]';
@@ -1468,6 +1507,17 @@ INSERT INTO temporal_mltrng VALUES
 INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[3,3]', datemultirange(daterange('2018-01-05', '2018-01-10')), '[5,5]');
 DELETE FROM temporal_mltrng WHERE id = '[5,5]' AND valid_at = datemultirange(daterange('2018-02-01', '2018-03-01'));
 -- a PK delete that fails because both are referenced:
+DELETE FROM temporal_mltrng WHERE id = '[5,5]' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
+-- deleting an unreferenced part is okay:
+DELETE FROM temporal_mltrng
+FOR PORTION OF valid_at (datemultirange(daterange('2018-01-02', '2018-01-03')))
+WHERE id = '[5,5]';
+-- deleting just a part fails:
+DELETE FROM temporal_mltrng
+FOR PORTION OF valid_at (datemultirange(daterange('2018-01-05', '2018-01-10')))
+WHERE id = '[5,5]';
+-- then delete the objecting FK record and the same PK delete succeeds:
+DELETE FROM temporal_fk_mltrng2mltrng WHERE id = '[3,3]';
 DELETE FROM temporal_mltrng WHERE id = '[5,5]' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
 -- clean up:
 DELETE FROM temporal_fk_mltrng2mltrng WHERE parent_id = '[5,5]';
