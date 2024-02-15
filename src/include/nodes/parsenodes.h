@@ -2576,10 +2576,6 @@ typedef enum ConstrType			/* types of constraints */
 #define FKCONSTR_MATCH_PARTIAL		'p'
 #define FKCONSTR_MATCH_SIMPLE		's'
 
-/* Foreign key with PERIOD positions */
-#define FKCONSTR_PERIOD_OP_CONTAINED_BY	0
-#define FKCONSTR_PERIOD_PROC_REFERENCED_AGG 0
-
 typedef struct Constraint
 {
 	NodeTag		type;
