@@ -284,9 +284,10 @@ extern void DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
 									   Oid *pf_eq_oprs, Oid *pp_eq_oprs, Oid *ff_eq_oprs,
 									   int *num_fk_del_set_cols, AttrNumber *fk_del_set_cols);
 extern void FindFKPeriodOpersAndProcs(Oid opclass,
-									  Oid *periodoperoid,
-									  Oid *aggedperiodoperoid,
-									  Oid *periodprocoid);
+									  Oid *containedbyodoperoid,
+									  Oid *aggedcontainedbyoperoid,
+									  Oid *aggprocoid,
+									  Oid *intersectprocoid);
 
 extern bool check_functional_grouping(Oid relid,
 									  Index varno, Index varlevelsup,
