@@ -500,6 +500,39 @@ NOTICE:  trigger = for_portion_of_test_update_trig, TG_LEVEL = ROW, OLD table = 
 NOTICE:  TG_OP = UPDATE
 NOTICE:  trigger = for_portion_of_test_update_trig_stmt, TG_LEVEL = STATEMENT, OLD table = ("[1,2)","[01-01-2018,01-01-2020)",one), NEW table = ("[1,2)","[01-01-2018,01-02-2018)",NULL_to_2018-01-01)
 ROLLBACK;
+-- Test with multiranges
+CREATE TABLE for_portion_of_test2 (
+  id int4range NOT NULL,
+  valid_at datemultirange NOT NULL,
+  name text NOT NULL,
+	CONSTRAINT for_portion_of_test2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+INSERT INTO for_portion_of_test2
+VALUES
+('[1,1]', datemultirange(daterange('2018-01-02', '2018-02-03)'), daterange('2018-02-04', '2018-03-03')), 'one'),
+('[1,1]', datemultirange(daterange('2018-03-03', '2018-04-04)')), 'one'),
+('[2,2]', datemultirange(daterange('2018-01-01', '2018-05-01)')), 'two'),
+('[3,3]', datemultirange(daterange('2018-01-01', null)), 'three');
+;
+UPDATE for_portion_of_test2
+FOR PORTION OF valid_at (datemultirange(daterange('2018-01-10', '2018-02-10'), daterange('2018-03-05', '2018-05-01')))
+SET name = 'one^1'
+WHERE id = '[1,1]';
+DELETE FROM for_portion_of_test2
+FOR PORTION OF valid_at (datemultirange(daterange('2018-01-15', '2018-02-15'), daterange('2018-03-01', '2018-03-15')))
+WHERE id = '[2,2]';
+SELECT * FROM for_portion_of_test2 ORDER BY id, valid_at;
+  id   |                                 valid_at                                  | name  
+-------+---------------------------------------------------------------------------+-------
+ [1,2) | {[01-02-2018,01-10-2018),[02-10-2018,03-03-2018)}                         | one
+ [1,2) | {[01-10-2018,02-03-2018),[02-04-2018,02-10-2018)}                         | one^1
+ [1,2) | {[03-03-2018,03-05-2018)}                                                 | one
+ [1,2) | {[03-05-2018,04-04-2018)}                                                 | one^1
+ [2,3) | {[01-01-2018,01-15-2018),[02-15-2018,03-01-2018),[03-15-2018,05-01-2018)} | two
+ [3,4) | {[01-01-2018,)}                                                           | three
+(6 rows)
+
+DROP TABLE for_portion_of_test2;
 -- Test with a custom range type
 CREATE TYPE mydaterange AS range(subtype=date);
 CREATE TABLE for_portion_of_test2 (
