@@ -135,6 +135,7 @@ typedef struct RI_ConstraintInfo
 	Oid			ff_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (FK = FK) */
 	Oid			period_contained_by_oper;	/* anyrange <@ anyrange */
 	Oid			agged_period_contained_by_oper;	/* fkattr <@ range_agg(pkattr) */
+	Oid			period_intersect_proc;	/* operator for PERIOD SQL */
 	dlist_node	valid_link;		/* Link in list of valid entries */
 } RI_ConstraintInfo;
 
@@ -246,7 +247,7 @@ static void ri_ReportViolation(const RI_ConstraintInfo *riinfo,
 							   int queryno, bool partgone) pg_attribute_noreturn();
 static bool fpo_targets_pk_range(const ForPortionOfState *tg_temporal,
 								 const RI_ConstraintInfo *riinfo);
-static Datum restrict_cascading_range(const ForPortionOfState *tg_temporal,
+static Datum restrict_cascading_range(Relation rel, const ForPortionOfState *tg_temporal,
 									  const RI_ConstraintInfo *riinfo,
 									  TupleTableSlot *oldslot);
 
@@ -824,7 +825,7 @@ ri_restrict(TriggerData *trigdata, bool is_no_action)
 	if (trigdata->tg_temporal)
 	{
 		targetRangeParam = riinfo->nkeys - 1;
-		targetRange = restrict_cascading_range(trigdata->tg_temporal, riinfo, oldslot);
+		targetRange = restrict_cascading_range(pk_rel, trigdata->tg_temporal, riinfo, oldslot);
 	}
 
 	ri_PerformCheck(riinfo, &qkey, qplan,
@@ -1359,7 +1360,7 @@ TRI_FKey_cascade_del(PG_FUNCTION_ARGS)
 	 * Don't delete than more than the PK's duration,
 	 * trimmed by an original FOR PORTION OF if necessary.
 	 */
-	targetRange = restrict_cascading_range(trigdata->tg_temporal, riinfo, oldslot);
+	targetRange = restrict_cascading_range(pk_rel, trigdata->tg_temporal, riinfo, oldslot);
 
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "SPI_connect failed");
@@ -1482,7 +1483,7 @@ TRI_FKey_cascade_upd(PG_FUNCTION_ARGS)
 	 * Don't delete than more than the PK's duration,
 	 * trimmed by an original FOR PORTION OF if necessary.
 	 */
-	targetRange = restrict_cascading_range(trigdata->tg_temporal, riinfo, oldslot);
+	targetRange = restrict_cascading_range(pk_rel, trigdata->tg_temporal, riinfo, oldslot);
 
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "SPI_connect failed");
@@ -1679,7 +1680,7 @@ tri_set(TriggerData *trigdata, bool is_set_null, int tgkind)
 	 * Don't SET NULL/DEFAULT than more than the PK's duration,
 	 * trimmed by an original FOR PORTION OF if necessary.
 	 */
-	targetRange = restrict_cascading_range(trigdata->tg_temporal, riinfo, oldslot);
+	targetRange = restrict_cascading_range(pk_rel, trigdata->tg_temporal, riinfo, oldslot);
 
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "SPI_connect failed");
@@ -2823,9 +2824,10 @@ ri_LoadConstraintInfo(Oid constraintOid)
 	if (riinfo->hasperiod)
 	{
 		Oid	opclass = get_index_column_opclass(conForm->conindid, riinfo->nkeys);
-		FindFKPeriodOpers(opclass,
-						  &riinfo->period_contained_by_oper,
-						  &riinfo->agged_period_contained_by_oper);
+		FindFKPeriodOpersAndProcs(opclass,
+								  &riinfo->period_contained_by_oper,
+								  &riinfo->agged_period_contained_by_oper,
+								  &riinfo->period_intersect_proc);
 	}
 
 	ReleaseSysCache(tup);
@@ -3730,7 +3732,7 @@ fpo_targets_pk_range(const ForPortionOfState *tg_temporal, const RI_ConstraintIn
 /*
  * restrict_cascading_range -
  *
- * Returns a Datum of RangeTypeP holding the appropriate timespan
+ * Returns a Datum holding the appropriate timespan
  * to target child records when we CASCADE/SET NULL/SET DEFAULT.
  *
  * In a normal UPDATE/DELETE this should be the parent's own valid time,
@@ -3738,22 +3740,22 @@ fpo_targets_pk_range(const ForPortionOfState *tg_temporal, const RI_ConstraintIn
  * trim down the parent's span further.
  */
 static Datum
-restrict_cascading_range(const ForPortionOfState *tg_temporal, const RI_ConstraintInfo *riinfo, TupleTableSlot *oldslot)
+restrict_cascading_range(Relation rel, const ForPortionOfState *tg_temporal, const RI_ConstraintInfo *riinfo, TupleTableSlot *oldslot)
 {
 	Datum	pkRecordRange;
 	bool	isnull;
+	int		attno = riinfo->pk_attnums[riinfo->nkeys - 1];
 
-	pkRecordRange = slot_getattr(oldslot, riinfo->pk_attnums[riinfo->nkeys - 1], &isnull);
+	pkRecordRange = slot_getattr(oldslot, attno, &isnull);
 	if (isnull)
 		elog(ERROR, "application time should not be null");
 
 	if (fpo_targets_pk_range(tg_temporal, riinfo))
 	{
-		RangeType *r1 = DatumGetRangeTypeP(pkRecordRange);
-		RangeType *r2 = DatumGetRangeTypeP(tg_temporal->fp_targetRange);
-		Oid rngtypid = RangeTypeGetOid(r1);
-		TypeCacheEntry *typcache = lookup_type_cache(rngtypid, TYPECACHE_RANGE_INFO);
-		return RangeTypePGetDatum(range_intersect_internal(typcache, r1, r2));
+		if (!OidIsValid(riinfo->period_intersect_proc))
+			elog(ERROR, "invalid intersect support function");
+
+		return OidFunctionCall2(riinfo->period_intersect_proc, pkRecordRange, tg_temporal->fp_targetRange);
 	}
 	else
 		return pkRecordRange;
