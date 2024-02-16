@@ -913,6 +913,21 @@ SET id = '[7,8)'
 WHERE id = '[5,6)';
 ERROR:  update or delete on table "temporal_rng" violates foreign key constraint "temporal_fk_rng2rng_fk" on table "temporal_fk_rng2rng"
 DETAIL:  Key (id, valid_at)=([5,6), [2018-01-03,2018-02-01)) is still referenced from table "temporal_fk_rng2rng".
+SELECT * FROM temporal_rng WHERE id in ('[5,5]', '[7,7]') ORDER BY id, valid_at;
+  id   |                        valid_at                         
+-------+---------------------------------------------------------
+ [5,6) | ["Mon Feb 01 00:00:00 2016","Tue Mar 01 00:00:00 2016")
+ [5,6) | ["Mon Jan 01 00:00:00 2018","Tue Jan 02 00:00:00 2018")
+ [5,6) | ["Wed Jan 03 00:00:00 2018","Thu Feb 01 00:00:00 2018")
+ [7,8) | ["Tue Jan 02 00:00:00 2018","Wed Jan 03 00:00:00 2018")
+(4 rows)
+
+SELECT * FROM temporal_fk_rng2rng WHERE id in ('[3,3]') ORDER BY id, valid_at;
+  id   |                        valid_at                         | parent_id 
+-------+---------------------------------------------------------+-----------
+ [3,4) | ["Fri Jan 05 00:00:00 2018","Wed Jan 10 00:00:00 2018") | [5,6)
+(1 row)
+
 -- then delete the objecting FK record and the same PK update succeeds:
 DELETE FROM temporal_fk_rng2rng WHERE id = '[3,4)';
 UPDATE temporal_rng SET valid_at = daterange('2016-01-01', '2016-02-01')
@@ -966,6 +981,21 @@ SET id = '[7,8)'
 WHERE id = '[5,6)';
 ERROR:  update or delete on table "temporal_rng" violates foreign key constraint "temporal_fk_rng2rng_fk" on table "temporal_fk_rng2rng"
 DETAIL:  Key (id, valid_at)=([5,6), [2018-01-03,2018-02-01)) is still referenced from table "temporal_fk_rng2rng".
+SELECT * FROM temporal_rng WHERE id in ('[5,5]', '[7,7]') ORDER BY id, valid_at;
+  id   |                        valid_at                         
+-------+---------------------------------------------------------
+ [5,6) | ["Mon Feb 01 00:00:00 2016","Tue Mar 01 00:00:00 2016")
+ [5,6) | ["Mon Jan 01 00:00:00 2018","Tue Jan 02 00:00:00 2018")
+ [5,6) | ["Wed Jan 03 00:00:00 2018","Thu Feb 01 00:00:00 2018")
+ [7,8) | ["Tue Jan 02 00:00:00 2018","Wed Jan 03 00:00:00 2018")
+(4 rows)
+
+SELECT * FROM temporal_fk_rng2rng WHERE id in ('[3,3]') ORDER BY id, valid_at;
+  id   |                        valid_at                         | parent_id 
+-------+---------------------------------------------------------+-----------
+ [3,4) | ["Fri Jan 05 00:00:00 2018","Wed Jan 10 00:00:00 2018") | [5,6)
+(1 row)
+
 -- then delete the objecting FK record and the same PK update succeeds:
 DELETE FROM temporal_fk_rng2rng WHERE id = '[3,4)';
 UPDATE temporal_rng SET valid_at = daterange('2016-01-01', '2016-02-01')
@@ -1012,6 +1042,19 @@ FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
 WHERE id = '[5,6)';
 ERROR:  update or delete on table "temporal_rng" violates foreign key constraint "temporal_fk_rng2rng_fk" on table "temporal_fk_rng2rng"
 DETAIL:  Key (id, valid_at)=([5,6), [2018-01-03,2018-02-01)) is still referenced from table "temporal_fk_rng2rng".
+SELECT * FROM temporal_rng WHERE id in ('[5,5]', '[7,7]') ORDER BY id, valid_at;
+  id   |                        valid_at                         
+-------+---------------------------------------------------------
+ [5,6) | ["Mon Jan 01 00:00:00 2018","Tue Jan 02 00:00:00 2018")
+ [5,6) | ["Wed Jan 03 00:00:00 2018","Thu Feb 01 00:00:00 2018")
+(2 rows)
+
+SELECT * FROM temporal_fk_rng2rng WHERE id in ('[3,3]') ORDER BY id, valid_at;
+  id   |                        valid_at                         | parent_id 
+-------+---------------------------------------------------------+-----------
+ [3,4) | ["Fri Jan 05 00:00:00 2018","Wed Jan 10 00:00:00 2018") | [5,6)
+(1 row)
+
 -- then delete the objecting FK record and the same PK delete succeeds:
 DELETE FROM temporal_fk_rng2rng WHERE id = '[3,4)';
 DELETE FROM temporal_rng WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
@@ -1056,6 +1099,19 @@ FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
 WHERE id = '[5,6)';
 ERROR:  update or delete on table "temporal_rng" violates foreign key constraint "temporal_fk_rng2rng_fk" on table "temporal_fk_rng2rng"
 DETAIL:  Key (id, valid_at)=([5,6), [2018-01-03,2018-02-01)) is still referenced from table "temporal_fk_rng2rng".
+SELECT * FROM temporal_rng WHERE id in ('[5,5]', '[7,7]') ORDER BY id, valid_at;
+  id   |                        valid_at                         
+-------+---------------------------------------------------------
+ [5,6) | ["Mon Jan 01 00:00:00 2018","Tue Jan 02 00:00:00 2018")
+ [5,6) | ["Wed Jan 03 00:00:00 2018","Thu Feb 01 00:00:00 2018")
+(2 rows)
+
+SELECT * FROM temporal_fk_rng2rng WHERE id in ('[3,3]') ORDER BY id, valid_at;
+  id   |                        valid_at                         | parent_id 
+-------+---------------------------------------------------------+-----------
+ [3,4) | ["Fri Jan 05 00:00:00 2018","Wed Jan 10 00:00:00 2018") | [5,6)
+(1 row)
+
 -- then delete the objecting FK record and the same PK delete succeeds:
 DELETE FROM temporal_fk_rng2rng WHERE id = '[3,4)';
 DELETE FROM temporal_rng WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
