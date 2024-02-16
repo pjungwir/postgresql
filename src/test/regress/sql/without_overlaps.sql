@@ -636,6 +636,8 @@ UPDATE temporal_rng
 FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
 SET id = '[7,7]'
 WHERE id = '[5,5]';
+SELECT * FROM temporal_rng WHERE id in ('[5,5]', '[7,7]') ORDER BY id, valid_at;
+SELECT * FROM temporal_fk_rng2rng WHERE id in ('[3,3]') ORDER BY id, valid_at;
 -- then delete the objecting FK record and the same PK update succeeds:
 DELETE FROM temporal_fk_rng2rng WHERE id = '[3,3]';
 UPDATE temporal_rng SET valid_at = tsrange('2016-01-01', '2016-02-01')
@@ -681,6 +683,8 @@ UPDATE temporal_rng
 FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
 SET id = '[7,7]'
 WHERE id = '[5,5]';
+SELECT * FROM temporal_rng WHERE id in ('[5,5]', '[7,7]') ORDER BY id, valid_at;
+SELECT * FROM temporal_fk_rng2rng WHERE id in ('[3,3]') ORDER BY id, valid_at;
 -- then delete the objecting FK record and the same PK update succeeds:
 DELETE FROM temporal_fk_rng2rng WHERE id = '[3,3]';
 UPDATE temporal_rng SET valid_at = tsrange('2016-01-01', '2016-02-01')
@@ -715,6 +719,8 @@ WHERE id = '[5,5]';
 DELETE FROM temporal_rng
 FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
 WHERE id = '[5,5]';
+SELECT * FROM temporal_rng WHERE id in ('[5,5]', '[7,7]') ORDER BY id, valid_at;
+SELECT * FROM temporal_fk_rng2rng WHERE id in ('[3,3]') ORDER BY id, valid_at;
 -- then delete the objecting FK record and the same PK delete succeeds:
 DELETE FROM temporal_fk_rng2rng WHERE id = '[3,3]';
 DELETE FROM temporal_rng WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
@@ -749,6 +755,8 @@ WHERE id = '[5,5]';
 DELETE FROM temporal_rng
 FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
 WHERE id = '[5,5]';
+SELECT * FROM temporal_rng WHERE id in ('[5,5]', '[7,7]') ORDER BY id, valid_at;
+SELECT * FROM temporal_fk_rng2rng WHERE id in ('[3,3]') ORDER BY id, valid_at;
 -- then delete the objecting FK record and the same PK delete succeeds:
 DELETE FROM temporal_fk_rng2rng WHERE id = '[3,3]';
 DELETE FROM temporal_rng WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
