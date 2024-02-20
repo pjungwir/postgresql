@@ -606,163 +606,224 @@ BEGIN;
   DELETE FROM temporal_rng WHERE id = '[5,5]'; --should not fail yet.
 COMMIT; -- should fail here.
 
+-- Some common stuff to keep our tests shorter:
+
+CREATE PROCEDURE temporal_fk_setup()
+LANGUAGE SQL
+AS $$
+  DROP TABLE IF EXISTS temporal_pk CASCADE;
+  DROP TABLE IF EXISTS temporal_fk CASCADE;
+  CREATE TABLE temporal_pk (LIKE temporal_pk_template INCLUDING INDEXES);
+  CREATE TABLE temporal_fk (LIKE temporal_fk_template INCLUDING INDEXES);
+$$;
+
+CREATE TABLE temporal_pk_template (
+	id int4range,
+	valid_at tsrange,
+	CONSTRAINT temporal_pk_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+CREATE TABLE temporal_fk_template (
+	id int4range,
+	valid_at tsrange,
+	parent_id int4range,
+	CONSTRAINT temporal_fk_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+
+-- Write a test script we can use for all kinds of FK types:
+-- We have to wrap it in EXECUTE since the tables don't exist yet.
+-- It's nicer to quote one big thing than lots of little things.
+CREATE PROCEDURE temporal_fk_update_tests()
+LANGUAGE plpgsql
+AS $proc$
+BEGIN
+  EXECUTE $$CREATE PROCEDURE do_temporal_fk_update_tests()
+  LANGUAGE plpgsql
+  AS $proc2$
+  DECLARE
+    errmsg TEXT;
+    errdetail TEXT;
+  BEGIN
+    -- a PK update that succeeds because the numeric id isn't referenced:
+    INSERT INTO temporal_pk VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
+    UPDATE temporal_pk
+      SET valid_at = tsrange('2016-01-01', '2016-02-01')
+      WHERE id = '[5,5]';
+
+    -- a PK update that succeeds even though the numeric id is referenced because the range isn't:
+    DELETE FROM temporal_pk WHERE id = '[5,5]';
+    INSERT INTO temporal_pk VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01')),
+                                   ('[5,5]', tsrange('2018-02-01', '2018-03-01'));
+    INSERT INTO temporal_fk VALUES ('[3,3]', tsrange('2018-01-05', '2018-01-10'), '[5,5]');
+    UPDATE temporal_pk
+      SET valid_at = tsrange('2016-02-01', '2016-03-01')
+      WHERE id = '[5,5]' AND valid_at = tsrange('2018-02-01', '2018-03-01');
+
+    -- a PK update that fails/cascades because both are referenced:
+    COMMIT;
+    BEGIN
+      UPDATE temporal_pk
+        SET valid_at = tsrange('2016-01-01', '2016-02-01')
+        WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+    EXCEPTION
+      WHEN foreign_key_violation THEN
+        GET STACKED DIAGNOSTICS errmsg = MESSAGE_TEXT, errdetail = PG_EXCEPTION_DETAIL;
+        RAISE NOTICE E'%\nDETAIL:  %', errmsg, errdetail;
+        ROLLBACK;
+    END;
+
+    -- changing the scalar part fails/cascades:
+    COMMIT;
+    BEGIN
+      UPDATE temporal_pk
+        SET id = '[7,7]'
+        WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+    EXCEPTION
+      WHEN foreign_key_violation THEN
+        GET STACKED DIAGNOSTICS errmsg = MESSAGE_TEXT, errdetail = PG_EXCEPTION_DETAIL;
+        RAISE NOTICE E'%\nDETAIL:  %', errmsg, errdetail;
+        ROLLBACK;
+    END;
+
+    -- changing an unreferenced part is okay:
+    UPDATE temporal_pk
+      FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
+      SET id = '[7,7]'
+      WHERE id = '[5,5]';
+
+    -- changing just a part fails/cascades:
+    COMMIT;
+    BEGIN
+      UPDATE temporal_pk
+        FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
+        SET id = '[7,7]'
+        WHERE id = '[5,5]';
+    EXCEPTION
+      WHEN foreign_key_violation THEN
+        GET STACKED DIAGNOSTICS errmsg = MESSAGE_TEXT, errdetail = PG_EXCEPTION_DETAIL;
+        RAISE NOTICE E'%\nDETAIL:  %', errmsg, errdetail;
+        ROLLBACK;
+    END;
+  END;
+  $proc2$;
+  $$;
+  CALL do_temporal_fk_update_tests();
+  DROP PROCEDURE do_temporal_fk_update_tests();
+END;
+$proc$;
+
+CREATE PROCEDURE temporal_fk_delete_tests()
+LANGUAGE plpgsql
+AS $proc$
+BEGIN
+  EXECUTE $$CREATE PROCEDURE do_temporal_fk_delete_tests()
+  LANGUAGE plpgsql
+  AS $proc2$
+  DECLARE
+    errmsg TEXT;
+    errdetail TEXT;
+  BEGIN
+    -- a PK delete that succeeds because the numeric id isn't referenced:
+    INSERT INTO temporal_pk VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
+    DELETE FROM temporal_pk WHERE id = '[5,5]';
+
+    -- a PK delete that succeeds even though the numeric id is referenced because the range isn't:
+    DELETE FROM temporal_pk WHERE id = '[5,5]';
+    INSERT INTO temporal_pk VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01')),
+                                   ('[5,5]', tsrange('2018-02-01', '2018-03-01'));
+    INSERT INTO temporal_fk VALUES ('[3,3]', tsrange('2018-01-05', '2018-01-10'), '[5,5]');
+    DELETE FROM temporal_pk WHERE id = '[5,5]' AND valid_at = tsrange('2018-02-01', '2018-03-01');
+
+    -- a PK delete that fails/cascades because both are referenced:
+    COMMIT;
+    BEGIN
+      DELETE FROM temporal_pk WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+    EXCEPTION
+      WHEN foreign_key_violation THEN
+        GET STACKED DIAGNOSTICS errmsg = MESSAGE_TEXT, errdetail = PG_EXCEPTION_DETAIL;
+        RAISE NOTICE E'%s\nDETAIL:  %s', errmsg, errdetail;
+        ROLLBACK;
+    END;
+
+    -- deleting an unreferenced part is okay:
+    DELETE FROM temporal_pk
+      FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
+      WHERE id = '[5,5]';
+
+    -- deleting just a part fails/cascades:
+    COMMIT;
+    BEGIN
+      DELETE FROM temporal_pk
+        FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
+        WHERE id = '[5,5]';
+    EXCEPTION
+      WHEN foreign_key_violation THEN
+        GET STACKED DIAGNOSTICS errmsg = MESSAGE_TEXT, errdetail = PG_EXCEPTION_DETAIL;
+        RAISE NOTICE E'%s\nDETAIL:  %s', errmsg, errdetail;
+        ROLLBACK;
+    END;
+  END;
+  $proc2$;
+  $$;
+  CALL do_temporal_fk_delete_tests();
+  DROP PROCEDURE do_temporal_fk_delete_tests();
+END;
+$proc$;
+
 --
 -- test FK parent updates NO ACTION
 --
 
--- a PK update that succeeds because the numeric id isn't referenced:
-INSERT INTO temporal_rng VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
-UPDATE temporal_rng SET valid_at = tsrange('2016-01-01', '2016-02-01') WHERE id = '[5,5]';
--- a PK update that succeeds even though the numeric id is referenced because the range isn't:
-DELETE FROM temporal_rng WHERE id = '[5,5]';
-INSERT INTO temporal_rng VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
-INSERT INTO temporal_rng VALUES ('[5,5]', tsrange('2018-02-01', '2018-03-01'));
-INSERT INTO temporal_fk_rng2rng VALUES ('[3,3]', tsrange('2018-01-05', '2018-01-10'), '[5,5]');
-UPDATE temporal_rng SET valid_at = tsrange('2016-02-01', '2016-03-01')
-WHERE id = '[5,5]' AND valid_at = tsrange('2018-02-01', '2018-03-01');
--- a PK update that fails because both are referenced:
-UPDATE temporal_rng SET valid_at = tsrange('2016-01-01', '2016-02-01')
-WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
--- changing the scalar part fails:
-UPDATE temporal_rng SET id = '[7,7]'
-WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
--- changing an unreferenced part is okay:
-UPDATE temporal_rng
-FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
-SET id = '[7,7]'
-WHERE id = '[5,5]';
--- changing just a part fails:
-UPDATE temporal_rng
-FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
-SET id = '[7,7]'
-WHERE id = '[5,5]';
-SELECT * FROM temporal_rng WHERE id in ('[5,5]', '[7,7]') ORDER BY id, valid_at;
-SELECT * FROM temporal_fk_rng2rng WHERE id in ('[3,3]') ORDER BY id, valid_at;
--- then delete the objecting FK record and the same PK update succeeds:
-DELETE FROM temporal_fk_rng2rng WHERE id = '[3,3]';
-UPDATE temporal_rng SET valid_at = tsrange('2016-01-01', '2016-02-01')
-WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
--- clean up:
-DELETE FROM temporal_fk_rng2rng WHERE parent_id = '[5,5]';
-DELETE FROM temporal_rng WHERE id IN ('[5,5]', '[7,7]');
+CALL temporal_fk_setup();
+ALTER TABLE temporal_fk ADD CONSTRAINT temporal_fk_fk FOREIGN KEY (parent_id, PERIOD valid_at) REFERENCES temporal_pk ON UPDATE NO ACTION;
+CALL temporal_fk_update_tests();
+SELECT * FROM temporal_pk ORDER BY id, valid_at;
+SELECT * FROM temporal_fk ORDER BY id, valid_at;
+-- Without referents, any update is okay:
+DELETE FROM temporal_fk;
+UPDATE temporal_pk
+  SET valid_at = tsrange('2016-01-01', '2016-02-01')
+  WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
+
+--
+-- test FK parent deletes NO ACTION
+--
+
+CALL temporal_fk_setup();
+ALTER TABLE temporal_fk ADD CONSTRAINT temporal_fk_fk FOREIGN KEY (parent_id, PERIOD valid_at) REFERENCES temporal_pk ON DELETE NO ACTION;
+CALL temporal_fk_delete_tests();
+SELECT * FROM temporal_pk ORDER BY id, valid_at;
+SELECT * FROM temporal_fk ORDER BY id, valid_at;
+-- Without referents, we can delete anything:
+DELETE FROM temporal_fk;
+DELETE FROM temporal_pk WHERE id = '[5,5]';
 
 --
 -- test FK parent updates RESTRICT
 --
 
-ALTER TABLE temporal_fk_rng2rng
-	DROP CONSTRAINT temporal_fk_rng2rng_fk;
-ALTER TABLE temporal_fk_rng2rng
-	ADD CONSTRAINT temporal_fk_rng2rng_fk
-	FOREIGN KEY (parent_id, PERIOD valid_at)
-	REFERENCES temporal_rng
-	ON DELETE RESTRICT;
--- a PK update that succeeds because the numeric id isn't referenced:
-INSERT INTO temporal_rng VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
-UPDATE temporal_rng SET valid_at = tsrange('2016-01-01', '2016-02-01') WHERE id = '[5,5]';
--- a PK update that succeeds even though the numeric id is referenced because the range isn't:
-DELETE FROM temporal_rng WHERE id = '[5,5]';
-INSERT INTO temporal_rng VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
-INSERT INTO temporal_rng VALUES ('[5,5]', tsrange('2018-02-01', '2018-03-01'));
-INSERT INTO temporal_fk_rng2rng VALUES ('[3,3]', tsrange('2018-01-05', '2018-01-10'), '[5,5]');
-UPDATE temporal_rng SET valid_at = tsrange('2016-02-01', '2016-03-01')
-WHERE id = '[5,5]' AND valid_at = tsrange('2018-02-01', '2018-03-01');
--- a PK update that fails because both are referenced:
-UPDATE temporal_rng SET valid_at = tsrange('2016-01-01', '2016-02-01')
-WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
--- changing the scalar part fails:
-UPDATE temporal_rng SET id = '[7,7]'
-WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
--- changing an unreferenced part is okay:
-UPDATE temporal_rng
-FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
-SET id = '[7,7]'
-WHERE id = '[5,5]';
--- changing just a part fails:
-UPDATE temporal_rng
-FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
-SET id = '[7,7]'
-WHERE id = '[5,5]';
-SELECT * FROM temporal_rng WHERE id in ('[5,5]', '[7,7]') ORDER BY id, valid_at;
-SELECT * FROM temporal_fk_rng2rng WHERE id in ('[3,3]') ORDER BY id, valid_at;
--- then delete the objecting FK record and the same PK update succeeds:
-DELETE FROM temporal_fk_rng2rng WHERE id = '[3,3]';
-UPDATE temporal_rng SET valid_at = tsrange('2016-01-01', '2016-02-01')
-WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
--- clean up:
-DELETE FROM temporal_fk_rng2rng WHERE parent_id = '[5,5]';
-DELETE FROM temporal_rng WHERE id IN ('[5,5]', '[7,7]');
---
--- test FK parent deletes NO ACTION
---
-ALTER TABLE temporal_fk_rng2rng
-	DROP CONSTRAINT temporal_fk_rng2rng_fk;
-ALTER TABLE temporal_fk_rng2rng
-	ADD CONSTRAINT temporal_fk_rng2rng_fk
-	FOREIGN KEY (parent_id, PERIOD valid_at)
-	REFERENCES temporal_rng;
--- a PK delete that succeeds because the numeric id isn't referenced:
-INSERT INTO temporal_rng VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
-DELETE FROM temporal_rng WHERE id = '[5,5]';
--- a PK delete that succeeds even though the numeric id is referenced because the range isn't:
-INSERT INTO temporal_rng VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
-INSERT INTO temporal_rng VALUES ('[5,5]', tsrange('2018-02-01', '2018-03-01'));
-INSERT INTO temporal_fk_rng2rng VALUES ('[3,3]', tsrange('2018-01-05', '2018-01-10'), '[5,5]');
-DELETE FROM temporal_rng WHERE id = '[5,5]' AND valid_at = tsrange('2018-02-01', '2018-03-01');
--- a PK delete that fails because both are referenced:
-DELETE FROM temporal_rng WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
--- deleting an unreferenced part is okay:
-DELETE FROM temporal_rng
-FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
-WHERE id = '[5,5]';
--- deleting just a part fails:
-DELETE FROM temporal_rng
-FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
-WHERE id = '[5,5]';
-SELECT * FROM temporal_rng WHERE id in ('[5,5]', '[7,7]') ORDER BY id, valid_at;
-SELECT * FROM temporal_fk_rng2rng WHERE id in ('[3,3]') ORDER BY id, valid_at;
--- then delete the objecting FK record and the same PK delete succeeds:
-DELETE FROM temporal_fk_rng2rng WHERE id = '[3,3]';
-DELETE FROM temporal_rng WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
--- clean up:
-DELETE FROM temporal_fk_rng2rng WHERE parent_id = '[5,5]';
-DELETE FROM temporal_rng WHERE id IN ('[5,5]');
+CALL temporal_fk_setup();
+ALTER TABLE temporal_fk ADD CONSTRAINT temporal_fk_fk FOREIGN KEY (parent_id, PERIOD valid_at) REFERENCES temporal_pk ON UPDATE RESTRICT;
+CALL temporal_fk_update_tests();
+SELECT * FROM temporal_pk ORDER BY id, valid_at;
+SELECT * FROM temporal_fk ORDER BY id, valid_at;
+-- Without referents, any update is okay:
+DELETE FROM temporal_fk;
+UPDATE temporal_pk
+  SET valid_at = tsrange('2016-01-01', '2016-02-01')
+  WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
 
 --
 -- test FK parent deletes RESTRICT
 --
-ALTER TABLE temporal_fk_rng2rng
-	DROP CONSTRAINT temporal_fk_rng2rng_fk;
-ALTER TABLE temporal_fk_rng2rng
-	ADD CONSTRAINT temporal_fk_rng2rng_fk
-	FOREIGN KEY (parent_id, PERIOD valid_at)
-	REFERENCES temporal_rng
-	ON DELETE RESTRICT;
-INSERT INTO temporal_rng VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
-DELETE FROM temporal_rng WHERE id = '[5,5]';
--- a PK delete that succeeds even though the numeric id is referenced because the range isn't:
-INSERT INTO temporal_rng VALUES ('[5,5]', tsrange('2018-01-01', '2018-02-01'));
-INSERT INTO temporal_rng VALUES ('[5,5]', tsrange('2018-02-01', '2018-03-01'));
-INSERT INTO temporal_fk_rng2rng VALUES ('[3,3]', tsrange('2018-01-05', '2018-01-10'), '[5,5]');
-DELETE FROM temporal_rng WHERE id = '[5,5]' AND valid_at = tsrange('2018-02-01', '2018-03-01');
--- a PK delete that fails because both are referenced:
-DELETE FROM temporal_rng WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
--- deleting an unreferenced part is okay:
-DELETE FROM temporal_rng
-FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
-WHERE id = '[5,5]';
--- deleting just a part fails:
-DELETE FROM temporal_rng
-FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
-WHERE id = '[5,5]';
-SELECT * FROM temporal_rng WHERE id in ('[5,5]', '[7,7]') ORDER BY id, valid_at;
-SELECT * FROM temporal_fk_rng2rng WHERE id in ('[3,3]') ORDER BY id, valid_at;
--- then delete the objecting FK record and the same PK delete succeeds:
-DELETE FROM temporal_fk_rng2rng WHERE id = '[3,3]';
-DELETE FROM temporal_rng WHERE id = '[5,5]' AND valid_at = tsrange('2018-01-01', '2018-02-01');
--- clean up:
-DELETE FROM temporal_fk_rng2rng WHERE parent_id = '[5,5]';
-DELETE FROM temporal_rng WHERE id IN ('[5,5]');
+
+CALL temporal_fk_setup();
+ALTER TABLE temporal_fk ADD CONSTRAINT temporal_fk_fk FOREIGN KEY (parent_id, PERIOD valid_at) REFERENCES temporal_pk ON DELETE RESTRICT;
+CALL temporal_fk_delete_tests();
+SELECT * FROM temporal_pk ORDER BY id, valid_at;
+SELECT * FROM temporal_fk ORDER BY id, valid_at;
+-- Without referents, we can delete anything:
+DELETE FROM temporal_fk;
+DELETE FROM temporal_pk WHERE id = '[5,5]';
 
 --
 -- test ON UPDATE/DELETE options
