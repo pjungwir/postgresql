@@ -235,7 +235,7 @@ static void ri_ReportViolation(const RI_ConstraintInfo *riinfo,
 							   Relation pk_rel, Relation fk_rel,
 							   TupleTableSlot *violatorslot, TupleDesc tupdesc,
 							   int queryno, bool partgone) pg_attribute_noreturn();
-static void lookupTRIProc(const RI_ConstraintInfo *riinfo, char **aggname);
+static void lookupPeriodRIProc(const RI_ConstraintInfo *riinfo, char **aggname);
 
 
 /*
@@ -429,7 +429,7 @@ RI_FKey_check(TriggerData *trigdata)
 			Oid		fk_type = RIAttType(fk_rel, riinfo->fk_attnums[riinfo->nkeys - 1]);
 			Oid		agg_rettype = riinfo->period_referenced_agg_rettype;
 
-			lookupTRIProc(riinfo, &aggname);
+			lookupPeriodRIProc(riinfo, &aggname);
 			appendStringInfo(&querybuf, ") x1 HAVING ");
 			sprintf(paramname, "$%d", riinfo->nkeys);
 			ri_GenerateQual(&querybuf, "",
@@ -602,7 +602,7 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 			Oid		fk_type = RIAttType(fk_rel, riinfo->fk_attnums[riinfo->nkeys - 1]);
 			Oid		agg_rettype = riinfo->period_referenced_agg_rettype;
 
-			lookupTRIProc(riinfo, &aggname);
+			lookupPeriodRIProc(riinfo, &aggname);
 			appendStringInfo(&querybuf, ") x1 HAVING ");
 			sprintf(paramname, "$%d", riinfo->nkeys);
 			ri_GenerateQual(&querybuf, "",
@@ -1304,13 +1304,13 @@ ri_set(TriggerData *trigdata, bool is_set_null, int tgkind)
 }
 
 /* ----------
- * TRI_FKey_check_ins -
+ * RI_FKey_period_check_ins -
  *
  *	Check temporal foreign key existence at insert event on FK table.
  * ----------
  */
 Datum
-TRI_FKey_check_ins(PG_FUNCTION_ARGS)
+RI_FKey_period_check_ins(PG_FUNCTION_ARGS)
 {
 	/*
 	 * Check that this is a valid trigger call on the right time and event.
@@ -1325,13 +1325,13 @@ TRI_FKey_check_ins(PG_FUNCTION_ARGS)
 
 
 /* ----------
- * TRI_FKey_check_upd -
+ * RI_FKey_period_check_upd -
  *
  *	Check temporal foreign key existence at update event on FK table.
  * ----------
  */
 Datum
-TRI_FKey_check_upd(PG_FUNCTION_ARGS)
+RI_FKey_period_check_upd(PG_FUNCTION_ARGS)
 {
 	/*
 	 * Check that this is a valid trigger call on the right time and event.
@@ -1346,7 +1346,7 @@ TRI_FKey_check_upd(PG_FUNCTION_ARGS)
 
 
 /* ----------
- * TRI_FKey_noaction_del -
+ * RI_FKey_period_noaction_del -
  *
  *	Give an error and roll back the current transaction if the
  *	delete has resulted in a violation of the given temporal
@@ -1354,12 +1354,12 @@ TRI_FKey_check_upd(PG_FUNCTION_ARGS)
  * ----------
  */
 Datum
-TRI_FKey_noaction_del(PG_FUNCTION_ARGS)
+RI_FKey_period_noaction_del(PG_FUNCTION_ARGS)
 {
 	/*
 	 * Check that this is a valid trigger call on the right time and event.
 	 */
-	ri_CheckTrigger(fcinfo, "TRI_FKey_noaction_del", RI_TRIGTYPE_DELETE);
+	ri_CheckTrigger(fcinfo, "RI_FKey_period_noaction_del", RI_TRIGTYPE_DELETE);
 
 	/*
 	 * Share code with RESTRICT/UPDATE cases.
@@ -1368,7 +1368,7 @@ TRI_FKey_noaction_del(PG_FUNCTION_ARGS)
 }
 
 /*
- * TRI_FKey_restrict_del -
+ * RI_FKey_period_restrict_del -
  *
  * Restrict delete from PK table to rows unreferenced by foreign key.
  *
@@ -1378,10 +1378,10 @@ TRI_FKey_noaction_del(PG_FUNCTION_ARGS)
  * we still implement this as an AFTER trigger, but it's non-deferrable.
  */
 Datum
-TRI_FKey_restrict_del(PG_FUNCTION_ARGS)
+RI_FKey_period_restrict_del(PG_FUNCTION_ARGS)
 {
 	/* Check that this is a valid trigger call on the right time and event. */
-	ri_CheckTrigger(fcinfo, "TRI_FKey_restrict_del", RI_TRIGTYPE_DELETE);
+	ri_CheckTrigger(fcinfo, "RI_FKey_period_restrict_del", RI_TRIGTYPE_DELETE);
 
 	/* Share code with NO ACTION/UPDATE cases. */
 	return ri_restrict((TriggerData *) fcinfo->context, false);
@@ -1395,17 +1395,17 @@ TRI_FKey_restrict_del(PG_FUNCTION_ARGS)
  * integrity constraint.
  */
 Datum
-TRI_FKey_noaction_upd(PG_FUNCTION_ARGS)
+RI_FKey_period_noaction_upd(PG_FUNCTION_ARGS)
 {
 	/* Check that this is a valid trigger call on the right time and event. */
-	ri_CheckTrigger(fcinfo, "TRI_FKey_noaction_upd", RI_TRIGTYPE_UPDATE);
+	ri_CheckTrigger(fcinfo, "RI_FKey_period_noaction_upd", RI_TRIGTYPE_UPDATE);
 
 	/* Share code with RESTRICT/DELETE cases. */
 	return ri_restrict((TriggerData *) fcinfo->context, true);
 }
 
 /*
- * TRI_FKey_restrict_upd -
+ * RI_FKey_period_restrict_upd -
  *
  * Restrict update of PK to rows unreferenced by foreign key.
  *
@@ -1415,10 +1415,10 @@ TRI_FKey_noaction_upd(PG_FUNCTION_ARGS)
  * we still implement this as an AFTER trigger, but it's non-deferrable.
  */
 Datum
-TRI_FKey_restrict_upd(PG_FUNCTION_ARGS)
+RI_FKey_period_restrict_upd(PG_FUNCTION_ARGS)
 {
 	/* Check that this is a valid trigger call on the right time and event. */
-	ri_CheckTrigger(fcinfo, "TRI_FKey_restrict_upd", RI_TRIGTYPE_UPDATE);
+	ri_CheckTrigger(fcinfo, "RI_FKey_period_restrict_upd", RI_TRIGTYPE_UPDATE);
 
 	/* Share code with NO ACTION/DELETE cases. */
 	return ri_restrict((TriggerData *) fcinfo->context, false);
@@ -3260,16 +3260,16 @@ RI_FKey_trigger_type(Oid tgfoid)
 		case F_RI_FKEY_SETDEFAULT_UPD:
 		case F_RI_FKEY_NOACTION_DEL:
 		case F_RI_FKEY_NOACTION_UPD:
-		case F_TRI_FKEY_RESTRICT_DEL:
-		case F_TRI_FKEY_RESTRICT_UPD:
-		case F_TRI_FKEY_NOACTION_DEL:
-		case F_TRI_FKEY_NOACTION_UPD:
+		case F_RI_FKEY_PERIOD_RESTRICT_DEL:
+		case F_RI_FKEY_PERIOD_RESTRICT_UPD:
+		case F_RI_FKEY_PERIOD_NOACTION_DEL:
+		case F_RI_FKEY_PERIOD_NOACTION_UPD:
 			return RI_TRIGGER_PK;
 
 		case F_RI_FKEY_CHECK_INS:
 		case F_RI_FKEY_CHECK_UPD:
-		case F_TRI_FKEY_CHECK_INS:
-		case F_TRI_FKEY_CHECK_UPD:
+		case F_RI_FKEY_PERIOD_CHECK_INS:
+		case F_RI_FKEY_PERIOD_CHECK_UPD:
 			return RI_TRIGGER_FK;
 	}
 
@@ -3277,14 +3277,14 @@ RI_FKey_trigger_type(Oid tgfoid)
 }
 
 /*
- * lookupTRIProc -
+ * lookupPeriodRIProc -
  *
  * Gets the name of the aggregate function
- * used to build the SQL for TRI constraints.
+ * used to build the SQL for temporal RI constraints.
  * Raises an error if not found.
  */
 static void
-lookupTRIProc(const RI_ConstraintInfo *riinfo, char **aggname)
+lookupPeriodRIProc(const RI_ConstraintInfo *riinfo, char **aggname)
 {
 	Oid			oid = riinfo->period_referenced_agg_proc;
 	HeapTuple	tp;
