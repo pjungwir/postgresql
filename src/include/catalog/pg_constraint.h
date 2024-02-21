@@ -183,7 +183,7 @@ MAKE_SYSCACHE(CONSTROID, pg_constraint_oid_index, 16);
 
 /* conkey can contain zero (InvalidAttrNumber) if a whole-row Var is used */
 DECLARE_ARRAY_FOREIGN_KEY_OPT((conrelid, conkey), pg_attribute, (attrelid, attnum));
-DECLARE_ARRAY_FOREIGN_KEY_OPT((confrelid, confkey), pg_attribute, (attrelid, attnum));
+DECLARE_ARRAY_FOREIGN_KEY((confrelid, confkey), pg_attribute, (attrelid, attnum));
 
 #ifdef EXPOSE_TO_CLIENT_CODE
 
