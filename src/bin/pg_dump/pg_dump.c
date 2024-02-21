@@ -9365,7 +9365,8 @@ getTableAttrs(Archive *fout, TableInfo *tblinfo, int numTables)
 				"FROM pg_catalog.pg_period AS p "
 				"JOIN pg_catalog.pg_attribute AS sa ON (sa.attrelid, sa.attnum) = (p.perrelid, p.perstart) "
 				"JOIN pg_catalog.pg_attribute AS ea ON (ea.attrelid, ea.attnum) = (p.perrelid, p.perend) "
-				"JOIN pg_catalog.pg_type AS r ON r.oid = p.perrngtype "
+				"JOIN pg_catalog.pg_attribute AS ra ON (ra.attrelid, ra.attnum) = (p.perrelid, p.perrange) "
+				"JOIN pg_catalog.pg_type AS r ON r.oid = ra.atttypid "
 				"JOIN pg_catalog.pg_constraint AS c ON c.oid = p.perconstraint "
 				"WHERE p.perrelid = '%u'::pg_catalog.oid "
 				"ORDER BY p.pername",
