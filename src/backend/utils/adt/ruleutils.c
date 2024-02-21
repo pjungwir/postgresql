@@ -2251,7 +2251,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 
 				/* If it is a temporal foreign key then it uses PERIOD. */
 				decompile_column_index_array(val, conForm->conrelid,
-											 conForm->conwithoutoverlaps, &buf);
+											 conForm->conperiod, &buf);
 
 				/* add foreign relation name */
 				appendStringInfo(&buf, ") REFERENCES %s(",
@@ -2263,7 +2263,7 @@ pg_get_constraintdef_worker(Oid constraintId, bool fullCommand,
 											 Anum_pg_constraint_confkey);
 
 				decompile_column_index_array(val, conForm->confrelid,
-											 conForm->conwithoutoverlaps, &buf);
+											 conForm->conperiod, &buf);
 
 				appendStringInfoChar(&buf, ')');
 
