@@ -30,6 +30,7 @@
 #include "access/xact.h"
 #include "catalog/pg_collation.h"
 #include "catalog/pg_constraint.h"
+#include "catalog/pg_proc.h"
 #include "commands/trigger.h"
 #include "executor/executor.h"
 #include "executor/spi.h"
@@ -126,6 +127,7 @@ typedef struct RI_ConstraintInfo
 	Oid			period_contained_by_oper;	/* operator for PERIOD SQL */
 	Oid			agged_period_contained_by_oper;	/* operator for PERIOD SQL */
 	Oid			period_referenced_agg_proc;	/* proc for PERIOD SQL */
+	Oid			period_referenced_agg_rettype;	/* rettype for previous */
 	dlist_node	valid_link;		/* Link in list of valid entries */
 } RI_ConstraintInfo;
 
@@ -233,8 +235,7 @@ static void ri_ReportViolation(const RI_ConstraintInfo *riinfo,
 							   Relation pk_rel, Relation fk_rel,
 							   TupleTableSlot *violatorslot, TupleDesc tupdesc,
 							   int queryno, bool partgone) pg_attribute_noreturn();
-static void lookupTRIOperAndProc(const RI_ConstraintInfo *riinfo,
-								 char **opname, char **aggname);
+static void lookupTRIProc(const RI_ConstraintInfo *riinfo, char **aggname);
 
 
 /*
@@ -424,12 +425,18 @@ RI_FKey_check(TriggerData *trigdata)
 		appendStringInfoString(&querybuf, " FOR KEY SHARE OF x");
 		if (riinfo->temporal)
 		{
-			char *opname;
-			char *aggname;
-			lookupTRIOperAndProc(riinfo, &opname, &aggname);
-			appendStringInfo(&querybuf, ") x1 HAVING $%d %s %s(x1.r)", riinfo->nkeys, opname, aggname);
-			pfree(opname);
-			pfree(aggname);
+			char   *aggname;
+			Oid		fk_type = RIAttType(fk_rel, riinfo->fk_attnums[riinfo->nkeys - 1]);
+			Oid		agg_rettype = riinfo->period_referenced_agg_rettype;
+
+			lookupTRIProc(riinfo, &aggname);
+			appendStringInfo(&querybuf, ") x1 HAVING ");
+			sprintf(paramname, "$%d", riinfo->nkeys);
+			ri_GenerateQual(&querybuf, "",
+							paramname, fk_type,
+							riinfo->agged_period_contained_by_oper,
+							aggname, agg_rettype);
+			appendStringInfo(&querybuf, "(x1.r)");
 		}
 
 		/* Prepare and save the plan */
@@ -591,12 +598,18 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 		appendStringInfoString(&querybuf, " FOR KEY SHARE OF x");
 		if (riinfo->temporal)
 		{
-			char *opname;
-			char *aggname;
-			lookupTRIOperAndProc(riinfo, &opname, &aggname);
-			appendStringInfo(&querybuf, ") x1 HAVING $%d %s %s(x1.r)", riinfo->nkeys, opname, aggname);
-			pfree(opname);
-			pfree(aggname);
+			char   *aggname;
+			Oid		fk_type = RIAttType(fk_rel, riinfo->fk_attnums[riinfo->nkeys - 1]);
+			Oid		agg_rettype = riinfo->period_referenced_agg_rettype;
+
+			lookupTRIProc(riinfo, &aggname);
+			appendStringInfo(&querybuf, ") x1 HAVING ");
+			sprintf(paramname, "$%d", riinfo->nkeys);
+			ri_GenerateQual(&querybuf, "",
+							paramname, fk_type,
+							riinfo->agged_period_contained_by_oper,
+							aggname, agg_rettype);
+			appendStringInfo(&querybuf, "(x1.r)");
 		}
 
 		/* Prepare and save the plan */
@@ -2396,6 +2409,7 @@ ri_LoadConstraintInfo(Oid constraintOid)
 								  &riinfo->period_contained_by_oper,
 								  &riinfo->agged_period_contained_by_oper,
 								  &riinfo->period_referenced_agg_proc);
+		riinfo->period_referenced_agg_rettype = get_func_rettype(riinfo->period_referenced_agg_proc);
 	}
 
 	ReleaseSysCache(tup);
@@ -3263,32 +3277,39 @@ RI_FKey_trigger_type(Oid tgfoid)
 }
 
 /*
- * lookupTRIOperAndProc -
+ * lookupTRIProc -
  *
- * Gets the names of the operator and aggregate function
+ * Gets the name of the aggregate function
  * used to build the SQL for TRI constraints.
- * Raises an error if either is not found.
+ * Raises an error if not found.
  */
 static void
-lookupTRIOperAndProc(const RI_ConstraintInfo *riinfo, char **opname, char **aggname)
+lookupTRIProc(const RI_ConstraintInfo *riinfo, char **aggname)
 {
-	Oid	oid;
+	Oid			oid = riinfo->period_referenced_agg_proc;
+	HeapTuple	tp;
+	Form_pg_proc functup;
+	char	   *namesp;
+	char	   *func;
 
-	oid = riinfo->agged_period_contained_by_oper;
-	if (!OidIsValid(oid))
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_OBJECT),
-				 errmsg("no ContainedBy operator for foreign key constraint \"%s\"",
-						NameStr(riinfo->conname)),
-				 errhint("You must use an operator class with a matching ContainedBy operator.")));
-	*opname = get_opname(oid);
 
-	oid = riinfo->period_referenced_agg_proc;
 	if (!OidIsValid(oid))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
 				 errmsg("no referencedagg support function for foreign key constraint \"%s\"",
 						NameStr(riinfo->conname)),
 				 errhint("You must use an operator class with a referencedagg support function.")));
-	*aggname = get_func_name_and_namespace(oid);
+
+	tp = SearchSysCache1(PROCOID, ObjectIdGetDatum(riinfo->period_referenced_agg_proc));
+	if (!HeapTupleIsValid(tp))
+		elog(ERROR, "cache lookup failed for function %u", oid);
+
+	functup = (Form_pg_proc) GETSTRUCT(tp);
+	namesp = get_namespace_name(functup->pronamespace);
+	func = NameStr(functup->proname);
+
+	*aggname = psprintf("%s.%s", quote_identifier(namesp), quote_identifier(func));
+
+	pfree(namesp);
+	ReleaseSysCache(tp);
 }
