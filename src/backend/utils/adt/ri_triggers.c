@@ -2387,7 +2387,7 @@ ri_LoadConstraintInfo(Oid constraintOid)
 	riinfo->confupdtype = conForm->confupdtype;
 	riinfo->confdeltype = conForm->confdeltype;
 	riinfo->confmatchtype = conForm->confmatchtype;
-	riinfo->temporal = conForm->conwithoutoverlaps;
+	riinfo->temporal = conForm->conperiod;
 
 	DeconstructFkConstraintRow(tup,
 							   &riinfo->nkeys,
