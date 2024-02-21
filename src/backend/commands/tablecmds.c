@@ -12714,17 +12714,17 @@ createForeignKeyActionTriggers(Relation rel, Oid refRelOid, Constraint *fkconstr
 			case FKCONSTR_ACTION_CASCADE:
 				fk_trigger->deferrable = false;
 				fk_trigger->initdeferred = false;
-				fk_trigger->funcname = SystemFuncName("TRI_FKey_cascade_del");
+				fk_trigger->funcname = SystemFuncName("RI_FKey_period_cascade_del");
 				break;
 			case FKCONSTR_ACTION_SETNULL:
 				fk_trigger->deferrable = false;
 				fk_trigger->initdeferred = false;
-				fk_trigger->funcname = SystemFuncName("TRI_FKey_setnull_del");
+				fk_trigger->funcname = SystemFuncName("RI_FKey_period_setnull_del");
 				break;
 			case FKCONSTR_ACTION_SETDEFAULT:
 				fk_trigger->deferrable = false;
 				fk_trigger->initdeferred = false;
-				fk_trigger->funcname = SystemFuncName("TRI_FKey_setdefault_del");
+				fk_trigger->funcname = SystemFuncName("RI_FKey_period_setdefault_del");
 				break;
 			default:
 				elog(ERROR, "unrecognized FK action type: %d",
@@ -12813,17 +12813,17 @@ createForeignKeyActionTriggers(Relation rel, Oid refRelOid, Constraint *fkconstr
 			case FKCONSTR_ACTION_CASCADE:
 				fk_trigger->deferrable = false;
 				fk_trigger->initdeferred = false;
-				fk_trigger->funcname = SystemFuncName("TRI_FKey_cascade_upd");
+				fk_trigger->funcname = SystemFuncName("RI_FKey_period_cascade_upd");
 				break;
 			case FKCONSTR_ACTION_SETNULL:
 				fk_trigger->deferrable = false;
 				fk_trigger->initdeferred = false;
-				fk_trigger->funcname = SystemFuncName("TRI_FKey_setnull_upd");
+				fk_trigger->funcname = SystemFuncName("RI_FKey_period_setnull_upd");
 				break;
 			case FKCONSTR_ACTION_SETDEFAULT:
 				fk_trigger->deferrable = false;
 				fk_trigger->initdeferred = false;
-				fk_trigger->funcname = SystemFuncName("TRI_FKey_setdefault_upd");
+				fk_trigger->funcname = SystemFuncName("RI_FKey_period_setdefault_upd");
 				break;
 			default:
 				elog(ERROR, "unrecognized FK action type: %d",
