@@ -1486,7 +1486,7 @@ TRI_FKey_cascade_del(PG_FUNCTION_ARGS)
 		quoteRelationName(fkrelname, fk_rel);
 		quoteOneName(attname, RIAttName(fk_rel, riinfo->fk_attnums[riinfo->nkeys - 1]));
 
-		appendStringInfo(&querybuf, "DELETE FROM %s%s FOR PORTION OF %s FROM lower($%d) TO upper($%d)",
+		appendStringInfo(&querybuf, "DELETE FROM %s%s FOR PORTION OF %s FROM pg_catalog.lower($%d) TO pg_catalog.upper($%d)",
 						 fk_only, fkrelname, attname, riinfo->nkeys + 1, riinfo->nkeys + 1);
 		querysep = "WHERE";
 		for (int i = 0; i < riinfo->nkeys; i++)
@@ -1653,7 +1653,7 @@ TRI_FKey_cascade_upd(PG_FUNCTION_ARGS)
 		quoteRelationName(fkrelname, fk_rel);
 		quoteOneName(attname, RIAttName(fk_rel, riinfo->fk_attnums[riinfo->nkeys - 1]));
 
-		appendStringInfo(&querybuf, "UPDATE %s%s FOR PORTION OF %s FROM lower($%d) TO upper($%d) SET",
+		appendStringInfo(&querybuf, "UPDATE %s%s FOR PORTION OF %s FROM pg_catalog.lower($%d) TO pg_catalog.upper($%d) SET",
 						 fk_only, fkrelname, attname, 2 * riinfo->nkeys + 1, 2 * riinfo->nkeys + 1);
 
 		querysep = "";
@@ -1897,7 +1897,7 @@ tri_set(TriggerData *trigdata, bool is_set_null, int tgkind)
 		quoteRelationName(fkrelname, fk_rel);
 		quoteOneName(attname, RIAttName(fk_rel, riinfo->fk_attnums[riinfo->nkeys - 1]));
 
-		appendStringInfo(&querybuf, "UPDATE %s%s FOR PORTION OF %s FROM lower($%d) TO upper($%d) SET",
+		appendStringInfo(&querybuf, "UPDATE %s%s FOR PORTION OF %s FROM pg_catalog.lower($%d) TO pg_catalog.upper($%d) SET",
 						 fk_only, fkrelname, attname, riinfo->nkeys + 1, riinfo->nkeys + 1);
 
 		/*
