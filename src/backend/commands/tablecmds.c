@@ -10861,7 +10861,7 @@ CloneFkReferenced(Relation parentRel, Relation partitionRel)
 							   true,
 							   deleteTriggerOid,
 							   updateTriggerOid,
-							   constrForm->conwithoutoverlaps);
+							   constrForm->conperiod);
 
 		table_close(fkRel, NoLock);
 		ReleaseSysCache(tuple);
@@ -11070,7 +11070,7 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 			fkconstraint->conname = pstrdup(NameStr(constrForm->conname));
 
 		indexOid = constrForm->conindid;
-		is_temporal = constrForm->conwithoutoverlaps;
+		is_temporal = constrForm->conperiod;
 		constrOid =
 			CreateConstraintEntry(fkconstraint->conname,
 								  constrForm->connamespace,
