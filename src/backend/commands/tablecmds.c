@@ -10126,23 +10126,21 @@ validateFkOnDeleteSetColumns(int numfks, const int16 *fkattnums,
 	for (int i = 0; i < numfksetcols; i++)
 	{
 		int16		setcol_attnum = fksetcolsattnums[i];
-		/* assume only one PERIOD key column in a foreign key */
-		int16		fkperiod_attnum = fkperiodattnum;
 		bool		seen = false;
 
 		for (int j = 0; j < numfks; j++)
 		{
-			if (fkattnums[j] == setcol_attnum)
-			{
-				seen = true;
-				break;
-			}
-			if (fkperiod_attnum == setcol_attnum)
+			if (fkperiodattnum == setcol_attnum)
 			{
 				char	   *col = strVal(list_nth(fksetcols, i));
 				ereport(ERROR,
 						(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
 						 errmsg("column \"%s\" referenced in ON DELETE SET action cannot be PERIOD", col)));
+			}
+			if (fkattnums[j] == setcol_attnum)
+			{
+				seen = true;
+				break;
 			}
 		}
 
