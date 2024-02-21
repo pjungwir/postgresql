@@ -2613,9 +2613,9 @@ typedef struct Constraint
 	/* Fields used for FOREIGN KEY constraints: */
 	RangeVar   *pktable;		/* Primary key table */
 	List	   *fk_attrs;		/* Attributes of foreign key */
-	Node	   *fk_period;		/* String node naming Period or range column */
 	List	   *pk_attrs;		/* Corresponding attrs in PK table */
-	Node	   *pk_period;		/* String node naming Period or range column */
+	bool		fk_with_period;	/* Last attribute of FK uses PERIOD */
+	bool		pk_with_period;	/* Last attribute of PK uses PERIOD */
 	char		fk_matchtype;	/* FULL, PARTIAL, SIMPLE */
 	char		fk_upd_action;	/* ON UPDATE action */
 	char		fk_del_action;	/* ON DELETE action */
