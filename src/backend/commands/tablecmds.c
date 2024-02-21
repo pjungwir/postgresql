@@ -11855,10 +11855,10 @@ ATExecAlterConstrRecurse(Constraint *cmdcon, Relation conrel, Relation tgrel,
 				tgform->tgfoid != F_RI_FKEY_NOACTION_UPD &&
 				tgform->tgfoid != F_RI_FKEY_CHECK_INS &&
 				tgform->tgfoid != F_RI_FKEY_CHECK_UPD &&
-				tgform->tgfoid != F_TRI_FKEY_NOACTION_DEL &&
-				tgform->tgfoid != F_TRI_FKEY_NOACTION_UPD &&
-				tgform->tgfoid != F_TRI_FKEY_CHECK_INS &&
-				tgform->tgfoid != F_TRI_FKEY_CHECK_UPD)
+				tgform->tgfoid != F_RI_FKEY_PERIOD_NOACTION_DEL &&
+				tgform->tgfoid != F_RI_FKEY_PERIOD_NOACTION_UPD &&
+				tgform->tgfoid != F_RI_FKEY_PERIOD_CHECK_INS &&
+				tgform->tgfoid != F_RI_FKEY_PERIOD_CHECK_UPD)
 				continue;
 
 			tgCopyTuple = heap_copytuple(tgtuple);
@@ -12602,7 +12602,7 @@ CreateFKCheckTrigger(Oid myRelOid, Oid refRelOid, Constraint *fkconstraint,
 	if (on_insert)
 	{
 		if (is_temporal)
-			fk_trigger->funcname = SystemFuncName("TRI_FKey_check_ins");
+			fk_trigger->funcname = SystemFuncName("RI_FKey_period_check_ins");
 		else
 			fk_trigger->funcname = SystemFuncName("RI_FKey_check_ins");
 		fk_trigger->events = TRIGGER_TYPE_INSERT;
@@ -12610,7 +12610,7 @@ CreateFKCheckTrigger(Oid myRelOid, Oid refRelOid, Constraint *fkconstraint,
 	else
 	{
 		if (is_temporal)
-			fk_trigger->funcname = SystemFuncName("TRI_FKey_check_upd");
+			fk_trigger->funcname = SystemFuncName("RI_FKey_period_check_upd");
 		else
 			fk_trigger->funcname = SystemFuncName("RI_FKey_check_upd");
 		fk_trigger->events = TRIGGER_TYPE_UPDATE;
@@ -12678,12 +12678,12 @@ createForeignKeyActionTriggers(Relation rel, Oid refRelOid, Constraint *fkconstr
 			case FKCONSTR_ACTION_NOACTION:
 				fk_trigger->deferrable = fkconstraint->deferrable;
 				fk_trigger->initdeferred = fkconstraint->initdeferred;
-				fk_trigger->funcname = SystemFuncName("TRI_FKey_noaction_del");
+				fk_trigger->funcname = SystemFuncName("RI_FKey_period_noaction_del");
 				break;
 			case FKCONSTR_ACTION_RESTRICT:
 				fk_trigger->deferrable = false;
 				fk_trigger->initdeferred = false;
-				fk_trigger->funcname = SystemFuncName("TRI_FKey_restrict_del");
+				fk_trigger->funcname = SystemFuncName("RI_FKey_period_restrict_del");
 				break;
 			case FKCONSTR_ACTION_CASCADE:
 			case FKCONSTR_ACTION_SETNULL:
@@ -12770,12 +12770,12 @@ createForeignKeyActionTriggers(Relation rel, Oid refRelOid, Constraint *fkconstr
 			case FKCONSTR_ACTION_NOACTION:
 				fk_trigger->deferrable = fkconstraint->deferrable;
 				fk_trigger->initdeferred = fkconstraint->initdeferred;
-				fk_trigger->funcname = SystemFuncName("TRI_FKey_noaction_upd");
+				fk_trigger->funcname = SystemFuncName("RI_FKey_period_noaction_upd");
 				break;
 			case FKCONSTR_ACTION_RESTRICT:
 				fk_trigger->deferrable = false;
 				fk_trigger->initdeferred = false;
-				fk_trigger->funcname = SystemFuncName("TRI_FKey_restrict_upd");
+				fk_trigger->funcname = SystemFuncName("RI_FKey_period_restrict_upd");
 				break;
 			case FKCONSTR_ACTION_CASCADE:
 			case FKCONSTR_ACTION_SETNULL:
