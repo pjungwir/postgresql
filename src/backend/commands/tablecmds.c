@@ -12666,7 +12666,7 @@ createForeignKeyActionTriggers(Relation rel, Oid refRelOid, Constraint *fkconstr
 			fk_trigger->deferrable = false;
 			fk_trigger->initdeferred = false;
 			if (fkconstraint->fk_with_period)
-				fk_trigger->funcname = SystemFuncName("TRI_FKey_cascade_del");
+				fk_trigger->funcname = SystemFuncName("RI_FKey_period_cascade_del");
 			else
 				fk_trigger->funcname = SystemFuncName("RI_FKey_cascade_del");
 			break;
@@ -12674,7 +12674,7 @@ createForeignKeyActionTriggers(Relation rel, Oid refRelOid, Constraint *fkconstr
 			fk_trigger->deferrable = false;
 			fk_trigger->initdeferred = false;
 			if (fkconstraint->fk_with_period)
-				fk_trigger->funcname = SystemFuncName("TRI_FKey_setnull_del");
+				fk_trigger->funcname = SystemFuncName("RI_FKey_period_setnull_del");
 			else
 				fk_trigger->funcname = SystemFuncName("RI_FKey_setnull_del");
 			break;
@@ -12682,7 +12682,7 @@ createForeignKeyActionTriggers(Relation rel, Oid refRelOid, Constraint *fkconstr
 			fk_trigger->deferrable = false;
 			fk_trigger->initdeferred = false;
 			if (fkconstraint->fk_with_period)
-				fk_trigger->funcname = SystemFuncName("TRI_FKey_setdefault_del");
+				fk_trigger->funcname = SystemFuncName("RI_FKey_period_setdefault_del");
 			else
 				fk_trigger->funcname = SystemFuncName("RI_FKey_setdefault_del");
 			break;
@@ -12736,7 +12736,7 @@ createForeignKeyActionTriggers(Relation rel, Oid refRelOid, Constraint *fkconstr
 			fk_trigger->deferrable = false;
 			fk_trigger->initdeferred = false;
 			if (fkconstraint->fk_with_period)
-				fk_trigger->funcname = SystemFuncName("TRI_FKey_cascade_upd");
+				fk_trigger->funcname = SystemFuncName("RI_FKey_period_cascade_upd");
 			else
 				fk_trigger->funcname = SystemFuncName("RI_FKey_cascade_upd");
 			break;
@@ -12744,7 +12744,7 @@ createForeignKeyActionTriggers(Relation rel, Oid refRelOid, Constraint *fkconstr
 			fk_trigger->deferrable = false;
 			fk_trigger->initdeferred = false;
 			if (fkconstraint->fk_with_period)
-				fk_trigger->funcname = SystemFuncName("TRI_FKey_setnull_upd");
+				fk_trigger->funcname = SystemFuncName("RI_FKey_period_setnull_upd");
 			else
 				fk_trigger->funcname = SystemFuncName("RI_FKey_setnull_upd");
 			break;
@@ -12752,7 +12752,7 @@ createForeignKeyActionTriggers(Relation rel, Oid refRelOid, Constraint *fkconstr
 			fk_trigger->deferrable = false;
 			fk_trigger->initdeferred = false;
 			if (fkconstraint->fk_with_period)
-				fk_trigger->funcname = SystemFuncName("TRI_FKey_setdefault_upd");
+				fk_trigger->funcname = SystemFuncName("RI_FKey_period_setdefault_upd");
 			else
 				fk_trigger->funcname = SystemFuncName("RI_FKey_setdefault_upd");
 			break;
