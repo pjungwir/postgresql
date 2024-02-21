@@ -80,12 +80,12 @@
 #define RI_PLAN_SETNULL_ONUPDATE		7
 #define RI_PLAN_SETDEFAULT_ONDELETE		8
 #define RI_PLAN_SETDEFAULT_ONUPDATE		9
-#define TRI_PLAN_CASCADE_ONDELETE		10
-#define TRI_PLAN_CASCADE_ONUPDATE		11
-#define TRI_PLAN_SETNULL_ONUPDATE		12
-#define TRI_PLAN_SETNULL_ONDELETE		13
-#define TRI_PLAN_SETDEFAULT_ONUPDATE	14
-#define TRI_PLAN_SETDEFAULT_ONDELETE	15
+#define RI_PLAN_PERIOD_CASCADE_ONDELETE		10
+#define RI_PLAN_PERIOD_CASCADE_ONUPDATE		11
+#define RI_PLAN_PERIOD_SETNULL_ONUPDATE		12
+#define RI_PLAN_PERIOD_SETNULL_ONDELETE		13
+#define RI_PLAN_PERIOD_SETDEFAULT_ONUPDATE	14
+#define RI_PLAN_PERIOD_SETDEFAULT_ONDELETE	15
 
 #define MAX_QUOTED_NAME_LEN  (NAMEDATALEN*2+3)
 #define MAX_QUOTED_REL_NAME_LEN  (MAX_QUOTED_NAME_LEN*2)
@@ -1324,12 +1324,12 @@ ri_set(TriggerData *trigdata, bool is_set_null, int tgkind)
 }
 
 /*
- * TRI_FKey_cascade_del -
+ * RI_FKey_period_cascade_del -
  *
  * Cascaded delete foreign key references at delete event on temporal PK table.
  */
 Datum
-TRI_FKey_cascade_del(PG_FUNCTION_ARGS)
+RI_FKey_period_cascade_del(PG_FUNCTION_ARGS)
 {
 	TriggerData *trigdata = (TriggerData *) fcinfo->context;
 	const RI_ConstraintInfo *riinfo;
@@ -1341,7 +1341,7 @@ TRI_FKey_cascade_del(PG_FUNCTION_ARGS)
 	Datum targetRange;
 
 	/* Check that this is a valid trigger call on the right time and event. */
-	ri_CheckTrigger(fcinfo, "TRI_FKey_cascade_del", RI_TRIGTYPE_DELETE);
+	ri_CheckTrigger(fcinfo, "RI_FKey_period_cascade_del", RI_TRIGTYPE_DELETE);
 
 	riinfo = ri_FetchConstraintInfo(trigdata->tg_trigger,
 									trigdata->tg_relation, true);
@@ -1366,7 +1366,7 @@ TRI_FKey_cascade_del(PG_FUNCTION_ARGS)
 		elog(ERROR, "SPI_connect failed");
 
 	/* Fetch or prepare a saved plan for the cascaded delete */
-	ri_BuildQueryKey(&qkey, riinfo, TRI_PLAN_CASCADE_ONDELETE);
+	ri_BuildQueryKey(&qkey, riinfo, RI_PLAN_PERIOD_CASCADE_ONDELETE);
 
 	if ((qplan = ri_FetchPreparedPlan(&qkey)) == NULL)
 	{
@@ -1444,12 +1444,12 @@ TRI_FKey_cascade_del(PG_FUNCTION_ARGS)
 }
 
 /*
- * TRI_FKey_cascade_upd -
+ * RI_FKey_period_cascade_upd -
  *
  * Cascaded update foreign key references at update event on temporal PK table.
  */
 Datum
-TRI_FKey_cascade_upd(PG_FUNCTION_ARGS)
+RI_FKey_period_cascade_upd(PG_FUNCTION_ARGS)
 {
 	TriggerData *trigdata = (TriggerData *) fcinfo->context;
 	const RI_ConstraintInfo *riinfo;
@@ -1462,7 +1462,7 @@ TRI_FKey_cascade_upd(PG_FUNCTION_ARGS)
 	Datum targetRange;
 
 	/* Check that this is a valid trigger call on the right time and event. */
-	ri_CheckTrigger(fcinfo, "TRI_FKey_cascade_upd", RI_TRIGTYPE_UPDATE);
+	ri_CheckTrigger(fcinfo, "RI_FKey_period_cascade_upd", RI_TRIGTYPE_UPDATE);
 
 	riinfo = ri_FetchConstraintInfo(trigdata->tg_trigger,
 									trigdata->tg_relation, true);
@@ -1489,7 +1489,7 @@ TRI_FKey_cascade_upd(PG_FUNCTION_ARGS)
 		elog(ERROR, "SPI_connect failed");
 
 	/* Fetch or prepare a saved plan for the cascaded update */
-	ri_BuildQueryKey(&qkey, riinfo, TRI_PLAN_CASCADE_ONUPDATE);
+	ri_BuildQueryKey(&qkey, riinfo, RI_PLAN_PERIOD_CASCADE_ONUPDATE);
 
 	if ((qplan = ri_FetchPreparedPlan(&qkey)) == NULL)
 	{
@@ -1586,60 +1586,60 @@ TRI_FKey_cascade_upd(PG_FUNCTION_ARGS)
 }
 
 /*
- * TRI_FKey_setnull_del -
+ * RI_FKey_period_setnull_del -
  *
  * Set foreign key references to NULL values at delete event on PK table.
  */
 Datum
-TRI_FKey_setnull_del(PG_FUNCTION_ARGS)
+RI_FKey_period_setnull_del(PG_FUNCTION_ARGS)
 {
 	/* Check that this is a valid trigger call on the right time and event. */
-	ri_CheckTrigger(fcinfo, "TRI_FKey_setnull_del", RI_TRIGTYPE_DELETE);
+	ri_CheckTrigger(fcinfo, "RI_FKey_period_setnull_del", RI_TRIGTYPE_DELETE);
 
 	/* Share code with UPDATE case */
 	return tri_set((TriggerData *) fcinfo->context, true, RI_TRIGTYPE_DELETE);
 }
 
 /*
- * TRI_FKey_setnull_upd -
+ * RI_FKey_period_setnull_upd -
  *
  * Set foreign key references to NULL at update event on PK table.
  */
 Datum
-TRI_FKey_setnull_upd(PG_FUNCTION_ARGS)
+RI_FKey_period_setnull_upd(PG_FUNCTION_ARGS)
 {
 	/* Check that this is a valid trigger call on the right time and event. */
-	ri_CheckTrigger(fcinfo, "TRI_FKey_setnull_upd", RI_TRIGTYPE_UPDATE);
+	ri_CheckTrigger(fcinfo, "RI_FKey_period_setnull_upd", RI_TRIGTYPE_UPDATE);
 
 	/* Share code with DELETE case */
 	return tri_set((TriggerData *) fcinfo->context, true, RI_TRIGTYPE_UPDATE);
 }
 
 /*
- * TRI_FKey_setdefault_del -
+ * RI_FKey_period_setdefault_del -
  *
  * Set foreign key references to defaults at delete event on PK table.
  */
 Datum
-TRI_FKey_setdefault_del(PG_FUNCTION_ARGS)
+RI_FKey_period_setdefault_del(PG_FUNCTION_ARGS)
 {
 	/* Check that this is a valid trigger call on the right time and event. */
-	ri_CheckTrigger(fcinfo, "TRI_FKey_setdefault_del", RI_TRIGTYPE_DELETE);
+	ri_CheckTrigger(fcinfo, "RI_FKey_period_setdefault_del", RI_TRIGTYPE_DELETE);
 
 	/* Share code with UPDATE case */
 	return tri_set((TriggerData *) fcinfo->context, false, RI_TRIGTYPE_DELETE);
 }
 
 /*
- * TRI_FKey_setdefault_upd -
+ * RI_FKey_period_setdefault_upd -
  *
  * Set foreign key references to defaults at update event on PK table.
  */
 Datum
-TRI_FKey_setdefault_upd(PG_FUNCTION_ARGS)
+RI_FKey_period_setdefault_upd(PG_FUNCTION_ARGS)
 {
 	/* Check that this is a valid trigger call on the right time and event. */
-	ri_CheckTrigger(fcinfo, "TRI_FKey_setdefault_upd", RI_TRIGTYPE_UPDATE);
+	ri_CheckTrigger(fcinfo, "RI_FKey_period_setdefault_upd", RI_TRIGTYPE_UPDATE);
 
 	/* Share code with DELETE case */
 	return tri_set((TriggerData *) fcinfo->context, false, RI_TRIGTYPE_UPDATE);
@@ -1692,13 +1692,13 @@ tri_set(TriggerData *trigdata, bool is_set_null, int tgkind)
 	{
 		case RI_TRIGTYPE_UPDATE:
 			queryno = is_set_null
-				? TRI_PLAN_SETNULL_ONUPDATE
-				: TRI_PLAN_SETDEFAULT_ONUPDATE;
+				? RI_PLAN_PERIOD_SETNULL_ONUPDATE
+				: RI_PLAN_PERIOD_SETDEFAULT_ONUPDATE;
 			break;
 		case RI_TRIGTYPE_DELETE:
 			queryno = is_set_null
-				? TRI_PLAN_SETNULL_ONDELETE
-				: TRI_PLAN_SETDEFAULT_ONDELETE;
+				? RI_PLAN_PERIOD_SETNULL_ONDELETE
+				: RI_PLAN_PERIOD_SETDEFAULT_ONDELETE;
 			break;
 		default:
 			elog(ERROR, "invalid tgkind passed to ri_set");
@@ -3698,12 +3698,12 @@ RI_FKey_trigger_type(Oid tgfoid)
 		case F_RI_FKEY_SETDEFAULT_UPD:
 		case F_RI_FKEY_NOACTION_DEL:
 		case F_RI_FKEY_NOACTION_UPD:
-		case F_TRI_FKEY_CASCADE_DEL:
-		case F_TRI_FKEY_CASCADE_UPD:
-		case F_TRI_FKEY_SETNULL_DEL:
-		case F_TRI_FKEY_SETNULL_UPD:
-		case F_TRI_FKEY_SETDEFAULT_DEL:
-		case F_TRI_FKEY_SETDEFAULT_UPD:
+		case F_RI_FKEY_PERIOD_CASCADE_DEL:
+		case F_RI_FKEY_PERIOD_CASCADE_UPD:
+		case F_RI_FKEY_PERIOD_SETNULL_DEL:
+		case F_RI_FKEY_PERIOD_SETNULL_UPD:
+		case F_RI_FKEY_PERIOD_SETDEFAULT_DEL:
+		case F_RI_FKEY_PERIOD_SETDEFAULT_UPD:
 			return RI_TRIGGER_PK;
 
 		case F_RI_FKEY_CHECK_INS:
