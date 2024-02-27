@@ -33,6 +33,29 @@ select *, p from pt;
 create table pt2 (id integer, ds date, de date, period for p1 (ds, de), period for p2 (ds, de));
 drop table pt2;
 
+/* Skip creating GENERATED column: works */
+create table pt2 (id integer, ds date, de date, p daterange not null generated always as (daterange(ds, de)) stored, period for p (ds, de) with (colexists = true));
+\d pt2
+drop table pt2;
+/* Skip creating GENERATED column: fails because the col isn't there */
+create table pt2 (id integer, ds date, de date, period for p (ds, de) with (colexists = true));
+/* Skip creating GENERATED column: fails because the option has an invalid value */
+create table pt2 (id integer, ds date, de date, period for p (ds, de) with (colexists = 'whatever'));
+/* Skip creating GENERATED column: fails because the column is not NOT NULL */
+create table pt2 (id integer, ds date, de date, p daterange generated always as (daterange(ds, de)) stored, period for p (ds, de) with (colexists = true));
+/* Skip creating GENERATED column: fails because the column is not GENERATED */
+create table pt2 (id integer, ds date, de date, p daterange not null, period for p (ds, de) with (colexists = true));
+/* Skip creating GENERATED column: fails because the column is GENERATED but with the wrong expression */
+-- TODO:
+-- create table pt2 (id integer, ds date, de date, p daterange not null generated always as (daterange(de, ds)) stored, period for p (ds, de) with (colexists = true));
+/* Skip creating GENERATED column: fails because the column is the wrong type */
+create table pt2 (id integer, ds date, de date, p tsrange not null generated always as (tsrange(ds, de)) stored, period for p (ds, de) with (colexists = true));
+/* Skip creating GENERATED column: fails because the column is inherited */
+create table pt2parent (id integer, ds date, de date, p daterange not null generated always as (daterange(ds, de)) stored);
+create table pt2 (period for p (ds, de) with (colexists = true)) inherits (pt2parent);
+drop table pt2parent;
+
+
 /*
  * ALTER TABLE tests
  */
@@ -81,6 +104,42 @@ create table pt3 (id int, ds date, de date, period for p (ds, de) with (rangetyp
 /* Range type is the wrong type */
 create table pt3 (id int, ds date, de date, period for p (ds, de) with (rangetype = 'tstzrange'));
 drop table pt2;
+
+/* Skip creating GENERATED column: works */
+create table pt2 (id integer, ds date, de date, p daterange not null generated always as (daterange(ds, de)) stored);
+alter table pt2 add period for p (ds, de) with (colexists = true);
+\d pt2
+drop table pt2;
+/* Skip creating GENERATED column: fails because the col isn't there */
+create table pt2 (id integer, ds date, de date);
+alter table pt2 add period for p (ds, de) with (colexists = true);
+drop table pt2;
+/* Skip creating GENERATED column: fails because the option has an invalid value */
+create table pt2 (id integer, ds date, de date, p daterange not null generated always as (daterange(ds, de)) stored);
+alter table pt2 add period for p (ds, de) with (colexists = 'whatever');
+drop table pt2;
+/* Skip creating GENERATED column: fails because the column is not NOT NULL */
+create table pt2 (id integer, ds date, de date, p daterange generated always as (daterange(ds, de)) stored);
+alter table pt2 add period for p (ds, de) with (colexists = true);
+drop table pt2;
+/* Skip creating GENERATED column: fails because the column is not GENERATED */
+create table pt2 (id integer, ds date, de date, p daterange not null);
+alter table pt2 add period for p (ds, de) with (colexists = true);
+drop table pt2;
+/* Skip creating GENERATED column: fails because the column is GENERATED but with the wrong expression */
+-- TODO:
+-- create table pt2 (id integer, ds date, de date, p daterange not null generated always as (daterange(de, ds)) stored);
+-- alter table pt2 add period for p (ds, de) with (colexists = true);
+/* Skip creating GENERATED column: fails because the column is the wrong type */
+create table pt2 (id integer, ds date, de date, p tsrange not null generated always as (tsrange(ds, de)) stored);
+alter table pt2 add period for p (ds, de) with (colexists = true);
+drop table pt2;
+/* Skip creating GENERATED column: fails because the column is inherited */
+create table pt2parent (id integer, ds date, de date, p daterange not null generated always as (daterange(ds, de)) stored);
+create table pt2 () inherits (pt2parent);
+alter table pt2 add period for p (ds, de) with (colexists = true);
+drop table pt2;
+drop table pt2parent;
 
 /* CREATE TABLE (LIKE ...) */
 
