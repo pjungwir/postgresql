@@ -6726,8 +6726,8 @@ getTables(Archive *fout, int *numTables)
 		appendPQExpBufferStr(query,
 							 "c.relhasoids, ");
 
-	/* In PG16 upwards we have PERIODs. */
-	if (fout->remoteVersion >= 160000)
+	/* In PG17 upwards we have PERIODs. */
+	if (fout->remoteVersion >= 170000)
 		appendPQExpBufferStr(query,
 							 "(SELECT count(*) FROM pg_period WHERE perrelid = c.oid) AS nperiods, ");
 	else
@@ -8647,6 +8647,7 @@ getTableAttrs(Archive *fout, TableInfo *tblinfo, int numTables)
 	int			i_attidentity;
 	int			i_attgenerated;
 	int			i_attisdropped;
+	int			i_attisperiod;
 	int			i_attlen;
 	int			i_attalign;
 	int			i_attislocal;
@@ -8734,6 +8735,14 @@ getTableAttrs(Archive *fout, TableInfo *tblinfo, int numTables)
 						 "FROM pg_catalog.pg_options_to_table(attfdwoptions) "
 						 "ORDER BY option_name"
 						 "), E',\n    ') AS attfdwoptions,\n");
+
+	/* Note if the attribute is a GENERATED column for a PERIOD */
+	if (fout->remoteVersion >= 170000)
+		appendPQExpBufferStr(q,
+				"EXISTS (SELECT 1 FROM pg_period p WHERE p.perrelid = a.attrelid AND p.pername = a.attname) AS attisperiod,\n");
+	else
+		appendPQExpBufferStr(q,
+				"false AS attisperiod,\n");
 
 	/*
 	 * Find out any NOT NULL markings for each column.  In 17 and up we have
@@ -8834,6 +8843,7 @@ getTableAttrs(Archive *fout, TableInfo *tblinfo, int numTables)
 	i_attidentity = PQfnumber(res, "attidentity");
 	i_attgenerated = PQfnumber(res, "attgenerated");
 	i_attisdropped = PQfnumber(res, "attisdropped");
+	i_attisperiod = PQfnumber(res, "attisperiod");
 	i_attlen = PQfnumber(res, "attlen");
 	i_attalign = PQfnumber(res, "attalign");
 	i_attislocal = PQfnumber(res, "attislocal");
@@ -8900,6 +8910,7 @@ getTableAttrs(Archive *fout, TableInfo *tblinfo, int numTables)
 		tbinfo->attidentity = (char *) pg_malloc(numatts * sizeof(char));
 		tbinfo->attgenerated = (char *) pg_malloc(numatts * sizeof(char));
 		tbinfo->attisdropped = (bool *) pg_malloc(numatts * sizeof(bool));
+		tbinfo->attisperiod = (bool *) pg_malloc(numatts * sizeof(bool));
 		tbinfo->attlen = (int *) pg_malloc(numatts * sizeof(int));
 		tbinfo->attalign = (char *) pg_malloc(numatts * sizeof(char));
 		tbinfo->attislocal = (bool *) pg_malloc(numatts * sizeof(bool));
@@ -8936,6 +8947,7 @@ getTableAttrs(Archive *fout, TableInfo *tblinfo, int numTables)
 			tbinfo->attgenerated[j] = *(PQgetvalue(res, r, i_attgenerated));
 			tbinfo->needs_override = tbinfo->needs_override || (tbinfo->attidentity[j] == ATTRIBUTE_IDENTITY_ALWAYS);
 			tbinfo->attisdropped[j] = (PQgetvalue(res, r, i_attisdropped)[0] == 't');
+			tbinfo->attisperiod[j] = (PQgetvalue(res, r, i_attisperiod)[0] == 't');
 			tbinfo->attlen[j] = atoi(PQgetvalue(res, r, i_attlen));
 			tbinfo->attalign[j] = *(PQgetvalue(res, r, i_attalign));
 			tbinfo->attislocal[j] = (PQgetvalue(res, r, i_attislocal)[0] == 't');
@@ -9232,7 +9244,7 @@ getTableAttrs(Archive *fout, TableInfo *tblinfo, int numTables)
 		pg_log_info("finding table check constraints");
 
 		resetPQExpBuffer(q);
-		if (fout->remoteVersion >= 160000)
+		if (fout->remoteVersion >= 170000)
 		{
 			/*
 			 * PERIODs were added in v17 and we don't dump CHECK
@@ -9382,7 +9394,7 @@ getTableAttrs(Archive *fout, TableInfo *tblinfo, int numTables)
 			int			j;
 
 			/* We shouldn't have any periods before v17 */
-			Assert(fout->remoteVersion >= 160000);
+			Assert(fout->remoteVersion >= 170000);
 
 			pg_log_info("finding periods for table \"%s.%s\"",
 						tbinfo->dobj.namespace->dobj.name,
@@ -9454,12 +9466,13 @@ getTableAttrs(Archive *fout, TableInfo *tblinfo, int numTables)
  * Normally this is always true, but it's false for dropped columns, as well
  * as those that were inherited without any local definition.  (If we print
  * such a column it will mistakenly get pg_attribute.attislocal set to true.)
+ * It's also false for the GENERATED columns that implement PERIODs.
  * For partitions, it's always true, because we want the partitions to be
  * created independently and ATTACH PARTITION used afterwards.
  *
  * In binary_upgrade mode, we must print all columns and fix the attislocal/
  * attisdropped state later, so as to keep control of the physical column
- * order.
+ * order. TODO: what to do for periods?
  *
  * This function exists because there are scattered nonobvious places that
  * must be kept in sync with this decision.
@@ -9469,7 +9482,7 @@ shouldPrintColumn(const DumpOptions *dopt, const TableInfo *tbinfo, int colno)
 {
 	if (dopt->binary_upgrade)
 		return true;
-	if (tbinfo->attisdropped[colno])
+	if (tbinfo->attisdropped[colno] || tbinfo->attisperiod[colno])
 		return false;
 	return (tbinfo->attislocal[colno] || tbinfo->ispartition);
 }
@@ -16216,6 +16229,12 @@ dumpTableSchema(Archive *fout, const TableInfo *tbinfo)
 						 */
 						appendPQExpBufferStr(q, " INTEGER /* dummy */");
 						/* and skip to the next column */
+						continue;
+					}
+
+					if (tbinfo->attisperiod[j])
+					{
+						/* Don't print GENERATED columns from PERIODs. */
 						continue;
 					}
 
