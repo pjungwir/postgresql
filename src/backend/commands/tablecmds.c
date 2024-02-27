@@ -963,7 +963,7 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId,
 
 					// TODO: check the GENERATED expression also.
 
-					if (!colDef->is_not_null)
+					if (!colDef->is_not_null && !IsBinaryUpgrade)
 						ereport(ERROR, (errmsg("Period %s uses a generated column that allows nulls", period->periodname)));
 
 					if (period->rngtypid != typenameTypeId(NULL, colDef->typeName))
@@ -1709,7 +1709,7 @@ ValidatePeriod(Relation rel, PeriodDef *period)
 
 		// TODO: check the GENERATED expression also.
 
-		if (!atttuple->attnotnull)
+		if (!atttuple->attnotnull && !IsBinaryUpgrade)
 			ereport(ERROR, (errmsg("Period %s uses a generated column that allows nulls", period->periodname)));
 
 		if (period->rngtypid != atttuple->atttypid)
