@@ -938,6 +938,7 @@ transformPeriodOptions(PeriodDef *period)
 	ListCell   *option;
 	DefElem	   *dconstraintname = NULL;
 	DefElem	   *drangetypename = NULL;
+	DefElem	   *dcolexists = NULL;
 
 	foreach(option, period->options)
 	{
@@ -959,6 +960,14 @@ transformPeriodOptions(PeriodDef *period)
 						 errmsg("conflicting or redundant options")));
 			drangetypename = defel;
 		}
+		else if (strcmp(defel->defname, "colexists") == 0)
+		{
+			if (dcolexists)
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+						 errmsg("conflicting or redundant options")));
+			dcolexists = defel;
+		}
 		else
 			ereport(ERROR,
 					(errcode(ERRCODE_SYNTAX_ERROR),
@@ -974,6 +983,11 @@ transformPeriodOptions(PeriodDef *period)
 		period->rangetypename = defGetString(drangetypename);
 	else
 		period->rangetypename = NULL;
+
+	if (dcolexists != NULL)
+		period->colexists = defGetBoolean(dcolexists);
+	else
+		period->colexists = false;
 }
 
 /*

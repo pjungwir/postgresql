@@ -2560,6 +2560,7 @@ typedef struct PeriodDef
 	char	   *rangetypename;	/* name of the range type */
 	Oid			coltypid;		/* the start/end col type */
 	Oid			rngtypid;		/* the range type to use */
+	bool		colexists;		/* use an existing GENERATED column */
 	int			location;		/* token location, or -1 if unknown */
 } PeriodDef;
 
