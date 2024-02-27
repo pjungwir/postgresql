@@ -339,6 +339,7 @@ typedef struct _tableInfo
 	char	   *attstorage;		/* attribute storage scheme */
 	char	   *typstorage;		/* type storage scheme */
 	bool	   *attisdropped;	/* true if attr is dropped; don't dump it */
+	bool	   *attisperiod;	/* true if attr is a PERIOD; don't dump it */
 	char	   *attidentity;
 	char	   *attgenerated;
 	int		   *attlen;			/* attribute length, used by binary_upgrade */
