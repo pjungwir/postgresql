@@ -837,6 +837,13 @@ WITH ( MODULUS <replaceable class="parameter">numeric_literal</replaceable>, REM
       expected that most periods will use temporal types like <literal>timestamptz</literal>
       or <literal>date</literal>.
      </para>
+
+     <para>
+      A hidden <literal>GENERATED</literal> column is used to implement the period,
+      with the same name as the period.  If such a column already exists, you
+      can use the <literal>colexists</literal> <replaceable class="parameter">period_option</replaceable>
+      with value <literal>true</literal> to avoid creating it.
+     </para>
     </listitem>
    </varlistentry>
 
