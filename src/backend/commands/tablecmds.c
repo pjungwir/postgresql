@@ -10012,7 +10012,8 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 								  &old_check_ok, &old_pfeqop_item,
 								  pktypoid[i], fktypoid[i], opclasses[i],
 								  is_temporal, is_temporal && i == numpks - 1,
-								  &pfeqoperators[i], &ppeqoperators[i], &ffeqoperators[i]);
+								  &pfeqoperators[i], &ppeqoperators[i],
+								  &ffeqoperators[i]);
 	}
 
 	/*
@@ -11164,12 +11165,12 @@ FindFKComparisonOperators(Constraint *fkconstraint,
 
 	if (is_temporal)
 	{
+		/*
+		 * GiST indexes are required to support temporal foreign keys
+		 * because they combine equals and overlaps.
+		 */
 		if (amid != GIST_AM_OID)
 			elog(ERROR, "only GiST indexes are supported for temporal foreign keys");
-		/*
-		 * For the non-overlaps parts, we want either RTEqualStrategyNumber (without btree_gist)
-		 * or BTEqualStrategyNumber (with btree_gist). We'll try the latter first.
-		 */
 		if (for_overlaps)
 		{
 			stratname = "overlaps";
@@ -11180,6 +11181,11 @@ FindFKComparisonOperators(Constraint *fkconstraint,
 			stratname = "equality";
 			rtstrategy = RTEqualStrategyNumber;
 		}
+		/*
+		 * An opclass can use whatever strategy numbers it wants, so we ask
+		 * the opclass what number it actually uses instead of our
+		 * RT* constants.
+		 */
 		eqstrategy = GistTranslateStratnum(opclass, rtstrategy);
 		if (eqstrategy == InvalidStrategy)
 			ereport(ERROR,
@@ -12108,6 +12114,7 @@ ATExecValidateConstraint(List **wqueue, Relation rel, char *constrName,
 	return address;
 }
 
+
 /*
  * transformColumnNameList - transform list of column names
  *
@@ -12250,7 +12257,7 @@ transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 		atttypids[i] = attnumTypeId(pkrel, pkattno);
 		opclasses[i] = indclass->values[i];
 		*attnamelist = lappend(*attnamelist,
-							  makeString(pstrdup(NameStr(*attnumAttName(pkrel, pkattno)))));
+							   makeString(pstrdup(NameStr(*attnumAttName(pkrel, pkattno)))));
 	}
 
 	*pk_period = (indexStruct->indisexclusion);
@@ -12324,8 +12331,8 @@ transformFkeyCheckAttrs(Relation pkrel,
 		/*
 		 * Must have the right number of columns; must be unique
 		 * (or if temporal then exclusion instead) and not a
-		 * partial index; forget it if there are any expressions, too.
-		 * Invalid indexes are out as well.
+		 * partial index; forget it if there are any expressions, too. Invalid
+		 * indexes are out as well.
 		 */
 		if (indexStruct->indnkeyatts == numattrs &&
 			(is_temporal ? indexStruct->indisexclusion : indexStruct->indisunique) &&
