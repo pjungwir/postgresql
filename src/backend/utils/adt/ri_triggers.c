@@ -367,7 +367,7 @@ RI_FKey_check(TriggerData *trigdata)
 		/* ----------
 		 * The query string built is
 		 *	SELECT 1 FROM [ONLY] <pktable> x WHERE pkatt1 = $1 [AND ...]
-		 *		FOR KEY SHARE OF x
+		 *		   FOR KEY SHARE OF x
 		 * The type id's for the $ parameters are those of the
 		 * corresponding FK attributes.
 		 *
@@ -408,12 +408,11 @@ RI_FKey_check(TriggerData *trigdata)
 		querysep = "WHERE";
 		for (int i = 0; i < riinfo->nkeys; i++)
 		{
-			Oid		pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
-			Oid		fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
+			Oid			pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
+			Oid			fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
 
 			quoteOneName(attname,
 						 RIAttName(pk_rel, riinfo->pk_attnums[i]));
-
 			sprintf(paramname, "$%d", i + 1);
 			ri_GenerateQual(&querybuf, querysep,
 							attname, pk_type,
@@ -582,11 +581,10 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 		querysep = "WHERE";
 		for (int i = 0; i < riinfo->nkeys; i++)
 		{
-			Oid		pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
+			Oid			pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
 
 			quoteOneName(attname,
 						 RIAttName(pk_rel, riinfo->pk_attnums[i]));
-
 			sprintf(paramname, "$%d", i + 1);
 			ri_GenerateQual(&querybuf, querysep,
 							attname, pk_type,
@@ -785,10 +783,10 @@ ri_restrict(TriggerData *trigdata, bool is_no_action)
 		querysep = "WHERE";
 		for (int i = 0; i < riinfo->nkeys; i++)
 		{
-			Oid		pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
-			Oid		fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
-			Oid		pk_coll = RIAttCollation(pk_rel, riinfo->pk_attnums[i]);
-			Oid		fk_coll = RIAttCollation(fk_rel, riinfo->fk_attnums[i]);
+			Oid			pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
+			Oid			fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
+			Oid			pk_coll = RIAttCollation(pk_rel, riinfo->pk_attnums[i]);
+			Oid			fk_coll = RIAttCollation(fk_rel, riinfo->fk_attnums[i]);
 
 			quoteOneName(attname,
 						 RIAttName(fk_rel, riinfo->fk_attnums[i]));
@@ -1692,17 +1690,15 @@ RI_Initial_Check(Trigger *trigger, Relation fk_rel, Relation pk_rel)
 	sep = "(";
 	for (int i = 0; i < riinfo->nkeys; i++)
 	{
-		Oid	pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
-		Oid	fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
-		Oid	pk_coll = RIAttCollation(pk_rel, riinfo->pk_attnums[i]);
-		Oid	fk_coll = RIAttCollation(fk_rel, riinfo->fk_attnums[i]);
+		Oid			pk_type = RIAttType(pk_rel, riinfo->pk_attnums[i]);
+		Oid			fk_type = RIAttType(fk_rel, riinfo->fk_attnums[i]);
+		Oid			pk_coll = RIAttCollation(pk_rel, riinfo->pk_attnums[i]);
+		Oid			fk_coll = RIAttCollation(fk_rel, riinfo->fk_attnums[i]);
 
 		quoteOneName(pkattname + 3,
 					 RIAttName(pk_rel, riinfo->pk_attnums[i]));
-
 		quoteOneName(fkattname + 3,
 					 RIAttName(fk_rel, riinfo->fk_attnums[i]));
-
 		ri_GenerateQual(&querybuf, sep,
 						pkattname, pk_type,
 						riinfo->pf_eq_oprs[i],
@@ -2343,7 +2339,6 @@ ri_LoadConstraintInfo(Oid constraintOid)
 	riinfo = (RI_ConstraintInfo *) hash_search(ri_constraint_cache,
 											   &constraintOid,
 											   HASH_ENTER, &found);
-
 	if (!found)
 		riinfo->valid = false;
 	else if (riinfo->valid)
@@ -2391,8 +2386,8 @@ ri_LoadConstraintInfo(Oid constraintOid)
 							   riinfo->confdelsetcols);
 
 	/*
-	 * For temporal FKs, get the operator and aggregate function we need.
-	 * We ask the opclass of the PK element for this.
+	 * For temporal FKs, get the operators and functions we need.
+	 * We ask the opclass of the PK element for these.
 	 * This all gets cached (as does the generated plan),
 	 * so there's no performance issue.
 	 */
@@ -3086,6 +3081,11 @@ ri_KeysEqual(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
 			if (riinfo->temporal && i == riinfo->nkeys - 1)
 				eq_opr = riinfo->period_contained_by_oper;
 
+			/*
+			 * For the FK table, compare with the appropriate equality
+			 * operator.  Changes that compare equal will still satisfy the
+			 * constraint after the update.
+			 */
 			if (!ri_AttributesEqual(eq_opr, RIAttType(rel, attnums[i]),
 									newvalue, oldvalue))
 				return false;
@@ -3198,8 +3198,6 @@ ri_HashCompareOp(Oid eq_opr, Oid typeid)
 		 * moment since that will never be generated for implicit coercions.
 		 */
 		op_input_types(eq_opr, &lefttype, &righttype);
-		if (lefttype != righttype)
-			ereport(NOTICE, (errmsg("%u != %u", lefttype, righttype)));
 		Assert(lefttype == righttype);
 		if (typeid == lefttype)
 			castfunc = InvalidOid;	/* simplest case */
