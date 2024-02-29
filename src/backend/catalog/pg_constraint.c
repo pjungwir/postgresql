@@ -15,6 +15,7 @@
 #include "postgres.h"
 
 #include "access/genam.h"
+#include "access/gist.h"
 #include "access/htup_details.h"
 #include "access/sysattr.h"
 #include "access/table.h"
@@ -1603,6 +1604,48 @@ DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
 	}
 
 	*numfks = numkeys;
+}
+
+/*
+ * FindFkPeriodOpers -
+ *
+ * Looks up the operator oids used for the PERIOD part of a temporal foreign key.
+ * The opclass should be the opclass of that PERIOD element.
+ * Everything else is an output: periodoperoid is the ContainedBy operator for
+ * types matching the PERIOD element.
+ * And aggedperiodoperoid is also a ContainedBy operator,
+ * but one whose rhs is anymultirange.
+ * That way foreign keys can compare fkattr <@ range_agg(pkattr).
+ */
+void
+FindFKPeriodOpers(Oid opclass,
+				  Oid *periodoperoid,
+				  Oid *aggedperiodoperoid)
+{
+	StrategyNumber strat;
+
+	/*
+	 * Look up the ContainedBy operator whose lhs and rhs are the opclass's type.
+	 * We use this to optimize RI checks: if the new value includes all
+	 * of the old value, then we can treat the attribute as if it didn't change,
+	 * and skip the RI check.
+	 */
+	strat = RTContainedByStrategyNumber;
+	GetOperatorFromWellKnownStrategy(opclass,
+									 InvalidOid,
+									 periodoperoid,
+									 &strat);
+
+	/*
+	 * Now look up the ContainedBy operator.
+	 * Its left arg must be the type of the column (or rather of the opclass).
+	 * Its right arg must match the return type of the support proc.
+	 */
+	strat = RTContainedByStrategyNumber;
+	GetOperatorFromWellKnownStrategy(opclass,
+									 ANYMULTIRANGEOID,
+									 aggedperiodoperoid,
+									 &strat);
 }
 
 /*

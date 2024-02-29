@@ -30,6 +30,7 @@
 #include "access/xact.h"
 #include "catalog/pg_collation.h"
 #include "catalog/pg_constraint.h"
+#include "catalog/pg_proc.h"
 #include "commands/trigger.h"
 #include "executor/executor.h"
 #include "executor/spi.h"
@@ -45,6 +46,7 @@
 #include "utils/inval.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
+#include "utils/rangetypes.h"
 #include "utils/rel.h"
 #include "utils/rls.h"
 #include "utils/ruleutils.h"
@@ -115,12 +117,15 @@ typedef struct RI_ConstraintInfo
 	int16		confdelsetcols[RI_MAX_NUMKEYS]; /* attnums of cols to set on
 												 * delete */
 	char		confmatchtype;	/* foreign key's match type */
+	bool		hasperiod;		/* if the foreign key uses PERIOD */
 	int			nkeys;			/* number of key columns */
 	int16		pk_attnums[RI_MAX_NUMKEYS]; /* attnums of referenced cols */
 	int16		fk_attnums[RI_MAX_NUMKEYS]; /* attnums of referencing cols */
 	Oid			pf_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (PK = FK) */
 	Oid			pp_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (PK = PK) */
 	Oid			ff_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (FK = FK) */
+	Oid			period_contained_by_oper;	/* anyrange <@ anyrange */
+	Oid			agged_period_contained_by_oper;	/* anyrange <@ anymultirange */
 	dlist_node	valid_link;		/* Link in list of valid entries */
 } RI_ConstraintInfo;
 
@@ -362,14 +367,41 @@ RI_FKey_check(TriggerData *trigdata)
 		 *		   FOR KEY SHARE OF x
 		 * The type id's for the $ parameters are those of the
 		 * corresponding FK attributes.
+		 *
+		 * But for temporal FKs we need to make sure
+		 * the FK's range is completely covered.
+		 * So we use this query instead:
+		 *  SELECT 1
+		 *	FROM	(
+		 *		SELECT pkperiodatt AS r
+		 *		FROM   [ONLY] pktable x
+		 *		WHERE  pkatt1 = $1 [AND ...]
+		 *		AND    pkperiodatt && $n
+		 *		FOR KEY SHARE OF x
+		 *	) x1
+		 *  HAVING $n <@ range_agg(x1.r)
+		 * Note if FOR KEY SHARE ever allows GROUP BY and HAVING
+		 * we can make this a bit simpler.
 		 * ----------
 		 */
 		initStringInfo(&querybuf);
 		pk_only = pk_rel->rd_rel->relkind == RELKIND_PARTITIONED_TABLE ?
 			"" : "ONLY ";
 		quoteRelationName(pkrelname, pk_rel);
-		appendStringInfo(&querybuf, "SELECT 1 FROM %s%s x",
-						 pk_only, pkrelname);
+		if (riinfo->hasperiod)
+		{
+			quoteOneName(attname,
+					RIAttName(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]));
+
+			appendStringInfo(&querybuf,
+					"SELECT 1 FROM (SELECT %s AS r FROM %s%s x",
+					attname, pk_only, pkrelname);
+		}
+		else
+		{
+			appendStringInfo(&querybuf, "SELECT 1 FROM %s%s x",
+							 pk_only, pkrelname);
+		}
 		querysep = "WHERE";
 		for (int i = 0; i < riinfo->nkeys; i++)
 		{
@@ -387,6 +419,19 @@ RI_FKey_check(TriggerData *trigdata)
 			queryoids[i] = fk_type;
 		}
 		appendStringInfoString(&querybuf, " FOR KEY SHARE OF x");
+		if (riinfo->hasperiod)
+		{
+			Oid		fk_type = RIAttType(fk_rel, riinfo->fk_attnums[riinfo->nkeys - 1]);
+			Oid		agg_rettype = ANYMULTIRANGEOID;
+
+			appendStringInfo(&querybuf, ") x1 HAVING ");
+			sprintf(paramname, "$%d", riinfo->nkeys);
+			ri_GenerateQual(&querybuf, "",
+							paramname, fk_type,
+							riinfo->agged_period_contained_by_oper,
+							"pg_catalog.range_agg", agg_rettype);
+			appendStringInfo(&querybuf, "(x1.r)");
+		}
 
 		/* Prepare and save the plan */
 		qplan = ri_PlanCheck(querybuf.data, riinfo->nkeys, queryoids,
@@ -494,14 +539,40 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 		 *		   FOR KEY SHARE OF x
 		 * The type id's for the $ parameters are those of the
 		 * PK attributes themselves.
+		 * But for temporal FKs we need to make sure
+		 * the FK's range is completely covered.
+		 * So we use this query instead:
+		 *  SELECT 1
+		 *  FROM    (
+		 *	  SELECT pkperiodatt AS r
+		 *	  FROM   [ONLY] pktable x
+		 *	  WHERE  pkatt1 = $1 [AND ...]
+		 *	  AND    pkperiodatt && $n
+		 *	  FOR KEY SHARE OF x
+		 *  ) x1
+		 *  HAVING $n <@ range_agg(x1.r)
+		 * Note if FOR KEY SHARE ever allows GROUP BY and HAVING
+		 * we can make this a bit simpler.
 		 * ----------
 		 */
 		initStringInfo(&querybuf);
 		pk_only = pk_rel->rd_rel->relkind == RELKIND_PARTITIONED_TABLE ?
 			"" : "ONLY ";
 		quoteRelationName(pkrelname, pk_rel);
-		appendStringInfo(&querybuf, "SELECT 1 FROM %s%s x",
-						 pk_only, pkrelname);
+		if (riinfo->hasperiod)
+		{
+			quoteOneName(attname, RIAttName(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]));
+
+			appendStringInfo(&querybuf,
+					"SELECT 1 FROM (SELECT %s AS r FROM %s%s x",
+					attname, pk_only, pkrelname);
+		}
+		else
+		{
+			appendStringInfo(&querybuf, "SELECT 1 FROM %s%s x",
+					pk_only, pkrelname);
+		}
+
 		querysep = "WHERE";
 		for (int i = 0; i < riinfo->nkeys; i++)
 		{
@@ -518,6 +589,19 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 			queryoids[i] = pk_type;
 		}
 		appendStringInfoString(&querybuf, " FOR KEY SHARE OF x");
+		if (riinfo->hasperiod)
+		{
+			Oid		fk_type = RIAttType(fk_rel, riinfo->fk_attnums[riinfo->nkeys - 1]);
+			Oid		agg_rettype = ANYMULTIRANGEOID;
+
+			appendStringInfo(&querybuf, ") x1 HAVING ");
+			sprintf(paramname, "$%d", riinfo->nkeys);
+			ri_GenerateQual(&querybuf, "",
+							paramname, fk_type,
+							riinfo->agged_period_contained_by_oper,
+							"pg_catalog.range_agg", agg_rettype);
+			appendStringInfo(&querybuf, "(x1.r)");
+		}
 
 		/* Prepare and save the plan */
 		qplan = ri_PlanCheck(querybuf.data, riinfo->nkeys, queryoids,
@@ -1209,7 +1293,6 @@ ri_set(TriggerData *trigdata, bool is_set_null, int tgkind)
 		return ri_restrict(trigdata, true);
 	}
 }
-
 
 /*
  * RI_FKey_pk_upd_check_required -
@@ -2168,6 +2251,7 @@ ri_LoadConstraintInfo(Oid constraintOid)
 	riinfo->confupdtype = conForm->confupdtype;
 	riinfo->confdeltype = conForm->confdeltype;
 	riinfo->confmatchtype = conForm->confmatchtype;
+	riinfo->hasperiod = conForm->conperiod;
 
 	DeconstructFkConstraintRow(tup,
 							   &riinfo->nkeys,
@@ -2178,6 +2262,20 @@ ri_LoadConstraintInfo(Oid constraintOid)
 							   riinfo->ff_eq_oprs,
 							   &riinfo->ndelsetcols,
 							   riinfo->confdelsetcols);
+
+	/*
+	 * For temporal FKs, get the operators and functions we need.
+	 * We ask the opclass of the PK element for these.
+	 * This all gets cached (as does the generated plan),
+	 * so there's no performance issue.
+	 */
+	if (riinfo->hasperiod)
+	{
+		Oid	opclass = get_index_column_opclass(conForm->conindid, riinfo->nkeys);
+		FindFKPeriodOpers(opclass,
+						  &riinfo->period_contained_by_oper,
+						  &riinfo->agged_period_contained_by_oper);
+	}
 
 	ReleaseSysCache(tup);
 
@@ -2790,7 +2888,10 @@ ri_HashPreparedPlan(RI_QueryKey *key, SPIPlanPtr plan)
 /*
  * ri_KeysEqual -
  *
- * Check if all key values in OLD and NEW are equal.
+ * Check if all key values in OLD and NEW are "equivalent":
+ * For normal FKs we check for equality.
+ * For temporal FKs we check that the PK side is a superset of its old value,
+ * or the FK side is a subset of its old value.
  *
  * Note: at some point we might wish to redefine this as checking for
  * "IS NOT DISTINCT" rather than "=", that is, allow two nulls to be
@@ -2846,20 +2947,29 @@ ri_KeysEqual(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
 		}
 		else
 		{
+			Oid eq_opr = riinfo->ff_eq_oprs[i];
+
+			/*
+			 * When comparing the PERIOD columns we can skip the check
+			 * whenever the referencing column stayed equal or shrank,
+			 * so test with the contained-by operator instead.
+			 */
+			if (riinfo->hasperiod && i == riinfo->nkeys - 1)
+				eq_opr = riinfo->period_contained_by_oper;
+
 			/*
 			 * For the FK table, compare with the appropriate equality
 			 * operator.  Changes that compare equal will still satisfy the
 			 * constraint after the update.
 			 */
-			if (!ri_AttributesEqual(riinfo->ff_eq_oprs[i], RIAttType(rel, attnums[i]),
-									oldvalue, newvalue))
+			if (!ri_AttributesEqual(eq_opr, RIAttType(rel, attnums[i]),
+									newvalue, oldvalue))
 				return false;
 		}
 	}
 
 	return true;
 }
-
 
 /*
  * ri_AttributesEqual -
