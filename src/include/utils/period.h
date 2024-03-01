@@ -14,6 +14,8 @@
 #ifndef PERIOD_H
 #define PERIOD_H
 
+#include "executor/tuptable.h"
+
 extern Datum period_to_range(TupleTableSlot *slot, int startattno, int endattno, Oid rangetype);
 
 #endif							/* PERIOD_H */
