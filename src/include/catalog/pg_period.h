@@ -19,6 +19,7 @@
 
 #include "catalog/genbki.h"
 #include "catalog/pg_period_d.h"
+#include "nodes/bitmapset.h"
 
 /* ----------------
  *		pg_period definition.  cpp turns this into
