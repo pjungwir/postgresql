@@ -1390,7 +1390,7 @@ RI_FKey_period_cascade_del(PG_FUNCTION_ARGS)
 		/* ----------
 		 * The query string built is
 		 *  DELETE FROM [ONLY] <fktable>
-		 *  FOR PORTION OF $fkatt FROM lower(${n+1}) TO upper(${n+1})
+		 *  FOR PORTION OF $fkatt (${n+1})
 		 *  WHERE $1 = fkatt1 [AND ...]
 		 * The type id's for the $ parameters are those of the
 		 * corresponding PK attributes.
@@ -1402,8 +1402,8 @@ RI_FKey_period_cascade_del(PG_FUNCTION_ARGS)
 		quoteRelationName(fkrelname, fk_rel);
 		quoteOneName(attname, RIAttName(fk_rel, riinfo->fk_attnums[riinfo->nkeys - 1]));
 
-		appendStringInfo(&querybuf, "DELETE FROM %s%s FOR PORTION OF %s FROM pg_catalog.lower($%d) TO pg_catalog.upper($%d)",
-						 fk_only, fkrelname, attname, riinfo->nkeys + 1, riinfo->nkeys + 1);
+		appendStringInfo(&querybuf, "DELETE FROM %s%s FOR PORTION OF %s ($%d)",
+						 fk_only, fkrelname, attname, riinfo->nkeys + 1);
 		querysep = "WHERE";
 		for (int i = 0; i < riinfo->nkeys; i++)
 		{
@@ -1515,7 +1515,7 @@ RI_FKey_period_cascade_upd(PG_FUNCTION_ARGS)
 		/* ----------
 		 * The query string built is
 		 *  UPDATE [ONLY] <fktable>
-		 *		  FOR PORTION OF $fkatt FROM lower(${2n+1}) TO upper(${2n+1})
+		 *		  FOR PORTION OF $fkatt (${2n+1})
 		 *		  SET fkatt1 = $1, [, ...]
 		 *		  WHERE $n = fkatt1 [AND ...]
 		 * The type id's for the $ parameters are those of the
@@ -1531,8 +1531,8 @@ RI_FKey_period_cascade_upd(PG_FUNCTION_ARGS)
 		quoteRelationName(fkrelname, fk_rel);
 		quoteOneName(attname, RIAttName(fk_rel, riinfo->fk_attnums[riinfo->nkeys - 1]));
 
-		appendStringInfo(&querybuf, "UPDATE %s%s FOR PORTION OF %s FROM pg_catalog.lower($%d) TO pg_catalog.upper($%d) SET",
-						 fk_only, fkrelname, attname, 2 * riinfo->nkeys + 1, 2 * riinfo->nkeys + 1);
+		appendStringInfo(&querybuf, "UPDATE %s%s FOR PORTION OF %s ($%d) SET",
+						 fk_only, fkrelname, attname, 2 * riinfo->nkeys + 1);
 
 		querysep = "";
 		qualsep = "WHERE";
@@ -1761,7 +1761,7 @@ tri_set(TriggerData *trigdata, bool is_set_null, int tgkind)
 		/* ----------
 		 * The query string built is
 		 *	UPDATE [ONLY] <fktable>
-		 *			FOR PORTION OF $fkatt FROM lower(${n+1}) TO upper(${n+1})
+		 *			FOR PORTION OF $fkatt (${n+1})
 		 *			SET fkatt1 = {NULL|DEFAULT} [, ...]
 		 *			WHERE $1 = fkatt1 [AND ...]
 		 * The type id's for the $ parameters are those of the
@@ -1775,8 +1775,8 @@ tri_set(TriggerData *trigdata, bool is_set_null, int tgkind)
 		quoteRelationName(fkrelname, fk_rel);
 		quoteOneName(attname, RIAttName(fk_rel, riinfo->fk_attnums[riinfo->nkeys - 1]));
 
-		appendStringInfo(&querybuf, "UPDATE %s%s FOR PORTION OF %s FROM pg_catalog.lower($%d) TO pg_catalog.upper($%d) SET",
-						 fk_only, fkrelname, attname, riinfo->nkeys + 1, riinfo->nkeys + 1);
+		appendStringInfo(&querybuf, "UPDATE %s%s FOR PORTION OF %s ($%d) SET",
+						 fk_only, fkrelname, attname, riinfo->nkeys + 1);
 
 		/*
 		 * Add assignment clauses
