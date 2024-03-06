@@ -1137,21 +1137,21 @@ ALTER TABLE temporal_fk_rng2rng
 		ON DELETE CASCADE ON UPDATE CASCADE;
 -- leftovers on both sides:
 UPDATE temporal_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id = '[7,7]' WHERE id = '[6,6]';
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id 
 -----------+---------------------------------------------------------+-----------
- [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [7,8)
  [100,101) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [6,7)
+ [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [7,8)
  [100,101) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [6,7)
 (3 rows)
 
 -- non-FPO update:
 UPDATE temporal_rng SET id = '[7,7]' WHERE id = '[6,6]';
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id 
 -----------+---------------------------------------------------------+-----------
- [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [7,8)
  [100,101) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [7,8)
+ [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [7,8)
  [100,101) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [7,8)
 (3 rows)
 
@@ -1160,7 +1160,7 @@ INSERT INTO temporal_rng VALUES ('[8,8]', tsrange('2018-01-01', '2020-01-01'));
 INSERT INTO temporal_rng VALUES ('[8,8]', tsrange('2020-01-01', '2021-01-01'));
 INSERT INTO temporal_fk_rng2rng VALUES ('[200,200]', tsrange('2018-01-01', '2021-01-01'), '[8,8]');
 UPDATE temporal_rng SET id = '[9,9]' WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::timestamp;
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,200]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id 
 -----------+---------------------------------------------------------+-----------
  [200,201) | ["Mon Jan 01 00:00:00 2018","Wed Jan 01 00:00:00 2020") | [9,10)
@@ -1175,7 +1175,7 @@ INSERT INTO temporal_rng VALUES ('[6,6]', tsrange('2018-01-01', '2021-01-01'));
 INSERT INTO temporal_fk_rng2rng VALUES ('[100,100]', tsrange('2018-01-01', '2021-01-01'), '[6,6]');
 -- leftovers on both sides:
 DELETE FROM temporal_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[6,6]';
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id 
 -----------+---------------------------------------------------------+-----------
  [100,101) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [6,7)
@@ -1184,7 +1184,7 @@ SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]';
 
 -- non-FPO delete:
 DELETE FROM temporal_rng WHERE id = '[6,6]';
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
  id | valid_at | parent_id 
 ----+----------+-----------
 (0 rows)
@@ -1194,7 +1194,7 @@ INSERT INTO temporal_rng VALUES ('[8,8]', tsrange('2018-01-01', '2020-01-01'));
 INSERT INTO temporal_rng VALUES ('[8,8]', tsrange('2020-01-01', '2021-01-01'));
 INSERT INTO temporal_fk_rng2rng VALUES ('[200,200]', tsrange('2018-01-01', '2021-01-01'), '[8,8]');
 DELETE FROM temporal_rng WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::timestamp;
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,200]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id 
 -----------+---------------------------------------------------------+-----------
  [200,201) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [8,9)
@@ -1214,21 +1214,21 @@ ALTER TABLE temporal_fk_rng2rng
 		ON DELETE SET NULL ON UPDATE SET NULL;
 -- leftovers on both sides:
 UPDATE temporal_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id = '[7,7]' WHERE id = '[6,6]';
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id 
 -----------+---------------------------------------------------------+-----------
- [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | 
  [100,101) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [6,7)
+ [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | 
  [100,101) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [6,7)
 (3 rows)
 
 -- non-FPO update:
 UPDATE temporal_rng SET id = '[7,7]' WHERE id = '[6,6]';
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id 
 -----------+---------------------------------------------------------+-----------
- [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | 
  [100,101) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | 
+ [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | 
  [100,101) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | 
 (3 rows)
 
@@ -1237,7 +1237,7 @@ INSERT INTO temporal_rng VALUES ('[8,8]', tsrange('2018-01-01', '2020-01-01'));
 INSERT INTO temporal_rng VALUES ('[8,8]', tsrange('2020-01-01', '2021-01-01'));
 INSERT INTO temporal_fk_rng2rng VALUES ('[200,200]', tsrange('2018-01-01', '2021-01-01'), '[8,8]');
 UPDATE temporal_rng SET id = '[9,9]' WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::timestamp;
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,200]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id 
 -----------+---------------------------------------------------------+-----------
  [200,201) | ["Mon Jan 01 00:00:00 2018","Wed Jan 01 00:00:00 2020") | 
@@ -1252,21 +1252,21 @@ INSERT INTO temporal_rng VALUES ('[6,6]', tsrange('2018-01-01', '2021-01-01'));
 INSERT INTO temporal_fk_rng2rng VALUES ('[100,100]', tsrange('2018-01-01', '2021-01-01'), '[6,6]');
 -- leftovers on both sides:
 DELETE FROM temporal_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[6,6]';
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id 
 -----------+---------------------------------------------------------+-----------
- [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | 
  [100,101) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [6,7)
+ [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | 
  [100,101) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [6,7)
 (3 rows)
 
 -- non-FPO delete:
 DELETE FROM temporal_rng WHERE id = '[6,6]';
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id 
 -----------+---------------------------------------------------------+-----------
- [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | 
  [100,101) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | 
+ [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | 
  [100,101) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | 
 (3 rows)
 
@@ -1275,7 +1275,7 @@ INSERT INTO temporal_rng VALUES ('[8,8]', tsrange('2018-01-01', '2020-01-01'));
 INSERT INTO temporal_rng VALUES ('[8,8]', tsrange('2020-01-01', '2021-01-01'));
 INSERT INTO temporal_fk_rng2rng VALUES ('[200,200]', tsrange('2018-01-01', '2021-01-01'), '[8,8]');
 DELETE FROM temporal_rng WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::timestamp;
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,200]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id 
 -----------+---------------------------------------------------------+-----------
  [200,201) | ["Mon Jan 01 00:00:00 2018","Wed Jan 01 00:00:00 2020") | 
@@ -1298,21 +1298,21 @@ ALTER TABLE temporal_fk_rng2rng
 		ON DELETE SET DEFAULT ON UPDATE SET DEFAULT;
 -- leftovers on both sides:
 UPDATE temporal_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id = '[7,7]' WHERE id = '[6,6]';
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id 
 -----------+---------------------------------------------------------+-----------
- [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)
  [100,101) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [6,7)
+ [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)
  [100,101) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [6,7)
 (3 rows)
 
 -- non-FPO update:
 UPDATE temporal_rng SET id = '[7,7]' WHERE id = '[6,6]';
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id 
 -----------+---------------------------------------------------------+-----------
- [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)
  [100,101) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [-1,0)
+ [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)
  [100,101) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [-1,0)
 (3 rows)
 
@@ -1321,7 +1321,7 @@ INSERT INTO temporal_rng VALUES ('[8,8]', tsrange('2018-01-01', '2020-01-01'));
 INSERT INTO temporal_rng VALUES ('[8,8]', tsrange('2020-01-01', '2021-01-01'));
 INSERT INTO temporal_fk_rng2rng VALUES ('[200,200]', tsrange('2018-01-01', '2021-01-01'), '[8,8]');
 UPDATE temporal_rng SET id = '[9,9]' WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::timestamp;
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,200]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id 
 -----------+---------------------------------------------------------+-----------
  [200,201) | ["Mon Jan 01 00:00:00 2018","Wed Jan 01 00:00:00 2020") | [-1,0)
@@ -1336,21 +1336,21 @@ INSERT INTO temporal_rng VALUES ('[6,6]', tsrange('2018-01-01', '2021-01-01'));
 INSERT INTO temporal_fk_rng2rng VALUES ('[100,100]', tsrange('2018-01-01', '2021-01-01'), '[6,6]');
 -- leftovers on both sides:
 DELETE FROM temporal_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[6,6]';
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id 
 -----------+---------------------------------------------------------+-----------
- [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)
  [100,101) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [6,7)
+ [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)
  [100,101) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [6,7)
 (3 rows)
 
 -- non-FPO update:
 DELETE FROM temporal_rng WHERE id = '[6,6]';
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id 
 -----------+---------------------------------------------------------+-----------
- [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)
  [100,101) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [-1,0)
+ [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)
  [100,101) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [-1,0)
 (3 rows)
 
@@ -1359,7 +1359,7 @@ INSERT INTO temporal_rng VALUES ('[8,8]', tsrange('2018-01-01', '2020-01-01'));
 INSERT INTO temporal_rng VALUES ('[8,8]', tsrange('2020-01-01', '2021-01-01'));
 INSERT INTO temporal_fk_rng2rng VALUES ('[200,200]', tsrange('2018-01-01', '2021-01-01'), '[8,8]');
 DELETE FROM temporal_rng WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::timestamp;
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,200]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id 
 -----------+---------------------------------------------------------+-----------
  [200,201) | ["Mon Jan 01 00:00:00 2018","Wed Jan 01 00:00:00 2020") | [-1,0)
@@ -1380,21 +1380,21 @@ ALTER TABLE temporal_fk2_rng2rng
 		ON DELETE CASCADE ON UPDATE CASCADE;
 -- leftovers on both sides:
 UPDATE temporal_rng2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id1 = '[7,7]' WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id1 | parent_id2 
 -----------+---------------------------------------------------------+------------+------------
- [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [7,8)      | [6,7)
  [100,101) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [6,7)      | [6,7)
+ [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [7,8)      | [6,7)
  [100,101) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [6,7)      | [6,7)
 (3 rows)
 
 -- non-FPO update:
 UPDATE temporal_rng2 SET id1 = '[7,7]' WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id1 | parent_id2 
 -----------+---------------------------------------------------------+------------+------------
- [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [7,8)      | [6,7)
  [100,101) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [7,8)      | [6,7)
+ [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [7,8)      | [6,7)
  [100,101) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [7,8)      | [6,7)
 (3 rows)
 
@@ -1403,7 +1403,7 @@ INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2018-01-01', '2020-
 INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2020-01-01', '2021-01-01'));
 INSERT INTO temporal_fk2_rng2rng VALUES ('[200,200]', tsrange('2018-01-01', '2021-01-01'), '[8,8]', '[8,8]');
 UPDATE temporal_rng2 SET id1 = '[9,9]' WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::timestamp;
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id1 | parent_id2 
 -----------+---------------------------------------------------------+------------+------------
  [200,201) | ["Mon Jan 01 00:00:00 2018","Wed Jan 01 00:00:00 2020") | [9,10)     | [8,9)
@@ -1418,7 +1418,7 @@ INSERT INTO temporal_rng2 VALUES ('[6,6]', '[6,6]', tsrange('2018-01-01', '2021-
 INSERT INTO temporal_fk2_rng2rng VALUES ('[100,100]', tsrange('2018-01-01', '2021-01-01'), '[6,6]', '[6,6]');
 -- leftovers on both sides:
 DELETE FROM temporal_rng2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id1 | parent_id2 
 -----------+---------------------------------------------------------+------------+------------
  [100,101) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [6,7)      | [6,7)
@@ -1427,7 +1427,7 @@ SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
 
 -- non-FPO delete:
 DELETE FROM temporal_rng2 WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
  id | valid_at | parent_id1 | parent_id2 
 ----+----------+------------+------------
 (0 rows)
@@ -1437,7 +1437,7 @@ INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2018-01-01', '2020-
 INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2020-01-01', '2021-01-01'));
 INSERT INTO temporal_fk2_rng2rng VALUES ('[200,200]', tsrange('2018-01-01', '2021-01-01'), '[8,8]', '[8,8]');
 DELETE FROM temporal_rng2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::timestamp;
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id1 | parent_id2 
 -----------+---------------------------------------------------------+------------+------------
  [200,201) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [8,9)      | [8,9)
@@ -1457,21 +1457,21 @@ ALTER TABLE temporal_fk2_rng2rng
 		ON DELETE SET NULL ON UPDATE SET NULL;
 -- leftovers on both sides:
 UPDATE temporal_rng2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id1 = '[7,7]' WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id1 | parent_id2 
 -----------+---------------------------------------------------------+------------+------------
- [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") |            | 
  [100,101) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [6,7)      | [6,7)
+ [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") |            | 
  [100,101) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [6,7)      | [6,7)
 (3 rows)
 
 -- non-FPO update:
 UPDATE temporal_rng2 SET id1 = '[7,7]' WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id1 | parent_id2 
 -----------+---------------------------------------------------------+------------+------------
- [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") |            | 
  [100,101) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") |            | 
+ [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") |            | 
  [100,101) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") |            | 
 (3 rows)
 
@@ -1480,7 +1480,7 @@ INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2018-01-01', '2020-
 INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2020-01-01', '2021-01-01'));
 INSERT INTO temporal_fk2_rng2rng VALUES ('[200,200]', tsrange('2018-01-01', '2021-01-01'), '[8,8]', '[8,8]');
 UPDATE temporal_rng2 SET id1 = '[9,9]' WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::timestamp;
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id1 | parent_id2 
 -----------+---------------------------------------------------------+------------+------------
  [200,201) | ["Mon Jan 01 00:00:00 2018","Wed Jan 01 00:00:00 2020") |            | 
@@ -1495,21 +1495,21 @@ INSERT INTO temporal_rng2 VALUES ('[6,6]', '[6,6]', tsrange('2018-01-01', '2021-
 INSERT INTO temporal_fk2_rng2rng VALUES ('[100,100]', tsrange('2018-01-01', '2021-01-01'), '[6,6]', '[6,6]');
 -- leftovers on both sides:
 DELETE FROM temporal_rng2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id1 | parent_id2 
 -----------+---------------------------------------------------------+------------+------------
- [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") |            | 
  [100,101) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [6,7)      | [6,7)
+ [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") |            | 
  [100,101) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [6,7)      | [6,7)
 (3 rows)
 
 -- non-FPO delete:
 DELETE FROM temporal_rng2 WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id1 | parent_id2 
 -----------+---------------------------------------------------------+------------+------------
- [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") |            | 
  [100,101) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") |            | 
+ [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") |            | 
  [100,101) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") |            | 
 (3 rows)
 
@@ -1518,7 +1518,7 @@ INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2018-01-01', '2020-
 INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2020-01-01', '2021-01-01'));
 INSERT INTO temporal_fk2_rng2rng VALUES ('[200,200]', tsrange('2018-01-01', '2021-01-01'), '[8,8]', '[8,8]');
 DELETE FROM temporal_rng2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::timestamp;
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id1 | parent_id2 
 -----------+---------------------------------------------------------+------------+------------
  [200,201) | ["Mon Jan 01 00:00:00 2018","Wed Jan 01 00:00:00 2020") |            | 
@@ -1548,21 +1548,21 @@ ALTER TABLE temporal_fk2_rng2rng
 		ON DELETE SET NULL (parent_id1) ON UPDATE SET NULL;
 -- leftovers on both sides:
 DELETE FROM temporal_rng2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id1 | parent_id2 
 -----------+---------------------------------------------------------+------------+------------
- [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") |            | [6,7)
  [100,101) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [6,7)      | [6,7)
+ [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") |            | [6,7)
  [100,101) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [6,7)      | [6,7)
 (3 rows)
 
 -- non-FPO delete:
 DELETE FROM temporal_rng2 WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id1 | parent_id2 
 -----------+---------------------------------------------------------+------------+------------
- [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") |            | [6,7)
  [100,101) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") |            | [6,7)
+ [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") |            | [6,7)
  [100,101) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") |            | [6,7)
 (3 rows)
 
@@ -1571,7 +1571,7 @@ INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2018-01-01', '2020-
 INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2020-01-01', '2021-01-01'));
 INSERT INTO temporal_fk2_rng2rng VALUES ('[200,200]', tsrange('2018-01-01', '2021-01-01'), '[8,8]', '[8,8]');
 DELETE FROM temporal_rng2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::timestamp;
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id1 | parent_id2 
 -----------+---------------------------------------------------------+------------+------------
  [200,201) | ["Mon Jan 01 00:00:00 2018","Wed Jan 01 00:00:00 2020") |            | [8,9)
@@ -1595,21 +1595,21 @@ ALTER TABLE temporal_fk2_rng2rng
 		ON DELETE SET DEFAULT ON UPDATE SET DEFAULT;
 -- leftovers on both sides:
 UPDATE temporal_rng2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id1 = '[7,7]', id2 = '[7,7]' WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id1 | parent_id2 
 -----------+---------------------------------------------------------+------------+------------
- [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)     | [-1,0)
  [100,101) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [6,7)      | [6,7)
+ [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)     | [-1,0)
  [100,101) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [6,7)      | [6,7)
 (3 rows)
 
 -- non-FPO update:
 UPDATE temporal_rng2 SET id1 = '[7,7]', id2 = '[7,7]' WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id1 | parent_id2 
 -----------+---------------------------------------------------------+------------+------------
- [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)     | [-1,0)
  [100,101) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [-1,0)     | [-1,0)
+ [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)     | [-1,0)
  [100,101) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [-1,0)     | [-1,0)
 (3 rows)
 
@@ -1618,7 +1618,7 @@ INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2018-01-01', '2020-
 INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2020-01-01', '2021-01-01'));
 INSERT INTO temporal_fk2_rng2rng VALUES ('[200,200]', tsrange('2018-01-01', '2021-01-01'), '[8,8]', '[8,8]');
 UPDATE temporal_rng2 SET id1 = '[9,9]', id2 = '[9,9]' WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::timestamp;
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id1 | parent_id2 
 -----------+---------------------------------------------------------+------------+------------
  [200,201) | ["Mon Jan 01 00:00:00 2018","Wed Jan 01 00:00:00 2020") | [-1,0)     | [-1,0)
@@ -1633,21 +1633,21 @@ INSERT INTO temporal_rng2 VALUES ('[6,6]', '[6,6]', tsrange('2018-01-01', '2021-
 INSERT INTO temporal_fk2_rng2rng VALUES ('[100,100]', tsrange('2018-01-01', '2021-01-01'), '[6,6]', '[6,6]');
 -- leftovers on both sides:
 DELETE FROM temporal_rng2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id1 | parent_id2 
 -----------+---------------------------------------------------------+------------+------------
- [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)     | [-1,0)
  [100,101) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [6,7)      | [6,7)
+ [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)     | [-1,0)
  [100,101) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [6,7)      | [6,7)
 (3 rows)
 
 -- non-FPO update:
 DELETE FROM temporal_rng2 WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id1 | parent_id2 
 -----------+---------------------------------------------------------+------------+------------
- [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)     | [-1,0)
  [100,101) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [-1,0)     | [-1,0)
+ [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)     | [-1,0)
  [100,101) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [-1,0)     | [-1,0)
 (3 rows)
 
@@ -1656,7 +1656,7 @@ INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2018-01-01', '2020-
 INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2020-01-01', '2021-01-01'));
 INSERT INTO temporal_fk2_rng2rng VALUES ('[200,200]', tsrange('2018-01-01', '2021-01-01'), '[8,8]', '[8,8]');
 DELETE FROM temporal_rng2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::timestamp;
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id1 | parent_id2 
 -----------+---------------------------------------------------------+------------+------------
  [200,201) | ["Mon Jan 01 00:00:00 2018","Wed Jan 01 00:00:00 2020") | [-1,0)     | [-1,0)
@@ -1689,21 +1689,21 @@ ALTER TABLE temporal_fk2_rng2rng
 		ON DELETE SET DEFAULT (parent_id1) ON UPDATE SET DEFAULT;
 -- leftovers on both sides:
 DELETE FROM temporal_rng2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id1 | parent_id2 
 -----------+---------------------------------------------------------+------------+------------
- [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)     | [6,7)
  [100,101) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [6,7)      | [6,7)
+ [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)     | [6,7)
  [100,101) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [6,7)      | [6,7)
 (3 rows)
 
 -- non-FPO update:
 DELETE FROM temporal_rng2 WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id1 | parent_id2 
 -----------+---------------------------------------------------------+------------+------------
- [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)     | [6,7)
  [100,101) | ["Mon Jan 01 00:00:00 2018","Tue Jan 01 00:00:00 2019") | [-1,0)     | [6,7)
+ [100,101) | ["Tue Jan 01 00:00:00 2019","Wed Jan 01 00:00:00 2020") | [-1,0)     | [6,7)
  [100,101) | ["Wed Jan 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") | [-1,0)     | [6,7)
 (3 rows)
 
@@ -1713,7 +1713,7 @@ INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2020-01-01', '2021-
 INSERT INTO temporal_rng2 VALUES ('[-1,-1]', '[8,8]', tsrange(null, null));
 INSERT INTO temporal_fk2_rng2rng VALUES ('[200,200]', tsrange('2018-01-01', '2021-01-01'), '[8,8]', '[8,8]');
 DELETE FROM temporal_rng2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::timestamp;
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     |                        valid_at                         | parent_id1 | parent_id2 
 -----------+---------------------------------------------------------+------------+------------
  [200,201) | ["Mon Jan 01 00:00:00 2018","Wed Jan 01 00:00:00 2020") | [-1,0)     | [8,9)
