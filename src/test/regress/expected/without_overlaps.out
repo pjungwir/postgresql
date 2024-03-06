@@ -89,6 +89,76 @@ SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'te
  CREATE UNIQUE INDEX temporal_rng2_pk ON temporal_rng2 USING gist (id1, id2, valid_at)
 (1 row)
 
+-- PK with one column plus a PERIOD:
+CREATE TABLE temporal_per (
+  id int4range,
+  valid_from date,
+  valid_til date,
+  PERIOD FOR valid_at (valid_from, valid_til),
+  CONSTRAINT temporal_per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+\d temporal_per
+               Table "public.temporal_per"
+   Column   |   Type    | Collation | Nullable | Default 
+------------+-----------+-----------+----------+---------
+ id         | int4range |           | not null | 
+ valid_from | date      |           |          | 
+ valid_til  | date      |           |          | 
+Periods:
+    valid_at (valid_from, valid_til)
+Indexes:
+    "temporal_per_pk" PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "temporal_per_valid_at_check" CHECK (valid_from < valid_til)
+
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_per_pk';
+            pg_get_constraintdef             
+---------------------------------------------
+ PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+(1 row)
+
+SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_per_pk';
+                                pg_get_indexdef                                
+-------------------------------------------------------------------------------
+ CREATE UNIQUE INDEX temporal_per_pk ON temporal_per USING gist (id, valid_at)
+(1 row)
+
+-- PK with two columns plus a PERIOD:
+CREATE TABLE temporal_per2 (
+  id1 int4range,
+  id2 int4range,
+  valid_from date,
+  valid_til date,
+  PERIOD FOR valid_at (valid_from, valid_til),
+  CONSTRAINT temporal_per2_pk PRIMARY KEY (id1, id2, valid_at WITHOUT OVERLAPS)
+);
+\d temporal_per2
+              Table "public.temporal_per2"
+   Column   |   Type    | Collation | Nullable | Default 
+------------+-----------+-----------+----------+---------
+ id1        | int4range |           | not null | 
+ id2        | int4range |           | not null | 
+ valid_from | date      |           |          | 
+ valid_til  | date      |           |          | 
+Periods:
+    valid_at (valid_from, valid_til)
+Indexes:
+    "temporal_per2_pk" PRIMARY KEY (id1, id2, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "temporal_per2_valid_at_check" CHECK (valid_from < valid_til)
+
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_per2_pk';
+               pg_get_constraintdef                
+---------------------------------------------------
+ PRIMARY KEY (id1, id2, valid_at WITHOUT OVERLAPS)
+(1 row)
+
+SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_per2_pk';
+                                    pg_get_indexdef                                    
+---------------------------------------------------------------------------------------
+ CREATE UNIQUE INDEX temporal_per2_pk ON temporal_per2 USING gist (id1, id2, valid_at)
+(1 row)
+
 -- PK with a custom range type:
 CREATE TYPE textrange2 AS range (subtype=text, collation="C");
 CREATE TABLE temporal_rng3 (
@@ -224,6 +294,78 @@ SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'te
 (1 row)
 
 DROP TABLE temporal_rng3;
+-- UNIQUE with one column plus a PERIOD:
+CREATE TABLE temporal_per3 (
+  id int4range,
+  valid_from date,
+  valid_til date,
+  PERIOD FOR valid_at (valid_from, valid_til),
+  CONSTRAINT temporal_per3_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
+);
+\d temporal_per3
+              Table "public.temporal_per3"
+   Column   |   Type    | Collation | Nullable | Default 
+------------+-----------+-----------+----------+---------
+ id         | int4range |           |          | 
+ valid_from | date      |           |          | 
+ valid_til  | date      |           |          | 
+Periods:
+    valid_at (valid_from, valid_til)
+Indexes:
+    "temporal_per3_uq" UNIQUE (id, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "temporal_per3_valid_at_check" CHECK (valid_from < valid_til)
+
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_per3_uq';
+          pg_get_constraintdef          
+----------------------------------------
+ UNIQUE (id, valid_at WITHOUT OVERLAPS)
+(1 row)
+
+SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_per3_uq';
+                                 pg_get_indexdef                                 
+---------------------------------------------------------------------------------
+ CREATE UNIQUE INDEX temporal_per3_uq ON temporal_per3 USING gist (id, valid_at)
+(1 row)
+
+DROP TABLE temporal_per3;
+-- UNIQUE with two columns plus a PERIOD:
+CREATE TABLE temporal_per3 (
+  id1 int4range,
+  id2 int4range,
+  valid_from date,
+  valid_til date,
+  PERIOD FOR valid_at (valid_from, valid_til),
+  CONSTRAINT temporal_per3_uq UNIQUE (id1, id2, valid_at WITHOUT OVERLAPS)
+);
+\d temporal_per3
+              Table "public.temporal_per3"
+   Column   |   Type    | Collation | Nullable | Default 
+------------+-----------+-----------+----------+---------
+ id1        | int4range |           |          | 
+ id2        | int4range |           |          | 
+ valid_from | date      |           |          | 
+ valid_til  | date      |           |          | 
+Periods:
+    valid_at (valid_from, valid_til)
+Indexes:
+    "temporal_per3_uq" UNIQUE (id1, id2, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "temporal_per3_valid_at_check" CHECK (valid_from < valid_til)
+
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_per3_uq';
+             pg_get_constraintdef             
+----------------------------------------------
+ UNIQUE (id1, id2, valid_at WITHOUT OVERLAPS)
+(1 row)
+
+SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_per3_uq';
+                                    pg_get_indexdef                                    
+---------------------------------------------------------------------------------------
+ CREATE UNIQUE INDEX temporal_per3_uq ON temporal_per3 USING gist (id1, id2, valid_at)
+(1 row)
+
+DROP TABLE temporal_per3;
 -- UNIQUE with a custom range type:
 CREATE TYPE textrange2 AS range (subtype=text, collation="C");
 CREATE TABLE temporal_rng3 (
@@ -301,6 +443,106 @@ ALTER TABLE temporal3
 	ADD COLUMN valid_at daterange,
 	ADD CONSTRAINT temporal3_uq
 	UNIQUE (id, valid_at WITHOUT OVERLAPS);
+DROP TABLE temporal3;
+-- PRIMARY KEY with PERIOD already there
+CREATE TABLE temporal3 (
+  id int4range,
+  valid_from date,
+  valid_til date,
+  PERIOD FOR valid_at (valid_from, valid_til)
+);
+ALTER TABLE temporal3
+  ADD CONSTRAINT temporal3_pk
+  PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+\d temporal3
+                Table "public.temporal3"
+   Column   |   Type    | Collation | Nullable | Default 
+------------+-----------+-----------+----------+---------
+ id         | int4range |           | not null | 
+ valid_from | date      |           |          | 
+ valid_til  | date      |           |          | 
+Periods:
+    valid_at (valid_from, valid_til)
+Indexes:
+    "temporal3_pk" PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "temporal3_valid_at_check" CHECK (valid_from < valid_til)
+
+DROP TABLE temporal3;
+-- PRIMARY KEY with PERIOD too
+CREATE TABLE temporal3 (
+  id int4range,
+  valid_from date,
+  valid_til date
+);
+ALTER TABLE temporal3
+  ADD PERIOD FOR valid_at (valid_from, valid_til),
+  ADD CONSTRAINT temporal3_pk
+  PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+\d temporal3
+                Table "public.temporal3"
+   Column   |   Type    | Collation | Nullable | Default 
+------------+-----------+-----------+----------+---------
+ id         | int4range |           | not null | 
+ valid_from | date      |           |          | 
+ valid_til  | date      |           |          | 
+Periods:
+    valid_at (valid_from, valid_til)
+Indexes:
+    "temporal3_pk" PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "temporal3_valid_at_check" CHECK (valid_from < valid_til)
+
+DROP TABLE temporal3;
+-- UNIQUE with PERIOD already there
+CREATE TABLE temporal3 (
+  id int4range,
+  valid_from date,
+  valid_til date,
+  PERIOD FOR valid_at (valid_from, valid_til)
+);
+ALTER TABLE temporal3
+  ADD CONSTRAINT temporal3_uq
+  UNIQUE (id, valid_at WITHOUT OVERLAPS);
+\d temporal3
+                Table "public.temporal3"
+   Column   |   Type    | Collation | Nullable | Default 
+------------+-----------+-----------+----------+---------
+ id         | int4range |           |          | 
+ valid_from | date      |           |          | 
+ valid_til  | date      |           |          | 
+Periods:
+    valid_at (valid_from, valid_til)
+Indexes:
+    "temporal3_uq" UNIQUE (id, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "temporal3_valid_at_check" CHECK (valid_from < valid_til)
+
+DROP TABLE temporal3;
+-- UNIQUE with PERIOD too
+CREATE TABLE temporal3 (
+  id int4range,
+  valid_from date,
+  valid_til date
+);
+ALTER TABLE temporal3
+  ADD PERIOD FOR valid_at (valid_from, valid_til),
+  ADD CONSTRAINT temporal3_uq
+  UNIQUE (id, valid_at WITHOUT OVERLAPS);
+\d temporal3
+                Table "public.temporal3"
+   Column   |   Type    | Collation | Nullable | Default 
+------------+-----------+-----------+----------+---------
+ id         | int4range |           |          | 
+ valid_from | date      |           |          | 
+ valid_til  | date      |           |          | 
+Periods:
+    valid_at (valid_from, valid_til)
+Indexes:
+    "temporal3_uq" UNIQUE (id, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "temporal3_valid_at_check" CHECK (valid_from < valid_til)
+
 DROP TABLE temporal3;
 --
 -- test PK inserts
