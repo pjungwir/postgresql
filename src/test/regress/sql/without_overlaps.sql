@@ -832,16 +832,16 @@ ALTER TABLE temporal_fk_rng2rng
 		ON DELETE CASCADE ON UPDATE CASCADE;
 -- leftovers on both sides:
 UPDATE temporal_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id = '[7,7]' WHERE id = '[6,6]';
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- non-FPO update:
 UPDATE temporal_rng SET id = '[7,7]' WHERE id = '[6,6]';
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- FK across two referenced rows:
 INSERT INTO temporal_rng VALUES ('[8,8]', daterange('2018-01-01', '2020-01-01'));
 INSERT INTO temporal_rng VALUES ('[8,8]', daterange('2020-01-01', '2021-01-01'));
 INSERT INTO temporal_fk_rng2rng VALUES ('[200,200]', daterange('2018-01-01', '2021-01-01'), '[8,8]');
 UPDATE temporal_rng SET id = '[9,9]' WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::date;
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,200]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
 -- clean up
 DELETE FROM temporal_fk_rng2rng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_rng WHERE id IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
@@ -851,16 +851,16 @@ INSERT INTO temporal_rng VALUES ('[6,6]', daterange('2018-01-01', '2021-01-01'))
 INSERT INTO temporal_fk_rng2rng VALUES ('[100,100]', daterange('2018-01-01', '2021-01-01'), '[6,6]');
 -- leftovers on both sides:
 DELETE FROM temporal_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[6,6]';
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- non-FPO delete:
 DELETE FROM temporal_rng WHERE id = '[6,6]';
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- FK across two referenced rows:
 INSERT INTO temporal_rng VALUES ('[8,8]', daterange('2018-01-01', '2020-01-01'));
 INSERT INTO temporal_rng VALUES ('[8,8]', daterange('2020-01-01', '2021-01-01'));
 INSERT INTO temporal_fk_rng2rng VALUES ('[200,200]', daterange('2018-01-01', '2021-01-01'), '[8,8]');
 DELETE FROM temporal_rng WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::date;
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,200]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
 -- clean up
 DELETE FROM temporal_fk_rng2rng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_rng WHERE id IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
@@ -876,16 +876,16 @@ ALTER TABLE temporal_fk_rng2rng
 		ON DELETE SET NULL ON UPDATE SET NULL;
 -- leftovers on both sides:
 UPDATE temporal_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id = '[7,7]' WHERE id = '[6,6]';
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- non-FPO update:
 UPDATE temporal_rng SET id = '[7,7]' WHERE id = '[6,6]';
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- FK across two referenced rows:
 INSERT INTO temporal_rng VALUES ('[8,8]', daterange('2018-01-01', '2020-01-01'));
 INSERT INTO temporal_rng VALUES ('[8,8]', daterange('2020-01-01', '2021-01-01'));
 INSERT INTO temporal_fk_rng2rng VALUES ('[200,200]', daterange('2018-01-01', '2021-01-01'), '[8,8]');
 UPDATE temporal_rng SET id = '[9,9]' WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::date;
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,200]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
 -- clean up
 DELETE FROM temporal_fk_rng2rng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_rng WHERE id IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
@@ -895,16 +895,16 @@ INSERT INTO temporal_rng VALUES ('[6,6]', daterange('2018-01-01', '2021-01-01'))
 INSERT INTO temporal_fk_rng2rng VALUES ('[100,100]', daterange('2018-01-01', '2021-01-01'), '[6,6]');
 -- leftovers on both sides:
 DELETE FROM temporal_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[6,6]';
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- non-FPO delete:
 DELETE FROM temporal_rng WHERE id = '[6,6]';
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- FK across two referenced rows:
 INSERT INTO temporal_rng VALUES ('[8,8]', daterange('2018-01-01', '2020-01-01'));
 INSERT INTO temporal_rng VALUES ('[8,8]', daterange('2020-01-01', '2021-01-01'));
 INSERT INTO temporal_fk_rng2rng VALUES ('[200,200]', daterange('2018-01-01', '2021-01-01'), '[8,8]');
 DELETE FROM temporal_rng WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::date;
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,200]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
 -- clean up
 DELETE FROM temporal_fk_rng2rng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_rng WHERE id IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
@@ -922,16 +922,16 @@ ALTER TABLE temporal_fk_rng2rng
 		ON DELETE SET DEFAULT ON UPDATE SET DEFAULT;
 -- leftovers on both sides:
 UPDATE temporal_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id = '[7,7]' WHERE id = '[6,6]';
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- non-FPO update:
 UPDATE temporal_rng SET id = '[7,7]' WHERE id = '[6,6]';
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- FK across two referenced rows:
 INSERT INTO temporal_rng VALUES ('[8,8]', daterange('2018-01-01', '2020-01-01'));
 INSERT INTO temporal_rng VALUES ('[8,8]', daterange('2020-01-01', '2021-01-01'));
 INSERT INTO temporal_fk_rng2rng VALUES ('[200,200]', daterange('2018-01-01', '2021-01-01'), '[8,8]');
 UPDATE temporal_rng SET id = '[9,9]' WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::date;
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,200]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
 -- clean up
 DELETE FROM temporal_fk_rng2rng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_rng WHERE id IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
@@ -941,23 +941,23 @@ INSERT INTO temporal_rng VALUES ('[6,6]', daterange('2018-01-01', '2021-01-01'))
 INSERT INTO temporal_fk_rng2rng VALUES ('[100,100]', daterange('2018-01-01', '2021-01-01'), '[6,6]');
 -- leftovers on both sides:
 DELETE FROM temporal_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[6,6]';
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- non-FPO update:
 DELETE FROM temporal_rng WHERE id = '[6,6]';
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- FK across two referenced rows:
 INSERT INTO temporal_rng VALUES ('[8,8]', daterange('2018-01-01', '2020-01-01'));
 INSERT INTO temporal_rng VALUES ('[8,8]', daterange('2020-01-01', '2021-01-01'));
 INSERT INTO temporal_fk_rng2rng VALUES ('[200,200]', daterange('2018-01-01', '2021-01-01'), '[8,8]');
 DELETE FROM temporal_rng WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::date;
-SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,200]';
+SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
 -- clean up
 DELETE FROM temporal_fk_rng2rng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_rng WHERE id IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
 -- test FK referenced updates CASCADE (two scalar cols)
-INSERT INTO temporal_rng2 VALUES ('[6,6]', '[6,6]', tsrange('2018-01-01', '2021-01-01'));
-INSERT INTO temporal_fk2_rng2rng VALUES ('[100,100]', tsrange('2018-01-01', '2021-01-01'), '[6,6]', '[6,6]');
+INSERT INTO temporal_rng2 VALUES ('[6,6]', '[6,6]', daterange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_fk2_rng2rng VALUES ('[100,100]', daterange('2018-01-01', '2021-01-01'), '[6,6]', '[6,6]');
 ALTER TABLE temporal_fk2_rng2rng
 	DROP CONSTRAINT temporal_fk2_rng2rng_fk,
 	ADD CONSTRAINT temporal_fk2_rng2rng_fk
@@ -966,42 +966,42 @@ ALTER TABLE temporal_fk2_rng2rng
 		ON DELETE CASCADE ON UPDATE CASCADE;
 -- leftovers on both sides:
 UPDATE temporal_rng2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id1 = '[7,7]' WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- non-FPO update:
 UPDATE temporal_rng2 SET id1 = '[7,7]' WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- FK across two referenced rows:
-INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2018-01-01', '2020-01-01'));
-INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2020-01-01', '2021-01-01'));
-INSERT INTO temporal_fk2_rng2rng VALUES ('[200,200]', tsrange('2018-01-01', '2021-01-01'), '[8,8]', '[8,8]');
-UPDATE temporal_rng2 SET id1 = '[9,9]' WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::timestamp;
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]';
+INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', daterange('2018-01-01', '2020-01-01'));
+INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', daterange('2020-01-01', '2021-01-01'));
+INSERT INTO temporal_fk2_rng2rng VALUES ('[200,200]', daterange('2018-01-01', '2021-01-01'), '[8,8]', '[8,8]');
+UPDATE temporal_rng2 SET id1 = '[9,9]' WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date;
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
 -- clean up
 DELETE FROM temporal_fk2_rng2rng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_rng2 WHERE id1 IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
 -- test FK referenced deletes CASCADE (two scalar cols)
-INSERT INTO temporal_rng2 VALUES ('[6,6]', '[6,6]', tsrange('2018-01-01', '2021-01-01'));
-INSERT INTO temporal_fk2_rng2rng VALUES ('[100,100]', tsrange('2018-01-01', '2021-01-01'), '[6,6]', '[6,6]');
+INSERT INTO temporal_rng2 VALUES ('[6,6]', '[6,6]', daterange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_fk2_rng2rng VALUES ('[100,100]', daterange('2018-01-01', '2021-01-01'), '[6,6]', '[6,6]');
 -- leftovers on both sides:
 DELETE FROM temporal_rng2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- non-FPO delete:
 DELETE FROM temporal_rng2 WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- FK across two referenced rows:
-INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2018-01-01', '2020-01-01'));
-INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2020-01-01', '2021-01-01'));
-INSERT INTO temporal_fk2_rng2rng VALUES ('[200,200]', tsrange('2018-01-01', '2021-01-01'), '[8,8]', '[8,8]');
-DELETE FROM temporal_rng2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::timestamp;
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]';
+INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', daterange('2018-01-01', '2020-01-01'));
+INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', daterange('2020-01-01', '2021-01-01'));
+INSERT INTO temporal_fk2_rng2rng VALUES ('[200,200]', daterange('2018-01-01', '2021-01-01'), '[8,8]', '[8,8]');
+DELETE FROM temporal_rng2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date;
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
 -- clean up
 DELETE FROM temporal_fk2_rng2rng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_rng2 WHERE id1 IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
 -- test FK referenced updates SET NULL (two scalar cols)
-INSERT INTO temporal_rng2 VALUES ('[6,6]', '[6,6]', tsrange('2018-01-01', '2021-01-01'));
-INSERT INTO temporal_fk2_rng2rng VALUES ('[100,100]', tsrange('2018-01-01', '2021-01-01'), '[6,6]', '[6,6]');
+INSERT INTO temporal_rng2 VALUES ('[6,6]', '[6,6]', daterange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_fk2_rng2rng VALUES ('[100,100]', daterange('2018-01-01', '2021-01-01'), '[6,6]', '[6,6]');
 ALTER TABLE temporal_fk2_rng2rng
 	DROP CONSTRAINT temporal_fk2_rng2rng_fk,
 	ADD CONSTRAINT temporal_fk2_rng2rng_fk
@@ -1010,42 +1010,42 @@ ALTER TABLE temporal_fk2_rng2rng
 		ON DELETE SET NULL ON UPDATE SET NULL;
 -- leftovers on both sides:
 UPDATE temporal_rng2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id1 = '[7,7]' WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- non-FPO update:
 UPDATE temporal_rng2 SET id1 = '[7,7]' WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- FK across two referenced rows:
-INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2018-01-01', '2020-01-01'));
-INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2020-01-01', '2021-01-01'));
-INSERT INTO temporal_fk2_rng2rng VALUES ('[200,200]', tsrange('2018-01-01', '2021-01-01'), '[8,8]', '[8,8]');
-UPDATE temporal_rng2 SET id1 = '[9,9]' WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::timestamp;
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]';
+INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', daterange('2018-01-01', '2020-01-01'));
+INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', daterange('2020-01-01', '2021-01-01'));
+INSERT INTO temporal_fk2_rng2rng VALUES ('[200,200]', daterange('2018-01-01', '2021-01-01'), '[8,8]', '[8,8]');
+UPDATE temporal_rng2 SET id1 = '[9,9]' WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date;
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
 -- clean up
 DELETE FROM temporal_fk2_rng2rng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_rng2 WHERE id1 IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
 -- test FK referenced deletes SET NULL (two scalar cols)
-INSERT INTO temporal_rng2 VALUES ('[6,6]', '[6,6]', tsrange('2018-01-01', '2021-01-01'));
-INSERT INTO temporal_fk2_rng2rng VALUES ('[100,100]', tsrange('2018-01-01', '2021-01-01'), '[6,6]', '[6,6]');
+INSERT INTO temporal_rng2 VALUES ('[6,6]', '[6,6]', daterange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_fk2_rng2rng VALUES ('[100,100]', daterange('2018-01-01', '2021-01-01'), '[6,6]', '[6,6]');
 -- leftovers on both sides:
 DELETE FROM temporal_rng2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- non-FPO delete:
 DELETE FROM temporal_rng2 WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- FK across two referenced rows:
-INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2018-01-01', '2020-01-01'));
-INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2020-01-01', '2021-01-01'));
-INSERT INTO temporal_fk2_rng2rng VALUES ('[200,200]', tsrange('2018-01-01', '2021-01-01'), '[8,8]', '[8,8]');
-DELETE FROM temporal_rng2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::timestamp;
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]';
+INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', daterange('2018-01-01', '2020-01-01'));
+INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', daterange('2020-01-01', '2021-01-01'));
+INSERT INTO temporal_fk2_rng2rng VALUES ('[200,200]', daterange('2018-01-01', '2021-01-01'), '[8,8]', '[8,8]');
+DELETE FROM temporal_rng2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date;
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
 -- clean up
 DELETE FROM temporal_fk2_rng2rng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_rng2 WHERE id1 IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
 -- test FK referenced deletes SET NULL (two scalar cols, SET NULL subset)
-INSERT INTO temporal_rng2 VALUES ('[6,6]', '[6,6]', tsrange('2018-01-01', '2021-01-01'));
-INSERT INTO temporal_fk2_rng2rng VALUES ('[100,100]', tsrange('2018-01-01', '2021-01-01'), '[6,6]', '[6,6]');
+INSERT INTO temporal_rng2 VALUES ('[6,6]', '[6,6]', daterange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_fk2_rng2rng VALUES ('[100,100]', daterange('2018-01-01', '2021-01-01'), '[6,6]', '[6,6]');
 -- fails because you can't set the PERIOD column:
 ALTER TABLE temporal_fk2_rng2rng
 	DROP CONSTRAINT temporal_fk2_rng2rng_fk,
@@ -1062,24 +1062,24 @@ ALTER TABLE temporal_fk2_rng2rng
 		ON DELETE SET NULL (parent_id1) ON UPDATE SET NULL;
 -- leftovers on both sides:
 DELETE FROM temporal_rng2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- non-FPO delete:
 DELETE FROM temporal_rng2 WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- FK across two referenced rows:
-INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2018-01-01', '2020-01-01'));
-INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2020-01-01', '2021-01-01'));
-INSERT INTO temporal_fk2_rng2rng VALUES ('[200,200]', tsrange('2018-01-01', '2021-01-01'), '[8,8]', '[8,8]');
-DELETE FROM temporal_rng2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::timestamp;
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]';
+INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', daterange('2018-01-01', '2020-01-01'));
+INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', daterange('2020-01-01', '2021-01-01'));
+INSERT INTO temporal_fk2_rng2rng VALUES ('[200,200]', daterange('2018-01-01', '2021-01-01'), '[8,8]', '[8,8]');
+DELETE FROM temporal_rng2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date;
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
 -- clean up
 DELETE FROM temporal_fk2_rng2rng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_rng2 WHERE id1 IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
 -- test FK referenced updates SET DEFAULT (two scalar cols)
-INSERT INTO temporal_rng2 VALUES ('[-1,-1]', '[-1,-1]', tsrange(null, null));
-INSERT INTO temporal_rng2 VALUES ('[6,6]', '[6,6]', tsrange('2018-01-01', '2021-01-01'));
-INSERT INTO temporal_fk2_rng2rng VALUES ('[100,100]', tsrange('2018-01-01', '2021-01-01'), '[6,6]', '[6,6]');
+INSERT INTO temporal_rng2 VALUES ('[-1,-1]', '[-1,-1]', daterange(null, null));
+INSERT INTO temporal_rng2 VALUES ('[6,6]', '[6,6]', daterange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_fk2_rng2rng VALUES ('[100,100]', daterange('2018-01-01', '2021-01-01'), '[6,6]', '[6,6]');
 ALTER TABLE temporal_fk2_rng2rng
   ALTER COLUMN parent_id1 SET DEFAULT '[-1,-1]',
   ALTER COLUMN parent_id2 SET DEFAULT '[-1,-1]',
@@ -1090,43 +1090,43 @@ ALTER TABLE temporal_fk2_rng2rng
 		ON DELETE SET DEFAULT ON UPDATE SET DEFAULT;
 -- leftovers on both sides:
 UPDATE temporal_rng2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id1 = '[7,7]', id2 = '[7,7]' WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- non-FPO update:
 UPDATE temporal_rng2 SET id1 = '[7,7]', id2 = '[7,7]' WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- FK across two referenced rows:
-INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2018-01-01', '2020-01-01'));
-INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2020-01-01', '2021-01-01'));
-INSERT INTO temporal_fk2_rng2rng VALUES ('[200,200]', tsrange('2018-01-01', '2021-01-01'), '[8,8]', '[8,8]');
-UPDATE temporal_rng2 SET id1 = '[9,9]', id2 = '[9,9]' WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::timestamp;
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]';
+INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', daterange('2018-01-01', '2020-01-01'));
+INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', daterange('2020-01-01', '2021-01-01'));
+INSERT INTO temporal_fk2_rng2rng VALUES ('[200,200]', daterange('2018-01-01', '2021-01-01'), '[8,8]', '[8,8]');
+UPDATE temporal_rng2 SET id1 = '[9,9]', id2 = '[9,9]' WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date;
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
 -- clean up
 DELETE FROM temporal_fk2_rng2rng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_rng2 WHERE id1 IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
 -- test FK referenced deletes SET DEFAULT (two scalar cols)
-INSERT INTO temporal_rng2 VALUES ('[6,6]', '[6,6]', tsrange('2018-01-01', '2021-01-01'));
-INSERT INTO temporal_fk2_rng2rng VALUES ('[100,100]', tsrange('2018-01-01', '2021-01-01'), '[6,6]', '[6,6]');
+INSERT INTO temporal_rng2 VALUES ('[6,6]', '[6,6]', daterange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_fk2_rng2rng VALUES ('[100,100]', daterange('2018-01-01', '2021-01-01'), '[6,6]', '[6,6]');
 -- leftovers on both sides:
 DELETE FROM temporal_rng2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- non-FPO update:
 DELETE FROM temporal_rng2 WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- FK across two referenced rows:
-INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2018-01-01', '2020-01-01'));
-INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2020-01-01', '2021-01-01'));
-INSERT INTO temporal_fk2_rng2rng VALUES ('[200,200]', tsrange('2018-01-01', '2021-01-01'), '[8,8]', '[8,8]');
-DELETE FROM temporal_rng2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::timestamp;
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]';
+INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', daterange('2018-01-01', '2020-01-01'));
+INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', daterange('2020-01-01', '2021-01-01'));
+INSERT INTO temporal_fk2_rng2rng VALUES ('[200,200]', daterange('2018-01-01', '2021-01-01'), '[8,8]', '[8,8]');
+DELETE FROM temporal_rng2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date;
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
 -- clean up
 DELETE FROM temporal_fk2_rng2rng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_rng2 WHERE id1 IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
 -- test FK referenced deletes SET DEFAULT (two scalar cols, SET DEFAULT subset)
-INSERT INTO temporal_rng2 VALUES ('[-1,-1]', '[6,6]', tsrange(null, null));
-INSERT INTO temporal_rng2 VALUES ('[6,6]', '[6,6]', tsrange('2018-01-01', '2021-01-01'));
-INSERT INTO temporal_fk2_rng2rng VALUES ('[100,100]', tsrange('2018-01-01', '2021-01-01'), '[6,6]', '[6,6]');
+INSERT INTO temporal_rng2 VALUES ('[-1,-1]', '[6,6]', daterange(null, null));
+INSERT INTO temporal_rng2 VALUES ('[6,6]', '[6,6]', daterange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_fk2_rng2rng VALUES ('[100,100]', daterange('2018-01-01', '2021-01-01'), '[6,6]', '[6,6]');
 -- fails because you can't set the PERIOD column:
 ALTER TABLE temporal_fk2_rng2rng
   ALTER COLUMN parent_id1 SET DEFAULT '[-1,-1]',
@@ -1145,17 +1145,17 @@ ALTER TABLE temporal_fk2_rng2rng
 		ON DELETE SET DEFAULT (parent_id1) ON UPDATE SET DEFAULT;
 -- leftovers on both sides:
 DELETE FROM temporal_rng2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- non-FPO update:
 DELETE FROM temporal_rng2 WHERE id1 = '[6,6]';
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]';
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[100,100]' ORDER BY id, valid_at;
 -- FK across two referenced rows:
-INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2018-01-01', '2020-01-01'));
-INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', tsrange('2020-01-01', '2021-01-01'));
-INSERT INTO temporal_rng2 VALUES ('[-1,-1]', '[8,8]', tsrange(null, null));
-INSERT INTO temporal_fk2_rng2rng VALUES ('[200,200]', tsrange('2018-01-01', '2021-01-01'), '[8,8]', '[8,8]');
-DELETE FROM temporal_rng2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::timestamp;
-SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]';
+INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', daterange('2018-01-01', '2020-01-01'));
+INSERT INTO temporal_rng2 VALUES ('[8,8]', '[8,8]', daterange('2020-01-01', '2021-01-01'));
+INSERT INTO temporal_rng2 VALUES ('[-1,-1]', '[8,8]', daterange(null, null));
+INSERT INTO temporal_fk2_rng2rng VALUES ('[200,200]', daterange('2018-01-01', '2021-01-01'), '[8,8]', '[8,8]');
+DELETE FROM temporal_rng2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date;
+SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,200]' ORDER BY id, valid_at;
 -- clean up
 DELETE FROM temporal_fk2_rng2rng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_rng2 WHERE id1 IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
