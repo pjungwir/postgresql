@@ -992,16 +992,11 @@ transformPeriodOptions(PeriodDef *period)
 
 /*
  * transformTablePeriod
- *		transform a PeriodDef node within CREATE TABLE or ALTER TABLE
- *		TODO: Does ALTER TABLE really call us?? It doesn't seem like it does. Maybe it should. Did it in Vik's original patch?
+ *		transform a PeriodDef node within CREATE TABLE
  */
 static void
 transformTablePeriod(CreateStmtContext *cxt, PeriodDef *period)
 {
-	// Oid			coltypid;
-	// ColumnDef  *col;
-	// ListCell   *columns;
-
 	if (strcmp(period->periodname, "system_time") == 0)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -2683,6 +2678,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 					break;
 				}
 			}
+
 			if (found)
 			{
 				/*
@@ -2697,6 +2693,22 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 					!column->is_from_type)
 				{
 					column->is_not_null = true;
+				}
+			}
+			else if (constraint->without_overlaps &&
+					 lc == list_last_cell(constraint->keys))
+			{
+				/* If the key is WITHOUT OVERLAPS, a PERIOD will work too. */
+				PeriodDef  *period = NULL;
+
+				foreach(columns, cxt->periods)
+				{
+					period = lfirst_node(PeriodDef, columns);
+					if (strcmp(period->periodname, key) == 0)
+					{
+						found = true;
+						break;
+					}
 				}
 			}
 			else if (SystemAttributeByName(key) != NULL)
@@ -3653,10 +3665,17 @@ transformAlterTableStmt(Oid relid, AlterTableStmt *stmt,
 
 			case AT_AddPeriod:
 				{
+					/*
+					 * We can't call transformTablePeriod here
+					 * because it looks at cxt->columns
+					 * and in an ALTER statement the columns might already exists
+					 * (or not).
+					 */
+					// TODO: it doesn't look at cxt->columns any more.
+					// So should we call it here? To do what?
+					// Well it might be useful to know about it in cxt->periods at least.
+					transformTablePeriod(&cxt, castNode(PeriodDef, cmd->def));
 					newcmds = lappend(newcmds, cmd);
-					// Why not call transformTablePeriod here?
-					// Ah because it looks at cxt->columns
-					// and in an ALTER statement the columns might already exist (or not).
 					break;
 				}
 
