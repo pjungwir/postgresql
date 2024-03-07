@@ -834,6 +834,18 @@ CREATE TABLE temporal_fk_rng2rng (
 	CONSTRAINT temporal_fk_rng2rng_fk FOREIGN KEY (parent_id, PERIOD valid_at)
 		REFERENCES temporal_rng (id, PERIOD valid_at)
 );
+\d temporal_fk_rng2rng
+           Table "public.temporal_fk_rng2rng"
+  Column   |   Type    | Collation | Nullable | Default 
+-----------+-----------+-----------+----------+---------
+ id        | int4range |           | not null | 
+ valid_at  | tsrange   |           | not null | 
+ parent_id | int4range |           |          | 
+Indexes:
+    "temporal_fk_rng2rng_pk" PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+Foreign-key constraints:
+    "temporal_fk_rng2rng_fk" FOREIGN KEY (parent_id, PERIOD valid_at) REFERENCES temporal_rng(id, PERIOD valid_at)
+
 DROP TABLE temporal_fk_rng2rng;
 -- with mismatched PERIOD columns:
 -- (parent_id, PERIOD valid_at) REFERENCES (id, valid_at)
@@ -2998,6 +3010,190 @@ SELECT * FROM temporal_fk2_mltrng2mltrng WHERE id = '[200,201)' ORDER BY id, val
  [200,201) | {[2020-01-01,2021-01-01)} | [8,9)      | [8,9)
 (2 rows)
 
+--
+-- test FOREIGN KEY, PERIOD references PERIOD
+--
+-- test table setup
+DROP TABLE temporal_per;
+CREATE TABLE temporal_per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	PERIOD FOR valid_at (valid_from, valid_til)
+);
+ALTER TABLE temporal_per
+	ADD CONSTRAINT temporal_per_pk
+	PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+-- Can't create a FK with a mismatched range type
+CREATE TABLE temporal_fk_per2per (
+	id int4range,
+	valid_from int,
+	valid_til int,
+	parent_id int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk_per2per_pk2 PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_per2per_fk2 FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES temporal_per (id, PERIOD valid_at)
+);
+ERROR:  foreign key constraint "temporal_fk_per2per_fk2" cannot be implemented
+DETAIL:  Key columns "valid_at" and "valid_at" are of incompatible types: int4range and daterange.
+-- works: PERIOD for both referenced and referencing
+CREATE TABLE temporal_fk_per2per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	parent_id int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk_per2per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_per2per_fk FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES temporal_per (id, PERIOD valid_at)
+);
+\d temporal_fk_per2per
+           Table "public.temporal_fk_per2per"
+   Column   |   Type    | Collation | Nullable | Default 
+------------+-----------+-----------+----------+---------
+ id         | int4range |           | not null | 
+ valid_from | date      |           |          | 
+ valid_til  | date      |           |          | 
+ parent_id  | int4range |           |          | 
+Periods:
+    valid_at (valid_from, valid_til)
+Indexes:
+    "temporal_fk_per2per_pk" PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "temporal_fk_per2per_valid_at_check" CHECK (valid_from < valid_til)
+Foreign-key constraints:
+    "temporal_fk_per2per_fk" FOREIGN KEY (parent_id, PERIOD valid_at) REFERENCES temporal_per(id, PERIOD valid_at)
+
+DROP TABLE temporal_fk_per2per;
+-- with mismatched PERIOD columns:
+-- (parent_id, PERIOD valid_at) REFERENCES (id, valid_at)
+-- REFERENCES part should specify PERIOD
+CREATE TABLE temporal_fk_per2per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	parent_id int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk_per2per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_per2per_fk FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES temporal_per (id, valid_at)
+);
+ERROR:  foreign key uses PERIOD on the referencing table but not the referenced table
+-- (parent_id, valid_at) REFERENCES (id, PERIOD valid_at)
+-- FOREIGN KEY part should specify PERIOD
+CREATE TABLE temporal_fk_per2per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	parent_id int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk_per2per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_per2per_fk FOREIGN KEY (parent_id, valid_at)
+		REFERENCES temporal_per (id, PERIOD valid_at)
+);
+ERROR:  foreign key uses PERIOD on the referenced table but not the referencing table
+-- (parent_id, valid_at) REFERENCES [implicit]
+-- FOREIGN KEY part should specify PERIOD
+CREATE TABLE temporal_fk_per2per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	parent_id int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk_per2per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_per2per_fk FOREIGN KEY (parent_id, valid_at)
+		REFERENCES temporal_per
+);
+ERROR:  foreign key uses PERIOD on the referenced table but not the referencing table
+-- (parent_id, PERIOD valid_at) REFERENCES (id)
+CREATE TABLE temporal_fk_per2per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	parent_id int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk_per2per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_per2per_fk FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES temporal_per (id)
+);
+ERROR:  foreign key uses PERIOD on the referencing table but not the referenced table
+-- (parent_id) REFERENCES (id, PERIOD valid_at)
+CREATE TABLE temporal_fk_per2per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	parent_id int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk_per2per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_per2per_fk FOREIGN KEY (parent_id)
+		REFERENCES temporal_per (id, PERIOD valid_at)
+);
+ERROR:  foreign key uses PERIOD on the referenced table but not the referencing table
+-- with inferred PK on the referenced table:
+CREATE TABLE temporal_fk_per2per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	parent_id int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk_per2per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_per2per_fk FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES temporal_per
+);
+DROP TABLE temporal_fk_per2per;
+-- should fail because of duplicate referenced columns:
+CREATE TABLE temporal_fk_per2per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	parent_id int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk_per2per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_per2per_fk FOREIGN KEY (parent_id, PERIOD parent_id)
+		REFERENCES temporal_per (id, PERIOD id)
+);
+ERROR:  foreign key referenced-columns list must not contain duplicates
+-- Two scalar columns
+DROP TABLE temporal_per2;
+CREATE TABLE temporal_per2 (
+	id1 int4range,
+	id2 int4range,
+	valid_from date,
+	valid_til date,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_per2_pk PRIMARY KEY (id1, id2, valid_at WITHOUT OVERLAPS)
+);
+CREATE TABLE temporal_fk2_per2per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	parent_id1 int4range,
+	parent_id2 int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk2_per2per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk2_per2per_fk FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
+		REFERENCES temporal_per2 (id1, id2, PERIOD valid_at)
+);
+\d temporal_fk2_per2per
+           Table "public.temporal_fk2_per2per"
+   Column   |   Type    | Collation | Nullable | Default 
+------------+-----------+-----------+----------+---------
+ id         | int4range |           | not null | 
+ valid_from | date      |           |          | 
+ valid_til  | date      |           |          | 
+ parent_id1 | int4range |           |          | 
+ parent_id2 | int4range |           |          | 
+Periods:
+    valid_at (valid_from, valid_til)
+Indexes:
+    "temporal_fk2_per2per_pk" PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "temporal_fk2_per2per_valid_at_check" CHECK (valid_from < valid_til)
+Foreign-key constraints:
+    "temporal_fk2_per2per_fk" FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at) REFERENCES temporal_per2(id1, id2, PERIOD valid_at)
+
+DROP TABLE temporal_fk2_per2per;
 -- FK with a custom range type
 CREATE TYPE mydaterange AS range(subtype=date);
 CREATE TABLE temporal_rng3 (
