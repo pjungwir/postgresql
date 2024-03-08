@@ -10807,8 +10807,9 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	for (i = 0; i < numfks; i++)
 	{
 		char		attgenerated = TupleDescAttr(RelationGetDescr(rel), fkattnum[i] - 1)->attgenerated;
+		Bitmapset  *periods = get_period_attnos(RelationGetRelid(rel));
 
-		if (attgenerated)
+		if (attgenerated && !bms_is_member(fkattnum[i], periods))
 		{
 			/*
 			 * Check restrictions on UPDATE/DELETE actions, per SQL standard
