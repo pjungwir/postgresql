@@ -2195,6 +2195,303 @@ CREATE TABLE temporal_fk2_per2per (
 \d temporal_fk2_per2per
 DROP TABLE temporal_fk2_per2per;
 
+--
+-- test ALTER TABLE ADD CONSTRAINT
+--
+
+CREATE TABLE temporal_fk_per2per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	parent_id int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk_per2per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+ALTER TABLE temporal_fk_per2per
+	ADD CONSTRAINT temporal_fk_per2per_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES temporal_per (id, PERIOD valid_at);
+-- Two scalar columns:
+CREATE TABLE temporal_fk2_per2per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	parent_id1 int4range,
+	parent_id2 int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk2_per2per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+ALTER TABLE temporal_fk2_per2per
+	ADD CONSTRAINT temporal_fk2_per2per_fk
+	FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
+	REFERENCES temporal_per2 (id1, id2, PERIOD valid_at);
+\d temporal_fk2_per2per
+
+-- with inferred PK on the referenced table, and wrong column type:
+ALTER TABLE temporal_fk_per2per
+	DROP CONSTRAINT temporal_fk_per2per_fk,
+	DROP PERIOD FOR valid_at,
+	ALTER COLUMN valid_from TYPE timestamp,
+	ALTER COLUMN valid_til TYPE timestamp,
+	ADD PERIOD FOR valid_at (valid_from, valid_til);
+ALTER TABLE temporal_fk_per2per
+	ADD CONSTRAINT temporal_fk_per2per_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES temporal_per;
+ALTER TABLE temporal_fk_per2per
+	DROP PERIOD FOR valid_at,
+	ALTER COLUMN valid_from TYPE date,
+	ALTER COLUMN valid_til TYPE date,
+	ADD PERIOD FOR valid_at (valid_from, valid_til);
+
+-- with inferred PK on the referenced table:
+ALTER TABLE temporal_fk_per2per
+	ADD CONSTRAINT temporal_fk_per2per_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES temporal_per;
+
+-- should fail because of duplicate referenced columns:
+ALTER TABLE temporal_fk_per2per
+	ADD CONSTRAINT temporal_fk_per2per_fk2
+	FOREIGN KEY (parent_id, PERIOD parent_id)
+	REFERENCES temporal_per (id, PERIOD id);
+
+--
+-- test with rows already
+--
+
+DELETE FROM temporal_fk_per2per;
+DELETE FROM temporal_per;
+INSERT INTO temporal_per VALUES
+  ('[1,1]', '2018-01-02', '2018-02-03'),
+  ('[1,1]', '2018-03-03', '2018-04-04'),
+  ('[2,2]', '2018-01-01', '2018-01-05'),
+  ('[3,3]', '2018-01-01', NULL);
+
+ALTER TABLE temporal_fk_per2per
+	DROP CONSTRAINT temporal_fk_per2per_fk;
+INSERT INTO temporal_fk_per2per VALUES ('[1,1]', '2018-01-02', '2018-02-01', '[1,1]');
+ALTER TABLE temporal_fk_per2per
+	ADD CONSTRAINT temporal_fk_per2per_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES temporal_per;
+ALTER TABLE temporal_fk_per2per
+	DROP CONSTRAINT temporal_fk_per2per_fk;
+INSERT INTO temporal_fk_per2per VALUES ('[2,2]', '2018-01-02', '2018-04-01', '[1,1]');
+-- should fail:
+ALTER TABLE temporal_fk_per2per
+	ADD CONSTRAINT temporal_fk_per2per_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES temporal_per;
+-- okay again:
+DELETE FROM temporal_fk_per2per;
+ALTER TABLE temporal_fk_per2per
+	ADD CONSTRAINT temporal_fk_per2per_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES temporal_per;
+
+--
+-- test pg_get_constraintdef
+--
+
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_fk_per2per_fk';
+
+--
+-- test FK referencing inserts
+--
+
+INSERT INTO temporal_fk_per2per VALUES ('[1,1]', '2018-01-02', '2018-02-01', '[1,1]');
+-- should fail:
+INSERT INTO temporal_fk_per2per VALUES ('[2,2]', '2018-01-02', '2018-04-01', '[1,1]');
+-- now it should work:
+INSERT INTO temporal_per VALUES ('[1,1]', '2018-02-03', '2018-03-03');
+INSERT INTO temporal_fk_per2per VALUES ('[2,2]', '2018-01-02', '2018-04-01', '[1,1]');
+
+--
+-- test FK referencing updates
+--
+
+UPDATE temporal_fk_per2per SET valid_from = '2018-01-02', valid_til = '2018-03-01' WHERE id = '[1,1]';
+-- should fail:
+UPDATE temporal_fk_per2per SET valid_from = '2018-01-02', valid_til = '2018-05-01' WHERE id = '[1,1]';
+UPDATE temporal_fk_per2per SET parent_id = '[8,8]' WHERE id = '[1,1]';
+
+-- ALTER FK DEFERRABLE
+
+BEGIN;
+  INSERT INTO temporal_per VALUES
+    ('[5,5]', '2018-01-01', '2018-02-01'),
+    ('[5,5]', '2018-02-01', '2018-03-01');
+  INSERT INTO temporal_fk_per2per VALUES
+    ('[3,3]', '2018-01-05', '2018-01-10', '[5,5]');
+  ALTER TABLE temporal_fk_per2per
+    ALTER CONSTRAINT temporal_fk_per2per_fk
+    DEFERRABLE INITIALLY DEFERRED;
+
+  DELETE FROM temporal_per WHERE id = '[5,5]'; --should not fail yet.
+COMMIT; -- should fail here.
+
+--
+-- test FK parent updates NO ACTION
+--
+
+-- a PK update that succeeds because the numeric id isn't referenced:
+INSERT INTO temporal_per VALUES ('[5,5]', '2018-01-01', '2018-02-01');
+UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01' WHERE id = '[5,5]';
+-- a PK update that succeeds even though the numeric id is referenced because the range isn't:
+DELETE FROM temporal_per WHERE id = '[5,5]';
+INSERT INTO temporal_per VALUES
+  ('[5,5]', '2018-01-01', '2018-02-01'),
+  ('[5,5]', '2018-02-01', '2018-03-01');
+INSERT INTO temporal_fk_per2per VALUES ('[3,3]', '2018-01-05', '2018-01-10', '[5,5]');
+UPDATE temporal_per SET valid_from = '2016-02-01', valid_til = '2016-03-01'
+WHERE id = '[5,5]' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
+-- a PK update that fails because both are referenced:
+UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01'
+WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+-- changing the scalar part fails:
+UPDATE temporal_per SET id = '[7,7]'
+WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+-- changing an unreferenced part is okay:
+UPDATE temporal_per
+FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
+SET id = '[7,7]'
+WHERE id = '[5,5]';
+-- changing just a part fails:
+UPDATE temporal_per
+FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
+SET id = '[7,7]'
+WHERE id = '[5,5]';
+SELECT * FROM temporal_per WHERE id in ('[5,5]', '[7,7]') ORDER BY id, valid_at;
+SELECT * FROM temporal_fk_per2per WHERE id in ('[3,3]') ORDER BY id, valid_at;
+-- then delete the objecting FK record and the same PK update succeeds:
+DELETE FROM temporal_fk_per2per WHERE id = '[3,3]';
+UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01'
+WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+-- clean up:
+DELETE FROM temporal_fk_per2per WHERE parent_id = '[5,5]';
+DELETE FROM temporal_per WHERE id IN ('[5,5]', '[7,7]');
+
+--
+-- test FK parent updates RESTRICT
+--
+
+ALTER TABLE temporal_fk_per2per
+	DROP CONSTRAINT temporal_fk_per2per_fk;
+ALTER TABLE temporal_fk_per2per
+	ADD CONSTRAINT temporal_fk_per2per_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES temporal_per
+	ON UPDATE RESTRICT;
+-- a PK update that succeeds because the numeric id isn't referenced:
+INSERT INTO temporal_per VALUES ('[5,5]', '2018-01-01', '2018-02-01');
+UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01' WHERE id = '[5,5]';
+-- a PK update that succeeds even though the numeric id is referenced because the range isn't:
+DELETE FROM temporal_per WHERE id = '[5,5]';
+INSERT INTO temporal_per VALUES
+  ('[5,5]', '2018-01-01', '2018-02-01'),
+  ('[5,5]', '2018-02-01', '2018-03-01');
+INSERT INTO temporal_fk_per2per VALUES ('[3,3]', '2018-01-05', '2018-01-10', '[5,5]');
+UPDATE temporal_per SET valid_from = '2016-02-01', valid_til = '2016-03-01'
+WHERE id = '[5,5]' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
+-- a PK update that fails because both are referenced:
+UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01'
+WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+-- changing the scalar part fails:
+UPDATE temporal_per SET id = '[7,7]'
+WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+-- changing an unreferenced part is okay:
+UPDATE temporal_per
+FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
+SET id = '[7,7]'
+WHERE id = '[5,5]';
+-- changing just a part fails:
+UPDATE temporal_per
+FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
+SET id = '[7,7]'
+WHERE id = '[5,5]';
+SELECT * FROM temporal_per WHERE id in ('[5,5]', '[7,7]') ORDER BY id, valid_at;
+SELECT * FROM temporal_fk_per2per WHERE id in ('[3,3]') ORDER BY id, valid_at;
+-- then delete the objecting FK record and the same PK update succeeds:
+DELETE FROM temporal_fk_per2per WHERE id = '[3,3]';
+UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01'
+WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+-- clean up:
+DELETE FROM temporal_fk_per2per WHERE parent_id = '[5,5]';
+DELETE FROM temporal_per WHERE id IN ('[5,5]', '[7,7]');
+--
+-- test FK parent deletes NO ACTION
+--
+ALTER TABLE temporal_fk_per2per
+	DROP CONSTRAINT temporal_fk_per2per_fk;
+ALTER TABLE temporal_fk_per2per
+	ADD CONSTRAINT temporal_fk_per2per_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES temporal_per;
+-- a PK delete that succeeds because the numeric id isn't referenced:
+INSERT INTO temporal_per VALUES ('[5,5]', '2018-01-01', '2018-02-01');
+DELETE FROM temporal_per WHERE id = '[5,5]';
+-- a PK delete that succeeds even though the numeric id is referenced because the range isn't:
+INSERT INTO temporal_per VALUES
+  ('[5,5]', '2018-01-01', '2018-02-01'),
+  ('[5,5]', '2018-02-01', '2018-03-01');
+INSERT INTO temporal_fk_per2per VALUES ('[3,3]', '2018-01-05', '2018-01-10', '[5,5]');
+DELETE FROM temporal_per WHERE id = '[5,5]' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
+-- a PK delete that fails because both are referenced:
+DELETE FROM temporal_per WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+-- deleting an unreferenced part is okay:
+DELETE FROM temporal_per
+FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
+WHERE id = '[5,5]';
+-- deleting just a part fails:
+DELETE FROM temporal_per
+FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
+WHERE id = '[5,5]';
+SELECT * FROM temporal_per WHERE id in ('[5,5]', '[7,7]') ORDER BY id, valid_at;
+SELECT * FROM temporal_fk_per2per WHERE id in ('[3,3]') ORDER BY id, valid_at;
+-- then delete the objecting FK record and the same PK delete succeeds:
+DELETE FROM temporal_fk_per2per WHERE id = '[3,3]';
+DELETE FROM temporal_per WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+-- clean up:
+DELETE FROM temporal_fk_per2per WHERE parent_id = '[5,5]';
+DELETE FROM temporal_per WHERE id IN ('[5,5]');
+
+--
+-- test FK parent deletes RESTRICT
+--
+ALTER TABLE temporal_fk_per2per
+	DROP CONSTRAINT temporal_fk_per2per_fk;
+ALTER TABLE temporal_fk_per2per
+	ADD CONSTRAINT temporal_fk_per2per_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES temporal_per
+	ON DELETE RESTRICT;
+INSERT INTO temporal_per VALUES ('[5,5]', '2018-01-01', '2018-02-01');
+DELETE FROM temporal_per WHERE id = '[5,5]';
+-- a PK delete that succeeds even though the numeric id is referenced because the range isn't:
+INSERT INTO temporal_per VALUES
+  ('[5,5]', '2018-01-01', '2018-02-01'),
+  ('[5,5]', '2018-02-01', '2018-03-01');
+INSERT INTO temporal_fk_per2per VALUES ('[3,3]', '2018-01-05', '2018-01-10', '[5,5]');
+DELETE FROM temporal_per WHERE id = '[5,5]' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
+-- a PK delete that fails because both are referenced:
+DELETE FROM temporal_per WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+-- deleting an unreferenced part is okay:
+DELETE FROM temporal_per
+FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
+WHERE id = '[5,5]';
+-- deleting just a part fails:
+DELETE FROM temporal_per
+FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
+WHERE id = '[5,5]';
+SELECT * FROM temporal_per WHERE id in ('[5,5]', '[7,7]') ORDER BY id, valid_at;
+SELECT * FROM temporal_fk_per2per WHERE id in ('[3,3]') ORDER BY id, valid_at;
+-- then delete the objecting FK record and the same PK delete succeeds:
+DELETE FROM temporal_fk_per2per WHERE id = '[3,3]';
+DELETE FROM temporal_per WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+-- clean up:
+DELETE FROM temporal_fk_per2per WHERE parent_id = '[5,5]';
+DELETE FROM temporal_per WHERE id IN ('[5,5]');
 
 -- FK with a custom range type
 
