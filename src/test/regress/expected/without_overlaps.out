@@ -839,7 +839,7 @@ CREATE TABLE temporal_fk_rng2rng (
   Column   |   Type    | Collation | Nullable | Default 
 -----------+-----------+-----------+----------+---------
  id        | int4range |           | not null | 
- valid_at  | tsrange   |           | not null | 
+ valid_at  | daterange |           | not null | 
  parent_id | int4range |           |          | 
 Indexes:
     "temporal_fk_rng2rng_pk" PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
@@ -3226,7 +3226,7 @@ ALTER TABLE temporal_fk_per2per
 	FOREIGN KEY (parent_id, PERIOD valid_at)
 	REFERENCES temporal_per;
 ERROR:  insert or update on table "temporal_fk_per2per" violates foreign key constraint "temporal_fk_per2per_fk"
-DETAIL:  Key (parent_id, valid_at)=([1,2), [01-02-2018,04-01-2018)) is not present in table "temporal_per".
+DETAIL:  Key (parent_id, valid_at)=([1,2), [2018-01-02,2018-04-01)) is not present in table "temporal_per".
 -- okay again:
 DELETE FROM temporal_fk_per2per;
 ALTER TABLE temporal_fk_per2per
@@ -3249,7 +3249,7 @@ INSERT INTO temporal_fk_per2per VALUES ('[1,1]', '2018-01-02', '2018-02-01', '[1
 -- should fail:
 INSERT INTO temporal_fk_per2per VALUES ('[2,2]', '2018-01-02', '2018-04-01', '[1,1]');
 ERROR:  insert or update on table "temporal_fk_per2per" violates foreign key constraint "temporal_fk_per2per_fk"
-DETAIL:  Key (parent_id, valid_at)=([1,2), [01-02-2018,04-01-2018)) is not present in table "temporal_per".
+DETAIL:  Key (parent_id, valid_at)=([1,2), [2018-01-02,2018-04-01)) is not present in table "temporal_per".
 -- now it should work:
 INSERT INTO temporal_per VALUES ('[1,1]', '2018-02-03', '2018-03-03');
 INSERT INTO temporal_fk_per2per VALUES ('[2,2]', '2018-01-02', '2018-04-01', '[1,1]');
@@ -3260,10 +3260,10 @@ UPDATE temporal_fk_per2per SET valid_from = '2018-01-02', valid_til = '2018-03-0
 -- should fail:
 UPDATE temporal_fk_per2per SET valid_from = '2018-01-02', valid_til = '2018-05-01' WHERE id = '[1,1]';
 ERROR:  insert or update on table "temporal_fk_per2per" violates foreign key constraint "temporal_fk_per2per_fk"
-DETAIL:  Key (parent_id, valid_at)=([1,2), [01-02-2018,05-01-2018)) is not present in table "temporal_per".
+DETAIL:  Key (parent_id, valid_at)=([1,2), [2018-01-02,2018-05-01)) is not present in table "temporal_per".
 UPDATE temporal_fk_per2per SET parent_id = '[8,8]' WHERE id = '[1,1]';
 ERROR:  insert or update on table "temporal_fk_per2per" violates foreign key constraint "temporal_fk_per2per_fk"
-DETAIL:  Key (parent_id, valid_at)=([8,9), [01-02-2018,03-01-2018)) is not present in table "temporal_per".
+DETAIL:  Key (parent_id, valid_at)=([8,9), [2018-01-02,2018-03-01)) is not present in table "temporal_per".
 -- ALTER FK DEFERRABLE
 BEGIN;
   INSERT INTO temporal_per VALUES
@@ -3277,7 +3277,7 @@ BEGIN;
   DELETE FROM temporal_per WHERE id = '[5,5]'; --should not fail yet.
 COMMIT; -- should fail here.
 ERROR:  update or delete on table "temporal_per" violates foreign key constraint "temporal_fk_per2per_fk" on table "temporal_fk_per2per"
-DETAIL:  Key (id, valid_at)=([5,6), [01-01-2018,02-01-2018)) is still referenced from table "temporal_fk_per2per".
+DETAIL:  Key (id, valid_at)=([5,6), [2018-01-01,2018-02-01)) is still referenced from table "temporal_fk_per2per".
 --
 -- test FK parent updates NO ACTION
 --
@@ -3296,12 +3296,12 @@ WHERE id = '[5,5]' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
 UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01'
 WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
 ERROR:  update or delete on table "temporal_per" violates foreign key constraint "temporal_fk_per2per_fk" on table "temporal_fk_per2per"
-DETAIL:  Key (id, valid_at)=([5,6), [01-01-2018,02-01-2018)) is still referenced from table "temporal_fk_per2per".
+DETAIL:  Key (id, valid_at)=([5,6), [2018-01-01,2018-02-01)) is still referenced from table "temporal_fk_per2per".
 -- changing the scalar part fails:
 UPDATE temporal_per SET id = '[7,7]'
 WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
 ERROR:  update or delete on table "temporal_per" violates foreign key constraint "temporal_fk_per2per_fk" on table "temporal_fk_per2per"
-DETAIL:  Key (id, valid_at)=([5,6), [01-01-2018,02-01-2018)) is still referenced from table "temporal_fk_per2per".
+DETAIL:  Key (id, valid_at)=([5,6), [2018-01-01,2018-02-01)) is still referenced from table "temporal_fk_per2per".
 -- changing an unreferenced part is okay:
 UPDATE temporal_per
 FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
@@ -3313,20 +3313,20 @@ FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
 SET id = '[7,7]'
 WHERE id = '[5,5]';
 ERROR:  update or delete on table "temporal_per" violates foreign key constraint "temporal_fk_per2per_fk" on table "temporal_fk_per2per"
-DETAIL:  Key (id, valid_at)=([5,6), [01-03-2018,02-01-2018)) is still referenced from table "temporal_fk_per2per".
+DETAIL:  Key (id, valid_at)=([5,6), [2018-01-03,2018-02-01)) is still referenced from table "temporal_fk_per2per".
 SELECT * FROM temporal_per WHERE id in ('[5,5]', '[7,7]') ORDER BY id, valid_at;
   id   | valid_from | valid_til  
 -------+------------+------------
- [5,6) | 02-01-2016 | 03-01-2016
- [5,6) | 01-01-2018 | 01-02-2018
- [5,6) | 01-03-2018 | 02-01-2018
- [7,8) | 01-02-2018 | 01-03-2018
+ [5,6) | 2016-02-01 | 2016-03-01
+ [5,6) | 2018-01-01 | 2018-01-02
+ [5,6) | 2018-01-03 | 2018-02-01
+ [7,8) | 2018-01-02 | 2018-01-03
 (4 rows)
 
 SELECT * FROM temporal_fk_per2per WHERE id in ('[3,3]') ORDER BY id, valid_at;
   id   | valid_from | valid_til  | parent_id 
 -------+------------+------------+-----------
- [3,4) | 01-05-2018 | 01-10-2018 | [5,6)
+ [3,4) | 2018-01-05 | 2018-01-10 | [5,6)
 (1 row)
 
 -- then delete the objecting FK record and the same PK update succeeds:
@@ -3361,12 +3361,12 @@ WHERE id = '[5,5]' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
 UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01'
 WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
 ERROR:  update or delete on table "temporal_per" violates foreign key constraint "temporal_fk_per2per_fk" on table "temporal_fk_per2per"
-DETAIL:  Key (id, valid_at)=([5,6), [01-01-2018,02-01-2018)) is still referenced from table "temporal_fk_per2per".
+DETAIL:  Key (id, valid_at)=([5,6), [2018-01-01,2018-02-01)) is still referenced from table "temporal_fk_per2per".
 -- changing the scalar part fails:
 UPDATE temporal_per SET id = '[7,7]'
 WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
 ERROR:  update or delete on table "temporal_per" violates foreign key constraint "temporal_fk_per2per_fk" on table "temporal_fk_per2per"
-DETAIL:  Key (id, valid_at)=([5,6), [01-01-2018,02-01-2018)) is still referenced from table "temporal_fk_per2per".
+DETAIL:  Key (id, valid_at)=([5,6), [2018-01-01,2018-02-01)) is still referenced from table "temporal_fk_per2per".
 -- changing an unreferenced part is okay:
 UPDATE temporal_per
 FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
@@ -3378,20 +3378,20 @@ FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
 SET id = '[7,7]'
 WHERE id = '[5,5]';
 ERROR:  update or delete on table "temporal_per" violates foreign key constraint "temporal_fk_per2per_fk" on table "temporal_fk_per2per"
-DETAIL:  Key (id, valid_at)=([5,6), [01-03-2018,02-01-2018)) is still referenced from table "temporal_fk_per2per".
+DETAIL:  Key (id, valid_at)=([5,6), [2018-01-03,2018-02-01)) is still referenced from table "temporal_fk_per2per".
 SELECT * FROM temporal_per WHERE id in ('[5,5]', '[7,7]') ORDER BY id, valid_at;
   id   | valid_from | valid_til  
 -------+------------+------------
- [5,6) | 02-01-2016 | 03-01-2016
- [5,6) | 01-01-2018 | 01-02-2018
- [5,6) | 01-03-2018 | 02-01-2018
- [7,8) | 01-02-2018 | 01-03-2018
+ [5,6) | 2016-02-01 | 2016-03-01
+ [5,6) | 2018-01-01 | 2018-01-02
+ [5,6) | 2018-01-03 | 2018-02-01
+ [7,8) | 2018-01-02 | 2018-01-03
 (4 rows)
 
 SELECT * FROM temporal_fk_per2per WHERE id in ('[3,3]') ORDER BY id, valid_at;
   id   | valid_from | valid_til  | parent_id 
 -------+------------+------------+-----------
- [3,4) | 01-05-2018 | 01-10-2018 | [5,6)
+ [3,4) | 2018-01-05 | 2018-01-10 | [5,6)
 (1 row)
 
 -- then delete the objecting FK record and the same PK update succeeds:
@@ -3422,7 +3422,7 @@ DELETE FROM temporal_per WHERE id = '[5,5]' AND valid_from = '2018-02-01' AND va
 -- a PK delete that fails because both are referenced:
 DELETE FROM temporal_per WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
 ERROR:  update or delete on table "temporal_per" violates foreign key constraint "temporal_fk_per2per_fk" on table "temporal_fk_per2per"
-DETAIL:  Key (id, valid_at)=([5,6), [01-01-2018,02-01-2018)) is still referenced from table "temporal_fk_per2per".
+DETAIL:  Key (id, valid_at)=([5,6), [2018-01-01,2018-02-01)) is still referenced from table "temporal_fk_per2per".
 -- deleting an unreferenced part is okay:
 DELETE FROM temporal_per
 FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
@@ -3432,18 +3432,18 @@ DELETE FROM temporal_per
 FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
 WHERE id = '[5,5]';
 ERROR:  update or delete on table "temporal_per" violates foreign key constraint "temporal_fk_per2per_fk" on table "temporal_fk_per2per"
-DETAIL:  Key (id, valid_at)=([5,6), [01-03-2018,02-01-2018)) is still referenced from table "temporal_fk_per2per".
+DETAIL:  Key (id, valid_at)=([5,6), [2018-01-03,2018-02-01)) is still referenced from table "temporal_fk_per2per".
 SELECT * FROM temporal_per WHERE id in ('[5,5]', '[7,7]') ORDER BY id, valid_at;
   id   | valid_from | valid_til  
 -------+------------+------------
- [5,6) | 01-01-2018 | 01-02-2018
- [5,6) | 01-03-2018 | 02-01-2018
+ [5,6) | 2018-01-01 | 2018-01-02
+ [5,6) | 2018-01-03 | 2018-02-01
 (2 rows)
 
 SELECT * FROM temporal_fk_per2per WHERE id in ('[3,3]') ORDER BY id, valid_at;
   id   | valid_from | valid_til  | parent_id 
 -------+------------+------------+-----------
- [3,4) | 01-05-2018 | 01-10-2018 | [5,6)
+ [3,4) | 2018-01-05 | 2018-01-10 | [5,6)
 (1 row)
 
 -- then delete the objecting FK record and the same PK delete succeeds:
@@ -3473,7 +3473,7 @@ DELETE FROM temporal_per WHERE id = '[5,5]' AND valid_from = '2018-02-01' AND va
 -- a PK delete that fails because both are referenced:
 DELETE FROM temporal_per WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
 ERROR:  update or delete on table "temporal_per" violates foreign key constraint "temporal_fk_per2per_fk" on table "temporal_fk_per2per"
-DETAIL:  Key (id, valid_at)=([5,6), [01-01-2018,02-01-2018)) is still referenced from table "temporal_fk_per2per".
+DETAIL:  Key (id, valid_at)=([5,6), [2018-01-01,2018-02-01)) is still referenced from table "temporal_fk_per2per".
 -- deleting an unreferenced part is okay:
 DELETE FROM temporal_per
 FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
@@ -3483,18 +3483,18 @@ DELETE FROM temporal_per
 FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
 WHERE id = '[5,5]';
 ERROR:  update or delete on table "temporal_per" violates foreign key constraint "temporal_fk_per2per_fk" on table "temporal_fk_per2per"
-DETAIL:  Key (id, valid_at)=([5,6), [01-03-2018,02-01-2018)) is still referenced from table "temporal_fk_per2per".
+DETAIL:  Key (id, valid_at)=([5,6), [2018-01-03,2018-02-01)) is still referenced from table "temporal_fk_per2per".
 SELECT * FROM temporal_per WHERE id in ('[5,5]', '[7,7]') ORDER BY id, valid_at;
   id   | valid_from | valid_til  
 -------+------------+------------
- [5,6) | 01-01-2018 | 01-02-2018
- [5,6) | 01-03-2018 | 02-01-2018
+ [5,6) | 2018-01-01 | 2018-01-02
+ [5,6) | 2018-01-03 | 2018-02-01
 (2 rows)
 
 SELECT * FROM temporal_fk_per2per WHERE id in ('[3,3]') ORDER BY id, valid_at;
   id   | valid_from | valid_til  | parent_id 
 -------+------------+------------+-----------
- [3,4) | 01-05-2018 | 01-10-2018 | [5,6)
+ [3,4) | 2018-01-05 | 2018-01-10 | [5,6)
 (1 row)
 
 -- then delete the objecting FK record and the same PK delete succeeds:
@@ -3535,9 +3535,9 @@ UPDATE temporal_per FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SE
 SELECT * FROM temporal_fk_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id 
 -----------+------------+------------+-----------
- [100,101) | 01-01-2018 | 01-01-2019 | [6,7)
- [100,101) | 01-01-2019 | 01-01-2020 | [7,8)
- [100,101) | 01-01-2020 | 01-01-2021 | [6,7)
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 | [7,8)
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)
 (3 rows)
 
 -- non-FPO update:
@@ -3545,9 +3545,9 @@ UPDATE temporal_per SET id = '[7,7]' WHERE id = '[6,6]';
 SELECT * FROM temporal_fk_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id 
 -----------+------------+------------+-----------
- [100,101) | 01-01-2018 | 01-01-2019 | [7,8)
- [100,101) | 01-01-2019 | 01-01-2020 | [7,8)
- [100,101) | 01-01-2020 | 01-01-2021 | [7,8)
+ [100,101) | 2018-01-01 | 2019-01-01 | [7,8)
+ [100,101) | 2019-01-01 | 2020-01-01 | [7,8)
+ [100,101) | 2020-01-01 | 2021-01-01 | [7,8)
 (3 rows)
 
 -- FK across two referenced rows:
@@ -3558,8 +3558,8 @@ UPDATE temporal_per SET id = '[9,9]' WHERE id = '[8,8]' AND valid_at @> '2019-01
 SELECT * FROM temporal_fk_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id 
 -----------+------------+------------+-----------
- [200,201) | 01-01-2018 | 01-01-2020 | [9,10)
- [200,201) | 01-01-2020 | 01-01-2021 | [8,9)
+ [200,201) | 2018-01-01 | 2020-01-01 | [9,10)
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)
 (2 rows)
 
 -- clean up
@@ -3573,8 +3573,8 @@ DELETE FROM temporal_per FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-0
 SELECT * FROM temporal_fk_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id 
 -----------+------------+------------+-----------
- [100,101) | 01-01-2018 | 01-01-2019 | [6,7)
- [100,101) | 01-01-2020 | 01-01-2021 | [6,7)
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)
 (2 rows)
 
 -- non-FPO delete:
@@ -3592,7 +3592,7 @@ DELETE FROM temporal_per WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id 
 -----------+------------+------------+-----------
- [200,201) | 01-01-2020 | 01-01-2021 | [8,9)
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)
 (1 row)
 
 -- clean up
@@ -3612,9 +3612,9 @@ UPDATE temporal_per FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SE
 SELECT * FROM temporal_fk_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id 
 -----------+------------+------------+-----------
- [100,101) | 01-01-2018 | 01-01-2019 | [6,7)
- [100,101) | 01-01-2019 | 01-01-2020 | 
- [100,101) | 01-01-2020 | 01-01-2021 | [6,7)
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 | 
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)
 (3 rows)
 
 -- non-FPO update:
@@ -3622,9 +3622,9 @@ UPDATE temporal_per SET id = '[7,7]' WHERE id = '[6,6]';
 SELECT * FROM temporal_fk_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id 
 -----------+------------+------------+-----------
- [100,101) | 01-01-2018 | 01-01-2019 | 
- [100,101) | 01-01-2019 | 01-01-2020 | 
- [100,101) | 01-01-2020 | 01-01-2021 | 
+ [100,101) | 2018-01-01 | 2019-01-01 | 
+ [100,101) | 2019-01-01 | 2020-01-01 | 
+ [100,101) | 2020-01-01 | 2021-01-01 | 
 (3 rows)
 
 -- FK across two referenced rows:
@@ -3635,8 +3635,8 @@ UPDATE temporal_per SET id = '[9,9]' WHERE id = '[8,8]' AND valid_at @> '2019-01
 SELECT * FROM temporal_fk_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id 
 -----------+------------+------------+-----------
- [200,201) | 01-01-2018 | 01-01-2020 | 
- [200,201) | 01-01-2020 | 01-01-2021 | [8,9)
+ [200,201) | 2018-01-01 | 2020-01-01 | 
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)
 (2 rows)
 
 -- clean up
@@ -3650,9 +3650,9 @@ DELETE FROM temporal_per FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-0
 SELECT * FROM temporal_fk_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id 
 -----------+------------+------------+-----------
- [100,101) | 01-01-2018 | 01-01-2019 | [6,7)
- [100,101) | 01-01-2019 | 01-01-2020 | 
- [100,101) | 01-01-2020 | 01-01-2021 | [6,7)
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 | 
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)
 (3 rows)
 
 -- non-FPO delete:
@@ -3660,9 +3660,9 @@ DELETE FROM temporal_per WHERE id = '[6,6]';
 SELECT * FROM temporal_fk_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id 
 -----------+------------+------------+-----------
- [100,101) | 01-01-2018 | 01-01-2019 | 
- [100,101) | 01-01-2019 | 01-01-2020 | 
- [100,101) | 01-01-2020 | 01-01-2021 | 
+ [100,101) | 2018-01-01 | 2019-01-01 | 
+ [100,101) | 2019-01-01 | 2020-01-01 | 
+ [100,101) | 2020-01-01 | 2021-01-01 | 
 (3 rows)
 
 -- FK across two referenced rows:
@@ -3673,8 +3673,8 @@ DELETE FROM temporal_per WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id 
 -----------+------------+------------+-----------
- [200,201) | 01-01-2018 | 01-01-2020 | 
- [200,201) | 01-01-2020 | 01-01-2021 | [8,9)
+ [200,201) | 2018-01-01 | 2020-01-01 | 
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)
 (2 rows)
 
 -- clean up
@@ -3696,9 +3696,9 @@ UPDATE temporal_per FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SE
 SELECT * FROM temporal_fk_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id 
 -----------+------------+------------+-----------
- [100,101) | 01-01-2018 | 01-01-2019 | [6,7)
- [100,101) | 01-01-2019 | 01-01-2020 | [-1,0)
- [100,101) | 01-01-2020 | 01-01-2021 | [6,7)
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 | [-1,0)
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)
 (3 rows)
 
 -- non-FPO update:
@@ -3706,9 +3706,9 @@ UPDATE temporal_per SET id = '[7,7]' WHERE id = '[6,6]';
 SELECT * FROM temporal_fk_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id 
 -----------+------------+------------+-----------
- [100,101) | 01-01-2018 | 01-01-2019 | [-1,0)
- [100,101) | 01-01-2019 | 01-01-2020 | [-1,0)
- [100,101) | 01-01-2020 | 01-01-2021 | [-1,0)
+ [100,101) | 2018-01-01 | 2019-01-01 | [-1,0)
+ [100,101) | 2019-01-01 | 2020-01-01 | [-1,0)
+ [100,101) | 2020-01-01 | 2021-01-01 | [-1,0)
 (3 rows)
 
 -- FK across two referenced rows:
@@ -3719,8 +3719,8 @@ UPDATE temporal_per SET id = '[9,9]' WHERE id = '[8,8]' AND valid_at @> '2019-01
 SELECT * FROM temporal_fk_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id 
 -----------+------------+------------+-----------
- [200,201) | 01-01-2018 | 01-01-2020 | [-1,0)
- [200,201) | 01-01-2020 | 01-01-2021 | [8,9)
+ [200,201) | 2018-01-01 | 2020-01-01 | [-1,0)
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)
 (2 rows)
 
 -- clean up
@@ -3734,9 +3734,9 @@ DELETE FROM temporal_per FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-0
 SELECT * FROM temporal_fk_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id 
 -----------+------------+------------+-----------
- [100,101) | 01-01-2018 | 01-01-2019 | [6,7)
- [100,101) | 01-01-2019 | 01-01-2020 | [-1,0)
- [100,101) | 01-01-2020 | 01-01-2021 | [6,7)
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 | [-1,0)
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)
 (3 rows)
 
 -- non-FPO update:
@@ -3744,9 +3744,9 @@ DELETE FROM temporal_per WHERE id = '[6,6]';
 SELECT * FROM temporal_fk_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id 
 -----------+------------+------------+-----------
- [100,101) | 01-01-2018 | 01-01-2019 | [-1,0)
- [100,101) | 01-01-2019 | 01-01-2020 | [-1,0)
- [100,101) | 01-01-2020 | 01-01-2021 | [-1,0)
+ [100,101) | 2018-01-01 | 2019-01-01 | [-1,0)
+ [100,101) | 2019-01-01 | 2020-01-01 | [-1,0)
+ [100,101) | 2020-01-01 | 2021-01-01 | [-1,0)
 (3 rows)
 
 -- FK across two referenced rows:
@@ -3757,8 +3757,8 @@ DELETE FROM temporal_per WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id 
 -----------+------------+------------+-----------
- [200,201) | 01-01-2018 | 01-01-2020 | [-1,0)
- [200,201) | 01-01-2020 | 01-01-2021 | [8,9)
+ [200,201) | 2018-01-01 | 2020-01-01 | [-1,0)
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)
 (2 rows)
 
 -- clean up
@@ -3778,9 +3778,9 @@ UPDATE temporal_per2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' S
 SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id1 | parent_id2 
 -----------+------------+------------+------------+------------
- [100,101) | 01-01-2018 | 01-01-2019 | [6,7)      | [6,7)
- [100,101) | 01-01-2019 | 01-01-2020 | [7,8)      | [6,7)
- [100,101) | 01-01-2020 | 01-01-2021 | [6,7)      | [6,7)
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)      | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 | [7,8)      | [6,7)
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)      | [6,7)
 (3 rows)
 
 -- non-FPO update:
@@ -3788,9 +3788,9 @@ UPDATE temporal_per2 SET id1 = '[7,7]' WHERE id1 = '[6,6]';
 SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id1 | parent_id2 
 -----------+------------+------------+------------+------------
- [100,101) | 01-01-2018 | 01-01-2019 | [7,8)      | [6,7)
- [100,101) | 01-01-2019 | 01-01-2020 | [7,8)      | [6,7)
- [100,101) | 01-01-2020 | 01-01-2021 | [7,8)      | [6,7)
+ [100,101) | 2018-01-01 | 2019-01-01 | [7,8)      | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 | [7,8)      | [6,7)
+ [100,101) | 2020-01-01 | 2021-01-01 | [7,8)      | [6,7)
 (3 rows)
 
 -- FK across two referenced rows:
@@ -3801,8 +3801,8 @@ UPDATE temporal_per2 SET id1 = '[9,9]' WHERE id1 = '[8,8]' AND valid_at @> '2019
 SELECT * FROM temporal_fk2_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id1 | parent_id2 
 -----------+------------+------------+------------+------------
- [200,201) | 01-01-2018 | 01-01-2020 | [9,10)     | [8,9)
- [200,201) | 01-01-2020 | 01-01-2021 | [8,9)      | [8,9)
+ [200,201) | 2018-01-01 | 2020-01-01 | [9,10)     | [8,9)
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)      | [8,9)
 (2 rows)
 
 -- clean up
@@ -3816,8 +3816,8 @@ DELETE FROM temporal_per2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-
 SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id1 | parent_id2 
 -----------+------------+------------+------------+------------
- [100,101) | 01-01-2018 | 01-01-2019 | [6,7)      | [6,7)
- [100,101) | 01-01-2020 | 01-01-2021 | [6,7)      | [6,7)
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)      | [6,7)
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)      | [6,7)
 (2 rows)
 
 -- non-FPO delete:
@@ -3835,7 +3835,7 @@ DELETE FROM temporal_per2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date
 SELECT * FROM temporal_fk2_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id1 | parent_id2 
 -----------+------------+------------+------------+------------
- [200,201) | 01-01-2020 | 01-01-2021 | [8,9)      | [8,9)
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)      | [8,9)
 (1 row)
 
 -- clean up
@@ -3855,9 +3855,9 @@ UPDATE temporal_per2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' S
 SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id1 | parent_id2 
 -----------+------------+------------+------------+------------
- [100,101) | 01-01-2018 | 01-01-2019 | [6,7)      | [6,7)
- [100,101) | 01-01-2019 | 01-01-2020 |            | 
- [100,101) | 01-01-2020 | 01-01-2021 | [6,7)      | [6,7)
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)      | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 |            | 
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)      | [6,7)
 (3 rows)
 
 -- non-FPO update:
@@ -3865,9 +3865,9 @@ UPDATE temporal_per2 SET id1 = '[7,7]' WHERE id1 = '[6,6]';
 SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id1 | parent_id2 
 -----------+------------+------------+------------+------------
- [100,101) | 01-01-2018 | 01-01-2019 |            | 
- [100,101) | 01-01-2019 | 01-01-2020 |            | 
- [100,101) | 01-01-2020 | 01-01-2021 |            | 
+ [100,101) | 2018-01-01 | 2019-01-01 |            | 
+ [100,101) | 2019-01-01 | 2020-01-01 |            | 
+ [100,101) | 2020-01-01 | 2021-01-01 |            | 
 (3 rows)
 
 -- FK across two referenced rows:
@@ -3878,8 +3878,8 @@ UPDATE temporal_per2 SET id1 = '[9,9]' WHERE id1 = '[8,8]' AND valid_at @> '2019
 SELECT * FROM temporal_fk2_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id1 | parent_id2 
 -----------+------------+------------+------------+------------
- [200,201) | 01-01-2018 | 01-01-2020 |            | 
- [200,201) | 01-01-2020 | 01-01-2021 | [8,9)      | [8,9)
+ [200,201) | 2018-01-01 | 2020-01-01 |            | 
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)      | [8,9)
 (2 rows)
 
 -- clean up
@@ -3893,9 +3893,9 @@ DELETE FROM temporal_per2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-
 SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id1 | parent_id2 
 -----------+------------+------------+------------+------------
- [100,101) | 01-01-2018 | 01-01-2019 | [6,7)      | [6,7)
- [100,101) | 01-01-2019 | 01-01-2020 |            | 
- [100,101) | 01-01-2020 | 01-01-2021 | [6,7)      | [6,7)
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)      | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 |            | 
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)      | [6,7)
 (3 rows)
 
 -- non-FPO delete:
@@ -3903,9 +3903,9 @@ DELETE FROM temporal_per2 WHERE id1 = '[6,6]';
 SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id1 | parent_id2 
 -----------+------------+------------+------------+------------
- [100,101) | 01-01-2018 | 01-01-2019 |            | 
- [100,101) | 01-01-2019 | 01-01-2020 |            | 
- [100,101) | 01-01-2020 | 01-01-2021 |            | 
+ [100,101) | 2018-01-01 | 2019-01-01 |            | 
+ [100,101) | 2019-01-01 | 2020-01-01 |            | 
+ [100,101) | 2020-01-01 | 2021-01-01 |            | 
 (3 rows)
 
 -- FK across two referenced rows:
@@ -3916,8 +3916,8 @@ DELETE FROM temporal_per2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date
 SELECT * FROM temporal_fk2_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id1 | parent_id2 
 -----------+------------+------------+------------+------------
- [200,201) | 01-01-2018 | 01-01-2020 |            | 
- [200,201) | 01-01-2020 | 01-01-2021 | [8,9)      | [8,9)
+ [200,201) | 2018-01-01 | 2020-01-01 |            | 
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)      | [8,9)
 (2 rows)
 
 -- clean up
@@ -3946,9 +3946,9 @@ DELETE FROM temporal_per2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-
 SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id1 | parent_id2 
 -----------+------------+------------+------------+------------
- [100,101) | 01-01-2018 | 01-01-2019 | [6,7)      | [6,7)
- [100,101) | 01-01-2019 | 01-01-2020 |            | [6,7)
- [100,101) | 01-01-2020 | 01-01-2021 | [6,7)      | [6,7)
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)      | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 |            | [6,7)
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)      | [6,7)
 (3 rows)
 
 -- non-FPO delete:
@@ -3956,9 +3956,9 @@ DELETE FROM temporal_per2 WHERE id1 = '[6,6]';
 SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id1 | parent_id2 
 -----------+------------+------------+------------+------------
- [100,101) | 01-01-2018 | 01-01-2019 |            | [6,7)
- [100,101) | 01-01-2019 | 01-01-2020 |            | [6,7)
- [100,101) | 01-01-2020 | 01-01-2021 |            | [6,7)
+ [100,101) | 2018-01-01 | 2019-01-01 |            | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 |            | [6,7)
+ [100,101) | 2020-01-01 | 2021-01-01 |            | [6,7)
 (3 rows)
 
 -- FK across two referenced rows:
@@ -3969,8 +3969,8 @@ DELETE FROM temporal_per2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date
 SELECT * FROM temporal_fk2_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id1 | parent_id2 
 -----------+------------+------------+------------+------------
- [200,201) | 01-01-2018 | 01-01-2020 |            | [8,9)
- [200,201) | 01-01-2020 | 01-01-2021 | [8,9)      | [8,9)
+ [200,201) | 2018-01-01 | 2020-01-01 |            | [8,9)
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)      | [8,9)
 (2 rows)
 
 -- clean up
@@ -3993,9 +3993,9 @@ UPDATE temporal_per2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' S
 SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id1 | parent_id2 
 -----------+------------+------------+------------+------------
- [100,101) | 01-01-2018 | 01-01-2019 | [6,7)      | [6,7)
- [100,101) | 01-01-2019 | 01-01-2020 | [-1,0)     | [-1,0)
- [100,101) | 01-01-2020 | 01-01-2021 | [6,7)      | [6,7)
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)      | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 | [-1,0)     | [-1,0)
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)      | [6,7)
 (3 rows)
 
 -- non-FPO update:
@@ -4003,9 +4003,9 @@ UPDATE temporal_per2 SET id1 = '[7,7]', id2 = '[7,7]' WHERE id1 = '[6,6]';
 SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id1 | parent_id2 
 -----------+------------+------------+------------+------------
- [100,101) | 01-01-2018 | 01-01-2019 | [-1,0)     | [-1,0)
- [100,101) | 01-01-2019 | 01-01-2020 | [-1,0)     | [-1,0)
- [100,101) | 01-01-2020 | 01-01-2021 | [-1,0)     | [-1,0)
+ [100,101) | 2018-01-01 | 2019-01-01 | [-1,0)     | [-1,0)
+ [100,101) | 2019-01-01 | 2020-01-01 | [-1,0)     | [-1,0)
+ [100,101) | 2020-01-01 | 2021-01-01 | [-1,0)     | [-1,0)
 (3 rows)
 
 -- FK across two referenced rows:
@@ -4016,8 +4016,8 @@ UPDATE temporal_per2 SET id1 = '[9,9]', id2 = '[9,9]' WHERE id1 = '[8,8]' AND va
 SELECT * FROM temporal_fk2_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id1 | parent_id2 
 -----------+------------+------------+------------+------------
- [200,201) | 01-01-2018 | 01-01-2020 | [-1,0)     | [-1,0)
- [200,201) | 01-01-2020 | 01-01-2021 | [8,9)      | [8,9)
+ [200,201) | 2018-01-01 | 2020-01-01 | [-1,0)     | [-1,0)
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)      | [8,9)
 (2 rows)
 
 -- clean up
@@ -4031,9 +4031,9 @@ DELETE FROM temporal_per2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-
 SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id1 | parent_id2 
 -----------+------------+------------+------------+------------
- [100,101) | 01-01-2018 | 01-01-2019 | [6,7)      | [6,7)
- [100,101) | 01-01-2019 | 01-01-2020 | [-1,0)     | [-1,0)
- [100,101) | 01-01-2020 | 01-01-2021 | [6,7)      | [6,7)
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)      | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 | [-1,0)     | [-1,0)
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)      | [6,7)
 (3 rows)
 
 -- non-FPO update:
@@ -4041,9 +4041,9 @@ DELETE FROM temporal_per2 WHERE id1 = '[6,6]';
 SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id1 | parent_id2 
 -----------+------------+------------+------------+------------
- [100,101) | 01-01-2018 | 01-01-2019 | [-1,0)     | [-1,0)
- [100,101) | 01-01-2019 | 01-01-2020 | [-1,0)     | [-1,0)
- [100,101) | 01-01-2020 | 01-01-2021 | [-1,0)     | [-1,0)
+ [100,101) | 2018-01-01 | 2019-01-01 | [-1,0)     | [-1,0)
+ [100,101) | 2019-01-01 | 2020-01-01 | [-1,0)     | [-1,0)
+ [100,101) | 2020-01-01 | 2021-01-01 | [-1,0)     | [-1,0)
 (3 rows)
 
 -- FK across two referenced rows:
@@ -4054,8 +4054,8 @@ DELETE FROM temporal_per2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date
 SELECT * FROM temporal_fk2_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id1 | parent_id2 
 -----------+------------+------------+------------+------------
- [200,201) | 01-01-2018 | 01-01-2020 | [-1,0)     | [-1,0)
- [200,201) | 01-01-2020 | 01-01-2021 | [8,9)      | [8,9)
+ [200,201) | 2018-01-01 | 2020-01-01 | [-1,0)     | [-1,0)
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)      | [8,9)
 (2 rows)
 
 -- clean up
@@ -4087,9 +4087,9 @@ DELETE FROM temporal_per2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-
 SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id1 | parent_id2 
 -----------+------------+------------+------------+------------
- [100,101) | 01-01-2018 | 01-01-2019 | [6,7)      | [6,7)
- [100,101) | 01-01-2019 | 01-01-2020 | [-1,0)     | [6,7)
- [100,101) | 01-01-2020 | 01-01-2021 | [6,7)      | [6,7)
+ [100,101) | 2018-01-01 | 2019-01-01 | [6,7)      | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 | [-1,0)     | [6,7)
+ [100,101) | 2020-01-01 | 2021-01-01 | [6,7)      | [6,7)
 (3 rows)
 
 -- non-FPO update:
@@ -4097,9 +4097,9 @@ DELETE FROM temporal_per2 WHERE id1 = '[6,6]';
 SELECT * FROM temporal_fk2_per2per WHERE id = '[100,100]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id1 | parent_id2 
 -----------+------------+------------+------------+------------
- [100,101) | 01-01-2018 | 01-01-2019 | [-1,0)     | [6,7)
- [100,101) | 01-01-2019 | 01-01-2020 | [-1,0)     | [6,7)
- [100,101) | 01-01-2020 | 01-01-2021 | [-1,0)     | [6,7)
+ [100,101) | 2018-01-01 | 2019-01-01 | [-1,0)     | [6,7)
+ [100,101) | 2019-01-01 | 2020-01-01 | [-1,0)     | [6,7)
+ [100,101) | 2020-01-01 | 2021-01-01 | [-1,0)     | [6,7)
 (3 rows)
 
 -- FK across two referenced rows:
@@ -4111,8 +4111,8 @@ DELETE FROM temporal_per2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date
 SELECT * FROM temporal_fk2_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
     id     | valid_from | valid_til  | parent_id1 | parent_id2 
 -----------+------------+------------+------------+------------
- [200,201) | 01-01-2018 | 01-01-2020 | [-1,0)     | [8,9)
- [200,201) | 01-01-2020 | 01-01-2021 | [8,9)      | [8,9)
+ [200,201) | 2018-01-01 | 2020-01-01 | [-1,0)     | [8,9)
+ [200,201) | 2020-01-01 | 2021-01-01 | [8,9)      | [8,9)
 (2 rows)
 
 -- clean up
