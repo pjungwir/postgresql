@@ -1606,22 +1606,22 @@ DELETE FROM temporal_mltrng WHERE id = '[5,5]' AND valid_at = datemultirange(dat
 -- mltrng2mltrng test ON UPDATE/DELETE options
 --
 -- TOC:
--- parent updates CASCADE
--- parent deletes CASCADE
--- parent updates SET NULL
--- parent deletes SET NULL
--- parent updates SET DEFAULT
--- parent deletes SET DEFAULT
--- parent updates CASCADE (two scalar cols)
--- parent deletes CASCADE (two scalar cols)
--- parent updates SET NULL (two scalar cols)
--- parent deletes SET NULL (two scalar cols)
--- parent deletes SET NULL (two scalar cols, SET NULL subset)
--- parent updates SET DEFAULT (two scalar cols)
--- parent deletes SET DEFAULT (two scalar cols)
--- parent deletes SET DEFAULT (two scalar cols, SET DEFAULT subset)
+-- referenced updates CASCADE
+-- referenced deletes CASCADE
+-- referenced updates SET NULL
+-- referenced deletes SET NULL
+-- referenced updates SET DEFAULT
+-- referencereferenced deletes SET DEFAULT
+-- referenced updates CASCADE (two scalar cols)
+-- referenced deletes CASCADE (two scalar cols)
+-- referenced updates SET NULL (two scalar cols)
+-- referenced deletes SET NULL (two scalar cols)
+-- referenced deletes SET NULL (two scalar cols, SET NULL subset)
+-- referenced updates SET DEFAULT (two scalar cols)
+-- referenced deletes SET DEFAULT (two scalar cols)
+-- referenced deletes SET DEFAULT (two scalar cols, SET DEFAULT subset)
 
--- test FK parent updates CASCADE
+-- test FK referenced updates CASCADE
 INSERT INTO temporal_mltrng VALUES ('[6,6]', datemultirange(daterange('2018-01-01', '2021-01-01')));
 INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[100,100]', datemultirange(daterange('2018-01-01', '2021-01-01')), '[6,6]');
 ALTER TABLE temporal_fk_mltrng2mltrng
@@ -1646,7 +1646,7 @@ SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[200,200]' ORDER BY id, vali
 DELETE FROM temporal_fk_mltrng2mltrng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_mltrng WHERE id IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
--- test FK parent deletes CASCADE
+-- test FK referenced deletes CASCADE
 INSERT INTO temporal_mltrng VALUES ('[6,6]', datemultirange(daterange('2018-01-01', '2021-01-01')));
 INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[100,100]', datemultirange(daterange('2018-01-01', '2021-01-01')), '[6,6]');
 -- leftovers on both sides:
@@ -1665,7 +1665,7 @@ SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[200,200]' ORDER BY id, vali
 DELETE FROM temporal_fk_mltrng2mltrng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_mltrng WHERE id IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
--- test FK parent updates SET NULL
+-- test FK referenced updates SET NULL
 INSERT INTO temporal_mltrng VALUES ('[6,6]', datemultirange(daterange('2018-01-01', '2021-01-01')));
 INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[100,100]', datemultirange(daterange('2018-01-01', '2021-01-01')), '[6,6]');
 ALTER TABLE temporal_fk_mltrng2mltrng
@@ -1690,7 +1690,7 @@ SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[200,200]' ORDER BY id, vali
 DELETE FROM temporal_fk_mltrng2mltrng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_mltrng WHERE id IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
--- test FK parent deletes SET NULL
+-- test FK referenced deletes SET NULL
 INSERT INTO temporal_mltrng VALUES ('[6,6]', datemultirange(daterange('2018-01-01', '2021-01-01')));
 INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[100,100]', datemultirange(daterange('2018-01-01', '2021-01-01')), '[6,6]');
 -- leftovers on both sides:
@@ -1709,7 +1709,7 @@ SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[200,200]' ORDER BY id, vali
 DELETE FROM temporal_fk_mltrng2mltrng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_mltrng WHERE id IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
--- test FK parent updates SET DEFAULT
+-- test FK referenced updates SET DEFAULT
 INSERT INTO temporal_mltrng VALUES ('[-1,-1]', datemultirange(daterange(null, null)));
 INSERT INTO temporal_mltrng VALUES ('[6,6]', datemultirange(daterange('2018-01-01', '2021-01-01')));
 INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[100,100]', datemultirange(daterange('2018-01-01', '2021-01-01')), '[6,6]');
@@ -1736,7 +1736,7 @@ SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[200,200]' ORDER BY id, vali
 DELETE FROM temporal_fk_mltrng2mltrng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_mltrng WHERE id IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
--- test FK parent deletes SET DEFAULT
+-- test FK referenced deletes SET DEFAULT
 INSERT INTO temporal_mltrng VALUES ('[6,6]', datemultirange(daterange('2018-01-01', '2021-01-01')));
 INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[100,100]', datemultirange(daterange('2018-01-01', '2021-01-01')), '[6,6]');
 -- leftovers on both sides:
@@ -1755,7 +1755,7 @@ SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[200,200]' ORDER BY id, vali
 DELETE FROM temporal_fk_mltrng2mltrng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_mltrng WHERE id IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
--- test FK parent updates CASCADE (two scalar cols)
+-- test FK referenced updates CASCADE (two scalar cols)
 INSERT INTO temporal_mltrng2 VALUES ('[6,6]', '[6,6]', datemultirange(daterange('2018-01-01', '2021-01-01')));
 INSERT INTO temporal_fk2_mltrng2mltrng VALUES ('[100,100]', datemultirange(daterange('2018-01-01', '2021-01-01')), '[6,6]', '[6,6]');
 ALTER TABLE temporal_fk2_mltrng2mltrng
@@ -1780,7 +1780,7 @@ SELECT * FROM temporal_fk2_mltrng2mltrng WHERE id = '[200,200]' ORDER BY id, val
 DELETE FROM temporal_fk2_mltrng2mltrng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_mltrng2 WHERE id1 IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
--- test FK parent deletes CASCADE (two scalar cols)
+-- test FK referenced deletes CASCADE (two scalar cols)
 INSERT INTO temporal_mltrng2 VALUES ('[6,6]', '[6,6]', datemultirange(daterange('2018-01-01', '2021-01-01')));
 INSERT INTO temporal_fk2_mltrng2mltrng VALUES ('[100,100]', datemultirange(daterange('2018-01-01', '2021-01-01')), '[6,6]', '[6,6]');
 -- leftovers on both sides:
@@ -1799,7 +1799,7 @@ SELECT * FROM temporal_fk2_mltrng2mltrng WHERE id = '[200,200]' ORDER BY id, val
 DELETE FROM temporal_fk2_mltrng2mltrng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_mltrng2 WHERE id1 IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
--- test FK parent updates SET NULL (two scalar cols)
+-- test FK referenced updates SET NULL (two scalar cols)
 INSERT INTO temporal_mltrng2 VALUES ('[6,6]', '[6,6]', datemultirange(daterange('2018-01-01', '2021-01-01')));
 INSERT INTO temporal_fk2_mltrng2mltrng VALUES ('[100,100]', datemultirange(daterange('2018-01-01', '2021-01-01')), '[6,6]', '[6,6]');
 ALTER TABLE temporal_fk2_mltrng2mltrng
@@ -1824,7 +1824,7 @@ SELECT * FROM temporal_fk2_mltrng2mltrng WHERE id = '[200,200]' ORDER BY id, val
 DELETE FROM temporal_fk2_mltrng2mltrng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_mltrng2 WHERE id1 IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
--- test FK parent deletes SET NULL (two scalar cols)
+-- test FK referenced deletes SET NULL (two scalar cols)
 INSERT INTO temporal_mltrng2 VALUES ('[6,6]', '[6,6]', datemultirange(daterange('2018-01-01', '2021-01-01')));
 INSERT INTO temporal_fk2_mltrng2mltrng VALUES ('[100,100]', datemultirange(daterange('2018-01-01', '2021-01-01')), '[6,6]', '[6,6]');
 -- leftovers on both sides:
@@ -1843,7 +1843,7 @@ SELECT * FROM temporal_fk2_mltrng2mltrng WHERE id = '[200,200]' ORDER BY id, val
 DELETE FROM temporal_fk2_mltrng2mltrng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_mltrng2 WHERE id1 IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
--- test FK parent deletes SET NULL (two scalar cols, SET NULL subset)
+-- test FK referenced deletes SET NULL (two scalar cols, SET NULL subset)
 INSERT INTO temporal_mltrng2 VALUES ('[6,6]', '[6,6]', datemultirange(daterange('2018-01-01', '2021-01-01')));
 INSERT INTO temporal_fk2_mltrng2mltrng VALUES ('[100,100]', datemultirange(daterange('2018-01-01', '2021-01-01')), '[6,6]', '[6,6]');
 -- fails because you can't set the PERIOD column:
@@ -1876,7 +1876,7 @@ SELECT * FROM temporal_fk2_mltrng2mltrng WHERE id = '[200,200]' ORDER BY id, val
 DELETE FROM temporal_fk2_mltrng2mltrng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_mltrng2 WHERE id1 IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
--- test FK parent updates SET DEFAULT (two scalar cols)
+-- test FK referenced updates SET DEFAULT (two scalar cols)
 INSERT INTO temporal_mltrng2 VALUES ('[-1,-1]', '[-1,-1]', datemultirange(daterange(null, null)));
 INSERT INTO temporal_mltrng2 VALUES ('[6,6]', '[6,6]', datemultirange(daterange('2018-01-01', '2021-01-01')));
 INSERT INTO temporal_fk2_mltrng2mltrng VALUES ('[100,100]', datemultirange(daterange('2018-01-01', '2021-01-01')), '[6,6]', '[6,6]');
@@ -1904,7 +1904,7 @@ SELECT * FROM temporal_fk2_mltrng2mltrng WHERE id = '[200,200]' ORDER BY id, val
 DELETE FROM temporal_fk2_mltrng2mltrng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_mltrng2 WHERE id1 IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
--- test FK parent deletes SET DEFAULT (two scalar cols)
+-- test FK referenced deletes SET DEFAULT (two scalar cols)
 INSERT INTO temporal_mltrng2 VALUES ('[6,6]', '[6,6]', datemultirange(daterange('2018-01-01', '2021-01-01')));
 INSERT INTO temporal_fk2_mltrng2mltrng VALUES ('[100,100]', datemultirange(daterange('2018-01-01', '2021-01-01')), '[6,6]', '[6,6]');
 -- leftovers on both sides:
@@ -1923,7 +1923,7 @@ SELECT * FROM temporal_fk2_mltrng2mltrng WHERE id = '[200,200]' ORDER BY id, val
 DELETE FROM temporal_fk2_mltrng2mltrng WHERE id IN ('[100,100]', '[200,200]');
 DELETE FROM temporal_mltrng2 WHERE id1 IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
--- test FK parent deletes SET DEFAULT (two scalar cols, SET DEFAULT subset)
+-- test FK referenced deletes SET DEFAULT (two scalar cols, SET DEFAULT subset)
 INSERT INTO temporal_mltrng2 VALUES ('[-1,-1]', '[6,6]', datemultirange(daterange(null, null)));
 INSERT INTO temporal_mltrng2 VALUES ('[6,6]', '[6,6]', datemultirange(daterange('2018-01-01', '2021-01-01')));
 INSERT INTO temporal_fk2_mltrng2mltrng VALUES ('[100,100]', datemultirange(daterange('2018-01-01', '2021-01-01')), '[6,6]', '[6,6]');
