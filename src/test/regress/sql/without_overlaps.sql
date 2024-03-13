@@ -217,26 +217,26 @@ DROP TABLE temporal3;
 --
 
 -- okay:
-INSERT INTO temporal_rng VALUES ('[1,1]', daterange('2018-01-02', '2018-02-03'));
-INSERT INTO temporal_rng VALUES ('[1,1]', daterange('2018-03-03', '2018-04-04'));
-INSERT INTO temporal_rng VALUES ('[2,2]', daterange('2018-01-01', '2018-01-05'));
-INSERT INTO temporal_rng VALUES ('[3,3]', daterange('2018-01-01', NULL));
+INSERT INTO temporal_rng VALUES ('[1,2)', daterange('2018-01-02', '2018-02-03'));
+INSERT INTO temporal_rng VALUES ('[1,2)', daterange('2018-03-03', '2018-04-04'));
+INSERT INTO temporal_rng VALUES ('[2,3)', daterange('2018-01-01', '2018-01-05'));
+INSERT INTO temporal_rng VALUES ('[3,4)', daterange('2018-01-01', NULL));
 
 -- should fail:
-INSERT INTO temporal_rng VALUES ('[1,1]', daterange('2018-01-01', '2018-01-05'));
+INSERT INTO temporal_rng VALUES ('[1,2)', daterange('2018-01-01', '2018-01-05'));
 INSERT INTO temporal_rng VALUES (NULL, daterange('2018-01-01', '2018-01-05'));
-INSERT INTO temporal_rng VALUES ('[3,3]', NULL);
+INSERT INTO temporal_rng VALUES ('[3,4)', NULL);
 
 -- okay:
-INSERT INTO temporal_mltrng VALUES ('[1,1]', datemultirange(daterange('2018-01-02', '2018-02-03')));
-INSERT INTO temporal_mltrng VALUES ('[1,1]', datemultirange(daterange('2018-03-03', '2018-04-04')));
-INSERT INTO temporal_mltrng VALUES ('[2,2]', datemultirange(daterange('2018-01-01', '2018-01-05')));
-INSERT INTO temporal_mltrng VALUES ('[3,3]', datemultirange(daterange('2018-01-01', NULL)));
+INSERT INTO temporal_mltrng VALUES ('[1,2)', datemultirange(daterange('2018-01-02', '2018-02-03')));
+INSERT INTO temporal_mltrng VALUES ('[1,2)', datemultirange(daterange('2018-03-03', '2018-04-04')));
+INSERT INTO temporal_mltrng VALUES ('[2,3)', datemultirange(daterange('2018-01-01', '2018-01-05')));
+INSERT INTO temporal_mltrng VALUES ('[3,4)', datemultirange(daterange('2018-01-01', NULL)));
 
 -- should fail:
-INSERT INTO temporal_mltrng VALUES ('[1,1]', datemultirange(daterange('2018-01-01', '2018-01-05')));
+INSERT INTO temporal_mltrng VALUES ('[1,2)', datemultirange(daterange('2018-01-01', '2018-01-05')));
 INSERT INTO temporal_mltrng VALUES (NULL, datemultirange(daterange('2018-01-01', '2018-01-05')));
-INSERT INTO temporal_mltrng VALUES ('[3,3]', NULL);
+INSERT INTO temporal_mltrng VALUES ('[3,4)', NULL);
 
 SELECT * FROM temporal_mltrng ORDER BY id, valid_at;
 
