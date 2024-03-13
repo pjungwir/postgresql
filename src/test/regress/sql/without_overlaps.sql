@@ -261,16 +261,16 @@ UPDATE temporal3 FOR PORTION OF valid_at FROM '2000-05-01' TO '2000-07-01'
   SET name = name || '1';
 UPDATE temporal3 FOR PORTION OF valid_at FROM '2000-04-01' TO '2000-06-01'
   SET name = name || '2'
-  WHERE id = '[2,2]';
+  WHERE id = '[2,3)';
 SELECT * FROM temporal3 ORDER BY id, valid_at;
 -- conflicting id only:
 INSERT INTO temporal3 (id, valid_at, id2, name)
   VALUES
-  ('[1,1]', daterange('2005-01-01', '2006-01-01'), '[8,8]', 'foo3');
+  ('[1,2)', daterange('2005-01-01', '2006-01-01'), '[8,9)', 'foo3');
 -- conflicting id2 only:
 INSERT INTO temporal3 (id, valid_at, id2, name)
   VALUES
-  ('[3,3]', daterange('2005-01-01', '2010-01-01'), '[9,9]', 'bar3');
+  ('[3,4)', daterange('2005-01-01', '2010-01-01'), '[9,10)', 'bar3');
 DROP TABLE temporal3;
 
 --
@@ -312,18 +312,18 @@ SELECT * FROM tp2 ORDER BY id, valid_at;
 UPDATE  temporal_partitioned
   FOR PORTION OF valid_at FROM '2000-01-15' TO '2000-02-15'
   SET name = 'one2'
-  WHERE id = '[1,1]';
+  WHERE id = '[1,2)';
 UPDATE  temporal_partitioned
   FOR PORTION OF valid_at FROM '2000-02-20' TO '2000-02-25'
-  SET id = '[4,4]'
+  SET id = '[4,5)'
   WHERE name = 'one';
 UPDATE  temporal_partitioned
   FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01'
-  SET id = '[2,2]'
+  SET id = '[2,3)'
   WHERE name = 'three';
 DELETE FROM temporal_partitioned
   FOR PORTION OF valid_at FROM '2000-01-15' TO '2000-02-15'
-  WHERE id = '[3,3]';
+  WHERE id = '[3,4)';
 SELECT * FROM temporal_partitioned ORDER BY id, valid_at;
 DROP TABLE temporal_partitioned;
 
@@ -346,18 +346,18 @@ SELECT * FROM tp2 ORDER BY id, valid_at;
 UPDATE  temporal_partitioned
   FOR PORTION OF valid_at FROM '2000-01-15' TO '2000-02-15'
   SET name = 'one2'
-  WHERE id = '[1,1]';
+  WHERE id = '[1,2)';
 UPDATE  temporal_partitioned
   FOR PORTION OF valid_at FROM '2000-02-20' TO '2000-02-25'
-  SET id = '[4,4]'
+  SET id = '[4,5)'
   WHERE name = 'one';
 UPDATE  temporal_partitioned
   FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01'
-  SET id = '[2,2]'
+  SET id = '[2,3)'
   WHERE name = 'three';
 DELETE FROM temporal_partitioned
   FOR PORTION OF valid_at FROM '2000-01-15' TO '2000-02-15'
-  WHERE id = '[3,3]';
+  WHERE id = '[3,4)';
 SELECT * FROM temporal_partitioned ORDER BY id, valid_at;
 DROP TABLE temporal_partitioned;
 
