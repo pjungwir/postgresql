@@ -321,18 +321,18 @@ INSERT INTO temporal_rng (id, valid_at) VALUES ('[3,4)', NULL);
 ERROR:  null value in column "valid_at" of relation "temporal_rng" violates not-null constraint
 DETAIL:  Failing row contains ([3,4), null).
 -- okay:
-INSERT INTO temporal_mltrng VALUES ('[1,1]', datemultirange(daterange('2018-01-02', '2018-02-03')));
-INSERT INTO temporal_mltrng VALUES ('[1,1]', datemultirange(daterange('2018-03-03', '2018-04-04')));
-INSERT INTO temporal_mltrng VALUES ('[2,2]', datemultirange(daterange('2018-01-01', '2018-01-05')));
-INSERT INTO temporal_mltrng VALUES ('[3,3]', datemultirange(daterange('2018-01-01', NULL)));
+INSERT INTO temporal_mltrng VALUES ('[1,2)', datemultirange(daterange('2018-01-02', '2018-02-03')));
+INSERT INTO temporal_mltrng VALUES ('[1,2)', datemultirange(daterange('2018-03-03', '2018-04-04')));
+INSERT INTO temporal_mltrng VALUES ('[2,3)', datemultirange(daterange('2018-01-01', '2018-01-05')));
+INSERT INTO temporal_mltrng VALUES ('[3,4)', datemultirange(daterange('2018-01-01', NULL)));
 -- should fail:
-INSERT INTO temporal_mltrng VALUES ('[1,1]', datemultirange(daterange('2018-01-01', '2018-01-05')));
+INSERT INTO temporal_mltrng VALUES ('[1,2)', datemultirange(daterange('2018-01-01', '2018-01-05')));
 ERROR:  conflicting key value violates exclusion constraint "temporal_mltrng_pk"
 DETAIL:  Key (id, valid_at)=([1,2), {[2018-01-01,2018-01-05)}) conflicts with existing key (id, valid_at)=([1,2), {[2018-01-02,2018-02-03)}).
 INSERT INTO temporal_mltrng VALUES (NULL, datemultirange(daterange('2018-01-01', '2018-01-05')));
 ERROR:  null value in column "id" of relation "temporal_mltrng" violates not-null constraint
 DETAIL:  Failing row contains (null, {[2018-01-01,2018-01-05)}).
-INSERT INTO temporal_mltrng VALUES ('[3,3]', NULL);
+INSERT INTO temporal_mltrng VALUES ('[3,4)', NULL);
 ERROR:  null value in column "valid_at" of relation "temporal_mltrng" violates not-null constraint
 DETAIL:  Failing row contains ([3,4), null).
 SELECT * FROM temporal_mltrng ORDER BY id, valid_at;
