@@ -1153,7 +1153,7 @@ SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,201)' ORDER BY id, valid_at;
 DELETE FROM temporal_fk2_rng2rng WHERE id IN ('[100,101)', '[200,201)');
 DELETE FROM temporal_rng2 WHERE id1 IN ('[6,7)', '[7,8)', '[8,9)', '[9,10)');
 
--- test FK referencereferenced deletes SET DEFAULT (two scalar cols)
+-- test FK referenced deletes SET DEFAULT (two scalar cols)
 INSERT INTO temporal_rng2 VALUES ('[6,7)', '[6,7)', daterange('2018-01-01', '2021-01-01'));
 INSERT INTO temporal_fk2_rng2rng VALUES ('[100,101)', daterange('2018-01-01', '2021-01-01'), '[6,7)', '[6,7)');
 -- leftovers on both sides:
