@@ -17591,7 +17591,6 @@ unreserved_keyword:
 			| PARTITION
 			| PASSING
 			| PASSWORD
-			| PERIOD
 			| PLANS
 			| POLICY
 			| PORTION
@@ -17892,6 +17891,7 @@ reserved_keyword:
 			| ONLY
 			| OR
 			| ORDER
+			| PERIOD
 			| PLACING
 			| PRIMARY
 			| REFERENCES
