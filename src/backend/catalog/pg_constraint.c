@@ -1653,7 +1653,16 @@ DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
 /*
  * FindFkPeriodOpersAndProcs -
  *
- * Looks up the oper and proc oids used by foreign keys with a PERIOD part.
+ * Looks up the operator and support proc oids used for the PERIOD part of a temporal foreign key.
+ * The opclass should be the opclass of that PERIOD element.
+ * Everything else is an output: periodoperoid is the ContainedBy operator for
+ * types matching the PERIOD element. periodprocoid is a GiST support function to
+ * aggregate multiple PERIOD element values into a single value
+ * (whose return type need not match its inputs,
+ * e.g. many ranges can be aggregated into a multirange).
+ * And aggedperiodoperoid is also a ContainedBy operator,
+ * but one whose rhs matches the type returned by aggedperiodoperoid.
+ * That way foreign keys can compare fkattr <@ range_agg(pkattr).
  */
 void
 FindFKPeriodOpersAndProcs(Oid opclass,
@@ -1668,7 +1677,7 @@ FindFKPeriodOpersAndProcs(Oid opclass,
 	StrategyNumber strat = RTContainedByStrategyNumber;
 
 	/*
-	 * Look up the ContainedBy operator with symmetric types.
+	 * Look up the ContainedBy operator whose lhs and rhs are the opclass's type.
 	 * We use this to optimize RI checks: if the new value includes all
 	 * of the old value, then we can treat the attribute as if it didn't change,
 	 * and skip the RI check.
