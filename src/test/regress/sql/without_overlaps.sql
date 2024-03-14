@@ -593,6 +593,7 @@ COMMIT; -- should fail here.
 -- test FK referenced updates NO ACTION
 --
 
+TRUNCATE temporal_rng, temporal_fk_rng2rng;
 -- a PK update that succeeds because the numeric id isn't referenced:
 INSERT INTO temporal_rng (id, valid_at) VALUES ('[5,6)', daterange('2018-01-01', '2018-02-01'));
 UPDATE temporal_rng SET valid_at = daterange('2016-01-01', '2016-02-01') WHERE id = '[5,6)';
@@ -614,14 +615,12 @@ WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
 DELETE FROM temporal_fk_rng2rng WHERE id = '[3,4)';
 UPDATE temporal_rng SET valid_at = daterange('2016-01-01', '2016-02-01')
 WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
--- clean up:
-DELETE FROM temporal_fk_rng2rng WHERE parent_id = '[5,6)';
-DELETE FROM temporal_rng WHERE id = '[5,6)';
 
 --
 -- test FK referenced updates RESTRICT
 --
 
+TRUNCATE temporal_rng, temporal_fk_rng2rng;
 ALTER TABLE temporal_fk_rng2rng
 	DROP CONSTRAINT temporal_fk_rng2rng_fk;
 ALTER TABLE temporal_fk_rng2rng
@@ -650,12 +649,12 @@ WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
 DELETE FROM temporal_fk_rng2rng WHERE id = '[3,4)';
 UPDATE temporal_rng SET valid_at = daterange('2016-01-01', '2016-02-01')
 WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
--- clean up:
-DELETE FROM temporal_fk_rng2rng WHERE parent_id = '[5,6)';
-DELETE FROM temporal_rng WHERE id = '[5,6)';
+
 --
 -- test FK referenced deletes NO ACTION
 --
+
+TRUNCATE temporal_rng, temporal_fk_rng2rng;
 ALTER TABLE temporal_fk_rng2rng
 	DROP CONSTRAINT temporal_fk_rng2rng_fk;
 ALTER TABLE temporal_fk_rng2rng
@@ -681,6 +680,7 @@ DELETE FROM temporal_rng WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01
 -- test FK referenced deletes RESTRICT
 --
 
+TRUNCATE temporal_rng, temporal_fk_rng2rng;
 ALTER TABLE temporal_fk_rng2rng
 	DROP CONSTRAINT temporal_fk_rng2rng_fk;
 ALTER TABLE temporal_fk_rng2rng
@@ -966,6 +966,7 @@ COMMIT; -- should fail here.
 -- test FK referenced updates NO ACTION
 --
 
+TRUNCATE temporal_mltrng, temporal_fk_mltrng2mltrng;
 -- a PK update that succeeds because the numeric id isn't referenced:
 INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[5,6)', datemultirange(daterange('2018-01-01', '2018-02-01')));
 UPDATE temporal_mltrng SET valid_at = datemultirange(daterange('2016-01-01', '2016-02-01')) WHERE id = '[5,6)';
@@ -983,14 +984,12 @@ WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-01-01', '2018-0
 -- changing the scalar part fails:
 UPDATE temporal_mltrng SET id = '[7,8)'
 WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
--- clean up:
-DELETE FROM temporal_fk_mltrng2mltrng WHERE parent_id = '[5,6)';
-DELETE FROM temporal_mltrng WHERE id IN ('[5,6)', '[7,8)');
 
 --
 -- test FK referenced updates RESTRICT
 --
 
+TRUNCATE temporal_mltrng, temporal_fk_mltrng2mltrng;
 ALTER TABLE temporal_fk_mltrng2mltrng
 	DROP CONSTRAINT temporal_fk_mltrng2mltrng_fk;
 ALTER TABLE temporal_fk_mltrng2mltrng
@@ -1015,12 +1014,12 @@ WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-01-01', '2018-0
 -- changing the scalar part fails:
 UPDATE temporal_mltrng SET id = '[7,8)'
 WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
--- clean up:
-DELETE FROM temporal_fk_mltrng2mltrng WHERE parent_id = '[5,6)';
-DELETE FROM temporal_mltrng WHERE id IN ('[5,6)', '[7,8)');
+
 --
 -- test FK referenced deletes NO ACTION
 --
+
+TRUNCATE temporal_mltrng, temporal_fk_mltrng2mltrng;
 ALTER TABLE temporal_fk_mltrng2mltrng
 	DROP CONSTRAINT temporal_fk_mltrng2mltrng_fk;
 ALTER TABLE temporal_fk_mltrng2mltrng
@@ -1038,13 +1037,12 @@ INSERT INTO temporal_fk_mltrng2mltrng (id, valid_at, parent_id) VALUES ('[3,4)',
 DELETE FROM temporal_mltrng WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-02-01', '2018-03-01'));
 -- a PK delete that fails because both are referenced:
 DELETE FROM temporal_mltrng WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
--- clean up:
-DELETE FROM temporal_fk_mltrng2mltrng WHERE parent_id = '[5,6)';
-DELETE FROM temporal_mltrng WHERE id IN ('[5,6)');
 
 --
 -- test FK referenced deletes RESTRICT
 --
+
+TRUNCATE temporal_mltrng, temporal_fk_mltrng2mltrng;
 ALTER TABLE temporal_fk_mltrng2mltrng
 	DROP CONSTRAINT temporal_fk_mltrng2mltrng_fk;
 ALTER TABLE temporal_fk_mltrng2mltrng
@@ -1062,9 +1060,6 @@ INSERT INTO temporal_fk_mltrng2mltrng (id, valid_at, parent_id) VALUES ('[3,4)',
 DELETE FROM temporal_mltrng WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-02-01', '2018-03-01'));
 -- a PK delete that fails because both are referenced:
 DELETE FROM temporal_mltrng WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
--- clean up:
-DELETE FROM temporal_fk_mltrng2mltrng WHERE parent_id = '[5,6)';
-DELETE FROM temporal_mltrng WHERE id IN ('[5,6)');
 
 -- FK between partitioned tables
 
