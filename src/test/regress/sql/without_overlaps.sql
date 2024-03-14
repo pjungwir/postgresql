@@ -827,9 +827,9 @@ SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,101)' ORDER BY id, valid_at;
 UPDATE temporal_rng SET id = '[7,8)' WHERE id = '[6,7)';
 SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,101)' ORDER BY id, valid_at;
 -- FK across two referenced rows:
-INSERT INTO temporal_rng VALUES ('[8,9)', daterange('2018-01-01', '2020-01-01'));
-INSERT INTO temporal_rng VALUES ('[8,9)', daterange('2020-01-01', '2021-01-01'));
-INSERT INTO temporal_fk_rng2rng VALUES ('[200,201)', daterange('2018-01-01', '2021-01-01'), '[8,9)');
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[8,9)', daterange('2018-01-01', '2020-01-01'));
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[8,9)', daterange('2020-01-01', '2021-01-01'));
+INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES ('[200,201)', daterange('2018-01-01', '2021-01-01'), '[8,9)');
 UPDATE temporal_rng SET id = '[9,10)' WHERE id = '[8,9)' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,201)' ORDER BY id, valid_at;
 -- clean up
@@ -837,8 +837,8 @@ DELETE FROM temporal_fk_rng2rng WHERE id IN ('[100,101)', '[200,201)');
 DELETE FROM temporal_rng WHERE id IN ('[6,7)', '[7,8)', '[8,9)', '[9,10)');
 
 -- test FK referenced deletes CASCADE
-INSERT INTO temporal_rng VALUES ('[6,7)', daterange('2018-01-01', '2021-01-01'));
-INSERT INTO temporal_fk_rng2rng VALUES ('[100,101)', daterange('2018-01-01', '2021-01-01'), '[6,7)');
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[6,7)', daterange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES ('[100,101)', daterange('2018-01-01', '2021-01-01'), '[6,7)');
 -- leftovers on both sides:
 DELETE FROM temporal_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[6,7)';
 SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,101)' ORDER BY id, valid_at;
@@ -846,9 +846,9 @@ SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,101)' ORDER BY id, valid_at;
 DELETE FROM temporal_rng WHERE id = '[6,7)';
 SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,101)' ORDER BY id, valid_at;
 -- FK across two referenced rows:
-INSERT INTO temporal_rng VALUES ('[8,9)', daterange('2018-01-01', '2020-01-01'));
-INSERT INTO temporal_rng VALUES ('[8,9)', daterange('2020-01-01', '2021-01-01'));
-INSERT INTO temporal_fk_rng2rng VALUES ('[200,201)', daterange('2018-01-01', '2021-01-01'), '[8,9)');
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[8,9)', daterange('2018-01-01', '2020-01-01'));
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[8,9)', daterange('2020-01-01', '2021-01-01'));
+INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES ('[200,201)', daterange('2018-01-01', '2021-01-01'), '[8,9)');
 DELETE FROM temporal_rng WHERE id = '[8,9)' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,201)' ORDER BY id, valid_at;
 -- clean up
@@ -871,9 +871,9 @@ SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,101)' ORDER BY id, valid_at;
 UPDATE temporal_rng SET id = '[7,8)' WHERE id = '[6,7)';
 SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,101)' ORDER BY id, valid_at;
 -- FK across two referenced rows:
-INSERT INTO temporal_rng VALUES ('[8,9)', daterange('2018-01-01', '2020-01-01'));
-INSERT INTO temporal_rng VALUES ('[8,9)', daterange('2020-01-01', '2021-01-01'));
-INSERT INTO temporal_fk_rng2rng VALUES ('[200,201)', daterange('2018-01-01', '2021-01-01'), '[8,9)');
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[8,9)', daterange('2018-01-01', '2020-01-01'));
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[8,9)', daterange('2020-01-01', '2021-01-01'));
+INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES ('[200,201)', daterange('2018-01-01', '2021-01-01'), '[8,9)');
 UPDATE temporal_rng SET id = '[9,10)' WHERE id = '[8,9)' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,201)' ORDER BY id, valid_at;
 -- clean up
@@ -881,8 +881,8 @@ DELETE FROM temporal_fk_rng2rng WHERE id IN ('[100,101)', '[200,201)');
 DELETE FROM temporal_rng WHERE id IN ('[6,7)', '[7,8)', '[8,9)', '[9,10)');
 
 -- test FK referenced deletes SET NULL
-INSERT INTO temporal_rng VALUES ('[6,7)', daterange('2018-01-01', '2021-01-01'));
-INSERT INTO temporal_fk_rng2rng VALUES ('[100,101)', daterange('2018-01-01', '2021-01-01'), '[6,7)');
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[6,7)', daterange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES ('[100,101)', daterange('2018-01-01', '2021-01-01'), '[6,7)');
 -- leftovers on both sides:
 DELETE FROM temporal_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[6,7)';
 SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,101)' ORDER BY id, valid_at;
@@ -890,9 +890,9 @@ SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,101)' ORDER BY id, valid_at;
 DELETE FROM temporal_rng WHERE id = '[6,7)';
 SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,101)' ORDER BY id, valid_at;
 -- FK across two referenced rows:
-INSERT INTO temporal_rng VALUES ('[8,9)', daterange('2018-01-01', '2020-01-01'));
-INSERT INTO temporal_rng VALUES ('[8,9)', daterange('2020-01-01', '2021-01-01'));
-INSERT INTO temporal_fk_rng2rng VALUES ('[200,201)', daterange('2018-01-01', '2021-01-01'), '[8,9)');
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[8,9)', daterange('2018-01-01', '2020-01-01'));
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[8,9)', daterange('2020-01-01', '2021-01-01'));
+INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES ('[200,201)', daterange('2018-01-01', '2021-01-01'), '[8,9)');
 DELETE FROM temporal_rng WHERE id = '[8,9)' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,201)' ORDER BY id, valid_at;
 -- clean up
@@ -917,9 +917,9 @@ SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,101)' ORDER BY id, valid_at;
 UPDATE temporal_rng SET id = '[7,8)' WHERE id = '[6,7)';
 SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,101)' ORDER BY id, valid_at;
 -- FK across two referenced rows:
-INSERT INTO temporal_rng VALUES ('[8,9)', daterange('2018-01-01', '2020-01-01'));
-INSERT INTO temporal_rng VALUES ('[8,9)', daterange('2020-01-01', '2021-01-01'));
-INSERT INTO temporal_fk_rng2rng VALUES ('[200,201)', daterange('2018-01-01', '2021-01-01'), '[8,9)');
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[8,9)', daterange('2018-01-01', '2020-01-01'));
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[8,9)', daterange('2020-01-01', '2021-01-01'));
+INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES ('[200,201)', daterange('2018-01-01', '2021-01-01'), '[8,9)');
 UPDATE temporal_rng SET id = '[9,10)' WHERE id = '[8,9)' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,201)' ORDER BY id, valid_at;
 -- clean up
@@ -927,8 +927,8 @@ DELETE FROM temporal_fk_rng2rng WHERE id IN ('[100,101)', '[200,201)');
 DELETE FROM temporal_rng WHERE id IN ('[6,7)', '[7,8)', '[8,9)', '[9,10)');
 
 -- test FK referenced deletes SET DEFAULT
-INSERT INTO temporal_rng VALUES ('[6,7)', daterange('2018-01-01', '2021-01-01'));
-INSERT INTO temporal_fk_rng2rng VALUES ('[100,101)', daterange('2018-01-01', '2021-01-01'), '[6,7)');
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[6,7)', daterange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES ('[100,101)', daterange('2018-01-01', '2021-01-01'), '[6,7)');
 -- leftovers on both sides:
 DELETE FROM temporal_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[6,7)';
 SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,101)' ORDER BY id, valid_at;
@@ -936,9 +936,9 @@ SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,101)' ORDER BY id, valid_at;
 DELETE FROM temporal_rng WHERE id = '[6,7)';
 SELECT * FROM temporal_fk_rng2rng WHERE id = '[100,101)' ORDER BY id, valid_at;
 -- FK across two referenced rows:
-INSERT INTO temporal_rng VALUES ('[8,9)', daterange('2018-01-01', '2020-01-01'));
-INSERT INTO temporal_rng VALUES ('[8,9)', daterange('2020-01-01', '2021-01-01'));
-INSERT INTO temporal_fk_rng2rng VALUES ('[200,201)', daterange('2018-01-01', '2021-01-01'), '[8,9)');
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[8,9)', daterange('2018-01-01', '2020-01-01'));
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[8,9)', daterange('2020-01-01', '2021-01-01'));
+INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES ('[200,201)', daterange('2018-01-01', '2021-01-01'), '[8,9)');
 DELETE FROM temporal_rng WHERE id = '[8,9)' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk_rng2rng WHERE id = '[200,201)' ORDER BY id, valid_at;
 -- clean up
@@ -1094,7 +1094,7 @@ SELECT * FROM temporal_fk2_rng2rng WHERE id = '[200,201)' ORDER BY id, valid_at;
 DELETE FROM temporal_fk2_rng2rng WHERE id IN ('[100,101)', '[200,201)');
 DELETE FROM temporal_rng2 WHERE id1 IN ('[6,7)', '[7,8)', '[8,9)', '[9,10)');
 
--- test FK referenced deletes SET DEFAULT (two scalar cols)
+-- test FK referencereferenced deletes SET DEFAULT (two scalar cols)
 INSERT INTO temporal_rng2 VALUES ('[6,7)', '[6,7)', daterange('2018-01-01', '2021-01-01'));
 INSERT INTO temporal_fk2_rng2rng VALUES ('[100,101)', daterange('2018-01-01', '2021-01-01'), '[6,7)', '[6,7)');
 -- leftovers on both sides:
@@ -1539,8 +1539,8 @@ DELETE FROM temporal_mltrng WHERE id = '[5,6)' AND valid_at = datemultirange(dat
 -- referenced deletes SET DEFAULT (two scalar cols, SET DEFAULT subset)
 
 -- test FK referenced updates CASCADE
-INSERT INTO temporal_mltrng VALUES ('[6,7)', datemultirange(daterange('2018-01-01', '2021-01-01')));
-INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[100,101)', datemultirange(daterange('2018-01-01', '2021-01-01')), '[6,7)');
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[6,7)', datemultirange(daterange('2018-01-01', '2021-01-01')));
+INSERT INTO temporal_fk_mltrng2mltrng (id, valid_at, parent_id) VALUES ('[100,101)', datemultirange(daterange('2018-01-01', '2021-01-01')), '[6,7)');
 ALTER TABLE temporal_fk_mltrng2mltrng
 	DROP CONSTRAINT temporal_fk_mltrng2mltrng_fk,
 	ADD CONSTRAINT temporal_fk_mltrng2mltrng_fk
@@ -1554,9 +1554,9 @@ SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[100,101)' ORDER BY id, vali
 UPDATE temporal_mltrng SET id = '[7,8)' WHERE id = '[6,7)';
 SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[100,101)' ORDER BY id, valid_at;
 -- FK across two referenced rows:
-INSERT INTO temporal_mltrng VALUES ('[8,9)', datemultirange(daterange('2018-01-01', '2020-01-01')));
-INSERT INTO temporal_mltrng VALUES ('[8,9)', datemultirange(daterange('2020-01-01', '2021-01-01')));
-INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[200,201)', datemultirange(daterange('2018-01-01', '2021-01-01')), '[8,9)');
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[8,9)', datemultirange(daterange('2018-01-01', '2020-01-01')));
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[8,9)', datemultirange(daterange('2020-01-01', '2021-01-01')));
+INSERT INTO temporal_fk_mltrng2mltrng (id, valid_at, parent_id) VALUES ('[200,201)', datemultirange(daterange('2018-01-01', '2021-01-01')), '[8,9)');
 UPDATE temporal_mltrng SET id = '[9,10)' WHERE id = '[8,9)' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[200,201)' ORDER BY id, valid_at;
 -- clean up
@@ -1564,8 +1564,8 @@ DELETE FROM temporal_fk_mltrng2mltrng WHERE id IN ('[100,101)', '[200,201)');
 DELETE FROM temporal_mltrng WHERE id IN ('[6,7)', '[7,8)', '[8,9)', '[9,10)');
 
 -- test FK referenced deletes CASCADE
-INSERT INTO temporal_mltrng VALUES ('[6,7)', datemultirange(daterange('2018-01-01', '2021-01-01')));
-INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[100,101)', datemultirange(daterange('2018-01-01', '2021-01-01')), '[6,7)');
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[6,7)', datemultirange(daterange('2018-01-01', '2021-01-01')));
+INSERT INTO temporal_fk_mltrng2mltrng (id, valid_at, parent_id) VALUES ('[100,101)', datemultirange(daterange('2018-01-01', '2021-01-01')), '[6,7)');
 -- leftovers on both sides:
 DELETE FROM temporal_mltrng FOR PORTION OF valid_at (datemultirange(daterange('2019-01-01', '2020-01-01'))) WHERE id = '[6,7)';
 SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[100,101)' ORDER BY id, valid_at;
@@ -1573,9 +1573,9 @@ SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[100,101)' ORDER BY id, vali
 DELETE FROM temporal_mltrng WHERE id = '[6,7)';
 SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[100,101)' ORDER BY id, valid_at;
 -- FK across two referenced rows:
-INSERT INTO temporal_mltrng VALUES ('[8,9)', datemultirange(daterange('2018-01-01', '2020-01-01')));
-INSERT INTO temporal_mltrng VALUES ('[8,9)', datemultirange(daterange('2020-01-01', '2021-01-01')));
-INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[200,201)', datemultirange(daterange('2018-01-01', '2021-01-01')), '[8,9)');
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[8,9)', datemultirange(daterange('2018-01-01', '2020-01-01')));
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[8,9)', datemultirange(daterange('2020-01-01', '2021-01-01')));
+INSERT INTO temporal_fk_mltrng2mltrng (id, valid_at, parent_id) VALUES ('[200,201)', datemultirange(daterange('2018-01-01', '2021-01-01')), '[8,9)');
 DELETE FROM temporal_mltrng WHERE id = '[8,9)' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[200,201)' ORDER BY id, valid_at;
 -- clean up
@@ -1583,8 +1583,8 @@ DELETE FROM temporal_fk_mltrng2mltrng WHERE id IN ('[100,101)', '[200,201)');
 DELETE FROM temporal_mltrng WHERE id IN ('[6,7)', '[7,8)', '[8,9)', '[9,10)');
 
 -- test FK referenced updates SET NULL
-INSERT INTO temporal_mltrng VALUES ('[6,7)', datemultirange(daterange('2018-01-01', '2021-01-01')));
-INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[100,101)', datemultirange(daterange('2018-01-01', '2021-01-01')), '[6,7)');
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[6,7)', datemultirange(daterange('2018-01-01', '2021-01-01')));
+INSERT INTO temporal_fk_mltrng2mltrng (id, valid_at, parent_id) VALUES ('[100,101)', datemultirange(daterange('2018-01-01', '2021-01-01')), '[6,7)');
 ALTER TABLE temporal_fk_mltrng2mltrng
 	DROP CONSTRAINT temporal_fk_mltrng2mltrng_fk,
 	ADD CONSTRAINT temporal_fk_mltrng2mltrng_fk
@@ -1598,9 +1598,9 @@ SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[100,101)' ORDER BY id, vali
 UPDATE temporal_mltrng SET id = '[7,8)' WHERE id = '[6,7)';
 SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[100,101)' ORDER BY id, valid_at;
 -- FK across two referenced rows:
-INSERT INTO temporal_mltrng VALUES ('[8,9)', datemultirange(daterange('2018-01-01', '2020-01-01')));
-INSERT INTO temporal_mltrng VALUES ('[8,9)', datemultirange(daterange('2020-01-01', '2021-01-01')));
-INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[200,201)', datemultirange(daterange('2018-01-01', '2021-01-01')), '[8,9)');
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[8,9)', datemultirange(daterange('2018-01-01', '2020-01-01')));
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[8,9)', datemultirange(daterange('2020-01-01', '2021-01-01')));
+INSERT INTO temporal_fk_mltrng2mltrng (id, valid_at, parent_id) VALUES ('[200,201)', datemultirange(daterange('2018-01-01', '2021-01-01')), '[8,9)');
 UPDATE temporal_mltrng SET id = '[9,10)' WHERE id = '[8,9)' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[200,201)' ORDER BY id, valid_at;
 -- clean up
@@ -1608,8 +1608,8 @@ DELETE FROM temporal_fk_mltrng2mltrng WHERE id IN ('[100,101)', '[200,201)');
 DELETE FROM temporal_mltrng WHERE id IN ('[6,7)', '[7,8)', '[8,9)', '[9,10)');
 
 -- test FK referenced deletes SET NULL
-INSERT INTO temporal_mltrng VALUES ('[6,7)', datemultirange(daterange('2018-01-01', '2021-01-01')));
-INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[100,101)', datemultirange(daterange('2018-01-01', '2021-01-01')), '[6,7)');
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[6,7)', datemultirange(daterange('2018-01-01', '2021-01-01')));
+INSERT INTO temporal_fk_mltrng2mltrng (id, valid_at, parent_id) VALUES ('[100,101)', datemultirange(daterange('2018-01-01', '2021-01-01')), '[6,7)');
 -- leftovers on both sides:
 DELETE FROM temporal_mltrng FOR PORTION OF valid_at (datemultirange(daterange('2019-01-01', '2020-01-01'))) WHERE id = '[6,7)';
 SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[100,101)' ORDER BY id, valid_at;
@@ -1617,9 +1617,9 @@ SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[100,101)' ORDER BY id, vali
 DELETE FROM temporal_mltrng WHERE id = '[6,7)';
 SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[100,101)' ORDER BY id, valid_at;
 -- FK across two referenced rows:
-INSERT INTO temporal_mltrng VALUES ('[8,9)', datemultirange(daterange('2018-01-01', '2020-01-01')));
-INSERT INTO temporal_mltrng VALUES ('[8,9)', datemultirange(daterange('2020-01-01', '2021-01-01')));
-INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[200,201)', datemultirange(daterange('2018-01-01', '2021-01-01')), '[8,9)');
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[8,9)', datemultirange(daterange('2018-01-01', '2020-01-01')));
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[8,9)', datemultirange(daterange('2020-01-01', '2021-01-01')));
+INSERT INTO temporal_fk_mltrng2mltrng (id, valid_at, parent_id) VALUES ('[200,201)', datemultirange(daterange('2018-01-01', '2021-01-01')), '[8,9)');
 DELETE FROM temporal_mltrng WHERE id = '[8,9)' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[200,201)' ORDER BY id, valid_at;
 -- clean up
@@ -1627,9 +1627,9 @@ DELETE FROM temporal_fk_mltrng2mltrng WHERE id IN ('[100,101)', '[200,201)');
 DELETE FROM temporal_mltrng WHERE id IN ('[6,7)', '[7,8)', '[8,9)', '[9,10)');
 
 -- test FK referenced updates SET DEFAULT
-INSERT INTO temporal_mltrng VALUES ('[-1,-1]', datemultirange(daterange(null, null)));
-INSERT INTO temporal_mltrng VALUES ('[6,7)', datemultirange(daterange('2018-01-01', '2021-01-01')));
-INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[100,101)', datemultirange(daterange('2018-01-01', '2021-01-01')), '[6,7)');
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[-1,-1]', datemultirange(daterange(null, null)));
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[6,7)', datemultirange(daterange('2018-01-01', '2021-01-01')));
+INSERT INTO temporal_fk_mltrng2mltrng (id, valid_at, parent_id) VALUES ('[100,101)', datemultirange(daterange('2018-01-01', '2021-01-01')), '[6,7)');
 ALTER TABLE temporal_fk_mltrng2mltrng
   ALTER COLUMN parent_id SET DEFAULT '[-1,-1]',
 	DROP CONSTRAINT temporal_fk_mltrng2mltrng_fk,
@@ -1644,9 +1644,9 @@ SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[100,101)' ORDER BY id, vali
 UPDATE temporal_mltrng SET id = '[7,8)' WHERE id = '[6,7)';
 SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[100,101)' ORDER BY id, valid_at;
 -- FK across two referenced rows:
-INSERT INTO temporal_mltrng VALUES ('[8,9)', datemultirange(daterange('2018-01-01', '2020-01-01')));
-INSERT INTO temporal_mltrng VALUES ('[8,9)', datemultirange(daterange('2020-01-01', '2021-01-01')));
-INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[200,201)', datemultirange(daterange('2018-01-01', '2021-01-01')), '[8,9)');
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[8,9)', datemultirange(daterange('2018-01-01', '2020-01-01')));
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[8,9)', datemultirange(daterange('2020-01-01', '2021-01-01')));
+INSERT INTO temporal_fk_mltrng2mltrng (id, valid_at, parent_id) VALUES ('[200,201)', datemultirange(daterange('2018-01-01', '2021-01-01')), '[8,9)');
 UPDATE temporal_mltrng SET id = '[9,10)' WHERE id = '[8,9)' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[200,201)' ORDER BY id, valid_at;
 -- clean up
@@ -1654,8 +1654,8 @@ DELETE FROM temporal_fk_mltrng2mltrng WHERE id IN ('[100,101)', '[200,201)');
 DELETE FROM temporal_mltrng WHERE id IN ('[6,7)', '[7,8)', '[8,9)', '[9,10)');
 
 -- test FK referenced deletes SET DEFAULT
-INSERT INTO temporal_mltrng VALUES ('[6,7)', datemultirange(daterange('2018-01-01', '2021-01-01')));
-INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[100,101)', datemultirange(daterange('2018-01-01', '2021-01-01')), '[6,7)');
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[6,7)', datemultirange(daterange('2018-01-01', '2021-01-01')));
+INSERT INTO temporal_fk_mltrng2mltrng (id, valid_at, parent_id) VALUES ('[100,101)', datemultirange(daterange('2018-01-01', '2021-01-01')), '[6,7)');
 -- leftovers on both sides:
 DELETE FROM temporal_mltrng FOR PORTION OF valid_at (datemultirange(daterange('2019-01-01', '2020-01-01'))) WHERE id = '[6,7)';
 SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[100,101)' ORDER BY id, valid_at;
@@ -1663,9 +1663,9 @@ SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[100,101)' ORDER BY id, vali
 DELETE FROM temporal_mltrng WHERE id = '[6,7)';
 SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[100,101)' ORDER BY id, valid_at;
 -- FK across two referenced rows:
-INSERT INTO temporal_mltrng VALUES ('[8,9)', datemultirange(daterange('2018-01-01', '2020-01-01')));
-INSERT INTO temporal_mltrng VALUES ('[8,9)', datemultirange(daterange('2020-01-01', '2021-01-01')));
-INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[200,201)', datemultirange(daterange('2018-01-01', '2021-01-01')), '[8,9)');
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[8,9)', datemultirange(daterange('2018-01-01', '2020-01-01')));
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[8,9)', datemultirange(daterange('2020-01-01', '2021-01-01')));
+INSERT INTO temporal_fk_mltrng2mltrng (id, valid_at, parent_id) VALUES ('[200,201)', datemultirange(daterange('2018-01-01', '2021-01-01')), '[8,9)');
 DELETE FROM temporal_mltrng WHERE id = '[8,9)' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk_mltrng2mltrng WHERE id = '[200,201)' ORDER BY id, valid_at;
 -- clean up
