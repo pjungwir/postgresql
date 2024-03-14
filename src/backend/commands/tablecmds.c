@@ -389,7 +389,7 @@ static int	transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 									   Oid *opclasses, bool *pk_period);
 static Oid	transformFkeyCheckAttrs(Relation pkrel,
 									int numattrs, int16 *attnums,
-									bool is_temporal, Oid *opclasses);
+									bool with_period, Oid *opclasses);
 static void checkFkeyPermissions(Relation rel, int16 *attnums, int natts);
 static CoercionPathType findFkeyCast(Oid targetTypeId, Oid sourceTypeId,
 									 Oid *funcid);
@@ -509,7 +509,7 @@ static ObjectAddress addFkRecurseReferenced(List **wqueue, Constraint *fkconstra
 											int numfkdelsetcols, int16 *fkdelsetcols,
 											bool old_check_ok,
 											Oid parentDelTrigger, Oid parentUpdTrigger,
-											bool is_temporal);
+											bool with_period);
 static void validateFkOnDeleteSetColumns(int numfks, const int16 *fkattnums,
 										 int numfksetcols, const int16 *fksetcolsattnums,
 										 List *fksetcols);
@@ -520,7 +520,7 @@ static void addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint,
 									int numfkdelsetcols, int16 *fkdelsetcols,
 									bool old_check_ok, LOCKMODE lockmode,
 									Oid parentInsTrigger, Oid parentUpdTrigger,
-									bool is_temporal);
+									bool with_period);
 
 static void CloneForeignKeyConstraints(List **wqueue, Relation parentRel,
 									   Relation partitionRel);
@@ -9819,7 +9819,7 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	Oid			ppeqoperators[INDEX_MAX_KEYS] = {0};
 	Oid			ffeqoperators[INDEX_MAX_KEYS] = {0};
 	int16		fkdelsetcols[INDEX_MAX_KEYS] = {0};
-	bool		is_temporal;
+	bool		with_period;
 	bool		pk_with_period;
 	int			i;
 	int			numfks,
@@ -9915,8 +9915,8 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	numfks = transformColumnNameList(RelationGetRelid(rel),
 									 fkconstraint->fk_attrs,
 									 fkattnum, fktypoid);
-	is_temporal = fkconstraint->fk_with_period || fkconstraint->pk_with_period;
-	if (is_temporal)
+	with_period = fkconstraint->fk_with_period || fkconstraint->pk_with_period;
+	if (with_period)
 	{
 		if (!fkconstraint->fk_with_period)
 			ereport(ERROR,
@@ -9956,7 +9956,7 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 										 fkconstraint->pk_attrs,
 										 pkattnum, pktypoid);
 
-		if (is_temporal)
+		if (with_period)
 		{
 			if (!fkconstraint->pk_with_period)
 				/* Since we got pk_attrs, one should be a period. */
@@ -9967,7 +9967,7 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 
 		/* Look for an index matching the column list */
 		indexOid = transformFkeyCheckAttrs(pkrel, numpks, pkattnum,
-										   is_temporal, opclasses);
+										   with_period, opclasses);
 	}
 
 	/*
@@ -10040,7 +10040,7 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 		int16		eqstrategy;
 		Oid			pfeqop_right;
 		char	   *stratname;
-		bool		for_overlaps = is_temporal && i == numpks - 1;
+		bool		for_overlaps = with_period && i == numpks - 1;
 
 		/* We need several fields out of the pg_opclass entry */
 		cla_ht = SearchSysCache1(CLAOID, ObjectIdGetDatum(opclasses[i]));
@@ -10052,7 +10052,7 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 		opcintype = cla_tup->opcintype;
 		ReleaseSysCache(cla_ht);
 
-		if (is_temporal)
+		if (with_period)
 		{
 			/*
 			 * GiST indexes are required to support temporal foreign keys
@@ -10260,7 +10260,7 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	 * FKs will look these up at "runtime", but we should make sure
 	 * the lookup works here, even if we don't use the values.
 	 */
-	if (is_temporal)
+	if (with_period)
 	{
 		Oid			periodoperoid;
 		Oid			aggedperiodoperoid;
@@ -10286,7 +10286,7 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 									 fkdelsetcols,
 									 old_check_ok,
 									 InvalidOid, InvalidOid,
-									 is_temporal);
+									 with_period);
 
 	/* Now handle the referencing side. */
 	addFkRecurseReferencing(wqueue, fkconstraint, rel, pkrel,
@@ -10303,7 +10303,7 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 							old_check_ok,
 							lockmode,
 							InvalidOid, InvalidOid,
-							is_temporal);
+							with_period);
 
 	/*
 	 * Done.  Close pk table, but keep lock until we've committed.
@@ -10389,7 +10389,7 @@ addFkRecurseReferenced(List **wqueue, Constraint *fkconstraint, Relation rel,
 					   int numfkdelsetcols, int16 *fkdelsetcols,
 					   bool old_check_ok,
 					   Oid parentDelTrigger, Oid parentUpdTrigger,
-					   bool is_temporal)
+					   bool with_period)
 {
 	ObjectAddress address;
 	Oid			constrOid;
@@ -10475,7 +10475,7 @@ addFkRecurseReferenced(List **wqueue, Constraint *fkconstraint, Relation rel,
 									  conislocal,	/* islocal */
 									  coninhcount,	/* inhcount */
 									  connoinherit, /* conNoInherit */
-									  is_temporal,	/* conPeriod */
+									  with_period,	/* conPeriod */
 									  false);	/* is_internal */
 
 	ObjectAddressSet(address, ConstraintRelationId, constrOid);
@@ -10552,7 +10552,7 @@ addFkRecurseReferenced(List **wqueue, Constraint *fkconstraint, Relation rel,
 								   numfkdelsetcols, fkdelsetcols,
 								   old_check_ok,
 								   deleteTriggerOid, updateTriggerOid,
-								   is_temporal);
+								   with_period);
 
 			/* Done -- clean up (but keep the lock) */
 			table_close(partRel, NoLock);
@@ -10611,7 +10611,7 @@ addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint, Relation rel,
 						int numfkdelsetcols, int16 *fkdelsetcols,
 						bool old_check_ok, LOCKMODE lockmode,
 						Oid parentInsTrigger, Oid parentUpdTrigger,
-						bool is_temporal)
+						bool with_period)
 {
 	Oid			insertTriggerOid,
 				updateTriggerOid;
@@ -10777,7 +10777,7 @@ addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint, Relation rel,
 									  false,
 									  1,
 									  false,
-									  is_temporal,	/* conPeriod */
+									  with_period,	/* conPeriod */
 									  false);
 
 			/*
@@ -10809,7 +10809,7 @@ addFkRecurseReferencing(List **wqueue, Constraint *fkconstraint, Relation rel,
 									lockmode,
 									insertTriggerOid,
 									updateTriggerOid,
-									is_temporal);
+									with_period);
 
 			table_close(partition, NoLock);
 		}
@@ -11139,7 +11139,7 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 		ListCell   *lc;
 		Oid			insertTriggerOid,
 					updateTriggerOid;
-		bool		is_temporal;
+		bool		with_period;
 
 		tuple = SearchSysCache1(CONSTROID, ObjectIdGetDatum(parentConstrOid));
 		if (!HeapTupleIsValid(tuple))
@@ -11255,7 +11255,7 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 			fkconstraint->conname = pstrdup(NameStr(constrForm->conname));
 
 		indexOid = constrForm->conindid;
-		is_temporal = constrForm->conperiod;
+		with_period = constrForm->conperiod;
 		constrOid =
 			CreateConstraintEntry(fkconstraint->conname,
 								  constrForm->connamespace,
@@ -11287,7 +11287,7 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 								  false,	/* islocal */
 								  1,	/* inhcount */
 								  false,	/* conNoInherit */
-								  is_temporal,	/* conPeriod */
+								  with_period,	/* conPeriod */
 								  true);
 
 		/* Set up partition dependencies for the new constraint */
@@ -11322,7 +11322,7 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 								AccessExclusiveLock,
 								insertTriggerOid,
 								updateTriggerOid,
-								is_temporal);
+								with_period);
 		table_close(pkrel, NoLock);
 	}
 
@@ -12248,7 +12248,7 @@ transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 static Oid
 transformFkeyCheckAttrs(Relation pkrel,
 						int numattrs, int16 *attnums,
-						bool is_temporal, Oid *opclasses)
+						bool with_period, Oid *opclasses)
 {
 	Oid			indexoid = InvalidOid;
 	bool		found = false;
@@ -12301,7 +12301,7 @@ transformFkeyCheckAttrs(Relation pkrel,
 		 * indexes are out as well.
 		 */
 		if (indexStruct->indnkeyatts == numattrs &&
-			(is_temporal ? indexStruct->indisexclusion : indexStruct->indisunique) &&
+			(with_period ? indexStruct->indisexclusion : indexStruct->indisunique) &&
 			indexStruct->indisvalid &&
 			heap_attisnull(indexTuple, Anum_pg_index_indpred, NULL) &&
 			heap_attisnull(indexTuple, Anum_pg_index_indexprs, NULL))
@@ -12340,7 +12340,7 @@ transformFkeyCheckAttrs(Relation pkrel,
 					break;
 			}
 			/* The last attribute in the index must be the PERIOD FK part */
-			if (found && is_temporal)
+			if (found && with_period)
 			{
 				int16 periodattnum = attnums[numattrs - 1];
 
@@ -12557,7 +12557,7 @@ CreateFKCheckTrigger(Oid myRelOid, Oid refRelOid, Constraint *fkconstraint,
 {
 	ObjectAddress trigAddress;
 	CreateTrigStmt *fk_trigger;
-	bool is_temporal = fkconstraint->fk_with_period;
+	bool with_period = fkconstraint->fk_with_period;
 
 	/*
 	 * Note: for a self-referential FK (referencing and referenced tables are
@@ -12577,7 +12577,7 @@ CreateFKCheckTrigger(Oid myRelOid, Oid refRelOid, Constraint *fkconstraint,
 	/* Either ON INSERT or ON UPDATE */
 	if (on_insert)
 	{
-		if (is_temporal)
+		if (with_period)
 			fk_trigger->funcname = SystemFuncName("RI_FKey_period_check_ins");
 		else
 			fk_trigger->funcname = SystemFuncName("RI_FKey_check_ins");
@@ -12585,7 +12585,7 @@ CreateFKCheckTrigger(Oid myRelOid, Oid refRelOid, Constraint *fkconstraint,
 	}
 	else
 	{
-		if (is_temporal)
+		if (with_period)
 			fk_trigger->funcname = SystemFuncName("RI_FKey_period_check_upd");
 		else
 			fk_trigger->funcname = SystemFuncName("RI_FKey_check_upd");
