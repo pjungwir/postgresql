@@ -12210,8 +12210,7 @@ transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 
 	/*
 	 * Now build the list of PK attributes from the indkey definition (we
-	 * assume a primary key cannot have expressional elements, unless it
-	 * has a PERIOD)
+	 * assume a primary key cannot have expressional elements)
 	 */
 	*attnamelist = NIL;
 	for (i = 0; i < indexStruct->indnkeyatts; i++)
