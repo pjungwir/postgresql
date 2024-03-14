@@ -1301,127 +1301,6 @@ ri_set(TriggerData *trigdata, bool is_set_null, int tgkind)
 	}
 }
 
-/* ----------
- * RI_FKey_period_check_ins -
- *
- *	Check temporal foreign key existence at insert event on FK table.
- * ----------
- */
-Datum
-RI_FKey_period_check_ins(PG_FUNCTION_ARGS)
-{
-	/*
-	 * Check that this is a valid trigger call on the right time and event.
-	 */
-	ri_CheckTrigger(fcinfo, "RI_FKey_check_ins", RI_TRIGTYPE_INSERT);
-
-	/*
-	 * Share code with UPDATE case.
-	 */
-	return RI_FKey_check((TriggerData *) fcinfo->context);
-}
-
-
-/* ----------
- * RI_FKey_period_check_upd -
- *
- *	Check temporal foreign key existence at update event on FK table.
- * ----------
- */
-Datum
-RI_FKey_period_check_upd(PG_FUNCTION_ARGS)
-{
-	/*
-	 * Check that this is a valid trigger call on the right time and event.
-	 */
-	ri_CheckTrigger(fcinfo, "RI_FKey_check_upd", RI_TRIGTYPE_UPDATE);
-
-	/*
-	 * Share code with INSERT case.
-	 */
-	return RI_FKey_check((TriggerData *) fcinfo->context);
-}
-
-
-/* ----------
- * RI_FKey_period_noaction_del -
- *
- *	Give an error and roll back the current transaction if the
- *	delete has resulted in a violation of the given temporal
- *	referential integrity constraint.
- * ----------
- */
-Datum
-RI_FKey_period_noaction_del(PG_FUNCTION_ARGS)
-{
-	/*
-	 * Check that this is a valid trigger call on the right time and event.
-	 */
-	ri_CheckTrigger(fcinfo, "RI_FKey_period_noaction_del", RI_TRIGTYPE_DELETE);
-
-	/*
-	 * Share code with RESTRICT/UPDATE cases.
-	 */
-	return ri_restrict((TriggerData *) fcinfo->context, true);
-}
-
-/*
- * RI_FKey_period_restrict_del -
- *
- * Restrict delete from PK table to rows unreferenced by foreign key.
- *
- * The SQL standard intends that this referential action occur exactly when
- * the delete is performed, rather than after.  This appears to be
- * the only difference between "NO ACTION" and "RESTRICT".  In Postgres
- * we still implement this as an AFTER trigger, but it's non-deferrable.
- */
-Datum
-RI_FKey_period_restrict_del(PG_FUNCTION_ARGS)
-{
-	/* Check that this is a valid trigger call on the right time and event. */
-	ri_CheckTrigger(fcinfo, "RI_FKey_period_restrict_del", RI_TRIGTYPE_DELETE);
-
-	/* Share code with NO ACTION/UPDATE cases. */
-	return ri_restrict((TriggerData *) fcinfo->context, false);
-}
-
-/*
- * TRI_FKey_noaction_upd -
- *
- * Give an error and roll back the current transaction if the
- * update has resulted in a violation of the given referential
- * integrity constraint.
- */
-Datum
-RI_FKey_period_noaction_upd(PG_FUNCTION_ARGS)
-{
-	/* Check that this is a valid trigger call on the right time and event. */
-	ri_CheckTrigger(fcinfo, "RI_FKey_period_noaction_upd", RI_TRIGTYPE_UPDATE);
-
-	/* Share code with RESTRICT/DELETE cases. */
-	return ri_restrict((TriggerData *) fcinfo->context, true);
-}
-
-/*
- * RI_FKey_period_restrict_upd -
- *
- * Restrict update of PK to rows unreferenced by foreign key.
- *
- * The SQL standard intends that this referential action occur exactly when
- * the update is performed, rather than after.  This appears to be
- * the only difference between "NO ACTION" and "RESTRICT".  In Postgres
- * we still implement this as an AFTER trigger, but it's non-deferrable.
- */
-Datum
-RI_FKey_period_restrict_upd(PG_FUNCTION_ARGS)
-{
-	/* Check that this is a valid trigger call on the right time and event. */
-	ri_CheckTrigger(fcinfo, "RI_FKey_period_restrict_upd", RI_TRIGTYPE_UPDATE);
-
-	/* Share code with NO ACTION/DELETE cases. */
-	return ri_restrict((TriggerData *) fcinfo->context, false);
-}
-
 /*
  * RI_FKey_pk_upd_check_required -
  *
@@ -3258,16 +3137,10 @@ RI_FKey_trigger_type(Oid tgfoid)
 		case F_RI_FKEY_SETDEFAULT_UPD:
 		case F_RI_FKEY_NOACTION_DEL:
 		case F_RI_FKEY_NOACTION_UPD:
-		case F_RI_FKEY_PERIOD_RESTRICT_DEL:
-		case F_RI_FKEY_PERIOD_RESTRICT_UPD:
-		case F_RI_FKEY_PERIOD_NOACTION_DEL:
-		case F_RI_FKEY_PERIOD_NOACTION_UPD:
 			return RI_TRIGGER_PK;
 
 		case F_RI_FKEY_CHECK_INS:
 		case F_RI_FKEY_CHECK_UPD:
-		case F_RI_FKEY_PERIOD_CHECK_INS:
-		case F_RI_FKEY_PERIOD_CHECK_UPD:
 			return RI_TRIGGER_FK;
 	}
 
