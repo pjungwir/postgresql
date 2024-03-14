@@ -2312,6 +2312,7 @@ COMMIT; -- should fail here.
 -- test FK parent updates NO ACTION
 --
 
+TRUNCATE temporal_per, temporal_fk_per2per;
 -- a PK update that succeeds because the numeric id isn't referenced:
 INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[5,5]', '2018-01-01', '2018-02-01');
 UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01' WHERE id = '[5,5]';
@@ -2345,14 +2346,12 @@ SELECT * FROM temporal_fk_per2per WHERE id in ('[3,3]') ORDER BY id, valid_at;
 DELETE FROM temporal_fk_per2per WHERE id = '[3,3]';
 UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01'
 WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
--- clean up:
-DELETE FROM temporal_fk_per2per WHERE parent_id = '[5,5]';
-DELETE FROM temporal_per WHERE id IN ('[5,5]', '[7,7]');
 
 --
 -- test FK parent updates RESTRICT
 --
 
+TRUNCATE temporal_per, temporal_fk_per2per;
 ALTER TABLE temporal_fk_per2per
 	DROP CONSTRAINT temporal_fk_per2per_fk;
 ALTER TABLE temporal_fk_per2per
@@ -2393,12 +2392,12 @@ SELECT * FROM temporal_fk_per2per WHERE id in ('[3,3]') ORDER BY id, valid_at;
 DELETE FROM temporal_fk_per2per WHERE id = '[3,3]';
 UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01'
 WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
--- clean up:
-DELETE FROM temporal_fk_per2per WHERE parent_id = '[5,5]';
-DELETE FROM temporal_per WHERE id IN ('[5,5]', '[7,7]');
+
 --
 -- test FK parent deletes NO ACTION
 --
+
+TRUNCATE temporal_per, temporal_fk_per2per;
 ALTER TABLE temporal_fk_per2per
 	DROP CONSTRAINT temporal_fk_per2per_fk;
 ALTER TABLE temporal_fk_per2per
@@ -2429,13 +2428,12 @@ SELECT * FROM temporal_fk_per2per WHERE id in ('[3,3]') ORDER BY id, valid_at;
 -- then delete the objecting FK record and the same PK delete succeeds:
 DELETE FROM temporal_fk_per2per WHERE id = '[3,3]';
 DELETE FROM temporal_per WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
--- clean up:
-DELETE FROM temporal_fk_per2per WHERE parent_id = '[5,5]';
-DELETE FROM temporal_per WHERE id IN ('[5,5]');
 
 --
 -- test FK parent deletes RESTRICT
 --
+
+TRUNCATE temporal_per, temporal_fk_per2per;
 ALTER TABLE temporal_fk_per2per
 	DROP CONSTRAINT temporal_fk_per2per_fk;
 ALTER TABLE temporal_fk_per2per
@@ -2466,9 +2464,6 @@ SELECT * FROM temporal_fk_per2per WHERE id in ('[3,3]') ORDER BY id, valid_at;
 -- then delete the objecting FK record and the same PK delete succeeds:
 DELETE FROM temporal_fk_per2per WHERE id = '[3,3]';
 DELETE FROM temporal_per WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
--- clean up:
-DELETE FROM temporal_fk_per2per WHERE parent_id = '[5,5]';
-DELETE FROM temporal_per WHERE id IN ('[5,5]');
 
 --
 -- per2per test ON UPDATE/DELETE options
@@ -2489,7 +2484,11 @@ DELETE FROM temporal_per WHERE id IN ('[5,5]');
 -- parent deletes SET DEFAULT (two scalar cols)
 -- parent deletes SET DEFAULT (two scalar cols, SET DEFAULT subset)
 
+--
 -- test FK parent updates CASCADE
+--
+
+TRUNCATE temporal_per, temporal_fk_per2per;
 INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[6,6]', '2018-01-01', '2021-01-01');
 INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]');
 ALTER TABLE temporal_fk_per2per
@@ -2510,11 +2509,12 @@ INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[8,8]', '2020-01-0
 INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]');
 UPDATE temporal_per SET id = '[9,9]' WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
--- clean up
-DELETE FROM temporal_fk_per2per WHERE id IN ('[100,100]', '[200,200]');
-DELETE FROM temporal_per WHERE id IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
+--
 -- test FK parent deletes CASCADE
+--
+
+TRUNCATE temporal_per, temporal_fk_per2per;
 INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[6,6]', '2018-01-01', '2021-01-01');
 INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]');
 -- leftovers on both sides:
@@ -2529,11 +2529,12 @@ INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[8,8]', '2020-01-0
 INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]');
 DELETE FROM temporal_per WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
--- clean up
-DELETE FROM temporal_fk_per2per WHERE id IN ('[100,100]', '[200,200]');
-DELETE FROM temporal_per WHERE id IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
+--
 -- test FK parent updates SET NULL
+--
+
+TRUNCATE temporal_per, temporal_fk_per2per;
 INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[6,6]', '2018-01-01', '2021-01-01');
 INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]');
 ALTER TABLE temporal_fk_per2per
@@ -2554,11 +2555,12 @@ INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[8,8]', '2020-01-0
 INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]');
 UPDATE temporal_per SET id = '[9,9]' WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
--- clean up
-DELETE FROM temporal_fk_per2per WHERE id IN ('[100,100]', '[200,200]');
-DELETE FROM temporal_per WHERE id IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
+--
 -- test FK parent deletes SET NULL
+--
+
+TRUNCATE temporal_per, temporal_fk_per2per;
 INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[6,6]', '2018-01-01', '2021-01-01');
 INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]');
 -- leftovers on both sides:
@@ -2573,11 +2575,12 @@ INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[8,8]', '2020-01-0
 INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]');
 DELETE FROM temporal_per WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
--- clean up
-DELETE FROM temporal_fk_per2per WHERE id IN ('[100,100]', '[200,200]');
-DELETE FROM temporal_per WHERE id IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
+--
 -- test FK parent updates SET DEFAULT
+--
+
+TRUNCATE temporal_per, temporal_fk_per2per;
 INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[-1,-1]', null, null);
 INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[6,6]', '2018-01-01', '2021-01-01');
 INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]');
@@ -2600,11 +2603,13 @@ INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[8,8]', '2020-01-0
 INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]');
 UPDATE temporal_per SET id = '[9,9]' WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
--- clean up
-DELETE FROM temporal_fk_per2per WHERE id IN ('[100,100]', '[200,200]');
-DELETE FROM temporal_per WHERE id IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
+--
 -- test FK parent deletes SET DEFAULT
+--
+
+TRUNCATE temporal_per, temporal_fk_per2per;
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[-1,-1]', null, null);
 INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[6,6]', '2018-01-01', '2021-01-01');
 INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]');
 -- leftovers on both sides:
@@ -2619,11 +2624,12 @@ INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[8,8]', '2020-01-0
 INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]');
 DELETE FROM temporal_per WHERE id = '[8,8]' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
--- clean up
-DELETE FROM temporal_fk_per2per WHERE id IN ('[100,100]', '[200,200]');
-DELETE FROM temporal_per WHERE id IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
+--
 -- test FK parent updates CASCADE (two scalar cols)
+--
+
+TRUNCATE temporal_per2, temporal_fk2_per2per;
 INSERT INTO temporal_per2 VALUES ('[6,6]', '[6,6]', '2018-01-01', '2021-01-01');
 INSERT INTO temporal_fk2_per2per VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]', '[6,6]');
 ALTER TABLE temporal_fk2_per2per
@@ -2644,11 +2650,12 @@ INSERT INTO temporal_per2 VALUES ('[8,8]', '[8,8]', '2020-01-01', '2021-01-01');
 INSERT INTO temporal_fk2_per2per VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]', '[8,8]');
 UPDATE temporal_per2 SET id1 = '[9,9]' WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk2_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
--- clean up
-DELETE FROM temporal_fk2_per2per WHERE id IN ('[100,100]', '[200,200]');
-DELETE FROM temporal_per2 WHERE id1 IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
+--
 -- test FK parent deletes CASCADE (two scalar cols)
+--
+
+TRUNCATE temporal_per2, temporal_fk2_per2per;
 INSERT INTO temporal_per2 VALUES ('[6,6]', '[6,6]', '2018-01-01', '2021-01-01');
 INSERT INTO temporal_fk2_per2per VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]', '[6,6]');
 -- leftovers on both sides:
@@ -2663,11 +2670,12 @@ INSERT INTO temporal_per2 VALUES ('[8,8]', '[8,8]', '2020-01-01', '2021-01-01');
 INSERT INTO temporal_fk2_per2per VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]', '[8,8]');
 DELETE FROM temporal_per2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk2_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
--- clean up
-DELETE FROM temporal_fk2_per2per WHERE id IN ('[100,100]', '[200,200]');
-DELETE FROM temporal_per2 WHERE id1 IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
+--
 -- test FK parent updates SET NULL (two scalar cols)
+--
+
+TRUNCATE temporal_per2, temporal_fk2_per2per;
 INSERT INTO temporal_per2 VALUES ('[6,6]', '[6,6]', '2018-01-01', '2021-01-01');
 INSERT INTO temporal_fk2_per2per VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]', '[6,6]');
 ALTER TABLE temporal_fk2_per2per
@@ -2688,11 +2696,12 @@ INSERT INTO temporal_per2 VALUES ('[8,8]', '[8,8]', '2020-01-01', '2021-01-01');
 INSERT INTO temporal_fk2_per2per VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]', '[8,8]');
 UPDATE temporal_per2 SET id1 = '[9,9]' WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk2_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
--- clean up
-DELETE FROM temporal_fk2_per2per WHERE id IN ('[100,100]', '[200,200]');
-DELETE FROM temporal_per2 WHERE id1 IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
+--
 -- test FK parent deletes SET NULL (two scalar cols)
+--
+
+TRUNCATE temporal_per2, temporal_fk2_per2per;
 INSERT INTO temporal_per2 VALUES ('[6,6]', '[6,6]', '2018-01-01', '2021-01-01');
 INSERT INTO temporal_fk2_per2per VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]', '[6,6]');
 -- leftovers on both sides:
@@ -2707,11 +2716,12 @@ INSERT INTO temporal_per2 VALUES ('[8,8]', '[8,8]', '2020-01-01', '2021-01-01');
 INSERT INTO temporal_fk2_per2per VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]', '[8,8]');
 DELETE FROM temporal_per2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk2_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
--- clean up
-DELETE FROM temporal_fk2_per2per WHERE id IN ('[100,100]', '[200,200]');
-DELETE FROM temporal_per2 WHERE id1 IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
+--
 -- test FK parent deletes SET NULL (two scalar cols, SET NULL subset)
+--
+
+TRUNCATE temporal_per2, temporal_fk2_per2per;
 INSERT INTO temporal_per2 VALUES ('[6,6]', '[6,6]', '2018-01-01', '2021-01-01');
 INSERT INTO temporal_fk2_per2per VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]', '[6,6]');
 -- fails because you can't set the PERIOD column:
@@ -2740,11 +2750,12 @@ INSERT INTO temporal_per2 VALUES ('[8,8]', '[8,8]', '2020-01-01', '2021-01-01');
 INSERT INTO temporal_fk2_per2per VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]', '[8,8]');
 DELETE FROM temporal_per2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk2_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
--- clean up
-DELETE FROM temporal_fk2_per2per WHERE id IN ('[100,100]', '[200,200]');
-DELETE FROM temporal_per2 WHERE id1 IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
+--
 -- test FK parent updates SET DEFAULT (two scalar cols)
+--
+
+TRUNCATE temporal_per2, temporal_fk2_per2per;
 INSERT INTO temporal_per2 VALUES ('[-1,-1]', '[-1,-1]', null, null);
 INSERT INTO temporal_per2 VALUES ('[6,6]', '[6,6]', '2018-01-01', '2021-01-01');
 INSERT INTO temporal_fk2_per2per VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]', '[6,6]');
@@ -2768,11 +2779,13 @@ INSERT INTO temporal_per2 VALUES ('[8,8]', '[8,8]', '2020-01-01', '2021-01-01');
 INSERT INTO temporal_fk2_per2per VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]', '[8,8]');
 UPDATE temporal_per2 SET id1 = '[9,9]', id2 = '[9,9]' WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk2_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
--- clean up
-DELETE FROM temporal_fk2_per2per WHERE id IN ('[100,100]', '[200,200]');
-DELETE FROM temporal_per2 WHERE id1 IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
+--
 -- test FK parent deletes SET DEFAULT (two scalar cols)
+--
+
+TRUNCATE temporal_per2, temporal_fk2_per2per;
+INSERT INTO temporal_per2 VALUES ('[-1,-1]', '[-1,-1]', null, null);
 INSERT INTO temporal_per2 VALUES ('[6,6]', '[6,6]', '2018-01-01', '2021-01-01');
 INSERT INTO temporal_fk2_per2per VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]', '[6,6]');
 -- leftovers on both sides:
@@ -2787,11 +2800,12 @@ INSERT INTO temporal_per2 VALUES ('[8,8]', '[8,8]', '2020-01-01', '2021-01-01');
 INSERT INTO temporal_fk2_per2per VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]', '[8,8]');
 DELETE FROM temporal_per2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk2_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
--- clean up
-DELETE FROM temporal_fk2_per2per WHERE id IN ('[100,100]', '[200,200]');
-DELETE FROM temporal_per2 WHERE id1 IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
+--
 -- test FK parent deletes SET DEFAULT (two scalar cols, SET DEFAULT subset)
+--
+
+TRUNCATE temporal_per2, temporal_fk2_per2per;
 INSERT INTO temporal_per2 VALUES ('[-1,-1]', '[6,6]', null, null);
 INSERT INTO temporal_per2 VALUES ('[6,6]', '[6,6]', '2018-01-01', '2021-01-01');
 INSERT INTO temporal_fk2_per2per VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,6]', '[6,6]');
@@ -2824,9 +2838,6 @@ INSERT INTO temporal_per2 VALUES ('[-1,-1]', '[8,8]', null, null);
 INSERT INTO temporal_fk2_per2per VALUES ('[200,200]', '2018-01-01', '2021-01-01', '[8,8]', '[8,8]');
 DELETE FROM temporal_per2 WHERE id1 = '[8,8]' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_fk2_per2per WHERE id = '[200,200]' ORDER BY id, valid_at;
--- clean up
-DELETE FROM temporal_fk2_per2per WHERE id IN ('[100,100]', '[200,200]');
-DELETE FROM temporal_per2 WHERE id1 IN ('[6,6]', '[7,7]', '[8,8]', '[9,9]');
 
 -- FK with a custom range type
 
