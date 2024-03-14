@@ -228,15 +228,15 @@ INSERT INTO temporal_rng (id, valid_at) VALUES (NULL, daterange('2018-01-01', '2
 INSERT INTO temporal_rng (id, valid_at) VALUES ('[3,4)', NULL);
 
 -- okay:
-INSERT INTO temporal_mltrng VALUES ('[1,2)', datemultirange(daterange('2018-01-02', '2018-02-03')));
-INSERT INTO temporal_mltrng VALUES ('[1,2)', datemultirange(daterange('2018-03-03', '2018-04-04')));
-INSERT INTO temporal_mltrng VALUES ('[2,3)', datemultirange(daterange('2018-01-01', '2018-01-05')));
-INSERT INTO temporal_mltrng VALUES ('[3,4)', datemultirange(daterange('2018-01-01', NULL)));
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[1,2)', datemultirange(daterange('2018-01-02', '2018-02-03')));
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[1,2)', datemultirange(daterange('2018-03-03', '2018-04-04')));
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[2,3)', datemultirange(daterange('2018-01-01', '2018-01-05')));
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[3,4)', datemultirange(daterange('2018-01-01', NULL)));
 
 -- should fail:
-INSERT INTO temporal_mltrng VALUES ('[1,2)', datemultirange(daterange('2018-01-01', '2018-01-05')));
-INSERT INTO temporal_mltrng VALUES (NULL, datemultirange(daterange('2018-01-01', '2018-01-05')));
-INSERT INTO temporal_mltrng VALUES ('[3,4)', NULL);
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[1,2)', datemultirange(daterange('2018-01-01', '2018-01-05')));
+INSERT INTO temporal_mltrng (id, valid_at) VALUES (NULL, datemultirange(daterange('2018-01-01', '2018-01-05')));
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[3,4)', NULL);
 
 SELECT * FROM temporal_mltrng ORDER BY id, valid_at;
 
@@ -520,7 +520,7 @@ ALTER TABLE temporal_fk_rng2rng
 
 DELETE FROM temporal_fk_rng2rng;
 DELETE FROM temporal_rng;
-INSERT INTO temporal_rng VALUES
+INSERT INTO temporal_rng (id, valid_at) VALUES
   ('[1,2)', daterange('2018-01-02', '2018-02-03')),
   ('[1,2)', daterange('2018-03-03', '2018-04-04')),
   ('[2,3)', daterange('2018-01-01', '2018-01-05')),
@@ -528,14 +528,14 @@ INSERT INTO temporal_rng VALUES
 
 ALTER TABLE temporal_fk_rng2rng
 	DROP CONSTRAINT temporal_fk_rng2rng_fk;
-INSERT INTO temporal_fk_rng2rng VALUES ('[1,2)', daterange('2018-01-02', '2018-02-01'), '[1,2)');
+INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES ('[1,2)', daterange('2018-01-02', '2018-02-01'), '[1,2)');
 ALTER TABLE temporal_fk_rng2rng
 	ADD CONSTRAINT temporal_fk_rng2rng_fk
 	FOREIGN KEY (parent_id, PERIOD valid_at)
 	REFERENCES temporal_rng;
 ALTER TABLE temporal_fk_rng2rng
 	DROP CONSTRAINT temporal_fk_rng2rng_fk;
-INSERT INTO temporal_fk_rng2rng VALUES ('[2,3)', daterange('2018-01-02', '2018-04-01'), '[1,2)');
+INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES ('[2,3)', daterange('2018-01-02', '2018-04-01'), '[1,2)');
 -- should fail:
 ALTER TABLE temporal_fk_rng2rng
 	ADD CONSTRAINT temporal_fk_rng2rng_fk
@@ -558,12 +558,12 @@ SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_fk
 -- test FK child inserts
 --
 
-INSERT INTO temporal_fk_rng2rng VALUES ('[1,2)', daterange('2018-01-02', '2018-02-01'), '[1,2)');
+INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES ('[1,2)', daterange('2018-01-02', '2018-02-01'), '[1,2)');
 -- should fail:
-INSERT INTO temporal_fk_rng2rng VALUES ('[2,3)', daterange('2018-01-02', '2018-04-01'), '[1,2)');
+INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES ('[2,3)', daterange('2018-01-02', '2018-04-01'), '[1,2)');
 -- now it should work:
-INSERT INTO temporal_rng VALUES ('[1,2)', daterange('2018-02-03', '2018-03-03'));
-INSERT INTO temporal_fk_rng2rng VALUES ('[2,3)', daterange('2018-01-02', '2018-04-01'), '[1,2)');
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[1,2)', daterange('2018-02-03', '2018-03-03'));
+INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES ('[2,3)', daterange('2018-01-02', '2018-04-01'), '[1,2)');
 
 --
 -- test FK child updates
@@ -577,10 +577,10 @@ UPDATE temporal_fk_rng2rng SET parent_id = '[8,9)' WHERE id = '[1,2)';
 -- ALTER FK DEFERRABLE
 
 BEGIN;
-  INSERT INTO temporal_rng VALUES
+  INSERT INTO temporal_rng (id, valid_at) VALUES
     ('[5,6)', daterange('2018-01-01', '2018-02-01')),
     ('[5,6)', daterange('2018-02-01', '2018-03-01'));
-  INSERT INTO temporal_fk_rng2rng VALUES
+  INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES
     ('[3,4)', daterange('2018-01-05', '2018-01-10'), '[5,6)');
   ALTER TABLE temporal_fk_rng2rng
     ALTER CONSTRAINT temporal_fk_rng2rng_fk
@@ -594,14 +594,14 @@ COMMIT; -- should fail here.
 --
 
 -- a PK update that succeeds because the numeric id isn't referenced:
-INSERT INTO temporal_rng VALUES ('[5,6)', daterange('2018-01-01', '2018-02-01'));
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[5,6)', daterange('2018-01-01', '2018-02-01'));
 UPDATE temporal_rng SET valid_at = daterange('2016-01-01', '2016-02-01') WHERE id = '[5,6)';
 -- a PK update that succeeds even though the numeric id is referenced because the range isn't:
 DELETE FROM temporal_rng WHERE id = '[5,6)';
-INSERT INTO temporal_rng VALUES
+INSERT INTO temporal_rng (id, valid_at) VALUES
   ('[5,6)', daterange('2018-01-01', '2018-02-01')),
   ('[5,6)', daterange('2018-02-01', '2018-03-01'));
-INSERT INTO temporal_fk_rng2rng VALUES ('[3,4)', daterange('2018-01-05', '2018-01-10'), '[5,6)');
+INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES ('[3,4)', daterange('2018-01-05', '2018-01-10'), '[5,6)');
 UPDATE temporal_rng SET valid_at = daterange('2016-02-01', '2016-03-01')
 WHERE id = '[5,6)' AND valid_at = daterange('2018-02-01', '2018-03-01');
 -- a PK update that fails because both are referenced:
@@ -630,14 +630,14 @@ ALTER TABLE temporal_fk_rng2rng
 	REFERENCES temporal_rng
 	ON UPDATE RESTRICT;
 -- a PK update that succeeds because the numeric id isn't referenced:
-INSERT INTO temporal_rng VALUES ('[5,6)', daterange('2018-01-01', '2018-02-01'));
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[5,6)', daterange('2018-01-01', '2018-02-01'));
 UPDATE temporal_rng SET valid_at = daterange('2016-01-01', '2016-02-01') WHERE id = '[5,6)';
 -- a PK update that succeeds even though the numeric id is referenced because the range isn't:
 DELETE FROM temporal_rng WHERE id = '[5,6)';
-INSERT INTO temporal_rng VALUES
+INSERT INTO temporal_rng (id, valid_at) VALUES
   ('[5,6)', daterange('2018-01-01', '2018-02-01')),
   ('[5,6)', daterange('2018-02-01', '2018-03-01'));
-INSERT INTO temporal_fk_rng2rng VALUES ('[3,4)', daterange('2018-01-05', '2018-01-10'), '[5,6)');
+INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES ('[3,4)', daterange('2018-01-05', '2018-01-10'), '[5,6)');
 UPDATE temporal_rng SET valid_at = daterange('2016-02-01', '2016-03-01')
 WHERE id = '[5,6)' AND valid_at = daterange('2018-02-01', '2018-03-01');
 -- a PK update that fails because both are referenced:
@@ -663,13 +663,13 @@ ALTER TABLE temporal_fk_rng2rng
 	FOREIGN KEY (parent_id, PERIOD valid_at)
 	REFERENCES temporal_rng;
 -- a PK delete that succeeds because the numeric id isn't referenced:
-INSERT INTO temporal_rng VALUES ('[5,6)', daterange('2018-01-01', '2018-02-01'));
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[5,6)', daterange('2018-01-01', '2018-02-01'));
 DELETE FROM temporal_rng WHERE id = '[5,6)';
 -- a PK delete that succeeds even though the numeric id is referenced because the range isn't:
-INSERT INTO temporal_rng VALUES
+INSERT INTO temporal_rng (id, valid_at) VALUES
   ('[5,6)', daterange('2018-01-01', '2018-02-01')),
   ('[5,6)', daterange('2018-02-01', '2018-03-01'));
-INSERT INTO temporal_fk_rng2rng VALUES ('[3,4)', daterange('2018-01-05', '2018-01-10'), '[5,6)');
+INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES ('[3,4)', daterange('2018-01-05', '2018-01-10'), '[5,6)');
 DELETE FROM temporal_rng WHERE id = '[5,6)' AND valid_at = daterange('2018-02-01', '2018-03-01');
 -- a PK delete that fails because both are referenced:
 DELETE FROM temporal_rng WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
@@ -688,13 +688,13 @@ ALTER TABLE temporal_fk_rng2rng
 	FOREIGN KEY (parent_id, PERIOD valid_at)
 	REFERENCES temporal_rng
 	ON DELETE RESTRICT;
-INSERT INTO temporal_rng VALUES ('[5,6)', daterange('2018-01-01', '2018-02-01'));
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[5,6)', daterange('2018-01-01', '2018-02-01'));
 DELETE FROM temporal_rng WHERE id = '[5,6)';
 -- a PK delete that succeeds even though the numeric id is referenced because the range isn't:
-INSERT INTO temporal_rng VALUES
+INSERT INTO temporal_rng (id, valid_at) VALUES
   ('[5,6)', daterange('2018-01-01', '2018-02-01')),
   ('[5,6)', daterange('2018-02-01', '2018-03-01'));
-INSERT INTO temporal_fk_rng2rng VALUES ('[3,4)', daterange('2018-01-05', '2018-01-10'), '[5,6)');
+INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES ('[3,4)', daterange('2018-01-05', '2018-01-10'), '[5,6)');
 DELETE FROM temporal_rng WHERE id = '[5,6)' AND valid_at = daterange('2018-02-01', '2018-03-01');
 -- a PK delete that fails because both are referenced:
 DELETE FROM temporal_rng WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
@@ -707,8 +707,8 @@ DELETE FROM temporal_rng WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01
 --
 
 -- test FK parent updates CASCADE
-INSERT INTO temporal_rng VALUES ('[6,7)', daterange('2018-01-01', '2021-01-01'));
-INSERT INTO temporal_fk_rng2rng VALUES ('[4,5)', daterange('2018-01-01', '2021-01-01'), '[6,7)');
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[6,7)', daterange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES ('[4,5)', daterange('2018-01-01', '2021-01-01'), '[6,7)');
 ALTER TABLE temporal_fk_rng2rng
 	DROP CONSTRAINT temporal_fk_rng2rng_fk,
 	ADD CONSTRAINT temporal_fk_rng2rng_fk
@@ -717,8 +717,8 @@ ALTER TABLE temporal_fk_rng2rng
 		ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- test FK parent updates SET NULL
-INSERT INTO temporal_rng VALUES ('[9,10)', daterange('2018-01-01', '2021-01-01'));
-INSERT INTO temporal_fk_rng2rng VALUES ('[6,7)', daterange('2018-01-01', '2021-01-01'), '[9,10)');
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[9,10)', daterange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES ('[6,7)', daterange('2018-01-01', '2021-01-01'), '[9,10)');
 ALTER TABLE temporal_fk_rng2rng
 	DROP CONSTRAINT temporal_fk_rng2rng_fk,
 	ADD CONSTRAINT temporal_fk_rng2rng_fk
@@ -727,9 +727,9 @@ ALTER TABLE temporal_fk_rng2rng
 		ON DELETE SET NULL ON UPDATE SET NULL;
 
 -- test FK parent updates SET DEFAULT
-INSERT INTO temporal_rng VALUES ('[-1,-1]', daterange(null, null));
-INSERT INTO temporal_rng VALUES ('[12,13)', daterange('2018-01-01', '2021-01-01'));
-INSERT INTO temporal_fk_rng2rng VALUES ('[8,9)', daterange('2018-01-01', '2021-01-01'), '[12,13)');
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[-1,-1]', daterange(null, null));
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[12,13)', daterange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES ('[8,9)', daterange('2018-01-01', '2021-01-01'), '[12,13)');
 ALTER TABLE temporal_fk_rng2rng
   ALTER COLUMN parent_id SET DEFAULT '[-1,-1]',
 	DROP CONSTRAINT temporal_fk_rng2rng_fk,
@@ -901,14 +901,14 @@ ALTER TABLE temporal_fk_mltrng2mltrng
 DELETE FROM temporal_fk_mltrng2mltrng;
 ALTER TABLE temporal_fk_mltrng2mltrng
 	DROP CONSTRAINT temporal_fk_mltrng2mltrng_fk;
-INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[1,2)', datemultirange(daterange('2018-01-02', '2018-02-01')), '[1,2)');
+INSERT INTO temporal_fk_mltrng2mltrng (id, valid_at, parent_id) VALUES ('[1,2)', datemultirange(daterange('2018-01-02', '2018-02-01')), '[1,2)');
 ALTER TABLE temporal_fk_mltrng2mltrng
 	ADD CONSTRAINT temporal_fk_mltrng2mltrng_fk
 	FOREIGN KEY (parent_id, PERIOD valid_at)
 	REFERENCES temporal_mltrng;
 ALTER TABLE temporal_fk_mltrng2mltrng
 	DROP CONSTRAINT temporal_fk_mltrng2mltrng_fk;
-INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[2,3)', datemultirange(daterange('2018-01-02', '2018-04-01')), '[1,2)');
+INSERT INTO temporal_fk_mltrng2mltrng (id, valid_at, parent_id) VALUES ('[2,3)', datemultirange(daterange('2018-01-02', '2018-04-01')), '[1,2)');
 -- should fail:
 ALTER TABLE temporal_fk_mltrng2mltrng
 	ADD CONSTRAINT temporal_fk_mltrng2mltrng_fk
@@ -931,12 +931,12 @@ SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_fk
 -- test FK child inserts
 --
 
-INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[1,2)', datemultirange(daterange('2018-01-02', '2018-02-01')), '[1,2)');
+INSERT INTO temporal_fk_mltrng2mltrng (id, valid_at, parent_id) VALUES ('[1,2)', datemultirange(daterange('2018-01-02', '2018-02-01')), '[1,2)');
 -- should fail:
-INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[2,3)', datemultirange(daterange('2018-01-02', '2018-04-01')), '[1,2)');
+INSERT INTO temporal_fk_mltrng2mltrng (id, valid_at, parent_id) VALUES ('[2,3)', datemultirange(daterange('2018-01-02', '2018-04-01')), '[1,2)');
 -- now it should work:
-INSERT INTO temporal_mltrng VALUES ('[1,2)', datemultirange(daterange('2018-02-03', '2018-03-03')));
-INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[2,3)', datemultirange(daterange('2018-01-02', '2018-04-01')), '[1,2)');
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[1,2)', datemultirange(daterange('2018-02-03', '2018-03-03')));
+INSERT INTO temporal_fk_mltrng2mltrng (id, valid_at, parent_id) VALUES ('[2,3)', datemultirange(daterange('2018-01-02', '2018-04-01')), '[1,2)');
 
 --
 -- test FK child updates
@@ -950,10 +950,10 @@ UPDATE temporal_fk_mltrng2mltrng SET parent_id = '[8,9)' WHERE id = '[1,2)';
 -- ALTER FK DEFERRABLE
 
 BEGIN;
-  INSERT INTO temporal_mltrng VALUES
+  INSERT INTO temporal_mltrng (id, valid_at) VALUES
     ('[5,6)', datemultirange(daterange('2018-01-01', '2018-02-01'))),
     ('[5,6)', datemultirange(daterange('2018-02-01', '2018-03-01')));
-  INSERT INTO temporal_fk_mltrng2mltrng VALUES
+  INSERT INTO temporal_fk_mltrng2mltrng (id, valid_at, parent_id) VALUES
     ('[3,4)', datemultirange(daterange('2018-01-05', '2018-01-10')), '[5,6)');
   ALTER TABLE temporal_fk_mltrng2mltrng
     ALTER CONSTRAINT temporal_fk_mltrng2mltrng_fk
@@ -967,14 +967,14 @@ COMMIT; -- should fail here.
 --
 
 -- a PK update that succeeds because the numeric id isn't referenced:
-INSERT INTO temporal_mltrng VALUES ('[5,6)', datemultirange(daterange('2018-01-01', '2018-02-01')));
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[5,6)', datemultirange(daterange('2018-01-01', '2018-02-01')));
 UPDATE temporal_mltrng SET valid_at = datemultirange(daterange('2016-01-01', '2016-02-01')) WHERE id = '[5,6)';
 -- a PK update that succeeds even though the numeric id is referenced because the range isn't:
 DELETE FROM temporal_mltrng WHERE id = '[5,6)';
-INSERT INTO temporal_mltrng VALUES
+INSERT INTO temporal_mltrng (id, valid_at) VALUES
   ('[5,6)', datemultirange(daterange('2018-01-01', '2018-02-01'))),
   ('[5,6)', datemultirange(daterange('2018-02-01', '2018-03-01')));
-INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[3,4)', datemultirange(daterange('2018-01-05', '2018-01-10')), '[5,6)');
+INSERT INTO temporal_fk_mltrng2mltrng (id, valid_at, parent_id) VALUES ('[3,4)', datemultirange(daterange('2018-01-05', '2018-01-10')), '[5,6)');
 UPDATE temporal_mltrng SET valid_at = datemultirange(daterange('2016-02-01', '2016-03-01'))
 WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-02-01', '2018-03-01'));
 -- a PK update that fails because both are referenced:
@@ -999,14 +999,14 @@ ALTER TABLE temporal_fk_mltrng2mltrng
 	REFERENCES temporal_mltrng
 	ON UPDATE RESTRICT;
 -- a PK update that succeeds because the numeric id isn't referenced:
-INSERT INTO temporal_mltrng VALUES ('[5,6)', datemultirange(daterange('2018-01-01', '2018-02-01')));
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[5,6)', datemultirange(daterange('2018-01-01', '2018-02-01')));
 UPDATE temporal_mltrng SET valid_at = datemultirange(daterange('2016-01-01', '2016-02-01')) WHERE id = '[5,6)';
 -- a PK update that succeeds even though the numeric id is referenced because the range isn't:
 DELETE FROM temporal_mltrng WHERE id = '[5,6)';
-INSERT INTO temporal_mltrng VALUES
+INSERT INTO temporal_mltrng (id, valid_at) VALUES
   ('[5,6)', datemultirange(daterange('2018-01-01', '2018-02-01'))),
   ('[5,6)', datemultirange(daterange('2018-02-01', '2018-03-01')));
-INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[3,4)', datemultirange(daterange('2018-01-05', '2018-01-10')), '[5,6)');
+INSERT INTO temporal_fk_mltrng2mltrng (id, valid_at, parent_id) VALUES ('[3,4)', datemultirange(daterange('2018-01-05', '2018-01-10')), '[5,6)');
 UPDATE temporal_mltrng SET valid_at = datemultirange(daterange('2016-02-01', '2016-03-01'))
 WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-02-01', '2018-03-01'));
 -- a PK update that fails because both are referenced:
@@ -1028,13 +1028,13 @@ ALTER TABLE temporal_fk_mltrng2mltrng
 	FOREIGN KEY (parent_id, PERIOD valid_at)
 	REFERENCES temporal_mltrng;
 -- a PK delete that succeeds because the numeric id isn't referenced:
-INSERT INTO temporal_mltrng VALUES ('[5,6)', datemultirange(daterange('2018-01-01', '2018-02-01')));
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[5,6)', datemultirange(daterange('2018-01-01', '2018-02-01')));
 DELETE FROM temporal_mltrng WHERE id = '[5,6)';
 -- a PK delete that succeeds even though the numeric id is referenced because the range isn't:
-INSERT INTO temporal_mltrng VALUES
+INSERT INTO temporal_mltrng (id, valid_at) VALUES
   ('[5,6)', datemultirange(daterange('2018-01-01', '2018-02-01'))),
   ('[5,6)', datemultirange(daterange('2018-02-01', '2018-03-01')));
-INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[3,4)', datemultirange(daterange('2018-01-05', '2018-01-10')), '[5,6)');
+INSERT INTO temporal_fk_mltrng2mltrng (id, valid_at, parent_id) VALUES ('[3,4)', datemultirange(daterange('2018-01-05', '2018-01-10')), '[5,6)');
 DELETE FROM temporal_mltrng WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-02-01', '2018-03-01'));
 -- a PK delete that fails because both are referenced:
 DELETE FROM temporal_mltrng WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
@@ -1052,13 +1052,13 @@ ALTER TABLE temporal_fk_mltrng2mltrng
 	FOREIGN KEY (parent_id, PERIOD valid_at)
 	REFERENCES temporal_mltrng
 	ON DELETE RESTRICT;
-INSERT INTO temporal_mltrng VALUES ('[5,6)', datemultirange(daterange('2018-01-01', '2018-02-01')));
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[5,6)', datemultirange(daterange('2018-01-01', '2018-02-01')));
 DELETE FROM temporal_mltrng WHERE id = '[5,6)';
 -- a PK delete that succeeds even though the numeric id is referenced because the range isn't:
-INSERT INTO temporal_mltrng VALUES
+INSERT INTO temporal_mltrng (id, valid_at) VALUES
   ('[5,6)', datemultirange(daterange('2018-01-01', '2018-02-01'))),
   ('[5,6)', datemultirange(daterange('2018-02-01', '2018-03-01')));
-INSERT INTO temporal_fk_mltrng2mltrng VALUES ('[3,4)', datemultirange(daterange('2018-01-05', '2018-01-10')), '[5,6)');
+INSERT INTO temporal_fk_mltrng2mltrng (id, valid_at, parent_id) VALUES ('[3,4)', datemultirange(daterange('2018-01-05', '2018-01-10')), '[5,6)');
 DELETE FROM temporal_mltrng WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-02-01', '2018-03-01'));
 -- a PK delete that fails because both are referenced:
 DELETE FROM temporal_mltrng WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
@@ -1076,7 +1076,7 @@ CREATE TABLE temporal_partitioned_rng (
 ) PARTITION BY LIST (id);
 CREATE TABLE tp1 partition OF temporal_partitioned_rng FOR VALUES IN ('[1,2)', '[3,4)', '[5,6)', '[7,8)', '[9,10)', '[11,12)');
 CREATE TABLE tp2 partition OF temporal_partitioned_rng FOR VALUES IN ('[2,3)', '[4,5)', '[6,7)', '[8,9)', '[10,11)', '[12,13)');
-INSERT INTO temporal_partitioned_rng VALUES
+INSERT INTO temporal_partitioned_rng (id, valid_at, name) VALUES
   ('[1,2)', daterange('2000-01-01', '2000-02-01'), 'one'),
   ('[1,2)', daterange('2000-02-01', '2000-03-01'), 'one'),
   ('[2,3)', daterange('2000-01-01', '2010-01-01'), 'two');
@@ -1094,14 +1094,14 @@ CREATE TABLE tfkp2 partition OF temporal_partitioned_fk_rng2rng FOR VALUES IN ('
 
 -- partitioned FK child inserts
 
-INSERT INTO temporal_partitioned_fk_rng2rng VALUES
+INSERT INTO temporal_partitioned_fk_rng2rng (id, valid_at, parent_id) VALUES
   ('[1,2)', daterange('2000-01-01', '2000-02-15'), '[1,2)'),
   ('[1,2)', daterange('2001-01-01', '2002-01-01'), '[2,3)'),
   ('[2,3)', daterange('2000-01-01', '2000-02-15'), '[1,2)');
 -- should fail:
-INSERT INTO temporal_partitioned_fk_rng2rng VALUES
+INSERT INTO temporal_partitioned_fk_rng2rng (id, valid_at, parent_id) VALUES
   ('[3,4)', daterange('2010-01-01', '2010-02-15'), '[1,2)');
-INSERT INTO temporal_partitioned_fk_rng2rng VALUES
+INSERT INTO temporal_partitioned_fk_rng2rng (id, valid_at, parent_id) VALUES
   ('[3,4)', daterange('2000-01-01', '2000-02-15'), '[3,4)');
 
 -- partitioned FK child updates
@@ -1116,10 +1116,10 @@ UPDATE temporal_partitioned_fk_rng2rng SET valid_at = daterange('2000-01-01', '2
 
 -- partitioned FK parent updates NO ACTION
 
-INSERT INTO temporal_partitioned_rng VALUES ('[5,6)', daterange('2016-01-01', '2016-02-01'));
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[5,6)', daterange('2016-01-01', '2016-02-01'));
 UPDATE temporal_partitioned_rng SET valid_at = daterange('2018-01-01', '2018-02-01') WHERE id = '[5,6)';
-INSERT INTO temporal_partitioned_rng VALUES ('[5,6)', daterange('2018-02-01', '2018-03-01'));
-INSERT INTO temporal_partitioned_fk_rng2rng VALUES ('[3,4)', daterange('2018-01-05', '2018-01-10'), '[5,6)');
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[5,6)', daterange('2018-02-01', '2018-03-01'));
+INSERT INTO temporal_partitioned_fk_rng2rng (id, valid_at, parent_id) VALUES ('[3,4)', daterange('2018-01-05', '2018-01-10'), '[5,6)');
 UPDATE temporal_partitioned_rng SET valid_at = daterange('2016-02-01', '2016-03-01')
   WHERE id = '[5,6)' AND valid_at = daterange('2018-02-01', '2018-03-01');
 -- should fail:
@@ -1131,9 +1131,9 @@ DELETE FROM temporal_partitioned_rng WHERE id = '[5,6)';
 
 -- partitioned FK parent deletes NO ACTION
 
-INSERT INTO temporal_partitioned_rng VALUES ('[5,6)', daterange('2018-01-01', '2018-02-01'));
-INSERT INTO temporal_partitioned_rng VALUES ('[5,6)', daterange('2018-02-01', '2018-03-01'));
-INSERT INTO temporal_partitioned_fk_rng2rng VALUES ('[3,4)', daterange('2018-01-05', '2018-01-10'), '[5,6)');
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[5,6)', daterange('2018-01-01', '2018-02-01'));
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[5,6)', daterange('2018-02-01', '2018-03-01'));
+INSERT INTO temporal_partitioned_fk_rng2rng (id, valid_at, parent_id) VALUES ('[3,4)', daterange('2018-01-05', '2018-01-10'), '[5,6)');
 DELETE FROM temporal_partitioned_rng WHERE id = '[5,6)' AND valid_at = daterange('2018-02-01', '2018-03-01');
 -- should fail:
 DELETE FROM temporal_partitioned_rng WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
@@ -1150,10 +1150,10 @@ ALTER TABLE temporal_partitioned_fk_rng2rng
 	FOREIGN KEY (parent_id, PERIOD valid_at)
 	REFERENCES temporal_partitioned_rng
 	ON DELETE RESTRICT;
-INSERT INTO temporal_partitioned_rng VALUES ('[5,6)', daterange('2016-01-01', '2016-02-01'));
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[5,6)', daterange('2016-01-01', '2016-02-01'));
 UPDATE temporal_partitioned_rng SET valid_at = daterange('2018-01-01', '2018-02-01') WHERE id = '[5,6)';
-INSERT INTO temporal_partitioned_rng VALUES ('[5,6)', daterange('2018-02-01', '2018-03-01'));
-INSERT INTO temporal_partitioned_fk_rng2rng VALUES ('[3,4)', daterange('2018-01-05', '2018-01-10'), '[5,6)');
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[5,6)', daterange('2018-02-01', '2018-03-01'));
+INSERT INTO temporal_partitioned_fk_rng2rng (id, valid_at, parent_id) VALUES ('[3,4)', daterange('2018-01-05', '2018-01-10'), '[5,6)');
 UPDATE temporal_partitioned_rng SET valid_at = daterange('2016-02-01', '2016-03-01')
   WHERE id = '[5,6)' AND valid_at = daterange('2018-02-01', '2018-03-01');
 -- should fail:
@@ -1165,9 +1165,9 @@ DELETE FROM temporal_partitioned_rng WHERE id = '[5,6)';
 
 -- partitioned FK parent deletes RESTRICT
 
-INSERT INTO temporal_partitioned_rng VALUES ('[5,6)', daterange('2018-01-01', '2018-02-01'));
-INSERT INTO temporal_partitioned_rng VALUES ('[5,6)', daterange('2018-02-01', '2018-03-01'));
-INSERT INTO temporal_partitioned_fk_rng2rng VALUES ('[3,4)', daterange('2018-01-05', '2018-01-10'), '[5,6)');
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[5,6)', daterange('2018-01-01', '2018-02-01'));
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[5,6)', daterange('2018-02-01', '2018-03-01'));
+INSERT INTO temporal_partitioned_fk_rng2rng (id, valid_at, parent_id) VALUES ('[3,4)', daterange('2018-01-05', '2018-01-10'), '[5,6)');
 DELETE FROM temporal_partitioned_rng WHERE id = '[5,6)' AND valid_at = daterange('2018-02-01', '2018-03-01');
 -- should fail:
 DELETE FROM temporal_partitioned_rng WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
