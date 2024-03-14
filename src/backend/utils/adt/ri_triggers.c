@@ -3731,11 +3731,11 @@ fpo_targets_pk_range(const ForPortionOfState *tg_temporal, const RI_ConstraintIn
  * restrict_cascading_range -
  *
  * Returns a Datum holding the appropriate timespan
- * to target child records when we CASCADE/SET NULL/SET DEFAULT.
+ * to target referencing records when we CASCADE/SET NULL/SET DEFAULT.
  *
- * In a normal UPDATE/DELETE this should be the parent's own valid time,
+ * In a normal UPDATE/DELETE this should be the referenced row's own valid time,
  * but if there was a FOR PORTION OF clause, then we should use that to
- * trim down the parent's span further.
+ * trim down the span further.
  */
 static Datum
 restrict_cascading_range(Relation rel, const ForPortionOfState *tg_temporal, const RI_ConstraintInfo *riinfo, TupleTableSlot *oldslot)
