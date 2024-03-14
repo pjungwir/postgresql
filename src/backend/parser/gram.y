@@ -17353,6 +17353,7 @@ unreserved_keyword:
 			| PARTITION
 			| PASSING
 			| PASSWORD
+			| PERIOD
 			| PLANS
 			| POLICY
 			| PRECEDING
@@ -17645,7 +17646,6 @@ reserved_keyword:
 			| ONLY
 			| OR
 			| ORDER
-			| PERIOD
 			| PLACING
 			| PRIMARY
 			| REFERENCES
