@@ -1061,7 +1061,9 @@ DELETE FROM temporal_mltrng WHERE id = '[5,6)' AND valid_at = datemultirange(dat
 -- a PK delete that fails because both are referenced:
 DELETE FROM temporal_mltrng WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
 
+--
 -- FK between partitioned tables
+--
 
 CREATE TABLE temporal_partitioned_rng (
 	id int4range,
@@ -1087,7 +1089,9 @@ CREATE TABLE temporal_partitioned_fk_rng2rng (
 CREATE TABLE tfkp1 partition OF temporal_partitioned_fk_rng2rng FOR VALUES IN ('[1,2)', '[3,4)', '[5,6)', '[7,8)', '[9,10)', '[11,12)');
 CREATE TABLE tfkp2 partition OF temporal_partitioned_fk_rng2rng FOR VALUES IN ('[2,3)', '[4,5)', '[6,7)', '[8,9)', '[10,11)', '[12,13)');
 
+--
 -- partitioned FK referencing inserts
+--
 
 INSERT INTO temporal_partitioned_fk_rng2rng (id, valid_at, parent_id) VALUES
   ('[1,2)', daterange('2000-01-01', '2000-02-15'), '[1,2)'),
@@ -1099,7 +1103,9 @@ INSERT INTO temporal_partitioned_fk_rng2rng (id, valid_at, parent_id) VALUES
 INSERT INTO temporal_partitioned_fk_rng2rng (id, valid_at, parent_id) VALUES
   ('[3,4)', daterange('2000-01-01', '2000-02-15'), '[3,4)');
 
+--
 -- partitioned FK referencing updates
+--
 
 UPDATE temporal_partitioned_fk_rng2rng SET valid_at = daterange('2000-01-01', '2000-02-13') WHERE id = '[2,3)';
 -- move a row from the first partition to the second
@@ -1109,8 +1115,11 @@ UPDATE temporal_partitioned_fk_rng2rng SET id = '[1,2)' WHERE id = '[4,5)';
 -- should fail:
 UPDATE temporal_partitioned_fk_rng2rng SET valid_at = daterange('2000-01-01', '2000-04-01') WHERE id = '[1,2)';
 
+--
 -- partitioned FK referenced updates NO ACTION
+--
 
+TRUNCATE temporal_partitioned_rng, temporal_partitioned_fk_rng2rng;
 INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[5,6)', daterange('2016-01-01', '2016-02-01'));
 UPDATE temporal_partitioned_rng SET valid_at = daterange('2018-01-01', '2018-02-01') WHERE id = '[5,6)';
 INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[5,6)', daterange('2018-02-01', '2018-03-01'));
@@ -1120,24 +1129,24 @@ UPDATE temporal_partitioned_rng SET valid_at = daterange('2016-02-01', '2016-03-
 -- should fail:
 UPDATE temporal_partitioned_rng SET valid_at = daterange('2016-01-01', '2016-02-01')
   WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
--- clean up:
-DELETE FROM temporal_partitioned_fk_rng2rng WHERE parent_id = '[5,6)';
-DELETE FROM temporal_partitioned_rng WHERE id = '[5,6)';
 
+--
 -- partitioned FK referenced deletes NO ACTION
+--
 
+TRUNCATE temporal_partitioned_rng, temporal_partitioned_fk_rng2rng;
 INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[5,6)', daterange('2018-01-01', '2018-02-01'));
 INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[5,6)', daterange('2018-02-01', '2018-03-01'));
 INSERT INTO temporal_partitioned_fk_rng2rng (id, valid_at, parent_id) VALUES ('[3,4)', daterange('2018-01-05', '2018-01-10'), '[5,6)');
 DELETE FROM temporal_partitioned_rng WHERE id = '[5,6)' AND valid_at = daterange('2018-02-01', '2018-03-01');
 -- should fail:
 DELETE FROM temporal_partitioned_rng WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
--- clean up:
-DELETE FROM temporal_partitioned_fk_rng2rng WHERE parent_id = '[5,6)';
-DELETE FROM temporal_partitioned_rng WHERE id = '[5,6)';
 
+--
 -- partitioned FK referenced updates RESTRICT
+--
 
+TRUNCATE temporal_partitioned_rng, temporal_partitioned_fk_rng2rng;
 ALTER TABLE temporal_partitioned_fk_rng2rng
 	DROP CONSTRAINT temporal_partitioned_fk_rng2rng_fk;
 ALTER TABLE temporal_partitioned_fk_rng2rng
@@ -1154,12 +1163,12 @@ UPDATE temporal_partitioned_rng SET valid_at = daterange('2016-02-01', '2016-03-
 -- should fail:
 UPDATE temporal_partitioned_rng SET valid_at = daterange('2016-01-01', '2016-02-01')
   WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
--- clean up:
-DELETE FROM temporal_partitioned_fk_rng2rng WHERE parent_id = '[5,6)';
-DELETE FROM temporal_partitioned_rng WHERE id = '[5,6)';
 
+--
 -- partitioned FK referenced deletes RESTRICT
+--
 
+TRUNCATE temporal_partitioned_rng, temporal_partitioned_fk_rng2rng;
 INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[5,6)', daterange('2018-01-01', '2018-02-01'));
 INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[5,6)', daterange('2018-02-01', '2018-03-01'));
 INSERT INTO temporal_partitioned_fk_rng2rng (id, valid_at, parent_id) VALUES ('[3,4)', daterange('2018-01-05', '2018-01-10'), '[5,6)');
@@ -1167,7 +1176,9 @@ DELETE FROM temporal_partitioned_rng WHERE id = '[5,6)' AND valid_at = daterange
 -- should fail:
 DELETE FROM temporal_partitioned_rng WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
 
+--
 -- partitioned FK referenced updates CASCADE
+--
 
 ALTER TABLE temporal_partitioned_fk_rng2rng
 	DROP CONSTRAINT temporal_partitioned_fk_rng2rng_fk,
@@ -1176,9 +1187,13 @@ ALTER TABLE temporal_partitioned_fk_rng2rng
 		REFERENCES temporal_partitioned_rng
 		ON DELETE CASCADE ON UPDATE CASCADE;
 
+--
 -- partitioned FK referenced deletes CASCADE
+--
 
+--
 -- partitioned FK referenced updates SET NULL
+--
 
 ALTER TABLE temporal_partitioned_fk_rng2rng
 	DROP CONSTRAINT temporal_partitioned_fk_rng2rng_fk,
@@ -1187,9 +1202,13 @@ ALTER TABLE temporal_partitioned_fk_rng2rng
 		REFERENCES temporal_partitioned_rng
 		ON DELETE SET NULL ON UPDATE SET NULL;
 
+--
 -- partitioned FK referenced deletes SET NULL
+--
 
+--
 -- partitioned FK referenced updates SET DEFAULT
+--
 
 ALTER TABLE temporal_partitioned_fk_rng2rng
   ALTER COLUMN parent_id SET DEFAULT '[-1,-1]',
@@ -1199,7 +1218,9 @@ ALTER TABLE temporal_partitioned_fk_rng2rng
 		REFERENCES temporal_partitioned_rng
 		ON DELETE SET DEFAULT ON UPDATE SET DEFAULT;
 
+--
 -- partitioned FK referenced deletes SET DEFAULT
+--
 
 DROP TABLE temporal_partitioned_fk_rng2rng;
 DROP TABLE temporal_partitioned_rng;
