@@ -553,15 +553,6 @@ static void GetForeignKeyCheckTriggers(Relation trigrel,
 									   Oid conoid, Oid confrelid, Oid conrelid,
 									   Oid *insertTriggerOid,
 									   Oid *updateTriggerOid);
-static void FindFKComparisonOperators(Constraint *fkconstraint,
-									  AlteredTableInfo *tab,
-									  int i,
-									  int16 *fkattnum,
-									  bool *old_check_ok,
-									  ListCell **old_pfeqop_item,
-									  Oid pktype, Oid fktype, Oid opclass,
-									  bool is_temporal, bool for_overlaps,
-									  Oid *pfeqopOut, Oid *ppeqopOut, Oid *ffeqopOut);
 static void ATExecDropConstraint(Relation rel, const char *constrName,
 								 DropBehavior behavior, bool recurse,
 								 bool missing_ok, LOCKMODE lockmode);
@@ -10030,12 +10021,231 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 
 	for (i = 0; i < numpks; i++)
 	{
-		FindFKComparisonOperators(fkconstraint, tab, i, fkattnum,
-								  &old_check_ok, &old_pfeqop_item,
-								  pktypoid[i], fktypoid[i], opclasses[i],
-								  is_temporal, is_temporal && i == numpks - 1,
-								  &pfeqoperators[i], &ppeqoperators[i],
-								  &ffeqoperators[i]);
+		Oid			pktype = pktypoid[i];
+		Oid			fktype = fktypoid[i];
+		Oid			fktyped;
+		HeapTuple	cla_ht;
+		Form_pg_opclass cla_tup;
+		Oid			amid;
+		Oid			opfamily;
+		Oid			opcintype;
+		Oid			pfeqop;
+		Oid			ppeqop;
+		Oid			ffeqop;
+		StrategyNumber	rtstrategy;
+		int16		eqstrategy;
+		Oid			pfeqop_right;
+		char	   *stratname;
+		bool		for_overlaps = is_temporal && i == numpks - 1;
+
+		/* We need several fields out of the pg_opclass entry */
+		cla_ht = SearchSysCache1(CLAOID, ObjectIdGetDatum(opclasses[i]));
+		if (!HeapTupleIsValid(cla_ht))
+			elog(ERROR, "cache lookup failed for opclass %u", opclasses[i]);
+		cla_tup = (Form_pg_opclass) GETSTRUCT(cla_ht);
+		amid = cla_tup->opcmethod;
+		opfamily = cla_tup->opcfamily;
+		opcintype = cla_tup->opcintype;
+		ReleaseSysCache(cla_ht);
+
+		if (is_temporal)
+		{
+			/*
+			 * GiST indexes are required to support temporal foreign keys
+			 * because they combine equals and overlaps.
+			 */
+			if (amid != GIST_AM_OID)
+				elog(ERROR, "only GiST indexes are supported for temporal foreign keys");
+			if (for_overlaps)
+			{
+				stratname = "overlaps";
+				rtstrategy = RTOverlapStrategyNumber;
+			}
+			else
+			{
+				stratname = "equality";
+				rtstrategy = RTEqualStrategyNumber;
+			}
+			/*
+			 * An opclass can use whatever strategy numbers it wants, so we ask
+			 * the opclass what number it actually uses instead of our
+			 * RT* constants.
+			 */
+			eqstrategy = GistTranslateStratnum(opclasses[i], rtstrategy);
+			if (eqstrategy == InvalidStrategy)
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_OBJECT),
+						 errmsg("no %s operator found for foreign key", stratname),
+						 errdetail("Could not translate strategy number %d for opclass %d.",
+							 rtstrategy, opclasses[i]),
+						 errhint("Define a stratnum support function for your GiST opclass.")));
+		}
+		else
+		{
+			/*
+			 * Check it's a btree; currently this can never fail since no other
+			 * index AMs support unique indexes.  If we ever did have other types
+			 * of unique indexes, we'd need a way to determine which operator
+			 * strategy number is equality.  (Is it reasonable to insist that
+			 * every such index AM use btree's number for equality?)
+			 */
+			if (amid != BTREE_AM_OID)
+				elog(ERROR, "only b-tree indexes are supported for foreign keys");
+			eqstrategy = BTEqualStrategyNumber;
+		}
+
+		/*
+		 * There had better be a primary equality operator for the index.
+		 * We'll use it for PK = PK comparisons.
+		 */
+		ppeqop = get_opfamily_member(opfamily, opcintype, opcintype,
+									 eqstrategy);
+
+		if (!OidIsValid(ppeqop))
+			elog(ERROR, "missing operator %d(%u,%u) in opfamily %u",
+				 eqstrategy, opcintype, opcintype, opfamily);
+
+		/*
+		 * Are there equality operators that take exactly the FK type? Assume
+		 * we should look through any domain here.
+		 */
+		fktyped = getBaseType(fktype);
+
+		pfeqop = get_opfamily_member(opfamily, opcintype, fktyped,
+									 eqstrategy);
+		if (OidIsValid(pfeqop))
+		{
+			pfeqop_right = fktyped;
+			ffeqop = get_opfamily_member(opfamily, fktyped, fktyped,
+										 eqstrategy);
+		}
+		else
+		{
+			/* keep compiler quiet */
+			pfeqop_right = InvalidOid;
+			ffeqop = InvalidOid;
+		}
+
+		if (!(OidIsValid(pfeqop) && OidIsValid(ffeqop)))
+		{
+			/*
+			 * Otherwise, look for an implicit cast from the FK type to the
+			 * opcintype, and if found, use the primary equality operator.
+			 * This is a bit tricky because opcintype might be a polymorphic
+			 * type such as ANYARRAY or ANYENUM; so what we have to test is
+			 * whether the two actual column types can be concurrently cast to
+			 * that type.  (Otherwise, we'd fail to reject combinations such
+			 * as int[] and point[].)
+			 */
+			Oid			input_typeids[2];
+			Oid			target_typeids[2];
+
+			input_typeids[0] = pktype;
+			input_typeids[1] = fktype;
+			target_typeids[0] = opcintype;
+			target_typeids[1] = opcintype;
+			if (can_coerce_type(2, input_typeids, target_typeids,
+								COERCION_IMPLICIT))
+			{
+				pfeqop = ffeqop = ppeqop;
+				pfeqop_right = opcintype;
+			}
+		}
+
+		if (!(OidIsValid(pfeqop) && OidIsValid(ffeqop)))
+		{
+			char *fkattr_name = strVal(list_nth(fkconstraint->fk_attrs, i));
+			char *pkattr_name = strVal(list_nth(fkconstraint->pk_attrs, i));
+
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("foreign key constraint \"%s\" cannot be implemented",
+							fkconstraint->conname),
+					 errdetail("Key columns \"%s\" and \"%s\" "
+							   "are of incompatible types: %s and %s.",
+							   fkattr_name,
+							   pkattr_name,
+							   format_type_be(fktype),
+							   format_type_be(pktype))));
+		}
+
+		if (old_check_ok)
+		{
+			/*
+			 * When a pfeqop changes, revalidate the constraint.  We could
+			 * permit intra-opfamily changes, but that adds subtle complexity
+			 * without any concrete benefit for core types.  We need not
+			 * assess ppeqop or ffeqop, which RI_Initial_Check() does not use.
+			 */
+			old_check_ok = (pfeqop == lfirst_oid(old_pfeqop_item));
+			old_pfeqop_item = lnext(fkconstraint->old_conpfeqop,
+									old_pfeqop_item);
+		}
+		if (old_check_ok)
+		{
+			Oid			old_fktype;
+			Oid			new_fktype;
+			CoercionPathType old_pathtype;
+			CoercionPathType new_pathtype;
+			Oid			old_castfunc;
+			Oid			new_castfunc;
+			Form_pg_attribute attr = TupleDescAttr(tab->oldDesc,
+												   fkattnum[i] - 1);
+
+			/*
+			 * Identify coercion pathways from each of the old and new FK-side
+			 * column types to the right (foreign) operand type of the pfeqop.
+			 * We may assume that pg_constraint.conkey is not changing.
+			 */
+			old_fktype = attr->atttypid;
+			new_fktype = fktype;
+			old_pathtype = findFkeyCast(pfeqop_right, old_fktype,
+										&old_castfunc);
+			new_pathtype = findFkeyCast(pfeqop_right, new_fktype,
+										&new_castfunc);
+
+			/*
+			 * Upon a change to the cast from the FK column to its pfeqop
+			 * operand, revalidate the constraint.  For this evaluation, a
+			 * binary coercion cast is equivalent to no cast at all.  While
+			 * type implementors should design implicit casts with an eye
+			 * toward consistency of operations like equality, we cannot
+			 * assume here that they have done so.
+			 *
+			 * A function with a polymorphic argument could change behavior
+			 * arbitrarily in response to get_fn_expr_argtype().  Therefore,
+			 * when the cast destination is polymorphic, we only avoid
+			 * revalidation if the input type has not changed at all.  Given
+			 * just the core data types and operator classes, this requirement
+			 * prevents no would-be optimizations.
+			 *
+			 * If the cast converts from a base type to a domain thereon, then
+			 * that domain type must be the opcintype of the unique index.
+			 * Necessarily, the primary key column must then be of the domain
+			 * type.  Since the constraint was previously valid, all values on
+			 * the foreign side necessarily exist on the primary side and in
+			 * turn conform to the domain.  Consequently, we need not treat
+			 * domains specially here.
+			 *
+			 * Since we require that all collations share the same notion of
+			 * equality (which they do, because texteq reduces to bitwise
+			 * equality), we don't compare collation here.
+			 *
+			 * We need not directly consider the PK type.  It's necessarily
+			 * binary coercible to the opcintype of the unique index column,
+			 * and ri_triggers.c will only deal with PK datums in terms of
+			 * that opcintype.  Changing the opcintype also changes pfeqop.
+			 */
+			old_check_ok = (new_pathtype == old_pathtype &&
+							new_castfunc == old_castfunc &&
+							(!IsPolymorphicType(pfeqop_right) ||
+							 new_fktype == old_fktype));
+
+		}
+
+		pfeqoperators[i] = pfeqop;
+		ppeqoperators[i] = ppeqop;
+		ffeqoperators[i] = ffeqop;
 	}
 
 	/*
@@ -11113,248 +11323,6 @@ CloneFkReferencing(List **wqueue, Relation parentRel, Relation partRel)
 	}
 
 	table_close(trigrel, RowExclusiveLock);
-}
-
-/*
- * FindFKComparisonOperators -
- *
- * Gets the operators for pfeqopOut, ppeqopOut, and ffeqopOut.
- * Sets old_check_ok if we can avoid re-validating the constraint.
- * Sets old_pfeqop_item to the old pfeqop values.
- */
-static void
-FindFKComparisonOperators(Constraint *fkconstraint,
-						  AlteredTableInfo *tab,
-						  int i,
-						  int16 *fkattnum,
-						  bool *old_check_ok,
-						  ListCell **old_pfeqop_item,
-						  Oid pktype, Oid fktype, Oid opclass,
-						  bool is_temporal, bool for_overlaps,
-						  Oid *pfeqopOut, Oid *ppeqopOut, Oid *ffeqopOut)
-{
-	Oid			fktyped;
-	HeapTuple	cla_ht;
-	Form_pg_opclass cla_tup;
-	Oid			amid;
-	Oid			opfamily;
-	Oid			opcintype;
-	Oid			pfeqop;
-	Oid			ppeqop;
-	Oid			ffeqop;
-	StrategyNumber	rtstrategy;
-	int16		eqstrategy;
-	Oid			pfeqop_right;
-	char	   *stratname;
-
-	/* We need several fields out of the pg_opclass entry */
-	cla_ht = SearchSysCache1(CLAOID, ObjectIdGetDatum(opclass));
-	if (!HeapTupleIsValid(cla_ht))
-		elog(ERROR, "cache lookup failed for opclass %u", opclass);
-	cla_tup = (Form_pg_opclass) GETSTRUCT(cla_ht);
-	amid = cla_tup->opcmethod;
-	opfamily = cla_tup->opcfamily;
-	opcintype = cla_tup->opcintype;
-	ReleaseSysCache(cla_ht);
-
-	if (is_temporal)
-	{
-		/*
-		 * GiST indexes are required to support temporal foreign keys
-		 * because they combine equals and overlaps.
-		 */
-		if (amid != GIST_AM_OID)
-			elog(ERROR, "only GiST indexes are supported for temporal foreign keys");
-		if (for_overlaps)
-		{
-			stratname = "overlaps";
-			rtstrategy = RTOverlapStrategyNumber;
-		}
-		else
-		{
-			stratname = "equality";
-			rtstrategy = RTEqualStrategyNumber;
-		}
-		/*
-		 * An opclass can use whatever strategy numbers it wants, so we ask
-		 * the opclass what number it actually uses instead of our
-		 * RT* constants.
-		 */
-		eqstrategy = GistTranslateStratnum(opclass, rtstrategy);
-		if (eqstrategy == InvalidStrategy)
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("no %s operator found for foreign key", stratname),
-					 errdetail("Could not translate strategy number %d for opclass %d.",
-						 rtstrategy, opclass),
-					 errhint("Define a stratnum support function for your GiST opclass.")));
-	}
-	else
-	{
-		/*
-		 * Check it's a btree; currently this can never fail since no other
-		 * index AMs support unique indexes.  If we ever did have other types
-		 * of unique indexes, we'd need a way to determine which operator
-		 * strategy number is equality.  (Is it reasonable to insist that
-		 * every such index AM use btree's number for equality?)
-		 */
-		if (amid != BTREE_AM_OID)
-			elog(ERROR, "only b-tree indexes are supported for foreign keys");
-		eqstrategy = BTEqualStrategyNumber;
-	}
-
-	/*
-	 * There had better be a primary equality operator for the index.
-	 * We'll use it for PK = PK comparisons.
-	 */
-	ppeqop = get_opfamily_member(opfamily, opcintype, opcintype,
-								 eqstrategy);
-
-	if (!OidIsValid(ppeqop))
-		elog(ERROR, "missing operator %d(%u,%u) in opfamily %u",
-			 eqstrategy, opcintype, opcintype, opfamily);
-
-	/*
-	 * Are there equality operators that take exactly the FK type? Assume
-	 * we should look through any domain here.
-	 */
-	fktyped = getBaseType(fktype);
-
-	pfeqop = get_opfamily_member(opfamily, opcintype, fktyped,
-								 eqstrategy);
-	if (OidIsValid(pfeqop))
-	{
-		pfeqop_right = fktyped;
-		ffeqop = get_opfamily_member(opfamily, fktyped, fktyped,
-									 eqstrategy);
-	}
-	else
-	{
-		/* keep compiler quiet */
-		pfeqop_right = InvalidOid;
-		ffeqop = InvalidOid;
-	}
-
-	if (!(OidIsValid(pfeqop) && OidIsValid(ffeqop)))
-	{
-		/*
-		 * Otherwise, look for an implicit cast from the FK type to the
-		 * opcintype, and if found, use the primary equality operator.
-		 * This is a bit tricky because opcintype might be a polymorphic
-		 * type such as ANYARRAY or ANYENUM; so what we have to test is
-		 * whether the two actual column types can be concurrently cast to
-		 * that type.  (Otherwise, we'd fail to reject combinations such
-		 * as int[] and point[].)
-		 */
-		Oid			input_typeids[2];
-		Oid			target_typeids[2];
-
-		input_typeids[0] = pktype;
-		input_typeids[1] = fktype;
-		target_typeids[0] = opcintype;
-		target_typeids[1] = opcintype;
-		if (can_coerce_type(2, input_typeids, target_typeids,
-							COERCION_IMPLICIT))
-		{
-			pfeqop = ffeqop = ppeqop;
-			pfeqop_right = opcintype;
-		}
-	}
-
-	if (!(OidIsValid(pfeqop) && OidIsValid(ffeqop)))
-	{
-		char *fkattr_name = strVal(list_nth(fkconstraint->fk_attrs, i));
-		char *pkattr_name = strVal(list_nth(fkconstraint->pk_attrs, i));
-
-		ereport(ERROR,
-				(errcode(ERRCODE_DATATYPE_MISMATCH),
-				 errmsg("foreign key constraint \"%s\" cannot be implemented",
-						fkconstraint->conname),
-				 errdetail("Key columns \"%s\" and \"%s\" "
-						   "are of incompatible types: %s and %s.",
-						   fkattr_name,
-						   pkattr_name,
-						   format_type_be(fktype),
-						   format_type_be(pktype))));
-	}
-
-	if (*old_check_ok)
-	{
-		/*
-		 * When a pfeqop changes, revalidate the constraint.  We could
-		 * permit intra-opfamily changes, but that adds subtle complexity
-		 * without any concrete benefit for core types.  We need not
-		 * assess ppeqop or ffeqop, which RI_Initial_Check() does not use.
-		 */
-		*old_check_ok = (pfeqop == lfirst_oid(*old_pfeqop_item));
-		*old_pfeqop_item = lnext(fkconstraint->old_conpfeqop,
-								*old_pfeqop_item);
-	}
-	if (*old_check_ok)
-	{
-		Oid			old_fktype;
-		Oid			new_fktype;
-		CoercionPathType old_pathtype;
-		CoercionPathType new_pathtype;
-		Oid			old_castfunc;
-		Oid			new_castfunc;
-		Form_pg_attribute attr = TupleDescAttr(tab->oldDesc,
-											   fkattnum[i] - 1);
-
-		/*
-		 * Identify coercion pathways from each of the old and new FK-side
-		 * column types to the right (foreign) operand type of the pfeqop.
-		 * We may assume that pg_constraint.conkey is not changing.
-		 */
-		old_fktype = attr->atttypid;
-		new_fktype = fktype;
-		old_pathtype = findFkeyCast(pfeqop_right, old_fktype,
-									&old_castfunc);
-		new_pathtype = findFkeyCast(pfeqop_right, new_fktype,
-									&new_castfunc);
-
-		/*
-		 * Upon a change to the cast from the FK column to its pfeqop
-		 * operand, revalidate the constraint.  For this evaluation, a
-		 * binary coercion cast is equivalent to no cast at all.  While
-		 * type implementors should design implicit casts with an eye
-		 * toward consistency of operations like equality, we cannot
-		 * assume here that they have done so.
-		 *
-		 * A function with a polymorphic argument could change behavior
-		 * arbitrarily in response to get_fn_expr_argtype().  Therefore,
-		 * when the cast destination is polymorphic, we only avoid
-		 * revalidation if the input type has not changed at all.  Given
-		 * just the core data types and operator classes, this requirement
-		 * prevents no would-be optimizations.
-		 *
-		 * If the cast converts from a base type to a domain thereon, then
-		 * that domain type must be the opcintype of the unique index.
-		 * Necessarily, the primary key column must then be of the domain
-		 * type.  Since the constraint was previously valid, all values on
-		 * the foreign side necessarily exist on the primary side and in
-		 * turn conform to the domain.  Consequently, we need not treat
-		 * domains specially here.
-		 *
-		 * Since we require that all collations share the same notion of
-		 * equality (which they do, because texteq reduces to bitwise
-		 * equality), we don't compare collation here.
-		 *
-		 * We need not directly consider the PK type.  It's necessarily
-		 * binary coercible to the opcintype of the unique index column,
-		 * and ri_triggers.c will only deal with PK datums in terms of
-		 * that opcintype.  Changing the opcintype also changes pfeqop.
-		 */
-		*old_check_ok = (new_pathtype == old_pathtype &&
-						new_castfunc == old_castfunc &&
-						(!IsPolymorphicType(pfeqop_right) ||
-						 new_fktype == old_fktype));
-
-	}
-
-	*pfeqopOut = pfeqop;
-	*ppeqopOut = ppeqop;
-	*ffeqopOut = ffeqop;
 }
 
 /*
