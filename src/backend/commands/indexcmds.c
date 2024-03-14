@@ -2427,7 +2427,7 @@ GetDefaultOpClass(Oid type_id, Oid am_id)
  * GetOperatorFromWellKnownStrategy
  *
  * opclass - the opclass to use
- * rhstype - the type for the right-hand side
+ * rhstype - the type for the right-hand side, or InvalidOid to use the type of the given opclass.
  * opid - holds the operator we found
  * strat - holds the input and output strategy number
  *
