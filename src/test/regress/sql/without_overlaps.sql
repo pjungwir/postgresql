@@ -1931,8 +1931,8 @@ CREATE TABLE temporal_fk3_rng2rng (
 	CONSTRAINT temporal_fk3_rng2rng_fk FOREIGN KEY (parent_id, PERIOD valid_at)
 		REFERENCES temporal_rng3 (id, PERIOD valid_at) ON DELETE CASCADE
 );
-INSERT INTO temporal_rng3 VALUES ('[8,9)', mydaterange('2018-01-01', '2021-01-01'));
-INSERT INTO temporal_fk3_rng2rng VALUES ('[5,6)', mydaterange('2018-01-01', '2021-01-01'), '[8,9)');
+INSERT INTO temporal_rng3 (id, valid_at) VALUES ('[8,9)', mydaterange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_fk3_rng2rng (id, valid_at, parent_id) VALUES ('[5,6)', mydaterange('2018-01-01', '2021-01-01'), '[8,9)');
 DELETE FROM temporal_rng3 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[8,9)';
 SELECT * FROM temporal_fk3_rng2rng WHERE id = '[5,6)';
 
@@ -2060,8 +2060,8 @@ DELETE FROM temporal_partitioned_rng WHERE id = '[5,6)' AND valid_at = daterange
 --
 
 TRUNCATE temporal_partitioned_rng, temporal_partitioned_fk_rng2rng;
-INSERT INTO temporal_partitioned_rng VALUES ('[6,7)', daterange('2018-01-01', '2021-01-01'));
-INSERT INTO temporal_partitioned_fk_rng2rng VALUES ('[4,5)', daterange('2018-01-01', '2021-01-01'), '[6,7)');
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[6,7)', daterange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_partitioned_fk_rng2rng (id, valid_at, parent_id) VALUES ('[4,5)', daterange('2018-01-01', '2021-01-01'), '[6,7)');
 ALTER TABLE temporal_partitioned_fk_rng2rng
 	DROP CONSTRAINT temporal_partitioned_fk_rng2rng_fk,
 	ADD CONSTRAINT temporal_partitioned_fk_rng2rng_fk
@@ -2072,9 +2072,9 @@ UPDATE temporal_partitioned_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '20
 SELECT * FROM temporal_partitioned_fk_rng2rng WHERE id = '[4,5)';
 UPDATE temporal_partitioned_rng SET id = '[7,8)' WHERE id = '[6,7)';
 SELECT * FROM temporal_partitioned_fk_rng2rng WHERE id = '[4,5)';
-INSERT INTO temporal_partitioned_rng VALUES ('[15,16)', daterange('2018-01-01', '2020-01-01'));
-INSERT INTO temporal_partitioned_rng VALUES ('[15,16)', daterange('2020-01-01', '2021-01-01'));
-INSERT INTO temporal_partitioned_fk_rng2rng VALUES ('[10,11)', daterange('2018-01-01', '2021-01-01'), '[15,16)');
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[15,16)', daterange('2018-01-01', '2020-01-01'));
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[15,16)', daterange('2020-01-01', '2021-01-01'));
+INSERT INTO temporal_partitioned_fk_rng2rng (id, valid_at, parent_id) VALUES ('[10,11)', daterange('2018-01-01', '2021-01-01'), '[15,16)');
 UPDATE temporal_partitioned_rng SET id = '[16,17)' WHERE id = '[15,16)' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_partitioned_fk_rng2rng WHERE id = '[10,11)';
 
@@ -2083,15 +2083,15 @@ SELECT * FROM temporal_partitioned_fk_rng2rng WHERE id = '[10,11)';
 --
 
 TRUNCATE temporal_partitioned_rng, temporal_partitioned_fk_rng2rng;
-INSERT INTO temporal_partitioned_rng VALUES ('[8,9)', daterange('2018-01-01', '2021-01-01'));
-INSERT INTO temporal_partitioned_fk_rng2rng VALUES ('[5,6)', daterange('2018-01-01', '2021-01-01'), '[8,9)');
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[8,9)', daterange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_partitioned_fk_rng2rng (id, valid_at, parent_id) VALUES ('[5,6)', daterange('2018-01-01', '2021-01-01'), '[8,9)');
 DELETE FROM temporal_partitioned_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[8,9)';
 SELECT * FROM temporal_partitioned_fk_rng2rng WHERE id = '[5,6)';
 DELETE FROM temporal_partitioned_rng WHERE id = '[8,9)';
 SELECT * FROM temporal_partitioned_fk_rng2rng WHERE id = '[5,6)';
-INSERT INTO temporal_partitioned_rng VALUES ('[17,18)', daterange('2018-01-01', '2020-01-01'));
-INSERT INTO temporal_partitioned_rng VALUES ('[17,18)', daterange('2020-01-01', '2021-01-01'));
-INSERT INTO temporal_partitioned_fk_rng2rng VALUES ('[11,12)', daterange('2018-01-01', '2021-01-01'), '[17,18)');
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[17,18)', daterange('2018-01-01', '2020-01-01'));
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[17,18)', daterange('2020-01-01', '2021-01-01'));
+INSERT INTO temporal_partitioned_fk_rng2rng (id, valid_at, parent_id) VALUES ('[11,12)', daterange('2018-01-01', '2021-01-01'), '[17,18)');
 DELETE FROM temporal_partitioned_rng WHERE id = '[17,18)' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_partitioned_fk_rng2rng WHERE id = '[11,12)';
 
@@ -2100,8 +2100,8 @@ SELECT * FROM temporal_partitioned_fk_rng2rng WHERE id = '[11,12)';
 --
 
 TRUNCATE temporal_partitioned_rng, temporal_partitioned_fk_rng2rng;
-INSERT INTO temporal_partitioned_rng VALUES ('[9,10)', daterange('2018-01-01', '2021-01-01'));
-INSERT INTO temporal_partitioned_fk_rng2rng VALUES ('[6,7)', daterange('2018-01-01', '2021-01-01'), '[9,10)');
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[9,10)', daterange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_partitioned_fk_rng2rng (id, valid_at, parent_id) VALUES ('[6,7)', daterange('2018-01-01', '2021-01-01'), '[9,10)');
 ALTER TABLE temporal_partitioned_fk_rng2rng
 	DROP CONSTRAINT temporal_partitioned_fk_rng2rng_fk,
 	ADD CONSTRAINT temporal_partitioned_fk_rng2rng_fk
@@ -2112,9 +2112,9 @@ UPDATE temporal_partitioned_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '20
 SELECT * FROM temporal_partitioned_fk_rng2rng WHERE id = '[6,7)';
 UPDATE temporal_partitioned_rng SET id = '[10,11)' WHERE id = '[9,10)';
 SELECT * FROM temporal_partitioned_fk_rng2rng WHERE id = '[6,7)';
-INSERT INTO temporal_partitioned_rng VALUES ('[18,19)', daterange('2018-01-01', '2020-01-01'));
-INSERT INTO temporal_partitioned_rng VALUES ('[18,19)', daterange('2020-01-01', '2021-01-01'));
-INSERT INTO temporal_partitioned_fk_rng2rng VALUES ('[12,13)', daterange('2018-01-01', '2021-01-01'), '[18,19)');
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[18,19)', daterange('2018-01-01', '2020-01-01'));
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[18,19)', daterange('2020-01-01', '2021-01-01'));
+INSERT INTO temporal_partitioned_fk_rng2rng (id, valid_at, parent_id) VALUES ('[12,13)', daterange('2018-01-01', '2021-01-01'), '[18,19)');
 UPDATE temporal_partitioned_rng SET id = '[19,20)' WHERE id = '[18,19)' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_partitioned_fk_rng2rng WHERE id = '[12,13)';
 
@@ -2123,15 +2123,15 @@ SELECT * FROM temporal_partitioned_fk_rng2rng WHERE id = '[12,13)';
 --
 
 TRUNCATE temporal_partitioned_rng, temporal_partitioned_fk_rng2rng;
-INSERT INTO temporal_partitioned_rng VALUES ('[11,12)', daterange('2018-01-01', '2021-01-01'));
-INSERT INTO temporal_partitioned_fk_rng2rng VALUES ('[7,8)', daterange('2018-01-01', '2021-01-01'), '[11,12)');
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[11,12)', daterange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_partitioned_fk_rng2rng (id, valid_at, parent_id) VALUES ('[7,8)', daterange('2018-01-01', '2021-01-01'), '[11,12)');
 DELETE FROM temporal_partitioned_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[11,12)';
 SELECT * FROM temporal_partitioned_fk_rng2rng WHERE id = '[7,8)';
 DELETE FROM temporal_partitioned_rng WHERE id = '[11,12)';
 SELECT * FROM temporal_partitioned_fk_rng2rng WHERE id = '[7,8)';
-INSERT INTO temporal_partitioned_rng VALUES ('[20,21)', daterange('2018-01-01', '2020-01-01'));
-INSERT INTO temporal_partitioned_rng VALUES ('[20,21)', daterange('2020-01-01', '2021-01-01'));
-INSERT INTO temporal_partitioned_fk_rng2rng VALUES ('[13,14)', daterange('2018-01-01', '2021-01-01'), '[20,21)');
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[20,21)', daterange('2018-01-01', '2020-01-01'));
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[20,21)', daterange('2020-01-01', '2021-01-01'));
+INSERT INTO temporal_partitioned_fk_rng2rng (id, valid_at, parent_id) VALUES ('[13,14)', daterange('2018-01-01', '2021-01-01'), '[20,21)');
 DELETE FROM temporal_partitioned_rng WHERE id = '[20,21)' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_partitioned_fk_rng2rng WHERE id = '[13,14)';
 
@@ -2140,9 +2140,9 @@ SELECT * FROM temporal_partitioned_fk_rng2rng WHERE id = '[13,14)';
 --
 
 TRUNCATE temporal_partitioned_rng, temporal_partitioned_fk_rng2rng;
-INSERT INTO temporal_partitioned_rng VALUES ('[0,1)', daterange(null, null));
-INSERT INTO temporal_partitioned_rng VALUES ('[12,13)', daterange('2018-01-01', '2021-01-01'));
-INSERT INTO temporal_partitioned_fk_rng2rng VALUES ('[8,9)', daterange('2018-01-01', '2021-01-01'), '[12,13)');
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[0,1)', daterange(null, null));
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[12,13)', daterange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_partitioned_fk_rng2rng (id, valid_at, parent_id) VALUES ('[8,9)', daterange('2018-01-01', '2021-01-01'), '[12,13)');
 ALTER TABLE temporal_partitioned_fk_rng2rng
   ALTER COLUMN parent_id SET DEFAULT '[0,1)',
 	DROP CONSTRAINT temporal_partitioned_fk_rng2rng_fk,
@@ -2154,9 +2154,9 @@ UPDATE temporal_partitioned_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '20
 SELECT * FROM temporal_partitioned_fk_rng2rng WHERE id = '[8,9)';
 UPDATE temporal_partitioned_rng SET id = '[13,14)' WHERE id = '[12,13)';
 SELECT * FROM temporal_partitioned_fk_rng2rng WHERE id = '[8,9)';
-INSERT INTO temporal_partitioned_rng VALUES ('[22,23)', daterange('2018-01-01', '2020-01-01'));
-INSERT INTO temporal_partitioned_rng VALUES ('[22,23)', daterange('2020-01-01', '2021-01-01'));
-INSERT INTO temporal_partitioned_fk_rng2rng VALUES ('[14,15)', daterange('2018-01-01', '2021-01-01'), '[22,23)');
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[22,23)', daterange('2018-01-01', '2020-01-01'));
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[22,23)', daterange('2020-01-01', '2021-01-01'));
+INSERT INTO temporal_partitioned_fk_rng2rng (id, valid_at, parent_id) VALUES ('[14,15)', daterange('2018-01-01', '2021-01-01'), '[22,23)');
 UPDATE temporal_partitioned_rng SET id = '[23,24)' WHERE id = '[22,23)' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_partitioned_fk_rng2rng WHERE id = '[14,15)';
 
@@ -2165,16 +2165,16 @@ SELECT * FROM temporal_partitioned_fk_rng2rng WHERE id = '[14,15)';
 --
 
 TRUNCATE temporal_partitioned_rng, temporal_partitioned_fk_rng2rng;
-INSERT INTO temporal_partitioned_rng VALUES ('[0,1)', daterange(null, null));
-INSERT INTO temporal_partitioned_rng VALUES ('[14,15)', daterange('2018-01-01', '2021-01-01'));
-INSERT INTO temporal_partitioned_fk_rng2rng VALUES ('[9,10)', daterange('2018-01-01', '2021-01-01'), '[14,15)');
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[0,1)', daterange(null, null));
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[14,15)', daterange('2018-01-01', '2021-01-01'));
+INSERT INTO temporal_partitioned_fk_rng2rng (id, valid_at, parent_id) VALUES ('[9,10)', daterange('2018-01-01', '2021-01-01'), '[14,15)');
 DELETE FROM temporal_partitioned_rng FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id = '[14,15)';
 SELECT * FROM temporal_partitioned_fk_rng2rng WHERE id = '[9,10)';
 DELETE FROM temporal_partitioned_rng WHERE id = '[14,15)';
 SELECT * FROM temporal_partitioned_fk_rng2rng WHERE id = '[9,10)';
-INSERT INTO temporal_partitioned_rng VALUES ('[24,25)', daterange('2018-01-01', '2020-01-01'));
-INSERT INTO temporal_partitioned_rng VALUES ('[24,25)', daterange('2020-01-01', '2021-01-01'));
-INSERT INTO temporal_partitioned_fk_rng2rng VALUES ('[15,16)', daterange('2018-01-01', '2021-01-01'), '[24,25)');
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[24,25)', daterange('2018-01-01', '2020-01-01'));
+INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[24,25)', daterange('2020-01-01', '2021-01-01'));
+INSERT INTO temporal_partitioned_fk_rng2rng (id, valid_at, parent_id) VALUES ('[15,16)', daterange('2018-01-01', '2021-01-01'), '[24,25)');
 DELETE FROM temporal_partitioned_rng WHERE id = '[24,25)' AND valid_at @> '2019-01-01'::date;
 SELECT * FROM temporal_partitioned_fk_rng2rng WHERE id = '[15,16)';
 
