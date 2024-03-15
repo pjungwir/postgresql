@@ -1175,9 +1175,9 @@ WITH ( MODULUS <replaceable class="parameter">numeric_literal</replaceable>, REM
      <para>
       If the last column is marked with <literal>PERIOD</literal>,
       it is treated in a special way.
-      While the non-<literal>PERIOD</literal> columns are treated normally
+      While the non-<literal>PERIOD</literal> columns are compared for equality
       (and there must be at least one of them),
-      the <literal>PERIOD</literal> column is not compared for equality.
+      the <literal>PERIOD</literal> column is not.
       Instead the constraint is considered satisfied
       if the referenced table has matching records
       (based on the non-<literal>PERIOD</literal> parts of the key)
@@ -1186,7 +1186,7 @@ WITH ( MODULUS <replaceable class="parameter">numeric_literal</replaceable>, REM
       In other words, the reference must have a referent for its entire duration.
       Normally this column would be a range or multirange type,
       although any type whose GiST opclass has a "contained by" operator
-      and a <literal>referenced_agg</literal> support function is allowed.
+      and a <literal>referencedagg</literal> support function is allowed.
       (See <xref linkend="gist-extensibility"/>.)
       In addition the referenced table must have a primary key
       or unique constraint declared with <literal>WITHOUT PORTION</literal>.
