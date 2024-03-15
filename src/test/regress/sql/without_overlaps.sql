@@ -2088,7 +2088,7 @@ CREATE TABLE temporal_fk_per2per (
 		REFERENCES temporal_per (id, PERIOD valid_at)
 );
 -- (parent_id, valid_at) REFERENCES [implicit]
--- FOREIGN KEY part should specify PERIOD
+-- FOREIGN KEY part should specify PERIOD, REFERENCES must be explicit
 CREATE TABLE temporal_fk_per2per (
 	id int4range,
 	valid_from date,
@@ -2123,6 +2123,7 @@ CREATE TABLE temporal_fk_per2per (
 );
 
 -- with inferred PK on the referenced table:
+-- (This is not permitted by the SQL standard. See 11.8 syntax rule 4b.)
 CREATE TABLE temporal_fk_per2per (
 	id int4range,
 	valid_from date,
@@ -2133,7 +2134,20 @@ CREATE TABLE temporal_fk_per2per (
 	CONSTRAINT temporal_fk_per2per_fk FOREIGN KEY (parent_id, PERIOD valid_at)
 		REFERENCES temporal_per
 );
-DROP TABLE temporal_fk_per2per;
+-- (parent_id) REFERENCES [implicit]
+-- This finds the PK (omitting the WITHOUT OVERLAPS element),
+-- but it's not a b-tree index, so it fails anyway.
+-- Anyway it must fail because the two sides have a different definition of "unique".
+CREATE TABLE temporal_fk_per2per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	parent_id int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk_per2per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_per2per_fk FOREIGN KEY (parent_id)
+		REFERENCES temporal_per
+);
 
 -- should fail because of duplicate referenced columns:
 CREATE TABLE temporal_fk_per2per (
@@ -2204,29 +2218,6 @@ ALTER TABLE temporal_fk2_per2per
 	REFERENCES temporal_per2 (id1, id2, PERIOD valid_at);
 \d temporal_fk2_per2per
 
--- with inferred PK on the referenced table, and wrong column type:
-ALTER TABLE temporal_fk_per2per
-	DROP CONSTRAINT temporal_fk_per2per_fk,
-	DROP PERIOD FOR valid_at,
-	ALTER COLUMN valid_from TYPE timestamp,
-	ALTER COLUMN valid_til TYPE timestamp,
-	ADD PERIOD FOR valid_at (valid_from, valid_til);
-ALTER TABLE temporal_fk_per2per
-	ADD CONSTRAINT temporal_fk_per2per_fk
-	FOREIGN KEY (parent_id, PERIOD valid_at)
-	REFERENCES temporal_per;
-ALTER TABLE temporal_fk_per2per
-	DROP PERIOD FOR valid_at,
-	ALTER COLUMN valid_from TYPE date,
-	ALTER COLUMN valid_til TYPE date,
-	ADD PERIOD FOR valid_at (valid_from, valid_til);
-
--- with inferred PK on the referenced table:
-ALTER TABLE temporal_fk_per2per
-	ADD CONSTRAINT temporal_fk_per2per_fk
-	FOREIGN KEY (parent_id, PERIOD valid_at)
-	REFERENCES temporal_per;
-
 -- should fail because of duplicate referenced columns:
 ALTER TABLE temporal_fk_per2per
 	ADD CONSTRAINT temporal_fk_per2per_fk2
@@ -2251,7 +2242,7 @@ INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('
 ALTER TABLE temporal_fk_per2per
 	ADD CONSTRAINT temporal_fk_per2per_fk
 	FOREIGN KEY (parent_id, PERIOD valid_at)
-	REFERENCES temporal_per;
+	REFERENCES temporal_per (id, PERIOD valid_at);
 ALTER TABLE temporal_fk_per2per
 	DROP CONSTRAINT temporal_fk_per2per_fk;
 INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[2,2]', '2018-01-02', '2018-04-01', '[1,1]');
@@ -2259,13 +2250,13 @@ INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('
 ALTER TABLE temporal_fk_per2per
 	ADD CONSTRAINT temporal_fk_per2per_fk
 	FOREIGN KEY (parent_id, PERIOD valid_at)
-	REFERENCES temporal_per;
+	REFERENCES temporal_per (id, PERIOD valid_at);
 -- okay again:
 DELETE FROM temporal_fk_per2per;
 ALTER TABLE temporal_fk_per2per
 	ADD CONSTRAINT temporal_fk_per2per_fk
 	FOREIGN KEY (parent_id, PERIOD valid_at)
-	REFERENCES temporal_per;
+	REFERENCES temporal_per (id, PERIOD valid_at);
 
 --
 -- test pg_get_constraintdef
@@ -2357,7 +2348,7 @@ ALTER TABLE temporal_fk_per2per
 ALTER TABLE temporal_fk_per2per
 	ADD CONSTRAINT temporal_fk_per2per_fk
 	FOREIGN KEY (parent_id, PERIOD valid_at)
-	REFERENCES temporal_per
+	REFERENCES temporal_per (id, PERIOD valid_at)
 	ON UPDATE RESTRICT;
 -- a PK update that succeeds because the numeric id isn't referenced:
 INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[5,5]', '2018-01-01', '2018-02-01');
@@ -2403,7 +2394,7 @@ ALTER TABLE temporal_fk_per2per
 ALTER TABLE temporal_fk_per2per
 	ADD CONSTRAINT temporal_fk_per2per_fk
 	FOREIGN KEY (parent_id, PERIOD valid_at)
-	REFERENCES temporal_per;
+	REFERENCES temporal_per (id, PERIOD valid_at);
 -- a PK delete that succeeds because the numeric id isn't referenced:
 INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[5,5]', '2018-01-01', '2018-02-01');
 DELETE FROM temporal_per WHERE id = '[5,5]';
@@ -2439,7 +2430,7 @@ ALTER TABLE temporal_fk_per2per
 ALTER TABLE temporal_fk_per2per
 	ADD CONSTRAINT temporal_fk_per2per_fk
 	FOREIGN KEY (parent_id, PERIOD valid_at)
-	REFERENCES temporal_per
+	REFERENCES temporal_per (id, PERIOD valid_at)
 	ON DELETE RESTRICT;
 INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[5,5]', '2018-01-01', '2018-02-01');
 DELETE FROM temporal_per WHERE id = '[5,5]';
@@ -2495,7 +2486,7 @@ ALTER TABLE temporal_fk_per2per
 	DROP CONSTRAINT temporal_fk_per2per_fk,
 	ADD CONSTRAINT temporal_fk_per2per_fk
 		FOREIGN KEY (parent_id, PERIOD valid_at)
-		REFERENCES temporal_per
+		REFERENCES temporal_per (id, PERIOD valid_at)
 		ON DELETE CASCADE ON UPDATE CASCADE;
 -- leftovers on both sides:
 UPDATE temporal_per FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id = '[7,7]' WHERE id = '[6,6]';
@@ -2541,7 +2532,7 @@ ALTER TABLE temporal_fk_per2per
 	DROP CONSTRAINT temporal_fk_per2per_fk,
 	ADD CONSTRAINT temporal_fk_per2per_fk
 		FOREIGN KEY (parent_id, PERIOD valid_at)
-		REFERENCES temporal_per
+		REFERENCES temporal_per (id, PERIOD valid_at)
 		ON DELETE SET NULL ON UPDATE SET NULL;
 -- leftovers on both sides:
 UPDATE temporal_per FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id = '[7,7]' WHERE id = '[6,6]';
@@ -2589,7 +2580,7 @@ ALTER TABLE temporal_fk_per2per
 	DROP CONSTRAINT temporal_fk_per2per_fk,
 	ADD CONSTRAINT temporal_fk_per2per_fk
 		FOREIGN KEY (parent_id, PERIOD valid_at)
-		REFERENCES temporal_per
+		REFERENCES temporal_per (id, PERIOD valid_at)
 		ON DELETE SET DEFAULT ON UPDATE SET DEFAULT;
 -- leftovers on both sides:
 UPDATE temporal_per FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id = '[7,7]' WHERE id = '[6,6]';
@@ -2636,7 +2627,7 @@ ALTER TABLE temporal_fk2_per2per
 	DROP CONSTRAINT temporal_fk2_per2per_fk,
 	ADD CONSTRAINT temporal_fk2_per2per_fk
 		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
-		REFERENCES temporal_per2
+		REFERENCES temporal_per2 (id1, id2, PERIOD valid_at)
 		ON DELETE CASCADE ON UPDATE CASCADE;
 -- leftovers on both sides:
 UPDATE temporal_per2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id1 = '[7,7]' WHERE id1 = '[6,6]';
@@ -2682,7 +2673,7 @@ ALTER TABLE temporal_fk2_per2per
 	DROP CONSTRAINT temporal_fk2_per2per_fk,
 	ADD CONSTRAINT temporal_fk2_per2per_fk
 		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
-		REFERENCES temporal_per2
+		REFERENCES temporal_per2 (id1, id2, PERIOD valid_at)
 		ON DELETE SET NULL ON UPDATE SET NULL;
 -- leftovers on both sides:
 UPDATE temporal_per2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id1 = '[7,7]' WHERE id1 = '[6,6]';
@@ -2729,14 +2720,14 @@ ALTER TABLE temporal_fk2_per2per
 	DROP CONSTRAINT temporal_fk2_per2per_fk,
 	ADD CONSTRAINT temporal_fk2_per2per_fk
 		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
-		REFERENCES temporal_per2
+		REFERENCES temporal_per2 (id1, id2, PERIOD valid_at)
 		ON DELETE SET NULL (valid_at) ON UPDATE SET NULL;
 -- ok:
 ALTER TABLE temporal_fk2_per2per
 	DROP CONSTRAINT temporal_fk2_per2per_fk,
 	ADD CONSTRAINT temporal_fk2_per2per_fk
 		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
-		REFERENCES temporal_per2
+		REFERENCES temporal_per2 (id1, id2, PERIOD valid_at)
 		ON DELETE SET NULL (parent_id1) ON UPDATE SET NULL;
 -- leftovers on both sides:
 DELETE FROM temporal_per2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id1 = '[6,6]';
@@ -2765,7 +2756,7 @@ ALTER TABLE temporal_fk2_per2per
 	DROP CONSTRAINT temporal_fk2_per2per_fk,
 	ADD CONSTRAINT temporal_fk2_per2per_fk
 		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
-		REFERENCES temporal_per2
+		REFERENCES temporal_per2 (id1, id2, PERIOD valid_at)
 		ON DELETE SET DEFAULT ON UPDATE SET DEFAULT;
 -- leftovers on both sides:
 UPDATE temporal_per2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id1 = '[7,7]', id2 = '[7,7]' WHERE id1 = '[6,6]';
@@ -2815,7 +2806,7 @@ ALTER TABLE temporal_fk2_per2per
 	DROP CONSTRAINT temporal_fk2_per2per_fk,
 	ADD CONSTRAINT temporal_fk2_per2per_fk
 		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
-		REFERENCES temporal_per2
+		REFERENCES temporal_per2 (id1, id2, PERIOD valid_at)
 		ON DELETE SET DEFAULT (valid_at) ON UPDATE SET DEFAULT;
 -- ok:
 ALTER TABLE temporal_fk2_per2per
@@ -2823,7 +2814,7 @@ ALTER TABLE temporal_fk2_per2per
 	DROP CONSTRAINT temporal_fk2_per2per_fk,
 	ADD CONSTRAINT temporal_fk2_per2per_fk
 		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
-		REFERENCES temporal_per2
+		REFERENCES temporal_per2 (id1, id2, PERIOD valid_at)
 		ON DELETE SET DEFAULT (parent_id1) ON UPDATE SET DEFAULT;
 -- leftovers on both sides:
 DELETE FROM temporal_per2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id1 = '[6,6]';
