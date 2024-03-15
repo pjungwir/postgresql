@@ -370,7 +370,7 @@ CREATE TABLE temporal_fk_rng2rng (
 		REFERENCES temporal_rng (id, PERIOD valid_at)
 );
 -- (parent_id, valid_at) REFERENCES [implicit]
--- FOREIGN KEY part should specify PERIOD
+-- FOREIGN KEY part should specify PERIOD, REFERENCES must be explicit
 CREATE TABLE temporal_fk_rng2rng (
 	id int4range,
 	valid_at daterange,
@@ -397,8 +397,8 @@ CREATE TABLE temporal_fk_rng2rng (
 	CONSTRAINT temporal_fk_rng2rng_fk FOREIGN KEY (parent_id)
 		REFERENCES temporal_rng (id, PERIOD valid_at)
 );
-
 -- with inferred PK on the referenced table:
+-- (This is not permitted by the SQL standard. See 11.8 syntax rule 4b.)
 CREATE TABLE temporal_fk_rng2rng (
 	id int4range,
 	valid_at daterange,
@@ -407,7 +407,18 @@ CREATE TABLE temporal_fk_rng2rng (
 	CONSTRAINT temporal_fk_rng2rng_fk FOREIGN KEY (parent_id, PERIOD valid_at)
 		REFERENCES temporal_rng
 );
-DROP TABLE temporal_fk_rng2rng;
+-- (parent_id) REFERENCES [implicit]
+-- This finds the PK (omitting the WITHOUT OVERLAPS element),
+-- but it's not a b-tree index, so it fails anyway.
+-- Anyway it must fail because the two sides have a different definition of "unique".
+CREATE TABLE temporal_fk_rng2rng (
+	id int4range,
+	valid_at daterange,
+	parent_id int4range,
+	CONSTRAINT temporal_fk_rng2rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_rng2rng_fk FOREIGN KEY (parent_id)
+		REFERENCES temporal_rng
+);
 
 -- should fail because of duplicate referenced columns:
 CREATE TABLE temporal_fk_rng2rng (
@@ -468,23 +479,6 @@ ALTER TABLE temporal_fk2_rng2rng
 	REFERENCES temporal_rng2 (id1, id2, PERIOD valid_at);
 \d temporal_fk2_rng2rng
 
--- with inferred PK on the referenced table, and wrong column type:
-ALTER TABLE temporal_fk_rng2rng
-	DROP CONSTRAINT temporal_fk_rng2rng_fk,
-	ALTER COLUMN valid_at TYPE tsrange USING tsrange(lower(valid_at), upper(valid_at));
-ALTER TABLE temporal_fk_rng2rng
-	ADD CONSTRAINT temporal_fk_rng2rng_fk
-	FOREIGN KEY (parent_id, PERIOD valid_at)
-	REFERENCES temporal_rng;
-ALTER TABLE temporal_fk_rng2rng
-	ALTER COLUMN valid_at TYPE daterange USING daterange(lower(valid_at)::date, upper(valid_at)::date);
-
--- with inferred PK on the referenced table:
-ALTER TABLE temporal_fk_rng2rng
-	ADD CONSTRAINT temporal_fk_rng2rng_fk
-	FOREIGN KEY (parent_id, PERIOD valid_at)
-	REFERENCES temporal_rng;
-
 -- should fail because of duplicate referenced columns:
 ALTER TABLE temporal_fk_rng2rng
 	ADD CONSTRAINT temporal_fk_rng2rng_fk2
@@ -509,7 +503,7 @@ INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES ('[1,2)', dater
 ALTER TABLE temporal_fk_rng2rng
 	ADD CONSTRAINT temporal_fk_rng2rng_fk
 	FOREIGN KEY (parent_id, PERIOD valid_at)
-	REFERENCES temporal_rng;
+	REFERENCES temporal_rng (id, PERIOD valid_at);
 ALTER TABLE temporal_fk_rng2rng
 	DROP CONSTRAINT temporal_fk_rng2rng_fk;
 INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES ('[2,3)', daterange('2018-01-02', '2018-04-01'), '[1,2)');
@@ -517,13 +511,13 @@ INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES ('[2,3)', dater
 ALTER TABLE temporal_fk_rng2rng
 	ADD CONSTRAINT temporal_fk_rng2rng_fk
 	FOREIGN KEY (parent_id, PERIOD valid_at)
-	REFERENCES temporal_rng;
+	REFERENCES temporal_rng (id, PERIOD valid_at);
 -- okay again:
 DELETE FROM temporal_fk_rng2rng;
 ALTER TABLE temporal_fk_rng2rng
 	ADD CONSTRAINT temporal_fk_rng2rng_fk
 	FOREIGN KEY (parent_id, PERIOD valid_at)
-	REFERENCES temporal_rng;
+	REFERENCES temporal_rng (id, PERIOD valid_at);
 
 --
 -- test pg_get_constraintdef
@@ -603,7 +597,7 @@ ALTER TABLE temporal_fk_rng2rng
 ALTER TABLE temporal_fk_rng2rng
 	ADD CONSTRAINT temporal_fk_rng2rng_fk
 	FOREIGN KEY (parent_id, PERIOD valid_at)
-	REFERENCES temporal_rng
+	REFERENCES temporal_rng (id, PERIOD valid_at)
 	ON UPDATE RESTRICT;
 -- a PK update that succeeds because the numeric id isn't referenced:
 INSERT INTO temporal_rng (id, valid_at) VALUES ('[5,6)', daterange('2018-01-01', '2018-02-01'));
@@ -637,7 +631,7 @@ ALTER TABLE temporal_fk_rng2rng
 ALTER TABLE temporal_fk_rng2rng
 	ADD CONSTRAINT temporal_fk_rng2rng_fk
 	FOREIGN KEY (parent_id, PERIOD valid_at)
-	REFERENCES temporal_rng;
+	REFERENCES temporal_rng (id, PERIOD valid_at);
 -- a PK delete that succeeds because the numeric id isn't referenced:
 INSERT INTO temporal_rng (id, valid_at) VALUES ('[5,6)', daterange('2018-01-01', '2018-02-01'));
 DELETE FROM temporal_rng WHERE id = '[5,6)';
@@ -663,7 +657,7 @@ ALTER TABLE temporal_fk_rng2rng
 ALTER TABLE temporal_fk_rng2rng
 	ADD CONSTRAINT temporal_fk_rng2rng_fk
 	FOREIGN KEY (parent_id, PERIOD valid_at)
-	REFERENCES temporal_rng
+	REFERENCES temporal_rng (id, PERIOD valid_at)
 	ON DELETE RESTRICT;
 INSERT INTO temporal_rng (id, valid_at) VALUES ('[5,6)', daterange('2018-01-01', '2018-02-01'));
 DELETE FROM temporal_rng WHERE id = '[5,6)';
@@ -690,7 +684,7 @@ ALTER TABLE temporal_fk_rng2rng
 	DROP CONSTRAINT temporal_fk_rng2rng_fk,
 	ADD CONSTRAINT temporal_fk_rng2rng_fk
 		FOREIGN KEY (parent_id, PERIOD valid_at)
-		REFERENCES temporal_rng
+		REFERENCES temporal_rng (id, PERIOD valid_at)
 		ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- test FK referenced updates SET NULL
@@ -700,7 +694,7 @@ ALTER TABLE temporal_fk_rng2rng
 	DROP CONSTRAINT temporal_fk_rng2rng_fk,
 	ADD CONSTRAINT temporal_fk_rng2rng_fk
 		FOREIGN KEY (parent_id, PERIOD valid_at)
-		REFERENCES temporal_rng
+		REFERENCES temporal_rng (id, PERIOD valid_at)
 		ON DELETE SET NULL ON UPDATE SET NULL;
 
 -- test FK referenced updates SET DEFAULT
@@ -712,7 +706,7 @@ ALTER TABLE temporal_fk_rng2rng
 	DROP CONSTRAINT temporal_fk_rng2rng_fk,
 	ADD CONSTRAINT temporal_fk_rng2rng_fk
 		FOREIGN KEY (parent_id, PERIOD valid_at)
-		REFERENCES temporal_rng
+		REFERENCES temporal_rng (id, PERIOD valid_at)
 		ON DELETE SET DEFAULT ON UPDATE SET DEFAULT;
 
 --
@@ -806,7 +800,7 @@ ALTER TABLE temporal_partitioned_fk_rng2rng
 ALTER TABLE temporal_partitioned_fk_rng2rng
 	ADD CONSTRAINT temporal_partitioned_fk_rng2rng_fk
 	FOREIGN KEY (parent_id, PERIOD valid_at)
-	REFERENCES temporal_partitioned_rng
+	REFERENCES temporal_partitioned_rng (id, PERIOD valid_at)
 	ON DELETE RESTRICT;
 INSERT INTO temporal_partitioned_rng (id, valid_at) VALUES ('[5,6)', daterange('2016-01-01', '2016-02-01'));
 UPDATE temporal_partitioned_rng SET valid_at = daterange('2018-01-01', '2018-02-01') WHERE id = '[5,6)';
@@ -838,7 +832,7 @@ ALTER TABLE temporal_partitioned_fk_rng2rng
 	DROP CONSTRAINT temporal_partitioned_fk_rng2rng_fk,
 	ADD CONSTRAINT temporal_partitioned_fk_rng2rng_fk
 		FOREIGN KEY (parent_id, PERIOD valid_at)
-		REFERENCES temporal_partitioned_rng
+		REFERENCES temporal_partitioned_rng (id, PERIOD valid_at)
 		ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
@@ -853,7 +847,7 @@ ALTER TABLE temporal_partitioned_fk_rng2rng
 	DROP CONSTRAINT temporal_partitioned_fk_rng2rng_fk,
 	ADD CONSTRAINT temporal_partitioned_fk_rng2rng_fk
 		FOREIGN KEY (parent_id, PERIOD valid_at)
-		REFERENCES temporal_partitioned_rng
+		REFERENCES temporal_partitioned_rng (id, PERIOD valid_at)
 		ON DELETE SET NULL ON UPDATE SET NULL;
 
 --
@@ -869,7 +863,7 @@ ALTER TABLE temporal_partitioned_fk_rng2rng
 	DROP CONSTRAINT temporal_partitioned_fk_rng2rng_fk,
 	ADD CONSTRAINT temporal_partitioned_fk_rng2rng_fk
 		FOREIGN KEY (parent_id, PERIOD valid_at)
-		REFERENCES temporal_partitioned_rng
+		REFERENCES temporal_partitioned_rng (id, PERIOD valid_at)
 		ON DELETE SET DEFAULT ON UPDATE SET DEFAULT;
 
 --
