@@ -386,7 +386,7 @@ static int	transformColumnNameList(Oid relId, List *colList,
 static int	transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 									   List **attnamelist,
 									   int16 *attnums, Oid *atttypids,
-									   Oid *opclasses, bool *pk_period);
+									   Oid *opclasses);
 static Oid	transformFkeyCheckAttrs(Relation pkrel,
 									int numattrs, int16 *attnums,
 									bool with_period, Oid *opclasses);
@@ -9819,7 +9819,6 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	Oid			ffeqoperators[INDEX_MAX_KEYS] = {0};
 	int16		fkdelsetcols[INDEX_MAX_KEYS] = {0};
 	bool		with_period;
-	bool		pk_with_period;
 	int			i;
 	int			numfks,
 				numpks,
@@ -9921,6 +9920,16 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_FOREIGN_KEY),
 					errmsg("foreign key uses PERIOD on the referenced table but not the referencing table")));
+		/*
+		 * We never infer a PERIOD on the PK side
+		 * (Cf. 11.8 syntax rule 4b of the standard),
+		 * so if we don't have one already we won't ever get one.
+		 */
+		if (!fkconstraint->pk_with_period)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_FOREIGN_KEY),
+					errmsg("foreign key uses PERIOD on the referencing table but not the referenced table")));
+
 	}
 
 	numfkdelsetcols = transformColumnNameList(RelationGetRelid(rel),
@@ -9941,28 +9950,13 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 		numpks = transformFkeyGetPrimaryKey(pkrel, &indexOid,
 											&fkconstraint->pk_attrs,
 											pkattnum, pktypoid,
-											opclasses, &pk_with_period);
-
-		/* If the primary key uses WITHOUT OVERLAPS, the fk must use PERIOD */
-		if (pk_with_period && !fkconstraint->fk_with_period)
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_FOREIGN_KEY),
-					errmsg("foreign key uses PERIOD on the referenced table but not the referencing table")));
+											opclasses);
 	}
 	else
 	{
 		numpks = transformColumnNameList(RelationGetRelid(pkrel),
 										 fkconstraint->pk_attrs,
 										 pkattnum, pktypoid);
-
-		if (with_period)
-		{
-			if (!fkconstraint->pk_with_period)
-				/* Since we got pk_attrs, one should be a period. */
-				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_FOREIGN_KEY),
-						errmsg("foreign key uses PERIOD on the referencing table but not the referenced table")));
-		}
 
 		/* Look for an index matching the column list */
 		indexOid = transformFkeyCheckAttrs(pkrel, numpks, pkattnum,
@@ -12141,7 +12135,7 @@ static int
 transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 						   List **attnamelist,
 						   int16 *attnums, Oid *atttypids,
-						   Oid *opclasses, bool *pk_period)
+						   Oid *opclasses)
 {
 	List	   *indexoidlist;
 	ListCell   *indexoidscan;
@@ -12212,14 +12206,19 @@ transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 	{
 		int			pkattno = indexStruct->indkey.values[i];
 
+		/*
+		 * We must omit WITHOUT OVERLAPs parts of the key per the SQL standard 11.8 syntax rule 4b.
+		 * This should cause an error downstream if the FK uses PERIOD---and also if it doesn't!
+		 */
+		if (indexStruct->indisexclusion && i == indexStruct->indnatts - 1)
+			break; /* don't include this item in the number of attributes returned */
+
 		attnums[i] = pkattno;
 		atttypids[i] = attnumTypeId(pkrel, pkattno);
 		opclasses[i] = indclass->values[i];
 		*attnamelist = lappend(*attnamelist,
 							   makeString(pstrdup(NameStr(*attnumAttName(pkrel, pkattno)))));
 	}
-
-	*pk_period = (indexStruct->indisexclusion);
 
 	ReleaseSysCache(indexTuple);
 
