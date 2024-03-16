@@ -1622,7 +1622,7 @@ FindFKPeriodOpers(Oid opclass,
 				  Oid *periodoperoid,
 				  Oid *aggedperiodoperoid)
 {
-	StrategyNumber strat = RTContainedByStrategyNumber;
+	StrategyNumber strat;
 
 	/*
 	 * Look up the ContainedBy operator whose lhs and rhs are the opclass's type.
@@ -1630,6 +1630,7 @@ FindFKPeriodOpers(Oid opclass,
 	 * of the old value, then we can treat the attribute as if it didn't change,
 	 * and skip the RI check.
 	 */
+	strat = RTContainedByStrategyNumber;
 	GetOperatorFromWellKnownStrategy(opclass,
 									 InvalidOid,
 									 periodoperoid,
