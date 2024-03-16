@@ -2489,7 +2489,6 @@ GetOperatorFromWellKnownStrategy(Oid opclass,
 					errmsg(errstr, format_type_be(opcintype)),
 					errdetail("Could not translate strategy number %d for operator class \"%s\" for access method \"%s\".",
 							  instrat, NameStr(((Form_pg_opclass) GETSTRUCT(tuple))->opcname), "gist"));
-			ReleaseSysCache(tuple);
 		}
 
 		/*
