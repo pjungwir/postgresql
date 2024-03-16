@@ -1607,21 +1607,29 @@ DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
 }
 
 /*
- * FindFkPeriodOpers -
+ * FindFkPeriodOpersAndProcs -
  *
- * Looks up the operator oids used for the PERIOD part of a temporal foreign key.
+ * Looks up the operator and support proc oids used for the PERIOD part of a temporal foreign key.
  * The opclass should be the opclass of that PERIOD element.
  * Everything else is an output: periodoperoid is the ContainedBy operator for
- * types matching the PERIOD element.
+ * types matching the PERIOD element. periodprocoid is a GiST support function to
+ * aggregate multiple PERIOD element values into a single value
+ * (whose return type need not match its inputs,
+ * e.g. many ranges can be aggregated into a multirange).
  * And aggedperiodoperoid is also a ContainedBy operator,
- * but one whose rhs is anymultirange.
+ * but one whose rhs matches the type returned by aggedperiodoperoid.
  * That way foreign keys can compare fkattr <@ range_agg(pkattr).
  */
 void
-FindFKPeriodOpers(Oid opclass,
-				  Oid *periodoperoid,
-				  Oid *aggedperiodoperoid)
+FindFKPeriodOpersAndProcs(Oid opclass,
+						  Oid *periodoperoid,
+						  Oid *aggedperiodoperoid,
+						  Oid *periodprocoid)
 {
+	Oid	opfamily;
+	Oid	opcintype;
+	Oid	aggrettype;
+	Oid	funcid = InvalidOid;
 	StrategyNumber strat;
 
 	/*
@@ -1636,6 +1644,21 @@ FindFKPeriodOpers(Oid opclass,
 									 periodoperoid,
 									 &strat);
 
+	/* Now look up the support proc for aggregation. */
+	if (get_opclass_opfamily_and_input_type(opclass, &opfamily, &opcintype))
+		funcid = get_opfamily_proc(opfamily, opcintype, opcintype, GIST_REFERENCED_AGG_PROC);
+
+	if (!OidIsValid(funcid))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("no support func %u found for FOREIGN KEY constraint", GIST_REFERENCED_AGG_PROC),
+				 errhint("Define a referencedagg support function for your GiST opclass.")));
+
+	*periodprocoid = funcid;
+
+	/* Look up the function's rettype. */
+	aggrettype = get_func_rettype(funcid);
+
 	/*
 	 * Now look up the ContainedBy operator.
 	 * Its left arg must be the type of the column (or rather of the opclass).
@@ -1643,7 +1666,7 @@ FindFKPeriodOpers(Oid opclass,
 	 */
 	strat = RTContainedByStrategyNumber;
 	GetOperatorFromWellKnownStrategy(opclass,
-									 ANYMULTIRANGEOID,
+									 aggrettype,
 									 aggedperiodoperoid,
 									 &strat);
 }
