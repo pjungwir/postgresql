@@ -137,7 +137,8 @@ typedef struct RI_ConstraintInfo
 	Oid			period_referenced_agg_proc;	/* referencedagg GiST support proc
 											   to combine PK ranges */
 	Oid			period_referenced_agg_rettype;	/* rettype for previous */
-	Oid			period_intersect_proc;	/* operator for PERIOD SQL */
+	Oid			period_intersect_proc;	/* anyrange * anyrange
+										   (or whatever type is used) */
 	dlist_node	valid_link;		/* Link in list of valid entries */
 } RI_ConstraintInfo;
 
