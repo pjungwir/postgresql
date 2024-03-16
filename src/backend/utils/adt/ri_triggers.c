@@ -124,9 +124,12 @@ typedef struct RI_ConstraintInfo
 	Oid			pf_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (PK = FK) */
 	Oid			pp_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (PK = PK) */
 	Oid			ff_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (FK = FK) */
-	Oid			period_contained_by_oper;	/* operator for PERIOD SQL */
-	Oid			agged_period_contained_by_oper;	/* operator for PERIOD SQL */
-	Oid			period_referenced_agg_proc;	/* proc for PERIOD SQL */
+	Oid			period_contained_by_oper;	/* anyrange <@ anyrange,
+											   (or whatever type is used) */
+	Oid			agged_period_contained_by_oper;	/* anyrange <@ referencedagg result
+												   (or whatever types are used) */
+	Oid			period_referenced_agg_proc;	/* referencedagg GiST support proc
+											   to combine PK ranges */
 	Oid			period_referenced_agg_rettype;	/* rettype for previous */
 	dlist_node	valid_link;		/* Link in list of valid entries */
 } RI_ConstraintInfo;
