@@ -957,7 +957,7 @@ ALTER TABLE temporal_fk2_rng2rng
 	DROP CONSTRAINT temporal_fk2_rng2rng_fk,
 	ADD CONSTRAINT temporal_fk2_rng2rng_fk
 		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
-		REFERENCES temporal_rng2
+		REFERENCES temporal_rng2 (id1, id2, PERIOD valid_at)
 		ON DELETE CASCADE ON UPDATE CASCADE;
 -- leftovers on both sides:
 UPDATE temporal_rng2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id1 = '[7,8)' WHERE id1 = '[6,7)';
@@ -1002,7 +1002,7 @@ ALTER TABLE temporal_fk2_rng2rng
 	DROP CONSTRAINT temporal_fk2_rng2rng_fk,
 	ADD CONSTRAINT temporal_fk2_rng2rng_fk
 		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
-		REFERENCES temporal_rng2
+		REFERENCES temporal_rng2 (id1, id2, PERIOD valid_at)
 		ON DELETE SET NULL ON UPDATE SET NULL;
 -- leftovers on both sides:
 UPDATE temporal_rng2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id1 = '[7,8)' WHERE id1 = '[6,7)';
@@ -1049,14 +1049,14 @@ ALTER TABLE temporal_fk2_rng2rng
 	DROP CONSTRAINT temporal_fk2_rng2rng_fk,
 	ADD CONSTRAINT temporal_fk2_rng2rng_fk
 		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
-		REFERENCES temporal_rng2
+		REFERENCES temporal_rng2 (id1, id2, PERIOD valid_at)
 		ON DELETE SET NULL (valid_at) ON UPDATE SET NULL;
 -- ok:
 ALTER TABLE temporal_fk2_rng2rng
 	DROP CONSTRAINT temporal_fk2_rng2rng_fk,
 	ADD CONSTRAINT temporal_fk2_rng2rng_fk
 		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
-		REFERENCES temporal_rng2
+		REFERENCES temporal_rng2 (id1, id2, PERIOD valid_at)
 		ON DELETE SET NULL (parent_id1) ON UPDATE SET NULL;
 -- leftovers on both sides:
 DELETE FROM temporal_rng2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id1 = '[6,7)';
@@ -1085,7 +1085,7 @@ ALTER TABLE temporal_fk2_rng2rng
 	DROP CONSTRAINT temporal_fk2_rng2rng_fk,
 	ADD CONSTRAINT temporal_fk2_rng2rng_fk
 		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
-		REFERENCES temporal_rng2
+		REFERENCES temporal_rng2 (id1, id2, PERIOD valid_at)
 		ON DELETE SET DEFAULT ON UPDATE SET DEFAULT;
 -- leftovers on both sides:
 UPDATE temporal_rng2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' SET id1 = '[7,8)', id2 = '[7,8)' WHERE id1 = '[6,7)';
@@ -1135,7 +1135,7 @@ ALTER TABLE temporal_fk2_rng2rng
 	DROP CONSTRAINT temporal_fk2_rng2rng_fk,
 	ADD CONSTRAINT temporal_fk2_rng2rng_fk
 		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
-		REFERENCES temporal_rng2
+		REFERENCES temporal_rng2 (id1, id2, PERIOD valid_at)
 		ON DELETE SET DEFAULT (valid_at) ON UPDATE SET DEFAULT;
 -- ok:
 ALTER TABLE temporal_fk2_rng2rng
@@ -1143,7 +1143,7 @@ ALTER TABLE temporal_fk2_rng2rng
 	DROP CONSTRAINT temporal_fk2_rng2rng_fk,
 	ADD CONSTRAINT temporal_fk2_rng2rng_fk
 		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
-		REFERENCES temporal_rng2
+		REFERENCES temporal_rng2 (id1, id2, PERIOD valid_at)
 		ON DELETE SET DEFAULT (parent_id1) ON UPDATE SET DEFAULT;
 -- leftovers on both sides:
 DELETE FROM temporal_rng2 FOR PORTION OF valid_at FROM '2019-01-01' TO '2020-01-01' WHERE id1 = '[6,7)';
@@ -1558,7 +1558,7 @@ ALTER TABLE temporal_fk_mltrng2mltrng
 	DROP CONSTRAINT temporal_fk_mltrng2mltrng_fk,
 	ADD CONSTRAINT temporal_fk_mltrng2mltrng_fk
 		FOREIGN KEY (parent_id, PERIOD valid_at)
-		REFERENCES temporal_mltrng
+		REFERENCES temporal_mltrng (id, PERIOD valid_at)
 		ON DELETE CASCADE ON UPDATE CASCADE;
 -- leftovers on both sides:
 UPDATE temporal_mltrng FOR PORTION OF valid_at (datemultirange(daterange('2019-01-01', '2020-01-01'))) SET id = '[7,8)' WHERE id = '[6,7)';
@@ -1604,7 +1604,7 @@ ALTER TABLE temporal_fk_mltrng2mltrng
 	DROP CONSTRAINT temporal_fk_mltrng2mltrng_fk,
 	ADD CONSTRAINT temporal_fk_mltrng2mltrng_fk
 		FOREIGN KEY (parent_id, PERIOD valid_at)
-		REFERENCES temporal_mltrng
+		REFERENCES temporal_mltrng (id, PERIOD valid_at)
 		ON DELETE SET NULL ON UPDATE SET NULL;
 -- leftovers on both sides:
 UPDATE temporal_mltrng FOR PORTION OF valid_at (datemultirange(daterange('2019-01-01', '2020-01-01'))) SET id = '[7,8)' WHERE id = '[6,7)';
@@ -1652,7 +1652,7 @@ ALTER TABLE temporal_fk_mltrng2mltrng
 	DROP CONSTRAINT temporal_fk_mltrng2mltrng_fk,
 	ADD CONSTRAINT temporal_fk_mltrng2mltrng_fk
 		FOREIGN KEY (parent_id, PERIOD valid_at)
-		REFERENCES temporal_mltrng
+		REFERENCES temporal_mltrng (id, PERIOD valid_at)
 		ON DELETE SET DEFAULT ON UPDATE SET DEFAULT;
 -- leftovers on both sides:
 UPDATE temporal_mltrng FOR PORTION OF valid_at (datemultirange(daterange('2019-01-01', '2020-01-01'))) SET id = '[7,8)' WHERE id = '[6,7)';
@@ -1699,7 +1699,7 @@ ALTER TABLE temporal_fk2_mltrng2mltrng
 	DROP CONSTRAINT temporal_fk2_mltrng2mltrng_fk,
 	ADD CONSTRAINT temporal_fk2_mltrng2mltrng_fk
 		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
-		REFERENCES temporal_mltrng2
+		REFERENCES temporal_mltrng2 (id1, id2, PERIOD valid_at)
 		ON DELETE CASCADE ON UPDATE CASCADE;
 -- leftovers on both sides:
 UPDATE temporal_mltrng2 FOR PORTION OF valid_at (datemultirange(daterange('2019-01-01', '2020-01-01'))) SET id1 = '[7,8)' WHERE id1 = '[6,7)';
@@ -1745,7 +1745,7 @@ ALTER TABLE temporal_fk2_mltrng2mltrng
 	DROP CONSTRAINT temporal_fk2_mltrng2mltrng_fk,
 	ADD CONSTRAINT temporal_fk2_mltrng2mltrng_fk
 		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
-		REFERENCES temporal_mltrng2
+		REFERENCES temporal_mltrng2 (id1, id2, PERIOD valid_at)
 		ON DELETE SET NULL ON UPDATE SET NULL;
 -- leftovers on both sides:
 UPDATE temporal_mltrng2 FOR PORTION OF valid_at (datemultirange(daterange('2019-01-01', '2020-01-01'))) SET id1 = '[7,8)' WHERE id1 = '[6,7)';
@@ -1792,14 +1792,14 @@ ALTER TABLE temporal_fk2_mltrng2mltrng
 	DROP CONSTRAINT temporal_fk2_mltrng2mltrng_fk,
 	ADD CONSTRAINT temporal_fk2_mltrng2mltrng_fk
 		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
-		REFERENCES temporal_mltrng2
+		REFERENCES temporal_mltrng2 (id1, id2, PERIOD valid_at)
 		ON DELETE SET NULL (valid_at) ON UPDATE SET NULL;
 -- ok:
 ALTER TABLE temporal_fk2_mltrng2mltrng
 	DROP CONSTRAINT temporal_fk2_mltrng2mltrng_fk,
 	ADD CONSTRAINT temporal_fk2_mltrng2mltrng_fk
 		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
-		REFERENCES temporal_mltrng2
+		REFERENCES temporal_mltrng2 (id1, id2, PERIOD valid_at)
 		ON DELETE SET NULL (parent_id1) ON UPDATE SET NULL;
 -- leftovers on both sides:
 DELETE FROM temporal_mltrng2 FOR PORTION OF valid_at (datemultirange(daterange('2019-01-01', '2020-01-01'))) WHERE id1 = '[6,7)';
@@ -1828,7 +1828,7 @@ ALTER TABLE temporal_fk2_mltrng2mltrng
 	DROP CONSTRAINT temporal_fk2_mltrng2mltrng_fk,
 	ADD CONSTRAINT temporal_fk2_mltrng2mltrng_fk
 		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
-		REFERENCES temporal_mltrng2
+		REFERENCES temporal_mltrng2 (id1, id2, PERIOD valid_at)
 		ON DELETE SET DEFAULT ON UPDATE SET DEFAULT;
 -- leftovers on both sides:
 UPDATE temporal_mltrng2 FOR PORTION OF valid_at (datemultirange(daterange('2019-01-01', '2020-01-01'))) SET id1 = '[7,8)', id2 = '[7,8)' WHERE id1 = '[6,7)';
@@ -1878,7 +1878,7 @@ ALTER TABLE temporal_fk2_mltrng2mltrng
 	DROP CONSTRAINT temporal_fk2_mltrng2mltrng_fk,
 	ADD CONSTRAINT temporal_fk2_mltrng2mltrng_fk
 		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
-		REFERENCES temporal_mltrng2
+		REFERENCES temporal_mltrng2 (id1, id2, PERIOD valid_at)
 		ON DELETE SET DEFAULT (valid_at) ON UPDATE SET DEFAULT;
 -- ok:
 ALTER TABLE temporal_fk2_mltrng2mltrng
@@ -1886,7 +1886,7 @@ ALTER TABLE temporal_fk2_mltrng2mltrng
 	DROP CONSTRAINT temporal_fk2_mltrng2mltrng_fk,
 	ADD CONSTRAINT temporal_fk2_mltrng2mltrng_fk
 		FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at)
-		REFERENCES temporal_mltrng2
+		REFERENCES temporal_mltrng2 (id1, id2, PERIOD valid_at)
 		ON DELETE SET DEFAULT (parent_id1) ON UPDATE SET DEFAULT;
 -- leftovers on both sides:
 DELETE FROM temporal_mltrng2 FOR PORTION OF valid_at (datemultirange(daterange('2019-01-01', '2020-01-01'))) WHERE id1 = '[6,7)';
