@@ -117,7 +117,7 @@ typedef struct RI_ConstraintInfo
 	int16		confdelsetcols[RI_MAX_NUMKEYS]; /* attnums of cols to set on
 												 * delete */
 	char		confmatchtype;	/* foreign key's match type */
-	bool		temporal;		/* if the foreign key is temporal */
+	bool		hasperiod;		/* if the foreign key uses PERIOD */
 	int			nkeys;			/* number of key columns */
 	int16		pk_attnums[RI_MAX_NUMKEYS]; /* attnums of referenced cols */
 	int16		fk_attnums[RI_MAX_NUMKEYS]; /* attnums of referencing cols */
@@ -388,7 +388,7 @@ RI_FKey_check(TriggerData *trigdata)
 		pk_only = pk_rel->rd_rel->relkind == RELKIND_PARTITIONED_TABLE ?
 			"" : "ONLY ";
 		quoteRelationName(pkrelname, pk_rel);
-		if (riinfo->temporal)
+		if (riinfo->hasperiod)
 		{
 			quoteOneName(attname,
 					RIAttName(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]));
@@ -419,7 +419,7 @@ RI_FKey_check(TriggerData *trigdata)
 			queryoids[i] = fk_type;
 		}
 		appendStringInfoString(&querybuf, " FOR KEY SHARE OF x");
-		if (riinfo->temporal)
+		if (riinfo->hasperiod)
 		{
 			Oid		fk_type = RIAttType(fk_rel, riinfo->fk_attnums[riinfo->nkeys - 1]);
 			Oid		agg_rettype = ANYMULTIRANGEOID;
@@ -559,7 +559,7 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 		pk_only = pk_rel->rd_rel->relkind == RELKIND_PARTITIONED_TABLE ?
 			"" : "ONLY ";
 		quoteRelationName(pkrelname, pk_rel);
-		if (riinfo->temporal)
+		if (riinfo->hasperiod)
 		{
 			quoteOneName(attname, RIAttName(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]));
 
@@ -589,7 +589,7 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 			queryoids[i] = pk_type;
 		}
 		appendStringInfoString(&querybuf, " FOR KEY SHARE OF x");
-		if (riinfo->temporal)
+		if (riinfo->hasperiod)
 		{
 			Oid		fk_type = RIAttType(fk_rel, riinfo->fk_attnums[riinfo->nkeys - 1]);
 			Oid		agg_rettype = ANYMULTIRANGEOID;
@@ -2245,7 +2245,7 @@ ri_LoadConstraintInfo(Oid constraintOid)
 	riinfo->confupdtype = conForm->confupdtype;
 	riinfo->confdeltype = conForm->confdeltype;
 	riinfo->confmatchtype = conForm->confmatchtype;
-	riinfo->temporal = conForm->conperiod;
+	riinfo->hasperiod = conForm->conperiod;
 
 	DeconstructFkConstraintRow(tup,
 							   &riinfo->nkeys,
@@ -2263,7 +2263,7 @@ ri_LoadConstraintInfo(Oid constraintOid)
 	 * This all gets cached (as does the generated plan),
 	 * so there's no performance issue.
 	 */
-	if (riinfo->temporal)
+	if (riinfo->hasperiod)
 	{
 		Oid	opclass = get_index_column_opclass(conForm->conindid, riinfo->nkeys);
 		FindFKPeriodOpers(opclass,
@@ -2948,7 +2948,7 @@ ri_KeysEqual(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
 			 * whenever the referencing column stayed equal or shrank,
 			 * so test with the contained-by operator instead.
 			 */
-			if (riinfo->temporal && i == riinfo->nkeys - 1)
+			if (riinfo->hasperiod && i == riinfo->nkeys - 1)
 				eq_opr = riinfo->period_contained_by_oper;
 
 			/*
