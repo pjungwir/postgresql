@@ -1184,7 +1184,10 @@ WITH ( MODULUS <replaceable class="parameter">numeric_literal</replaceable>, REM
       whose combined <literal>PERIOD</literal> values completely cover
       the referencing record's.
       In other words, the reference must have a referent for its entire duration.
-      This column must be a column with a range type.
+      Normally this column would be a range or multirange type,
+      although any type whose GiST opclass has a "contained by" operator
+      and a <literal>referencedagg</literal> support function is allowed.
+      (See <xref linkend="gist-extensibility"/>.)
       In addition the referenced table must have a primary key
       or unique constraint declared with <literal>WITHOUT OVERLAPS</literal>.
       Finally, if one side of the foreign key uses <literal>PERIOD</literal>,
