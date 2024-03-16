@@ -10250,10 +10250,12 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	}
 
 	/*
-	 * For FKs with PERIOD we need an operator and aggregate function
+	 * For FKs with PERIOD we need additional operators
 	 * to check whether the referencing row's range is contained
 	 * by the aggregated ranges of the referenced row(s).
-	 * For rangetypes this is fk.periodatt <@ range_agg(pk.periodatt).
+	 * For rangetypes and multirangetypes this is
+	 * fk.periodatt <@ range_agg(pk.periodatt).
+	 * Those are the only types we support for now.
 	 * FKs will look these up at "runtime", but we should make sure
 	 * the lookup works here, even if we don't use the values.
 	 */

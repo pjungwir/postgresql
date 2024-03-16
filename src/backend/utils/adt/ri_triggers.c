@@ -128,7 +128,7 @@ typedef struct RI_ConstraintInfo
 	Oid			pp_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (PK = PK) */
 	Oid			ff_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (FK = FK) */
 	Oid			period_contained_by_oper;	/* anyrange <@ anyrange */
-	Oid			agged_period_contained_by_oper;	/* anyrange <@ anymultirange */
+	Oid			agged_period_contained_by_oper;	/* fkattr <@ range_agg(pkattr) */
 	dlist_node	valid_link;		/* Link in list of valid entries */
 } RI_ConstraintInfo;
 
@@ -425,14 +425,13 @@ RI_FKey_check(TriggerData *trigdata)
 		if (riinfo->hasperiod)
 		{
 			Oid		fk_type = RIAttType(fk_rel, riinfo->fk_attnums[riinfo->nkeys - 1]);
-			Oid		agg_rettype = ANYMULTIRANGEOID;
 
 			appendStringInfo(&querybuf, ") x1 HAVING ");
 			sprintf(paramname, "$%d", riinfo->nkeys);
 			ri_GenerateQual(&querybuf, "",
 							paramname, fk_type,
 							riinfo->agged_period_contained_by_oper,
-							"pg_catalog.range_agg", agg_rettype);
+							"pg_catalog.range_agg", ANYMULTIRANGEOID);
 			appendStringInfo(&querybuf, "(x1.r)");
 		}
 
@@ -595,14 +594,13 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 		if (riinfo->hasperiod)
 		{
 			Oid		fk_type = RIAttType(fk_rel, riinfo->fk_attnums[riinfo->nkeys - 1]);
-			Oid		agg_rettype = ANYMULTIRANGEOID;
 
 			appendStringInfo(&querybuf, ") x1 HAVING ");
 			sprintf(paramname, "$%d", riinfo->nkeys);
 			ri_GenerateQual(&querybuf, "",
 							paramname, fk_type,
 							riinfo->agged_period_contained_by_oper,
-							"pg_catalog.range_agg", agg_rettype);
+							"pg_catalog.range_agg", ANYMULTIRANGEOID);
 			appendStringInfo(&querybuf, "(x1.r)");
 		}
 
