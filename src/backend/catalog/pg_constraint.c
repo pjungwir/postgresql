@@ -1613,8 +1613,8 @@ DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
  * The opclass should be the opclass of that PERIOD element.
  * Everything else is an output: containedbyoperoid is the ContainedBy operator for
  * types matching the PERIOD element.
- * And aggedcontainedbyoperoid is also a ContainedBy operator,
- * but one whose rhs is anymultirange.
+ * aggedcontainedbyoperoid is also a ContainedBy operator,
+ * but one whose rhs is a multirange.
  * That way foreign keys can compare fkattr <@ range_agg(pkattr).
  */
 void
@@ -1622,7 +1622,22 @@ FindFKPeriodOpers(Oid opclass,
 				  Oid *containedbyoperoid,
 				  Oid *aggedcontainedbyoperoid)
 {
+	Oid		opfamily = InvalidOid;
+	Oid		opcintype = InvalidOid;
 	StrategyNumber strat;
+
+	/* Make sure we have a range or multirange. */
+	if (get_opclass_opfamily_and_input_type(opclass, &opfamily, &opcintype))
+	{
+		if (opcintype != ANYRANGEOID && opcintype != ANYMULTIRANGEOID)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("Invalid type for PERIOD part in FOREIGN KEY"),
+					 errhint("Use a range or multirange type.")));
+
+	}
+	else
+		elog(ERROR, "cache lookup failed for opclass %u", opclass);
 
 	/*
 	 * Look up the ContainedBy operator whose lhs and rhs are the opclass's type.
