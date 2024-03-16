@@ -1164,7 +1164,7 @@ WITH ( MODULUS <replaceable class="parameter">numeric_literal</replaceable>, REM
       These clauses specify a foreign key constraint, which requires
       that a group of one or more columns of the new table must only
       contain values that match values in the referenced
-      column(s) of some row of the referenced table. If the <replaceable
+      column(s) of some row of the referenced table.  If the <replaceable
       class="parameter">refcolumn</replaceable> list is omitted, the
       primary key of the <replaceable class="parameter">reftable</replaceable>
       is used.  Otherwise, the <replaceable class="parameter">refcolumn</replaceable>
