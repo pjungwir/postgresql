@@ -395,7 +395,7 @@ static CoercionPathType findFkeyCast(Oid targetTypeId, Oid sourceTypeId,
 									 Oid *funcid);
 static void validateForeignKeyConstraint(char *conname,
 										 Relation rel, Relation pkrel,
-										 Oid pkindOid, Oid constraintOid, bool temporal);
+										 Oid pkindOid, Oid constraintOid, bool hasperiod);
 static void ATController(AlterTableStmt *parsetree,
 						 Relation rel, List *cmds, bool recurse, LOCKMODE lockmode,
 						 AlterTableUtilityContext *context);
@@ -12446,7 +12446,7 @@ validateForeignKeyConstraint(char *conname,
 							 Relation pkrel,
 							 Oid pkindOid,
 							 Oid constraintOid,
-							 bool temporal)
+							 bool hasperiod)
 {
 	TupleTableSlot *slot;
 	TableScanDesc scan;
@@ -12478,7 +12478,7 @@ validateForeignKeyConstraint(char *conname,
 	 * We can't do a LEFT JOIN for temporal FKs yet,
 	 * but we can once we support temporal left joins.
 	 */
-	if (!temporal && RI_Initial_Check(&trig, rel, pkrel))
+	if (!hasperiod && RI_Initial_Check(&trig, rel, pkrel))
 		return;
 
 	/*
