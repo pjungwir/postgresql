@@ -1258,7 +1258,7 @@ my_stratnum(PG_FUNCTION_ARGS)
        type that can appear on the right hand side of the "contained by"
        operator. For example the built-in <literal>range_ops</literal>
        opclass uses <literal>range_agg</literal> here, so that foreign
-       keys can check <literal>fkperiod @> range_agg(pkperiod)</literal>.
+       keys can check <literal>fkperiod &lt;@ range_agg(pkperiod)</literal>.
       </para>
       <para>
        This is used for temporal foreign key constraints.
