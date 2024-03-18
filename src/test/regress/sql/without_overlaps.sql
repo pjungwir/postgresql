@@ -370,7 +370,7 @@ CREATE TABLE temporal_fk_rng2rng (
 		REFERENCES temporal_rng (id, PERIOD valid_at)
 );
 -- (parent_id, valid_at) REFERENCES [implicit]
--- FOREIGN KEY part should specify PERIOD
+-- FOREIGN KEY part should specify PERIOD, REFERENCES must be explicit
 CREATE TABLE temporal_fk_rng2rng (
 	id int4range,
 	valid_at daterange,

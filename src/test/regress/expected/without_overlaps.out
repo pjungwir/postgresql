@@ -469,7 +469,7 @@ CREATE TABLE temporal_fk_rng2rng (
 );
 ERROR:  foreign key uses PERIOD on the referenced table but not the referencing table
 -- (parent_id, valid_at) REFERENCES [implicit]
--- FOREIGN KEY part should specify PERIOD
+-- FOREIGN KEY part should specify PERIOD, REFERENCES must be explicit
 CREATE TABLE temporal_fk_rng2rng (
 	id int4range,
 	valid_at daterange,
