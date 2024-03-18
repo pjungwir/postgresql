@@ -10087,14 +10087,16 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 		else
 		{
 			/*
-			 * Check it's a btree; currently this can never fail since no other
-			 * index AMs support unique indexes.  If we ever did have other types
-			 * of unique indexes, we'd need a way to determine which operator
-			 * strategy number is equality.  (Is it reasonable to insist that
-			 * every such index AM use btree's number for equality?)
+			 * Check it's a btree.  This can only fail if the primary key or
+			 * unique constraint uses WITHOUT OVERLAPS.  But then we should
+			 * forbid a non-PERIOD foreign key.
+			 *
+			 * If we ever allowed non-temporal unique indexes with other index AMs,
+			 * we could use GistTranslateStratnum (or something similar for non-GiST)
+			 * to determine which operator strategy number is equality.
 			 */
 			if (amid != BTREE_AM_OID)
-				elog(ERROR, "only b-tree indexes are supported for foreign keys");
+				elog(ERROR, "only b-tree indexes are supported for non-PERIOD foreign keys");
 			eqstrategy = BTEqualStrategyNumber;
 		}
 
