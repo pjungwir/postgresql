@@ -1004,6 +1004,7 @@ CREATE TABLE temporal_fk_mltrng2mltrng (
 );
 ERROR:  foreign key uses PERIOD on the referenced table but not the referencing table
 -- (parent_id, valid_at) REFERENCES [implicit]
+-- FOREIGN KEY part should specify PERIOD, REFERENCES must be explicit
 CREATE TABLE temporal_fk_mltrng2mltrng (
 	id int4range,
 	valid_at datemultirange,
