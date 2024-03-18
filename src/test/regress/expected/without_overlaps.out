@@ -1057,7 +1057,7 @@ CREATE TABLE temporal_fk_mltrng2mltrng (
 	CONSTRAINT temporal_fk_mltrng2mltrng_fk FOREIGN KEY (parent_id)
 		REFERENCES temporal_mltrng
 );
-ERROR:  only b-tree indexes are supported for foreign keys
+ERROR:  only b-tree indexes are supported for non-PERIOD foreign keys
 -- should fail because of duplicate referenced columns:
 CREATE TABLE temporal_fk_mltrng2mltrng (
 	id int4range,
