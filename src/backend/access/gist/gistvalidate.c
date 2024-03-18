@@ -20,6 +20,7 @@
 #include "catalog/pg_amproc.h"
 #include "catalog/pg_opclass.h"
 #include "catalog/pg_opfamily.h"
+#include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "utils/lsyscache.h"
 #include "utils/regproc.h"
@@ -153,7 +154,7 @@ gistvalidate(Oid opclassoid)
 			case GIST_REFERENCED_AGG_PROC:
 				ok = check_amproc_signature(procform->amproc, InvalidOid, false,
 											   1, 1, opcintype)
-					&& check_amproc_is_aggregate(procform->amproc);
+					&& get_func_prokind(procform->amproc) == PROKIND_AGGREGATE;
 				break;
 			default:
 				ereport(INFO,

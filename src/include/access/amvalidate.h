@@ -28,7 +28,6 @@ typedef struct OpFamilyOpFuncGroup
 
 /* Functions in access/index/amvalidate.c */
 extern List *identify_opfamily_groups(CatCList *oprlist, CatCList *proclist);
-extern bool check_amproc_is_aggregate(Oid funcid);
 extern bool check_amproc_signature(Oid funcid, Oid restype, bool exact,
 								   int minargs, int maxargs,...);
 extern bool check_amoptsproc_signature(Oid funcid);

@@ -140,22 +140,6 @@ identify_opfamily_groups(CatCList *oprlist, CatCList *proclist)
 	return result;
 }
 
-bool
-check_amproc_is_aggregate(Oid funcid)
-{
-	bool		result;
-	HeapTuple	tp;
-	Form_pg_proc procform;
-
-	tp = SearchSysCache1(PROCOID, ObjectIdGetDatum(funcid));
-	if (!HeapTupleIsValid(tp))
-		elog(ERROR, "cache lookup failed for function %u", funcid);
-	procform = (Form_pg_proc) GETSTRUCT(tp);
-	result = procform->prokind == 'a';
-	ReleaseSysCache(tp);
-	return result;
-}
-
 /*
  * Validate the signature (argument and result types) of an opclass support
  * function.  Return true if OK, false if not.
