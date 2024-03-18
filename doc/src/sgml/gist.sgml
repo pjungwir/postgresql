@@ -1263,7 +1263,8 @@ my_stratnum(PG_FUNCTION_ARGS)
       <para>
        This is used for temporal foreign key constraints.
        If you omit this support function, your type cannot be used
-       as the <literal>PERIOD</literal> part of a foreign key.
+       as the <literal>PERIOD</literal> part of a foreign key (at least
+       with this opclass).
       </para>
 
       <para>
