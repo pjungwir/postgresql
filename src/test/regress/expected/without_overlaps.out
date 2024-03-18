@@ -3083,7 +3083,7 @@ CREATE TABLE temporal_fk_per2per (
 	CONSTRAINT temporal_fk_per2per_fk FOREIGN KEY (parent_id)
 		REFERENCES temporal_per
 );
-ERROR:  only b-tree indexes are supported for foreign keys
+ERROR:  only b-tree indexes are supported for non-PERIOD foreign keys
 -- should fail because of duplicate referenced columns:
 CREATE TABLE temporal_fk_per2per (
 	id int4range,
