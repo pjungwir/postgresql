@@ -3028,6 +3028,19 @@ CREATE TABLE temporal_fk_per2per (
 		REFERENCES temporal_per (id, valid_at)
 );
 ERROR:  foreign key uses PERIOD on the referencing table but not the referenced table
+-- (parent_id, valid_at) REFERENCES (id, valid_at)
+-- both should specify PERIOD:
+CREATE TABLE temporal_fk_per2per (
+	id int4range,
+	valid_from date,
+	valid_til date,
+	parent_id int4range,
+	PERIOD FOR valid_at (valid_from, valid_til),
+	CONSTRAINT temporal_fk_per2per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_per2per_fk FOREIGN KEY (parent_id, valid_at)
+		REFERENCES temporal_per (id, valid_at)
+);
+ERROR:  only b-tree indexes are supported for non-PERIOD foreign keys
 -- (parent_id, valid_at) REFERENCES (id, PERIOD valid_at)
 -- FOREIGN KEY part should specify PERIOD
 CREATE TABLE temporal_fk_per2per (
@@ -3079,6 +3092,7 @@ CREATE TABLE temporal_fk_per2per (
 );
 ERROR:  foreign key uses PERIOD on the referenced table but not the referencing table
 -- with inferred PK on the referenced table:
+-- (parent_id, PERIOD valid_at) REFERENCES [implicit]
 CREATE TABLE temporal_fk_per2per (
 	id int4range,
 	valid_from date,
@@ -3091,9 +3105,6 @@ CREATE TABLE temporal_fk_per2per (
 );
 DROP TABLE temporal_fk_per2per;
 -- (parent_id) REFERENCES [implicit]
--- This finds the PK (omitting the WITHOUT OVERLAPS element),
--- but it's not a b-tree index, so it fails anyway.
--- Anyway it must fail because the two sides have a different definition of "unique".
 CREATE TABLE temporal_fk_per2per (
 	id int4range,
 	valid_from date,
@@ -3104,7 +3115,7 @@ CREATE TABLE temporal_fk_per2per (
 	CONSTRAINT temporal_fk_per2per_fk FOREIGN KEY (parent_id)
 		REFERENCES temporal_per
 );
-ERROR:  only b-tree indexes are supported for non-PERIOD foreign keys
+ERROR:  foreign key uses PERIOD on the referenced table but not the referencing table
 -- should fail because of duplicate referenced columns:
 CREATE TABLE temporal_fk_per2per (
 	id int4range,
