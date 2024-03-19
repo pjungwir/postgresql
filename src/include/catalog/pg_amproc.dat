@@ -511,7 +511,7 @@
   amprocrighttype => 'box', amprocnum => '12',
   amproc => 'gist_stratnum_identity' },
 { amprocfamily => 'gist/box_ops', amproclefttype => 'box',
-  amprocrighttype => 'box', amprocnum => '14',
+  amprocrighttype => 'box', amprocnum => '13',
   amproc => 'box_intersect(box,box)' },
 { amprocfamily => 'gist/poly_ops', amproclefttype => 'polygon',
   amprocrighttype => 'polygon', amprocnum => '1',
