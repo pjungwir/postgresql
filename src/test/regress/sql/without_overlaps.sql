@@ -806,6 +806,7 @@ CREATE TABLE temporal_fk_mltrng2mltrng (
 DROP TABLE temporal_fk_mltrng2mltrng;
 
 -- with mismatched PERIOD columns:
+
 -- (parent_id, PERIOD valid_at) REFERENCES (id, valid_at)
 -- REFERENCES part should specify PERIOD
 CREATE TABLE temporal_fk_mltrng2mltrng (
@@ -814,6 +815,16 @@ CREATE TABLE temporal_fk_mltrng2mltrng (
 	parent_id int4range,
 	CONSTRAINT temporal_fk_mltrng2mltrng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
 	CONSTRAINT temporal_fk_mltrng2mltrng_fk FOREIGN KEY (parent_id, PERIOD valid_at)
+		REFERENCES temporal_mltrng (id, valid_at)
+);
+-- (parent_id, valid_at) REFERENCES (id, valid_at)
+-- both should specify PERIOD:
+CREATE TABLE temporal_fk_mltrng2mltrng (
+	id int4range,
+	valid_at datemultirange,
+	parent_id int4range,
+	CONSTRAINT temporal_fk_mltrng2mltrng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_mltrng2mltrng_fk FOREIGN KEY (parent_id, valid_at)
 		REFERENCES temporal_mltrng (id, valid_at)
 );
 -- (parent_id, valid_at) REFERENCES (id, PERIOD valid_at)
@@ -827,7 +838,7 @@ CREATE TABLE temporal_fk_mltrng2mltrng (
 		REFERENCES temporal_mltrng (id, PERIOD valid_at)
 );
 -- (parent_id, valid_at) REFERENCES [implicit]
--- FOREIGN KEY part should specify PERIOD, REFERENCES must be explicit
+-- FOREIGN KEY part should specify PERIOD
 CREATE TABLE temporal_fk_mltrng2mltrng (
 	id int4range,
 	valid_at datemultirange,
@@ -854,9 +865,8 @@ CREATE TABLE temporal_fk_mltrng2mltrng (
 	CONSTRAINT temporal_fk_mltrng2mltrng_fk FOREIGN KEY (parent_id)
 		REFERENCES temporal_mltrng (id, PERIOD valid_at)
 );
-
 -- with inferred PK on the referenced table:
--- (This is not permitted by the SQL standard. See 11.8 syntax rule 4b.)
+-- (parent_id, PERIOD valid_at) REFERENCES [implicit]
 CREATE TABLE temporal_fk_mltrng2mltrng (
 	id int4range,
 	valid_at datemultirange,
@@ -865,10 +875,8 @@ CREATE TABLE temporal_fk_mltrng2mltrng (
 	CONSTRAINT temporal_fk_mltrng2mltrng_fk FOREIGN KEY (parent_id, PERIOD valid_at)
 		REFERENCES temporal_mltrng
 );
+DROP TABLE temporal_fk_mltrng2mltrng;
 -- (parent_id) REFERENCES [implicit]
--- This finds the PK (omitting the WITHOUT OVERLAPS element),
--- but it's not a b-tree index, so it fails anyway.
--- Anyway it must fail because the two sides have a different definition of "unique".
 CREATE TABLE temporal_fk_mltrng2mltrng (
 	id int4range,
 	valid_at datemultirange,
