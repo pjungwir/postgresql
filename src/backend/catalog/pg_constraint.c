@@ -1611,16 +1611,16 @@ DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
  *
  * Looks up the operator oids used for the PERIOD part of a temporal foreign key.
  * The opclass should be the opclass of that PERIOD element.
- * Everything else is an output: periodoperoid is the ContainedBy operator for
+ * Everything else is an output: containedbyoperoid is the ContainedBy operator for
  * types matching the PERIOD element.
- * And aggedperiodoperoid is also a ContainedBy operator,
+ * And aggedcontainedbyoperoid is also a ContainedBy operator,
  * but one whose rhs is anymultirange.
  * That way foreign keys can compare fkattr <@ range_agg(pkattr).
  */
 void
 FindFKPeriodOpers(Oid opclass,
-				  Oid *periodoperoid,
-				  Oid *aggedperiodoperoid)
+				  Oid *containedbyoperoid,
+				  Oid *aggedcontainedbyoperoid)
 {
 	StrategyNumber strat;
 
@@ -1633,7 +1633,7 @@ FindFKPeriodOpers(Oid opclass,
 	strat = RTContainedByStrategyNumber;
 	GetOperatorFromWellKnownStrategy(opclass,
 									 InvalidOid,
-									 periodoperoid,
+									 containedbyoperoid,
 									 &strat);
 
 	/*
@@ -1644,7 +1644,7 @@ FindFKPeriodOpers(Oid opclass,
 	strat = RTContainedByStrategyNumber;
 	GetOperatorFromWellKnownStrategy(opclass,
 									 ANYMULTIRANGEOID,
-									 aggedperiodoperoid,
+									 aggedcontainedbyoperoid,
 									 &strat);
 }
 
