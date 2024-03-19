@@ -397,8 +397,8 @@ CREATE TABLE temporal_fk_rng2rng (
 	CONSTRAINT temporal_fk_rng2rng_fk FOREIGN KEY (parent_id)
 		REFERENCES temporal_rng (id, PERIOD valid_at)
 );
-
 -- with inferred PK on the referenced table:
+-- (parent_id, PERIOD valid_at) REFERENCES [implicit]
 CREATE TABLE temporal_fk_rng2rng (
 	id int4range,
 	valid_at daterange,
@@ -408,6 +408,15 @@ CREATE TABLE temporal_fk_rng2rng (
 		REFERENCES temporal_rng
 );
 DROP TABLE temporal_fk_rng2rng;
+-- (parent_id) REFERENCES [implicit]
+CREATE TABLE temporal_fk_rng2rng (
+	id int4range,
+	valid_at daterange,
+	parent_id int4range,
+	CONSTRAINT temporal_fk_rng2rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_rng2rng_fk FOREIGN KEY (parent_id)
+		REFERENCES temporal_rng
+);
 
 -- should fail because of duplicate referenced columns:
 CREATE TABLE temporal_fk_rng2rng (
