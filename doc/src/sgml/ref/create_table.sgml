@@ -1186,7 +1186,11 @@ WITH ( MODULUS <replaceable class="parameter">numeric_literal</replaceable>, REM
       In other words, the reference must have a referent for its entire duration.
       This column must be a column with a range type.
       In addition the referenced table must have a primary key
-      or unique constraint declared with <literal>WITHOUT PORTION</literal>.
+      or unique constraint declared with <literal>WITHOUT OVERLAPS</literal>.
+      Finally, if one side of the foreign key uses <literal>PERIOD</literal>,
+      the other side must too. If the <replaceable class="parameter">refcolumn</replaceable>
+      list is omitted, we assume the <literal>WITHOUT OVERLAPS</literal>
+      part of the primary key should be treated as if marked with <literal>PERIOD</literal>.
      </para>
 
      <para>
