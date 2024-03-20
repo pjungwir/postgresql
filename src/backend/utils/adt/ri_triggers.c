@@ -98,6 +98,9 @@
  *
  * Information extracted from an FK pg_constraint entry.  This is cached in
  * ri_constraint_cache.
+ *
+ * Note that pf/pp/ff_eq_oprs may hold the overlaps operator instead of equals
+ * for the PERIOD part of a temporal foreign key.
  */
 typedef struct RI_ConstraintInfo
 {
