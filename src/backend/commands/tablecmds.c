@@ -9912,13 +9912,10 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 									 fkconstraint->fk_attrs,
 									 fkattnum, fktypoid);
 	with_period = fkconstraint->fk_with_period || fkconstraint->pk_with_period;
-	if (with_period)
-	{
-		if (!fkconstraint->fk_with_period)
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_FOREIGN_KEY),
-					errmsg("foreign key uses PERIOD on the referenced table but not the referencing table")));
-	}
+	if (with_period && !fkconstraint->fk_with_period)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_FOREIGN_KEY),
+				errmsg("foreign key uses PERIOD on the referenced table but not the referencing table")));
 
 	numfkdelsetcols = transformColumnNameList(RelationGetRelid(rel),
 											  fkconstraint->fk_del_set_cols,
@@ -12215,7 +12212,7 @@ transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 							   makeString(pstrdup(NameStr(*attnumAttName(pkrel, pkattno)))));
 	}
 
-	*pk_period = (indexStruct->indisexclusion);
+	*pk_period = indexStruct->indisexclusion;
 
 	ReleaseSysCache(indexTuple);
 
