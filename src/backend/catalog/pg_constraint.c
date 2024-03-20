@@ -1671,7 +1671,8 @@ FindFKPeriodOpersAndProcs(Oid opclass,
 	 * If this is missing we don't need to complain here,
 	 * because FOR PORTION OF will not be allowed.
 	 */
-	*intersectprocoid = get_opfamily_proc(opfamily, opcintype, opcintype, GIST_INTERSECT_PROC);
+	if (get_opclass_opfamily_and_input_type(opclass, &opfamily, &opcintype))
+		*intersectprocoid = get_opfamily_proc(opfamily, opcintype, opcintype, GIST_INTERSECT_PROC);
 }
 
 /*
