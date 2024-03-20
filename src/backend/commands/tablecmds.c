@@ -9956,14 +9956,11 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 										 fkconstraint->pk_attrs,
 										 pkattnum, pktypoid);
 
-		if (with_period)
-		{
-			if (!fkconstraint->pk_with_period)
-				/* Since we got pk_attrs, one should be a period. */
-				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_FOREIGN_KEY),
-						errmsg("foreign key uses PERIOD on the referencing table but not the referenced table")));
-		}
+		/* Since we got pk_attrs, one should be a period. */
+		if (with_period && !fkconstraint->pk_with_period)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_FOREIGN_KEY),
+					errmsg("foreign key uses PERIOD on the referencing table but not the referenced table")));
 
 		/* Look for an index matching the column list */
 		indexOid = transformFkeyCheckAttrs(pkrel, numpks, pkattnum,
