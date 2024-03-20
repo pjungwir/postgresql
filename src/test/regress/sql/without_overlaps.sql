@@ -1087,6 +1087,27 @@ DELETE FROM temporal_mltrng WHERE id = '[5,6)' AND valid_at = datemultirange(dat
 DELETE FROM temporal_mltrng WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
 
 --
+-- test FOREIGN KEY, box references box
+-- (not allowed: PERIOD part must be a range or multirange)
+--
+
+CREATE TABLE temporal_box (
+  id int4range,
+  valid_at box,
+  CONSTRAINT temporal_box_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+\d temporal_box
+
+CREATE TABLE temporal_fk_box2box (
+  id int4range,
+  valid_at box,
+  parent_id int4range,
+  CONSTRAINT temporal_fk_box2box_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+  CONSTRAINT temporal_fk_box2box_fk FOREIGN KEY (parent_id, PERIOD valid_at)
+    REFERENCES temporal_box (id, PERIOD valid_at)
+);
+
+--
 -- FK between partitioned tables
 --
 
