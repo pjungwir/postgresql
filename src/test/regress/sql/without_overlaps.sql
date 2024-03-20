@@ -2113,8 +2113,8 @@ CREATE TABLE temporal_fk_per2per (
 	valid_til int,
 	parent_id int4range,
 	PERIOD FOR valid_at (valid_from, valid_til),
-	CONSTRAINT temporal_fk_per2per_pk2 PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
-	CONSTRAINT temporal_fk_per2per_fk2 FOREIGN KEY (parent_id, PERIOD valid_at)
+	CONSTRAINT temporal_fk_per2per_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+	CONSTRAINT temporal_fk_per2per_fk FOREIGN KEY (parent_id, PERIOD valid_at)
 		REFERENCES temporal_per (id, PERIOD valid_at)
 );
 
