@@ -1320,6 +1320,34 @@ DELETE FROM temporal_mltrng WHERE id = '[5,6)' AND valid_at = datemultirange(dat
 ERROR:  update or delete on table "temporal_mltrng" violates foreign key constraint "temporal_fk_mltrng2mltrng_fk" on table "temporal_fk_mltrng2mltrng"
 DETAIL:  Key (id, valid_at)=([5,6), {[2018-01-01,2018-02-01)}) is still referenced from table "temporal_fk_mltrng2mltrng".
 --
+-- test FOREIGN KEY, box references box
+-- (not allowed: PERIOD part must be a range or multirange)
+--
+CREATE TABLE temporal_box (
+  id int4range,
+  valid_at box,
+  CONSTRAINT temporal_box_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+\d temporal_box
+              Table "public.temporal_box"
+  Column  |   Type    | Collation | Nullable | Default 
+----------+-----------+-----------+----------+---------
+ id       | int4range |           | not null | 
+ valid_at | box       |           | not null | 
+Indexes:
+    "temporal_box_pk" PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+
+CREATE TABLE temporal_fk_box2box (
+  id int4range,
+  valid_at box,
+  parent_id int4range,
+  CONSTRAINT temporal_fk_box2box_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+  CONSTRAINT temporal_fk_box2box_fk FOREIGN KEY (parent_id, PERIOD valid_at)
+    REFERENCES temporal_box (id, PERIOD valid_at)
+);
+ERROR:  Invalid type for PERIOD part in FOREIGN KEY
+HINT:  Use a range or multirange type.
+--
 -- FK between partitioned tables
 --
 CREATE TABLE temporal_partitioned_rng (
