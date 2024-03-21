@@ -2429,6 +2429,13 @@ COMMIT; -- should fail here.
 --
 
 TRUNCATE temporal_per, temporal_fk_per2per;
+ALTER TABLE temporal_fk_per2per
+	DROP CONSTRAINT temporal_fk_per2per_fk;
+ALTER TABLE temporal_fk_per2per
+	ADD CONSTRAINT temporal_fk_per2per_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES temporal_per
+	ON UPDATE NO ACTION;
 -- a PK update that succeeds because the numeric id isn't referenced:
 INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[5,5]', '2018-01-01', '2018-02-01');
 UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01' WHERE id = '[5,5]';
@@ -2443,6 +2450,15 @@ WHERE id = '[5,5]' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
 -- a PK update that fails because both are referenced:
 UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01'
 WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+-- a PK update that fails because both are referenced, but not 'til commit:
+BEGIN;
+  ALTER TABLE temporal_fk_per2per
+    ALTER CONSTRAINT temporal_fk_per2per_fk
+    DEFERRABLE INITIALLY DEFERRED;
+
+  UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01'
+  WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
+COMMIT;
 -- changing the scalar part fails:
 UPDATE temporal_per SET id = '[7,7]'
 WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
@@ -2531,6 +2547,14 @@ INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('
 DELETE FROM temporal_per WHERE id = '[5,5]' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
 -- a PK delete that fails because both are referenced:
 DELETE FROM temporal_per WHERE id = '[5,5]' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
+-- a PK delete that fails because both are referenced, but not 'til commit:
+BEGIN;
+  ALTER TABLE temporal_fk_per2per
+    ALTER CONSTRAINT temporal_fk_per2per_fk
+    DEFERRABLE INITIALLY DEFERRED;
+
+  DELETE FROM temporal_per WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
+COMMIT;
 -- deleting an unreferenced part is okay:
 DELETE FROM temporal_per
 FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
