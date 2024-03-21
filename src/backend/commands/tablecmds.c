@@ -9818,7 +9818,6 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	int16		fkdelsetcols[INDEX_MAX_KEYS] = {0};
 	bool		with_period;
 	bool		pk_has_without_overlaps;
-	int16		fkperiodattnum = InvalidOid;
 	int			i;
 	int			numfks,
 				numpks,
