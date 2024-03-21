@@ -386,10 +386,11 @@ static int	transformColumnNameList(Oid relId, List *colList,
 static int	transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 									   List **attnamelist,
 									   int16 *attnums, Oid *atttypids,
-									   Oid *opclasses, bool *pk_period);
+									   Oid *opclasses, bool *pk_has_without_overlaps);
 static Oid	transformFkeyCheckAttrs(Relation pkrel,
 									int numattrs, int16 *attnums,
-									bool with_period, Oid *opclasses);
+									bool with_period, Oid *opclasses,
+									bool *pk_has_without_overlaps);
 static void checkFkeyPermissions(Relation rel, int16 *attnums, int natts);
 static CoercionPathType findFkeyCast(Oid targetTypeId, Oid sourceTypeId,
 									 Oid *funcid);
@@ -9816,7 +9817,8 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 	Oid			ffeqoperators[INDEX_MAX_KEYS] = {0};
 	int16		fkdelsetcols[INDEX_MAX_KEYS] = {0};
 	bool		with_period;
-	bool		pk_with_period;
+	bool		pk_has_without_overlaps;
+	int16		fkperiodattnum = InvalidOid;
 	int			i;
 	int			numfks,
 				numpks,
@@ -9935,10 +9937,10 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 		numpks = transformFkeyGetPrimaryKey(pkrel, &indexOid,
 											&fkconstraint->pk_attrs,
 											pkattnum, pktypoid,
-											opclasses, &pk_with_period);
+											opclasses, &pk_has_without_overlaps);
 
 		/* If the primary key uses WITHOUT OVERLAPS, the fk must use PERIOD */
-		if (pk_with_period && !fkconstraint->fk_with_period)
+		if (pk_has_without_overlaps && !fkconstraint->fk_with_period)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_FOREIGN_KEY),
 					errmsg("foreign key uses PERIOD on the referenced table but not the referencing table")));
@@ -9957,8 +9959,14 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 
 		/* Look for an index matching the column list */
 		indexOid = transformFkeyCheckAttrs(pkrel, numpks, pkattnum,
-										   with_period, opclasses);
+										   with_period, opclasses, &pk_has_without_overlaps);
 	}
+
+	/* If the referenced index has WITHOUT OVERLAPS, the foreign key must use PERIOD */
+	if (pk_has_without_overlaps && !with_period)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_FOREIGN_KEY),
+				 errmsg("foreign key must use PERIOD when referencing a WITHOUT OVERLAPS index")));
 
 	/*
 	 * Now we can check permissions.
@@ -10077,16 +10085,14 @@ ATAddForeignKeyConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 		else
 		{
 			/*
-			 * Check it's a btree.  This can only fail if the primary key or
-			 * unique constraint uses WITHOUT OVERLAPS.  But then we should
-			 * forbid a non-PERIOD foreign key.
-			 *
-			 * If we ever allowed non-temporal unique indexes with other index AMs,
-			 * we could use GistTranslateStratnum (or something similar for non-GiST)
-			 * to determine which operator strategy number is equality.
+			 * Check it's a btree; currently this can never fail since no other
+			 * index AMs support unique indexes.  If we ever did have other types
+			 * of unique indexes, we'd need a way to determine which operator
+			 * strategy number is equality.  (We could use something like
+			 * GistTranslateStratnum.)
 			 */
 			if (amid != BTREE_AM_OID)
-				elog(ERROR, "only b-tree indexes are supported for non-PERIOD foreign keys");
+				elog(ERROR, "only b-tree indexes are supported for foreign keys");
 			eqstrategy = BTEqualStrategyNumber;
 		}
 
@@ -12123,7 +12129,8 @@ transformColumnNameList(Oid relId, List *colList,
  *
  *	Look up the names, attnums, and types of the primary key attributes
  *	for the pkrel.  Also return the index OID and index opclasses of the
- *	index supporting the primary key.
+ *	index supporting the primary key.  Also return whether the index has
+ *	WITHOUT OVERLAPS.
  *
  *	All parameters except pkrel are output parameters.  Also, the function
  *	return value is the number of attributes in the primary key.
@@ -12134,7 +12141,7 @@ static int
 transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 						   List **attnamelist,
 						   int16 *attnums, Oid *atttypids,
-						   Oid *opclasses, bool *pk_period)
+						   Oid *opclasses, bool *pk_has_without_overlaps)
 {
 	List	   *indexoidlist;
 	ListCell   *indexoidscan;
@@ -12212,7 +12219,7 @@ transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
 							   makeString(pstrdup(NameStr(*attnumAttName(pkrel, pkattno)))));
 	}
 
-	*pk_period = indexStruct->indisexclusion;
+	*pk_has_without_overlaps = indexStruct->indisexclusion;
 
 	ReleaseSysCache(indexTuple);
 
@@ -12227,14 +12234,16 @@ transformFkeyGetPrimaryKey(Relation pkrel, Oid *indexOid,
  *
  *	Returns the OID of the unique index supporting the constraint and
  *	populates the caller-provided 'opclasses' array with the opclasses
- *	associated with the index columns.
+ *	associated with the index columns.  Also sets whether the index
+ *	uses WITHOUT OVERLAPS.
  *
  *	Raises an ERROR on validation failure.
  */
 static Oid
 transformFkeyCheckAttrs(Relation pkrel,
 						int numattrs, int16 *attnums,
-						bool with_period, Oid *opclasses)
+						bool with_period, Oid *opclasses,
+						bool *pk_has_without_overlaps)
 {
 	Oid			indexoid = InvalidOid;
 	bool		found = false;
@@ -12347,6 +12356,10 @@ transformFkeyCheckAttrs(Relation pkrel,
 				found_deferrable = true;
 				found = false;
 			}
+
+			/* We need to know whether the index has WITHOUT OVERLAPS */
+			if (found)
+				*pk_has_without_overlaps = indexStruct->indisexclusion;
 		}
 		ReleaseSysCache(indexTuple);
 		if (found)
