@@ -1002,7 +1002,7 @@ CREATE TABLE temporal_fk_mltrng2mltrng (
 	CONSTRAINT temporal_fk_mltrng2mltrng_fk FOREIGN KEY (parent_id, valid_at)
 		REFERENCES temporal_mltrng (id, valid_at)
 );
-ERROR:  only b-tree indexes are supported for non-PERIOD foreign keys
+ERROR:  foreign key must use PERIOD when referencing a WITHOUT OVERLAPS index
 -- (parent_id, valid_at) REFERENCES (id, PERIOD valid_at)
 -- FOREIGN KEY part should specify PERIOD
 CREATE TABLE temporal_fk_mltrng2mltrng (
