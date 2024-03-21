@@ -580,6 +580,13 @@ COMMIT; -- should fail here.
 --
 
 TRUNCATE temporal_rng, temporal_fk_rng2rng;
+ALTER TABLE temporal_fk_rng2rng
+	DROP CONSTRAINT temporal_fk_rng2rng_fk;
+ALTER TABLE temporal_fk_rng2rng
+	ADD CONSTRAINT temporal_fk_rng2rng_fk
+	FOREIGN KEY (parent_id, PERIOD valid_at)
+	REFERENCES temporal_rng
+	ON UPDATE NO ACTION;
 -- a PK update that succeeds because the numeric id isn't referenced:
 INSERT INTO temporal_rng (id, valid_at) VALUES ('[5,6)', daterange('2018-01-01', '2018-02-01'));
 UPDATE temporal_rng SET valid_at = daterange('2016-01-01', '2016-02-01') WHERE id = '[5,6)';
@@ -594,6 +601,15 @@ WHERE id = '[5,6)' AND valid_at = daterange('2018-02-01', '2018-03-01');
 -- a PK update that fails because both are referenced:
 UPDATE temporal_rng SET valid_at = daterange('2016-01-01', '2016-02-01')
 WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
+-- a PK update that fails because both are referenced, but not 'til commit:
+BEGIN;
+  ALTER TABLE temporal_fk_rng2rng
+    ALTER CONSTRAINT temporal_fk_rng2rng_fk
+    DEFERRABLE INITIALLY DEFERRED;
+
+  UPDATE temporal_rng SET valid_at = daterange('2016-01-01', '2016-02-01')
+  WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
+COMMIT;
 -- changing the scalar part fails:
 UPDATE temporal_rng SET id = '[7,8)'
 WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
@@ -658,6 +674,14 @@ INSERT INTO temporal_fk_rng2rng (id, valid_at, parent_id) VALUES ('[3,4)', dater
 DELETE FROM temporal_rng WHERE id = '[5,6)' AND valid_at = daterange('2018-02-01', '2018-03-01');
 -- a PK delete that fails because both are referenced:
 DELETE FROM temporal_rng WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
+-- a PK delete that fails because both are referenced, but not 'til commit:
+BEGIN;
+  ALTER TABLE temporal_fk_rng2rng
+    ALTER CONSTRAINT temporal_fk_rng2rng_fk
+    DEFERRABLE INITIALLY DEFERRED;
+
+  DELETE FROM temporal_rng WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
+COMMIT;
 -- then delete the objecting FK record and the same PK delete succeeds:
 DELETE FROM temporal_fk_rng2rng WHERE id = '[3,4)';
 DELETE FROM temporal_rng WHERE id = '[5,6)' AND valid_at = daterange('2018-01-01', '2018-02-01');
