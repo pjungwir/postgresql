@@ -1083,9 +1083,15 @@ INSERT INTO temporal_mltrng (id, valid_at) VALUES
 INSERT INTO temporal_fk_mltrng2mltrng (id, valid_at, parent_id) VALUES ('[3,4)', datemultirange(daterange('2018-01-05', '2018-01-10')), '[5,6)');
 UPDATE temporal_mltrng SET valid_at = datemultirange(daterange('2016-02-01', '2016-03-01'))
 WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-02-01', '2018-03-01'));
--- a PK update that fails because both are referenced:
-UPDATE temporal_mltrng SET valid_at = datemultirange(daterange('2016-01-01', '2016-02-01'))
-WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
+-- a PK update that fails because both are referenced (even before commit):
+BEGIN;
+  ALTER TABLE temporal_fk_mltrng2mltrng
+    ALTER CONSTRAINT temporal_fk_mltrng2mltrng_fk
+    DEFERRABLE INITIALLY DEFERRED;
+
+  UPDATE temporal_mltrng SET valid_at = datemultirange(daterange('2016-01-01', '2016-02-01'))
+  WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
+ROLLBACK;
 -- changing the scalar part fails:
 UPDATE temporal_mltrng SET id = '[7,8)'
 WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
@@ -1141,8 +1147,14 @@ INSERT INTO temporal_mltrng (id, valid_at) VALUES
   ('[5,6)', datemultirange(daterange('2018-02-01', '2018-03-01')));
 INSERT INTO temporal_fk_mltrng2mltrng (id, valid_at, parent_id) VALUES ('[3,4)', datemultirange(daterange('2018-01-05', '2018-01-10')), '[5,6)');
 DELETE FROM temporal_mltrng WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-02-01', '2018-03-01'));
--- a PK delete that fails because both are referenced:
-DELETE FROM temporal_mltrng WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
+-- a PK delete that fails because both are referenced (even before commit):
+BEGIN;
+  ALTER TABLE temporal_fk_mltrng2mltrng
+    ALTER CONSTRAINT temporal_fk_mltrng2mltrng_fk
+    DEFERRABLE INITIALLY DEFERRED;
+
+  DELETE FROM temporal_mltrng WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
+ROLLBACK;
 
 --
 -- test FOREIGN KEY, box references box
