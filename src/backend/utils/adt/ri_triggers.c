@@ -207,8 +207,8 @@ static void ri_BuildQueryKey(RI_QueryKey *key,
 							 int32 constr_queryno);
 static bool ri_KeysEqual(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
 						 const RI_ConstraintInfo *riinfo, bool rel_is_pk);
-static bool ri_AttributesEqual(Oid eq_opr, Oid typeid,
-							   Datum oldvalue, Datum newvalue);
+static bool ri_CompareWithCast(Oid eq_opr, Oid typeid,
+							   Datum lhs, Datum rhs);
 
 static void ri_InitHashTables(void);
 static void InvalidateConstraintCacheCallBack(Datum arg, int cacheid, uint32 hashvalue);
@@ -2959,7 +2959,7 @@ ri_KeysEqual(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
 			 * operator.  Changes that compare equal will still satisfy the
 			 * constraint after the update.
 			 */
-			if (!ri_AttributesEqual(eq_opr, RIAttType(rel, attnums[i]),
+			if (!ri_CompareWithCast(eq_opr, RIAttType(rel, attnums[i]),
 									newvalue, oldvalue))
 				return false;
 		}
@@ -2969,29 +2969,31 @@ ri_KeysEqual(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
 }
 
 /*
- * ri_AttributesEqual -
+ * ri_CompareWithCast -
  *
- * Call the appropriate equality comparison operator for two values.
+ * Call the appropriate comparison operator for two values.
+ * Normally this is equality, but for the PERIOD part of foreign keys
+ * it is ContainedBy, so the order of lhs vs rhs is significant.
  *
  * NB: we have already checked that neither value is null.
  */
 static bool
-ri_AttributesEqual(Oid eq_opr, Oid typeid,
-				   Datum oldvalue, Datum newvalue)
+ri_CompareWithCast(Oid eq_opr, Oid typeid,
+				   Datum lhs, Datum rhs)
 {
 	RI_CompareHashEntry *entry = ri_HashCompareOp(eq_opr, typeid);
 
 	/* Do we need to cast the values? */
 	if (OidIsValid(entry->cast_func_finfo.fn_oid))
 	{
-		oldvalue = FunctionCall3(&entry->cast_func_finfo,
-								 oldvalue,
-								 Int32GetDatum(-1), /* typmod */
-								 BoolGetDatum(false));	/* implicit coercion */
-		newvalue = FunctionCall3(&entry->cast_func_finfo,
-								 newvalue,
-								 Int32GetDatum(-1), /* typmod */
-								 BoolGetDatum(false));	/* implicit coercion */
+		lhs = FunctionCall3(&entry->cast_func_finfo,
+							lhs,
+							Int32GetDatum(-1), /* typmod */
+							BoolGetDatum(false));	/* implicit coercion */
+		rhs = FunctionCall3(&entry->cast_func_finfo,
+							rhs,
+							Int32GetDatum(-1), /* typmod */
+							BoolGetDatum(false));	/* implicit coercion */
 	}
 
 	/*
@@ -3008,7 +3010,7 @@ ri_AttributesEqual(Oid eq_opr, Oid typeid,
 	 */
 	return DatumGetBool(FunctionCall2Coll(&entry->eq_opr_finfo,
 										  DEFAULT_COLLATION_OID,
-										  oldvalue, newvalue));
+										  lhs, rhs));
 }
 
 /*
@@ -3063,7 +3065,7 @@ ri_HashCompareOp(Oid eq_opr, Oid typeid)
 		 * the cast function to get to the operator's input type.
 		 *
 		 * XXX eventually it would be good to support array-coercion cases
-		 * here and in ri_AttributesEqual().  At the moment there is no point
+		 * here and in ri_CompareWithCast().  At the moment there is no point
 		 * because cases involving nonidentical array types will be rejected
 		 * at constraint creation time.
 		 *
