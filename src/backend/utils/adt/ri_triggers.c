@@ -3007,6 +3007,12 @@ ri_CompareWithCast(Oid eq_opr, Oid typeid,
 	 * open), we'll just use the default collation here, which could lead to
 	 * some false negatives.  All this would break if we ever allow
 	 * database-wide collations to be nondeterministic.
+	 *
+	 * With range/multirangetypes, the collation of the base type is stored as
+	 * part of the rangetype (pg_range.rngcollation), and always used, so
+	 * there is no danger of inconsistency even using a non-equals operator.
+	 * But if we support arbitrary types with PERIOD, we should perhaps just
+	 * always force a re-check.
 	 */
 	return DatumGetBool(FunctionCall2Coll(&entry->eq_opr_finfo,
 										  DEFAULT_COLLATION_OID,
