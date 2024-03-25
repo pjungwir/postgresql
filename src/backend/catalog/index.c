@@ -2443,6 +2443,7 @@ BuildIndexInfo(Relation index)
 								 &ii->ii_ExclusionOps,
 								 &ii->ii_ExclusionProcs,
 								 &ii->ii_ExclusionStrats);
+		ii->ii_HasWithoutOverlaps = ii->ii_Unique;
 	}
 
 	return ii;

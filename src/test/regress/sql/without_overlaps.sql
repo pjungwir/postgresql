@@ -316,6 +316,21 @@ SELECT * FROM tp2 ORDER BY id, valid_at;
 DROP TABLE temporal_partitioned;
 
 --
+-- ON CONFLICT
+--
+
+TRUNCATE temporal_rng;
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[1,2)', daterange('2000-01-01', '2010-01-01'));
+-- with a conflict
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[1,2)', daterange('2005-01-01', '2006-01-01')) ON CONFLICT DO NOTHING;
+-- id matches but no conflict
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[1,2)', daterange('2010-01-01', '2020-01-01')) ON CONFLICT DO NOTHING;
+-- date matches but no conflict
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[2,3)', daterange('2005-01-01', '2006-01-01')) ON CONFLICT DO NOTHING;
+SELECT * FROM temporal_rng;
+
+
+--
 -- test FK dependencies
 --
 

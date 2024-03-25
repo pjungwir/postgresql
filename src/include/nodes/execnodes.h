@@ -204,6 +204,7 @@ typedef struct IndexInfo
 	bool		ii_Summarizing;
 	int			ii_ParallelWorkers;
 	Oid			ii_Am;
+	bool		ii_HasWithoutOverlaps;
 	void	   *ii_AmCache;
 	MemoryContext ii_Context;
 } IndexInfo;
