@@ -1176,6 +1176,8 @@ struct IndexOptInfo
 	bool		unique;
 	/* is uniqueness enforced immediately? */
 	bool		immediate;
+	/* true if index has WITHOUT OVERLAPS */
+	bool		hasperiod;
 	/* true if index doesn't really exist */
 	bool		hypothetical;
 
