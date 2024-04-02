@@ -800,8 +800,8 @@ rel_supports_distinctness(PlannerInfo *root, RelOptInfo *rel)
 		 * For a plain relation, we only know how to prove uniqueness by
 		 * reference to unique indexes.  Make sure there's at least one
 		 * suitable unique index.  It must be immediately enforced, and not a
-		 * partial index. (Keep these conditions in sync with
-		 * relation_has_unique_index_for!)
+		 * partial index, and not WITHOUT OVERLAPS (Keep these conditions
+		 * in sync with relation_has_unique_index_for!)
 		 */
 		ListCell   *lc;
 
@@ -809,7 +809,7 @@ rel_supports_distinctness(PlannerInfo *root, RelOptInfo *rel)
 		{
 			IndexOptInfo *ind = (IndexOptInfo *) lfirst(lc);
 
-			if (ind->unique && ind->immediate && ind->indpred == NIL)
+			if (ind->unique && ind->immediate && ind->indpred == NIL && !ind->hasperiod)
 				return true;
 		}
 	}

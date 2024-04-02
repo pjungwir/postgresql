@@ -3498,13 +3498,14 @@ relation_has_unique_index_for(PlannerInfo *root, RelOptInfo *rel,
 
 		/*
 		 * If the index is not unique, or not immediately enforced, or if it's
-		 * a partial index, it's useless here.  We're unable to make use of
+		 * a partial index, or if it's a WITHOUT OVERLAPS index (so not
+		 * literally unique), it's useless here.  We're unable to make use of
 		 * predOK partial unique indexes due to the fact that
 		 * check_index_predicates() also makes use of join predicates to
 		 * determine if the partial index is usable. Here we need proofs that
 		 * hold true before any joins are evaluated.
 		 */
-		if (!ind->unique || !ind->immediate || ind->indpred != NIL)
+		if (!ind->unique || !ind->immediate || ind->indpred != NIL || ind->hasperiod)
 			continue;
 
 		/*

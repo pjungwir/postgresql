@@ -457,6 +457,7 @@ get_relation_info(PlannerInfo *root, Oid relationObjectId, bool inhparent,
 			info->predOK = false;	/* set later, in indxpath.c */
 			info->unique = index->indisunique;
 			info->immediate = index->indimmediate;
+			info->hasperiod = index->indisunique && index->indisexclusion;
 			info->hypothetical = false;
 
 			/*
