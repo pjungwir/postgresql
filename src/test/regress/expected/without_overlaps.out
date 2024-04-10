@@ -27,8 +27,9 @@ CREATE TABLE temporal_rng (
 	valid_at TEXT,
 	CONSTRAINT temporal_rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
-ERROR:  data type text has no default operator class for access method "gist"
-HINT:  You must specify an operator class for the index or define a default operator class for the data type.
+ERROR:  column "valid_at" in WITHOUT OVERLAPS is not a range or multirange type
+LINE 4:  CONSTRAINT temporal_rng_pk PRIMARY KEY (id, valid_at WITHOU...
+         ^
 -- PK with one column plus a range:
 CREATE TABLE temporal_rng (
 	-- Since we can't depend on having btree_gist here,
@@ -46,6 +47,8 @@ CREATE TABLE temporal_rng (
  valid_at | daterange |           | not null | 
 Indexes:
     "temporal_rng_pk" PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "valid_at_not_empty" CHECK (NOT isempty(valid_at))
 
 SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rng_pk';
             pg_get_constraintdef             
@@ -76,6 +79,8 @@ CREATE TABLE temporal_rng2 (
  valid_at | daterange |           | not null | 
 Indexes:
     "temporal_rng2_pk" PRIMARY KEY (id1, id2, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "valid_at_not_empty" CHECK (NOT isempty(valid_at))
 
 SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rng2_pk';
                pg_get_constraintdef                
@@ -113,6 +118,8 @@ CREATE TABLE temporal_mltrng (
  valid_at | datemultirange |           | not null | 
 Indexes:
     "temporal_mltrng_pk" PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "valid_at_not_empty" CHECK (NOT isempty(valid_at))
 
 -- PK with two columns plus a multirange:
 -- We don't drop this table because tests below also need multiple scalar columns.
@@ -131,6 +138,8 @@ CREATE TABLE temporal_mltrng2 (
  valid_at | datemultirange |           | not null | 
 Indexes:
     "temporal_mltrng2_pk" PRIMARY KEY (id1, id2, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "valid_at_not_empty" CHECK (NOT isempty(valid_at))
 
 SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_mltrng2_pk';
                pg_get_constraintdef                
@@ -164,8 +173,9 @@ CREATE TABLE temporal_rng3 (
 	valid_at TEXT,
 	CONSTRAINT temporal_rng3_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
 );
-ERROR:  data type text has no default operator class for access method "gist"
-HINT:  You must specify an operator class for the index or define a default operator class for the data type.
+ERROR:  column "valid_at" in WITHOUT OVERLAPS is not a range or multirange type
+LINE 4:  CONSTRAINT temporal_rng3_uq UNIQUE (id, valid_at WITHOUT OV...
+         ^
 -- UNIQUE with one column plus a range:
 CREATE TABLE temporal_rng3 (
 	id int4range,
@@ -320,6 +330,9 @@ DETAIL:  Failing row contains (null, [2018-01-01,2018-01-05)).
 INSERT INTO temporal_rng (id, valid_at) VALUES ('[3,4)', NULL);
 ERROR:  null value in column "valid_at" of relation "temporal_rng" violates not-null constraint
 DETAIL:  Failing row contains ([3,4), null).
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[3,4)', 'empty');
+ERROR:  new row for relation "temporal_rng" violates check constraint "valid_at_not_empty"
+DETAIL:  Failing row contains ([3,4), empty).
 -- okay:
 INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[1,2)', datemultirange(daterange('2018-01-02', '2018-02-03')));
 INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[1,2)', datemultirange(daterange('2018-03-03', '2018-04-04')));
@@ -335,6 +348,9 @@ DETAIL:  Failing row contains (null, {[2018-01-01,2018-01-05)}).
 INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[3,4)', NULL);
 ERROR:  null value in column "valid_at" of relation "temporal_mltrng" violates not-null constraint
 DETAIL:  Failing row contains ([3,4), null).
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[3,4)', '{}');
+ERROR:  new row for relation "temporal_mltrng" violates check constraint "valid_at_not_empty"
+DETAIL:  Failing row contains ([3,4), {}).
 SELECT * FROM temporal_mltrng ORDER BY id, valid_at;
   id   |         valid_at          
 -------+---------------------------
@@ -344,6 +360,57 @@ SELECT * FROM temporal_mltrng ORDER BY id, valid_at;
  [3,4) | {[2018-01-01,)}
 (4 rows)
 
+--
+-- test UNIQUE inserts
+--
+CREATE TABLE temporal_rng3 (
+	id int4range,
+	valid_at daterange,
+	CONSTRAINT temporal_rng3_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
+);
+-- okay:
+INSERT INTO temporal_rng3 (id, valid_at) VALUES ('[1,2)', daterange('2018-01-02', '2018-02-03'));
+INSERT INTO temporal_rng3 (id, valid_at) VALUES ('[1,2)', daterange('2018-03-03', '2018-04-04'));
+INSERT INTO temporal_rng3 (id, valid_at) VALUES ('[2,3)', daterange('2018-01-01', '2018-01-05'));
+INSERT INTO temporal_rng3 (id, valid_at) VALUES ('[3,4)', daterange('2018-01-01', NULL));
+INSERT INTO temporal_rng3 (id, valid_at) VALUES (NULL, daterange('2018-01-01', '2018-01-05'));
+INSERT INTO temporal_rng3 (id, valid_at) VALUES ('[3,4)', NULL);
+INSERT INTO temporal_rng3 (id, valid_at) VALUES ('[3,4)', 'empty');
+-- should fail:
+INSERT INTO temporal_rng3 (id, valid_at) VALUES ('[1,2)', daterange('2018-01-01', '2018-01-05'));
+ERROR:  conflicting key value violates exclusion constraint "temporal_rng3_uq"
+DETAIL:  Key (id, valid_at)=([1,2), [2018-01-01,2018-01-05)) conflicts with existing key (id, valid_at)=([1,2), [2018-01-02,2018-02-03)).
+DROP TABLE temporal_rng3;
+CREATE TABLE temporal_mltrng3 (
+	id int4range,
+	valid_at datemultirange,
+	CONSTRAINT temporal_mltrng3_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
+);
+-- okay:
+INSERT INTO temporal_mltrng3 (id, valid_at) VALUES ('[1,2)', datemultirange(daterange('2018-01-02', '2018-02-03')));
+INSERT INTO temporal_mltrng3 (id, valid_at) VALUES ('[1,2)', datemultirange(daterange('2018-03-03', '2018-04-04')));
+INSERT INTO temporal_mltrng3 (id, valid_at) VALUES ('[2,3)', datemultirange(daterange('2018-01-01', '2018-01-05')));
+INSERT INTO temporal_mltrng3 (id, valid_at) VALUES ('[3,4)', datemultirange(daterange('2018-01-01', NULL)));
+INSERT INTO temporal_mltrng3 (id, valid_at) VALUES (NULL, datemultirange(daterange('2018-01-01', '2018-01-05')));
+INSERT INTO temporal_mltrng3 (id, valid_at) VALUES ('[3,4)', NULL);
+INSERT INTO temporal_mltrng3 (id, valid_at) VALUES ('[3,4)', '{}');
+-- should fail:
+INSERT INTO temporal_mltrng3 (id, valid_at) VALUES ('[1,2)', datemultirange(daterange('2018-01-01', '2018-01-05')));
+ERROR:  conflicting key value violates exclusion constraint "temporal_mltrng3_uq"
+DETAIL:  Key (id, valid_at)=([1,2), {[2018-01-01,2018-01-05)}) conflicts with existing key (id, valid_at)=([1,2), {[2018-01-02,2018-02-03)}).
+SELECT * FROM temporal_mltrng3 ORDER BY id, valid_at;
+  id   |         valid_at          
+-------+---------------------------
+ [1,2) | {[2018-01-02,2018-02-03)}
+ [1,2) | {[2018-03-03,2018-04-04)}
+ [2,3) | {[2018-01-01,2018-01-05)}
+ [3,4) | {}
+ [3,4) | {[2018-01-01,)}
+ [3,4) | 
+       | {[2018-01-01,2018-01-05)}
+(7 rows)
+
+DROP TABLE temporal_mltrng3;
 --
 -- test a range with both a PK and a UNIQUE constraint
 --
@@ -372,6 +439,7 @@ CREATE TABLE temporal3 (
 ALTER TABLE temporal3 ALTER COLUMN valid_at DROP NOT NULL;
 ERROR:  column "valid_at" is in a primary key
 ALTER TABLE temporal3 ALTER COLUMN valid_at TYPE tstzrange USING tstzrange(lower(valid_at), upper(valid_at));
+NOTICE:  merging constraint "valid_at_not_empty" with inherited definition
 ALTER TABLE temporal3 RENAME COLUMN valid_at TO valid_thru;
 ALTER TABLE temporal3 DROP COLUMN valid_thru;
 DROP TABLE temporal3;
@@ -806,6 +874,8 @@ CREATE TABLE temporal_fk2_rng2rng (
  parent_id2 | int4range |           |          | 
 Indexes:
     "temporal_fk2_rng2rng_pk" PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "valid_at_not_empty" CHECK (NOT isempty(valid_at))
 Foreign-key constraints:
     "temporal_fk2_rng2rng_fk" FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at) REFERENCES temporal_rng2(id1, id2, PERIOD valid_at)
 
@@ -845,6 +915,8 @@ ALTER TABLE temporal_fk2_rng2rng
  parent_id2 | int4range |           |          | 
 Indexes:
     "temporal_fk2_rng2rng_pk" PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "valid_at_not_empty" CHECK (NOT isempty(valid_at))
 Foreign-key constraints:
     "temporal_fk2_rng2rng_fk" FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at) REFERENCES temporal_rng2(id1, id2, PERIOD valid_at)
 
@@ -852,6 +924,7 @@ Foreign-key constraints:
 ALTER TABLE temporal_fk_rng2rng
 	DROP CONSTRAINT temporal_fk_rng2rng_fk,
 	ALTER COLUMN valid_at TYPE tsrange USING tsrange(lower(valid_at), upper(valid_at));
+NOTICE:  merging constraint "valid_at_not_empty" with inherited definition
 ALTER TABLE temporal_fk_rng2rng
 	ADD CONSTRAINT temporal_fk_rng2rng_fk
 	FOREIGN KEY (parent_id, PERIOD valid_at)
@@ -860,6 +933,7 @@ ERROR:  foreign key constraint "temporal_fk_rng2rng_fk" cannot be implemented
 DETAIL:  Key columns "valid_at" and "valid_at" are of incompatible types: tsrange and daterange.
 ALTER TABLE temporal_fk_rng2rng
 	ALTER COLUMN valid_at TYPE daterange USING daterange(lower(valid_at)::date, upper(valid_at)::date);
+NOTICE:  merging constraint "valid_at_not_empty" with inherited definition
 -- with inferred PK on the referenced table:
 ALTER TABLE temporal_fk_rng2rng
 	ADD CONSTRAINT temporal_fk_rng2rng_fk
@@ -1276,6 +1350,8 @@ CREATE TABLE temporal_fk2_mltrng2mltrng (
  parent_id2 | int4range      |           |          | 
 Indexes:
     "temporal_fk2_mltrng2mltrng_pk" PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "valid_at_not_empty" CHECK (NOT isempty(valid_at))
 Foreign-key constraints:
     "temporal_fk2_mltrng2mltrng_fk" FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at) REFERENCES temporal_mltrng2(id1, id2, PERIOD valid_at)
 
@@ -1315,6 +1391,8 @@ ALTER TABLE temporal_fk2_mltrng2mltrng
  parent_id2 | int4range      |           |          | 
 Indexes:
     "temporal_fk2_mltrng2mltrng_pk" PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+Check constraints:
+    "valid_at_not_empty" CHECK (NOT isempty(valid_at))
 Foreign-key constraints:
     "temporal_fk2_mltrng2mltrng_fk" FOREIGN KEY (parent_id1, parent_id2, PERIOD valid_at) REFERENCES temporal_mltrng2(id1, id2, PERIOD valid_at)
 
@@ -1535,34 +1613,6 @@ BEGIN;
 ERROR:  update or delete on table "temporal_mltrng" violates foreign key constraint "temporal_fk_mltrng2mltrng_fk" on table "temporal_fk_mltrng2mltrng"
 DETAIL:  Key (id, valid_at)=([5,6), {[2018-01-01,2018-02-01)}) is still referenced from table "temporal_fk_mltrng2mltrng".
 ROLLBACK;
---
--- test FOREIGN KEY, box references box
--- (not allowed: PERIOD part must be a range or multirange)
---
-CREATE TABLE temporal_box (
-  id int4range,
-  valid_at box,
-  CONSTRAINT temporal_box_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
-);
-\d temporal_box
-              Table "public.temporal_box"
-  Column  |   Type    | Collation | Nullable | Default 
-----------+-----------+-----------+----------+---------
- id       | int4range |           | not null | 
- valid_at | box       |           | not null | 
-Indexes:
-    "temporal_box_pk" PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
-
-CREATE TABLE temporal_fk_box2box (
-  id int4range,
-  valid_at box,
-  parent_id int4range,
-  CONSTRAINT temporal_fk_box2box_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
-  CONSTRAINT temporal_fk_box2box_fk FOREIGN KEY (parent_id, PERIOD valid_at)
-    REFERENCES temporal_box (id, PERIOD valid_at)
-);
-ERROR:  invalid type for PERIOD part of foreign key
-DETAIL:  Only range and multirange are supported.
 --
 -- FK between partitioned tables
 --

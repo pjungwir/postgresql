@@ -2301,6 +2301,8 @@ transformIndexConstraints(CreateStmtContext *cxt)
  *
  * For a PRIMARY KEY constraint, we additionally force the columns to be
  * marked as not-null, without producing a not-null constraint.
+ * If the PRIMARY KEY has WITHOUT OVERLAPS we also add an internal
+ * CHECK constraint to prevent empty ranges/multiranges.
  */
 static IndexStmt *
 transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
@@ -2683,6 +2685,48 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 				}
 			}
 
+			/*
+			 * The WITHOUT OVERLAPS part (if any) must be
+			 * a range or multirange type.
+			 */
+			if (constraint->without_overlaps && lc == list_last_cell(constraint->keys))
+			{
+				Oid typid = InvalidOid;
+
+				if (!found && cxt->isalter)
+				{
+					/*
+					 * Look up the column type on existing table.
+					 * If we can't find it, let things fail in DefineIndex.
+					 */
+					Relation rel = cxt->rel;
+					for (int i = 0; i < rel->rd_att->natts; i++)
+					{
+						Form_pg_attribute attr = TupleDescAttr(rel->rd_att, i);
+						const char *attname;
+
+						if (attr->attisdropped)
+							break;
+
+						attname = NameStr(attr->attname);
+						if (strcmp(attname, key) == 0)
+						{
+							typid = attr->atttypid;
+							break;
+						}
+					}
+				}
+				else
+					typid = typenameTypeId(NULL, column->typeName);
+
+				if (OidIsValid(typid) && !type_is_range(typid) && !type_is_multirange(typid))
+					ereport(ERROR,
+							(errcode(ERRCODE_DATATYPE_MISMATCH),
+							 errmsg("column \"%s\" in WITHOUT OVERLAPS is not a range or multirange type", key),
+							 parser_errposition(cxt->pstate, constraint->location)));
+			}
+
+
 			/* OK, add it to the index definition */
 			iparam = makeNode(IndexElem);
 			iparam->name = pstrdup(key);
@@ -2719,8 +2763,46 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 
 			/* WITHOUT OVERLAPS requires a GiST index */
 			index->accessMethod = "gist";
-		}
 
+			if (constraint->contype == CONSTR_PRIMARY)
+			{
+				/*
+				 * If the PRIMARY KEY has WITHOUT OVERLAPS, we must
+				 * prevent empties as well as NULLs. Since
+				 * 'empty' && 'empty' is false, you could insert a value
+				 * like (5, 'empty') more than once. For convenience
+				 * we add this to notnullcmds (by analogy).
+				 */
+				char			   *key = strVal(llast(constraint->keys));
+				AlterTableCmd	   *notemptycmd = makeNode(AlterTableCmd);
+				Constraint		   *checkcon = makeNode(Constraint);
+				ColumnRef		   *col;
+				FuncCall		   *func;
+				Node			   *expr;
+
+				col = makeNode(ColumnRef);
+				col->fields = list_make1(makeString(key));
+				func = makeFuncCall(SystemFuncName("isempty"), list_make1(col),
+									COERCE_EXPLICIT_CALL, -1);
+				expr = (Node *) makeBoolExpr(NOT_EXPR, list_make1(func), -1);
+
+				checkcon->conname = psprintf("%s_not_empty", key);
+				checkcon->contype = CONSTR_CHECK;
+				checkcon->raw_expr = expr;
+				checkcon->cooked_expr = NULL;
+				checkcon->is_no_inherit = false;
+				checkcon->deferrable = false;
+				checkcon->initdeferred = false;
+				checkcon->skip_validation = false;
+				checkcon->initially_valid = true;
+				checkcon->location = -1;
+
+				notemptycmd->subtype = AT_AddConstraint;
+				notemptycmd->def = (Node *) checkcon;
+
+				notnullcmds = lappend(notnullcmds, notemptycmd);
+			}
+		}
 	}
 
 	/*
