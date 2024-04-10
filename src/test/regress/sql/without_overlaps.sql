@@ -226,6 +226,7 @@ INSERT INTO temporal_rng (id, valid_at) VALUES ('[3,4)', daterange('2018-01-01',
 INSERT INTO temporal_rng (id, valid_at) VALUES ('[1,2)', daterange('2018-01-01', '2018-01-05'));
 INSERT INTO temporal_rng (id, valid_at) VALUES (NULL, daterange('2018-01-01', '2018-01-05'));
 INSERT INTO temporal_rng (id, valid_at) VALUES ('[3,4)', NULL);
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[3,4)', 'empty');
 
 -- okay:
 INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[1,2)', datemultirange(daterange('2018-01-02', '2018-02-03')));
@@ -237,8 +238,55 @@ INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[3,4)', datemultirange(dater
 INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[1,2)', datemultirange(daterange('2018-01-01', '2018-01-05')));
 INSERT INTO temporal_mltrng (id, valid_at) VALUES (NULL, datemultirange(daterange('2018-01-01', '2018-01-05')));
 INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[3,4)', NULL);
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[3,4)', '{}');
 
 SELECT * FROM temporal_mltrng ORDER BY id, valid_at;
+
+--
+-- test UNIQUE inserts
+--
+
+CREATE TABLE temporal_rng3 (
+	id int4range,
+	valid_at daterange,
+	CONSTRAINT temporal_rng3_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
+);
+
+-- okay:
+INSERT INTO temporal_rng3 (id, valid_at) VALUES ('[1,2)', daterange('2018-01-02', '2018-02-03'));
+INSERT INTO temporal_rng3 (id, valid_at) VALUES ('[1,2)', daterange('2018-03-03', '2018-04-04'));
+INSERT INTO temporal_rng3 (id, valid_at) VALUES ('[2,3)', daterange('2018-01-01', '2018-01-05'));
+INSERT INTO temporal_rng3 (id, valid_at) VALUES ('[3,4)', daterange('2018-01-01', NULL));
+INSERT INTO temporal_rng3 (id, valid_at) VALUES (NULL, daterange('2018-01-01', '2018-01-05'));
+INSERT INTO temporal_rng3 (id, valid_at) VALUES ('[3,4)', NULL);
+INSERT INTO temporal_rng3 (id, valid_at) VALUES ('[3,4)', 'empty');
+
+-- should fail:
+INSERT INTO temporal_rng3 (id, valid_at) VALUES ('[1,2)', daterange('2018-01-01', '2018-01-05'));
+
+DROP TABLE temporal_rng3;
+
+CREATE TABLE temporal_mltrng3 (
+	id int4range,
+	valid_at datemultirange,
+	CONSTRAINT temporal_mltrng3_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
+);
+
+-- okay:
+INSERT INTO temporal_mltrng3 (id, valid_at) VALUES ('[1,2)', datemultirange(daterange('2018-01-02', '2018-02-03')));
+INSERT INTO temporal_mltrng3 (id, valid_at) VALUES ('[1,2)', datemultirange(daterange('2018-03-03', '2018-04-04')));
+INSERT INTO temporal_mltrng3 (id, valid_at) VALUES ('[2,3)', datemultirange(daterange('2018-01-01', '2018-01-05')));
+INSERT INTO temporal_mltrng3 (id, valid_at) VALUES ('[3,4)', datemultirange(daterange('2018-01-01', NULL)));
+INSERT INTO temporal_mltrng3 (id, valid_at) VALUES (NULL, datemultirange(daterange('2018-01-01', '2018-01-05')));
+INSERT INTO temporal_mltrng3 (id, valid_at) VALUES ('[3,4)', NULL);
+INSERT INTO temporal_mltrng3 (id, valid_at) VALUES ('[3,4)', '{}');
+
+-- should fail:
+INSERT INTO temporal_mltrng3 (id, valid_at) VALUES ('[1,2)', datemultirange(daterange('2018-01-01', '2018-01-05')));
+
+SELECT * FROM temporal_mltrng3 ORDER BY id, valid_at;
+
+DROP TABLE temporal_mltrng3;
 
 --
 -- test a range with both a PK and a UNIQUE constraint
@@ -1272,27 +1320,6 @@ BEGIN;
 
   DELETE FROM temporal_mltrng WHERE id = '[5,6)' AND valid_at = datemultirange(daterange('2018-01-01', '2018-02-01'));
 ROLLBACK;
-
---
--- test FOREIGN KEY, box references box
--- (not allowed: PERIOD part must be a range or multirange)
---
-
-CREATE TABLE temporal_box (
-  id int4range,
-  valid_at box,
-  CONSTRAINT temporal_box_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
-);
-\d temporal_box
-
-CREATE TABLE temporal_fk_box2box (
-  id int4range,
-  valid_at box,
-  parent_id int4range,
-  CONSTRAINT temporal_fk_box2box_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
-  CONSTRAINT temporal_fk_box2box_fk FOREIGN KEY (parent_id, PERIOD valid_at)
-    REFERENCES temporal_box (id, PERIOD valid_at)
-);
 
 --
 -- FK between partitioned tables
