@@ -364,7 +364,7 @@ static void RangeVarCallbackForTruncate(const RangeVar *relation,
 static List *MergeAttributes(List *columns, const List *supers, char relpersistence,
 							 bool is_partition, List **supconstr,
 							 List **supnotnulls);
-static List *MergeCheckConstraint(List *constraints, const char *name, Node *expr);
+static List *MergeCheckConstraint(List *constraints, const char *name, Node *expr, bool conperiod);
 static void MergeChildAttribute(List *inh_columns, int exist_attno, int newcol_attno, const ColumnDef *newdef);
 static ColumnDef *MergeInheritedAttribute(List *inh_columns, int exist_attno, const ColumnDef *newdef);
 static void MergeAttributesIntoExisting(Relation child_rel, Relation parent_rel, bool ispartition);
@@ -584,7 +584,7 @@ static void RememberIndexForRebuilding(Oid indoid, AlteredTableInfo *tab);
 static void RememberStatisticsForRebuilding(Oid stxoid, AlteredTableInfo *tab);
 static void ATPostAlterTypeCleanup(List **wqueue, AlteredTableInfo *tab,
 								   LOCKMODE lockmode);
-static void ATPostAlterTypeParse(Oid oldId, Oid oldRelId, Oid refRelId,
+static void ATPostAlterTypeParse(Oid oldId, Oid oldRelId, Oid refRelId, bool conperiod,
 								 char *cmd, List **wqueue, LOCKMODE lockmode,
 								 bool rewrite);
 static void RebuildConstraintComment(AlteredTableInfo *tab, AlterTablePass pass,
@@ -960,6 +960,7 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId,
 			cooked->is_local = true;	/* not used for defaults */
 			cooked->inhcount = 0;	/* ditto */
 			cooked->is_no_inherit = false;
+			cooked->conperiod = false;
 			cookedDefaults = lappend(cookedDefaults, cooked);
 			attr->atthasdef = true;
 		}
@@ -2811,6 +2812,7 @@ MergeAttributes(List *columns, const List *supers, char relpersistence,
 				nn->is_local = false;
 				nn->inhcount = 1;
 				nn->is_no_inherit = false;
+				nn->conperiod = false;
 
 				nnconstraints = lappend(nnconstraints, nn);
 			}
@@ -2922,7 +2924,7 @@ MergeAttributes(List *columns, const List *supers, char relpersistence,
 									   name,
 									   RelationGetRelationName(relation))));
 
-				constraints = MergeCheckConstraint(constraints, name, expr);
+				constraints = MergeCheckConstraint(constraints, name, expr, check[i].ccperiod);
 			}
 		}
 
@@ -3140,7 +3142,7 @@ MergeAttributes(List *columns, const List *supers, char relpersistence,
  * the list.
  */
 static List *
-MergeCheckConstraint(List *constraints, const char *name, Node *expr)
+MergeCheckConstraint(List *constraints, const char *name, Node *expr, bool conperiod)
 {
 	ListCell   *lc;
 	CookedConstraint *newcon;
@@ -3155,7 +3157,8 @@ MergeCheckConstraint(List *constraints, const char *name, Node *expr)
 		if (strcmp(ccon->name, name) != 0)
 			continue;
 
-		if (equal(expr, ccon->expr))
+		/* Expressions match, and conperiod matches */
+		if (equal(expr, ccon->expr) && ccon->conperiod == conperiod)
 		{
 			/* OK to merge constraint with existing */
 			ccon->inhcount++;
@@ -3181,6 +3184,7 @@ MergeCheckConstraint(List *constraints, const char *name, Node *expr)
 	newcon->name = pstrdup(name);
 	newcon->expr = expr;
 	newcon->inhcount = 1;
+	newcon->conperiod = conperiod;
 	return lappend(constraints, newcon);
 }
 
@@ -9728,6 +9732,94 @@ ChooseForeignKeyConstraintNameAddition(List *colnames)
 }
 
 /*
+ * Gets the temporal PRIMARY KEY constraint oid and its not-empty CHECK constraint.
+ * Returns true if we found both, or else false (e.g. if the table has no PK
+ * or it doesn't use WITHOUT OVERLAPS).
+ *
+ * We may create the PRIMARY KEY first or the CHECK constraint first,
+ * depending on the operation (create-vs-alter table, with-vs-without partitioning
+ * or inheritance, re-adding an index from ALTER TYPE but keeping the CHECK constraint),
+ * so we do nothing unless both are found.
+ */
+bool
+get_pk_period_check_constraint(Relation heapRel, Oid *check_oid, Oid *pk_oid)
+{
+	Relation	pg_constraint;
+	HeapTuple	conTup;
+	SysScanDesc	scan;
+	ScanKeyData	key;
+	ArrayType  *arr;
+	bool		isNull;
+	Datum		adatum;
+	int			numkeys;
+	int16	   *attnums;
+	int16		pk_period_attnum = -1;
+	int16		check_period_attnum = -1;
+
+	pg_constraint = table_open(ConstraintRelationId, AccessShareLock);
+	ScanKeyInit(&key,
+			Anum_pg_constraint_conrelid,
+			BTEqualStrategyNumber, F_OIDEQ,
+			RelationGetRelid(heapRel));
+
+	scan = systable_beginscan(pg_constraint, ConstraintRelidTypidNameIndexId,
+			true, NULL, 1, &key);
+
+	while (HeapTupleIsValid(conTup = systable_getnext(scan)))
+	{
+		Form_pg_constraint con = (Form_pg_constraint) GETSTRUCT(conTup);
+
+		/*
+		 * Find both the PRIMARY KEY and the CHECK constraint.
+		 * They should be validated and with true conperiod.
+		 */
+		if (con->contype != CONSTRAINT_PRIMARY && con->contype != CONSTRAINT_CHECK)
+			continue;
+		if (!con->convalidated)
+			continue;
+		if (!con->conperiod)
+			continue;
+
+		adatum = heap_getattr(conTup, Anum_pg_constraint_conkey,
+				RelationGetDescr(pg_constraint), &isNull);
+		if (isNull)
+			elog(ERROR, "null conkey for constraint %u", con->oid);
+
+		arr = DatumGetArrayTypeP(adatum);
+		numkeys = ARR_DIMS(arr)[0];
+		if (ARR_NDIM(arr) != 1 ||
+			numkeys < 0 ||
+			ARR_HASNULL(arr) ||
+			ARR_ELEMTYPE(arr) != INT2OID)
+			elog(ERROR, "conkey is not a 1-D smallint array");
+
+		attnums = (int16 *) ARR_DATA_PTR(arr);
+		if (con->contype == CONSTRAINT_PRIMARY)
+		{
+			pk_period_attnum = attnums[numkeys - 1];
+			*pk_oid = con->oid;
+		}
+		else
+		{
+			check_period_attnum = attnums[numkeys - 1];
+			*check_oid = con->oid;
+		}
+	}
+	systable_endscan(scan);
+	table_close(pg_constraint, AccessShareLock);
+
+	if (pk_period_attnum != -1 && check_period_attnum != -1)
+	{
+		if (check_period_attnum != pk_period_attnum)
+			elog(ERROR, "WITHOUT OVERLAPS CHECK constraint should match the PRIMARY KEY attribute");
+
+		return true;
+	}
+	else
+		return false;
+}
+
+/*
  * Add a check or not-null constraint to a single table and its children.
  * Returns the address of the constraint added to the parent relation,
  * if one gets added, or InvalidObjectAddress otherwise.
@@ -9818,6 +9910,34 @@ ATAddCheckNNConstraint(List **wqueue, AlteredTableInfo *tab, Relation rel,
 
 	/* Advance command counter in case same table is visited multiple times */
 	CommandCounterIncrement();
+
+	/*
+	 * If this is a not-empty CHECK constraint for a WITHOUT OVERLAPS PK,
+	 * we must record it as an INTERNAL dependency.
+	 */
+	if (constr->without_overlaps)
+	{
+		ObjectAddress pk_address = InvalidObjectAddress;
+		ObjectAddress check_address = InvalidObjectAddress;
+		Oid pk_oid = InvalidOid;
+		Oid check_oid = InvalidOid;
+
+		if (get_pk_period_check_constraint(rel, &check_oid, &pk_oid))
+		{
+			Assert(OidIsValid(check_oid));
+			Assert(OidIsValid(pk_oid));
+
+			ObjectAddressSet(check_address, ConstraintRelationId, check_oid);
+			ObjectAddressSet(pk_address, ConstraintRelationId, pk_oid);
+
+			/*
+			 * Register the CHECK constraint as an INTERNAL dependency of the PK
+			 * so that it can't be dropped by hand and is dropped automatically
+			 * with the PK.
+			 */
+			recordDependencyOn(&check_address, &pk_address, DEPENDENCY_INTERNAL);
+		}
+	}
 
 	/*
 	 * If the constraint got merged with an existing constraint, we're done.
@@ -14455,6 +14575,7 @@ ATPostAlterTypeCleanup(List **wqueue, AlteredTableInfo *tab, LOCKMODE lockmode)
 		Oid			confrelid;
 		char		contype;
 		bool		conislocal;
+		bool		conperiod;
 
 		tup = SearchSysCache1(CONSTROID, ObjectIdGetDatum(oldId));
 		if (!HeapTupleIsValid(tup)) /* should not happen */
@@ -14472,6 +14593,7 @@ ATPostAlterTypeCleanup(List **wqueue, AlteredTableInfo *tab, LOCKMODE lockmode)
 		confrelid = con->confrelid;
 		contype = con->contype;
 		conislocal = con->conislocal;
+		conperiod = con->conperiod;
 		ReleaseSysCache(tup);
 
 		ObjectAddressSet(obj, ConstraintRelationId, oldId);
@@ -14496,7 +14618,7 @@ ATPostAlterTypeCleanup(List **wqueue, AlteredTableInfo *tab, LOCKMODE lockmode)
 		if (relid != tab->relid && contype == CONSTRAINT_FOREIGN)
 			LockRelationOid(relid, AccessExclusiveLock);
 
-		ATPostAlterTypeParse(oldId, relid, confrelid,
+		ATPostAlterTypeParse(oldId, relid, confrelid, conperiod,
 							 (char *) lfirst(def_item),
 							 wqueue, lockmode, tab->rewrite);
 	}
@@ -14507,7 +14629,7 @@ ATPostAlterTypeCleanup(List **wqueue, AlteredTableInfo *tab, LOCKMODE lockmode)
 		Oid			relid;
 
 		relid = IndexGetRelation(oldId, false);
-		ATPostAlterTypeParse(oldId, relid, InvalidOid,
+		ATPostAlterTypeParse(oldId, relid, InvalidOid, false,
 							 (char *) lfirst(def_item),
 							 wqueue, lockmode, tab->rewrite);
 
@@ -14523,7 +14645,7 @@ ATPostAlterTypeCleanup(List **wqueue, AlteredTableInfo *tab, LOCKMODE lockmode)
 		Oid			relid;
 
 		relid = StatisticsGetRelation(oldId, false);
-		ATPostAlterTypeParse(oldId, relid, InvalidOid,
+		ATPostAlterTypeParse(oldId, relid, InvalidOid, false,
 							 (char *) lfirst(def_item),
 							 wqueue, lockmode, tab->rewrite);
 
@@ -14587,8 +14709,8 @@ ATPostAlterTypeCleanup(List **wqueue, AlteredTableInfo *tab, LOCKMODE lockmode)
  * operator that's not available for the new column type.
  */
 static void
-ATPostAlterTypeParse(Oid oldId, Oid oldRelId, Oid refRelId, char *cmd,
-					 List **wqueue, LOCKMODE lockmode, bool rewrite)
+ATPostAlterTypeParse(Oid oldId, Oid oldRelId, Oid refRelId, bool conperiod,
+					 char *cmd, List **wqueue, LOCKMODE lockmode, bool rewrite)
 {
 	List	   *raw_parsetree_list;
 	List	   *querytree_list;
@@ -14717,6 +14839,8 @@ ATPostAlterTypeParse(Oid oldId, Oid oldRelId, Oid refRelId, char *cmd,
 						!rewrite && tab->rewrite == 0)
 						TryReuseForeignKey(oldId, con);
 					con->reset_default_tblspc = true;
+					/* preserve conperiod */
+					con->without_overlaps = conperiod;
 					cmd->subtype = AT_ReAddConstraint;
 					tab->subcmds[AT_PASS_OLD_CONSTR] =
 						lappend(tab->subcmds[AT_PASS_OLD_CONSTR], cmd);
@@ -16699,6 +16823,16 @@ MergeConstraintsIntoExisting(Relation child_rel, Relation parent_rel)
 						 errmsg("constraint \"%s\" conflicts with NOT VALID constraint on child table \"%s\"",
 								NameStr(child_con->conname), RelationGetRelationName(child_rel))));
 
+			/*
+			 * If the parent and child CHECK constraints have different conperiod values,
+			 * don't merge them.
+			 */
+			if (parent_con->contype == CONSTRAINT_CHECK &&
+				parent_con->conperiod != child_con->conperiod)
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
+						 errmsg("constraint \"%s\" conflicts with inherited constraint on child table \"%s\"",
+								NameStr(child_con->conname), RelationGetRelationName(child_rel))));
 			/*
 			 * OK, bump the child constraint's inheritance count.  (If we fail
 			 * later on, this change will just roll back.)
