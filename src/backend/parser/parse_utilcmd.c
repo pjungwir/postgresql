@@ -2566,7 +2566,8 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 	 * For UNIQUE and PRIMARY KEY, we just have a list of column names.
 	 *
 	 * Make sure referenced keys exist.  If we are making a PRIMARY KEY index,
-	 * also make sure they are not-null.
+	 * also make sure they are not-null.  For WITHOUT OVERLAPS constraints,
+	 * we make sure the last part is a range or multirange.
 	 */
 	else
 	{
@@ -2577,6 +2578,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 			ColumnDef  *column = NULL;
 			ListCell   *columns;
 			IndexElem  *iparam;
+			Oid			typid = InvalidOid;
 
 			/* Make sure referenced column exists. */
 			foreach(columns, cxt->columns)
@@ -2644,6 +2646,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 						if (strcmp(key, inhname) == 0)
 						{
 							found = true;
+							typid = inhattr->atttypid;
 							break;
 						}
 					}
@@ -2691,8 +2694,6 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 			 */
 			if (constraint->without_overlaps && lc == list_last_cell(constraint->keys))
 			{
-				Oid typid = InvalidOid;
-
 				if (!found && cxt->isalter)
 				{
 					/*
@@ -2716,14 +2717,17 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 						}
 					}
 				}
-				else
-					typid = typenameTypeId(NULL, column->typeName);
+				if (found)
+				{
+					if (!OidIsValid(typid))
+						typid = typenameTypeId(NULL, column->typeName);
 
-				if (OidIsValid(typid) && !type_is_range(typid) && !type_is_multirange(typid))
-					ereport(ERROR,
-							(errcode(ERRCODE_DATATYPE_MISMATCH),
-							 errmsg("column \"%s\" in WITHOUT OVERLAPS is not a range or multirange type", key),
-							 parser_errposition(cxt->pstate, constraint->location)));
+					if (!OidIsValid(typid) || !(type_is_range(typid) || type_is_multirange(typid)))
+						ereport(ERROR,
+								(errcode(ERRCODE_DATATYPE_MISMATCH),
+								 errmsg("column \"%s\" in WITHOUT OVERLAPS is not a range or multirange type", key),
+								 parser_errposition(cxt->pstate, constraint->location)));
+				}
 			}
 
 
@@ -2788,6 +2792,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 
 				checkcon->conname = psprintf("%s_not_empty", key);
 				checkcon->contype = CONSTR_CHECK;
+				checkcon->without_overlaps = true;
 				checkcon->raw_expr = expr;
 				checkcon->cooked_expr = NULL;
 				checkcon->is_no_inherit = false;

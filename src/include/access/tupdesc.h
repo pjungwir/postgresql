@@ -31,6 +31,7 @@ typedef struct ConstrCheck
 	char	   *ccbin;			/* nodeToString representation of expr */
 	bool		ccvalid;
 	bool		ccnoinherit;	/* this is a non-inheritable constraint */
+	bool		ccperiod;		/* used by WITHOUT OVERLAPS PRIMARY KEY */
 } ConstrCheck;
 
 /* This structure contains constraints of a tuple */
