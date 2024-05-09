@@ -27,6 +27,8 @@ struct AlterTableUtilityContext;	/* avoid including tcop/utility.h here */
 extern ObjectAddress DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId,
 									ObjectAddress *typaddress, const char *queryString);
 
+extern bool get_pk_period_check_constraint(Relation heapRel, Oid *check_oid, Oid *pk_oid);
+
 extern TupleDesc BuildDescForRelation(const List *columns);
 
 extern void RemoveRelations(DropStmt *drop);

@@ -45,6 +45,20 @@ CREATE TABLE temporal_rng (
 \d temporal_rng
 SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rng_pk';
 SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng_pk';
+-- can't drop the CHECK constraint:
+ALTER TABLE temporal_rng DROP CONSTRAINT valid_at_not_empty;
+-- dropping the PK drops the CHECK constraint:
+ALTER TABLE temporal_rng DROP CONSTRAINT temporal_rng_pk;
+\d temporal_rng
+-- fail if a constraint with that name already exists:
+ALTER TABLE temporal_rng ADD CONSTRAINT valid_at_not_empty CHECK (NOT isempty(valid_at));
+ALTER TABLE temporal_rng ADD CONSTRAINT temporal_rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+DROP TABLE temporal_rng;
+-- TODO: partitions
+  -- from CREATE
+    -- no more warnings?
+    -- \d shows it on the child table
+    -- on child table: include the same tests as here above (can't drop the CHECK, it disappears when you drop the PK)
 
 -- PK with two columns plus a range:
 -- We don't drop this table because tests below also need multiple scalar columns.
@@ -76,6 +90,15 @@ CREATE TABLE temporal_mltrng (
   CONSTRAINT temporal_mltrng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
 \d temporal_mltrng
+-- can't drop the CHECK constraint:
+ALTER TABLE temporal_mltrng DROP CONSTRAINT valid_at_not_empty;
+-- dropping the PK drops the CHECK constraint:
+ALTER TABLE temporal_mltrng DROP CONSTRAINT temporal_rng_pk;
+\d temporal_mltrng
+-- fail if a constraint with that name already exists:
+ALTER TABLE temporal_mltrng ADD CONSTRAINT valid_at_not_empty CHECK (NOT isempty(valid_at));
+ALTER TABLE temporal_mltrng ADD CONSTRAINT temporal_mltrng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+DROP TABLE temporal_mltrng;
 
 -- PK with two columns plus a multirange:
 -- We don't drop this table because tests below also need multiple scalar columns.
@@ -88,6 +111,37 @@ CREATE TABLE temporal_mltrng2 (
 \d temporal_mltrng2
 SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_mltrng2_pk';
 SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_mltrng2_pk';
+
+-- test when the WITHOUT OVERLAPS column type changes:
+CREATE TABLE temporal_rng (
+	id int4range,
+	valid_at daterange,
+	CONSTRAINT temporal_rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+ALTER TABLE temporal_rng
+  ALTER COLUMN valid_at TYPE daterange USING daterange(lower(valid_at), upper(valid_at));
+\d temporal_rng
+-- can't drop the CHECK constraint:
+ALTER TABLE temporal_rng DROP CONSTRAINT valid_at_not_empty;
+-- dropping the PK drops the CHECK constraint:
+ALTER TABLE temporal_rng DROP CONSTRAINT temporal_rng_pk;
+\d temporal_rng
+DROP TABLE temporal_rng;
+
+-- test when the WITHOUT OVERLAPS column name changes:
+CREATE TABLE temporal_rng (
+	id int4range,
+	valid_at daterange,
+	CONSTRAINT temporal_rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+ALTER TABLE temporal_rng RENAME valid_at TO valid_at1;
+\d temporal_rng
+-- can't drop the CHECK constraint:
+ALTER TABLE temporal_rng DROP CONSTRAINT valid_at_not_empty;
+-- dropping the PK drops the CHECK constraint:
+ALTER TABLE temporal_rng DROP CONSTRAINT temporal_rng_pk;
+\d temporal_rng
+DROP TABLE temporal_rng;
 
 -- UNIQUE with no columns just WITHOUT OVERLAPS:
 
@@ -150,7 +204,6 @@ DROP TYPE textrange2;
 -- test ALTER TABLE ADD CONSTRAINT
 --
 
-DROP TABLE temporal_rng;
 CREATE TABLE temporal_rng (
 	id int4range,
 	valid_at daterange
@@ -158,8 +211,35 @@ CREATE TABLE temporal_rng (
 ALTER TABLE temporal_rng
 	ADD CONSTRAINT temporal_rng_pk
 	PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+-- can't drop the CHECK constraint:
+ALTER TABLE temporal_rng DROP CONSTRAINT valid_at_not_empty;
+-- dropping the PK drops the CHECK constraint:
+ALTER TABLE temporal_rng DROP CONSTRAINT temporal_rng_pk;
+\d temporal_rng
+-- fail if a constraint with that name already exists:
+ALTER TABLE temporal_rng ADD CONSTRAINT valid_at_not_empty CHECK (NOT isempty(valid_at));
+ALTER TABLE temporal_rng ADD CONSTRAINT temporal_rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+DROP TABLE temporal_rng;
+
+CREATE TABLE temporal_mltrng (
+  id int4range,
+  valid_at datemultirange
+);
+ALTER TABLE temporal_mltrng
+	ADD CONSTRAINT temporal_mltrng_pk
+	PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+-- can't drop the CHECK constraint:
+ALTER TABLE temporal_mltrng DROP CONSTRAINT valid_at_not_empty;
+-- dropping the PK drops the CHECK constraint:
+ALTER TABLE temporal_mltrng DROP CONSTRAINT temporal_mltrng_pk;
+\d temporal_mltrng
+-- fail if a constraint with that name already exists:
+ALTER TABLE temporal_mltrng ADD CONSTRAINT valid_at_not_empty CHECK (NOT isempty(valid_at));
+ALTER TABLE temporal_mltrng ADD CONSTRAINT temporal_mltrng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+DROP TABLE temporal_mltrng;
 
 -- PK with USING INDEX (not possible):
+
 CREATE TABLE temporal3 (
 	id int4range,
 	valid_at daterange
@@ -200,6 +280,14 @@ ALTER TABLE temporal3
 	ADD COLUMN valid_at daterange,
 	ADD CONSTRAINT temporal3_pk
 	PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+-- can't drop the CHECK constraint:
+ALTER TABLE temporal3 DROP CONSTRAINT valid_at_not_empty;
+-- dropping the PK drops the CHECK constraint:
+ALTER TABLE temporal3 DROP CONSTRAINT temporal3_pk;
+\d temporal3
+-- fail if a constraint with that name already exists:
+ALTER TABLE temporal3 ADD CONSTRAINT valid_at_not_empty CHECK (NOT isempty(valid_at));
+ALTER TABLE temporal3 ADD CONSTRAINT temporal3_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
 DROP TABLE temporal3;
 
 -- Add range column and UNIQUE constraint at the same time
@@ -216,6 +304,12 @@ DROP TABLE temporal3;
 -- test PK inserts
 --
 
+CREATE TABLE temporal_rng (
+	id int4range,
+	valid_at daterange,
+	CONSTRAINT temporal_rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+
 -- okay:
 INSERT INTO temporal_rng (id, valid_at) VALUES ('[1,2)', daterange('2018-01-02', '2018-02-03'));
 INSERT INTO temporal_rng (id, valid_at) VALUES ('[1,2)', daterange('2018-03-03', '2018-04-04'));
@@ -227,6 +321,12 @@ INSERT INTO temporal_rng (id, valid_at) VALUES ('[1,2)', daterange('2018-01-01',
 INSERT INTO temporal_rng (id, valid_at) VALUES (NULL, daterange('2018-01-01', '2018-01-05'));
 INSERT INTO temporal_rng (id, valid_at) VALUES ('[3,4)', NULL);
 INSERT INTO temporal_rng (id, valid_at) VALUES ('[3,4)', 'empty');
+
+CREATE TABLE temporal_mltrng (
+  id int4range,
+  valid_at datemultirange,
+  CONSTRAINT temporal_mltrng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
 
 -- okay:
 INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[1,2)', datemultirange(daterange('2018-01-02', '2018-02-03')));
@@ -332,10 +432,19 @@ CREATE TABLE temporal_partitioned (
 	id int4range,
 	valid_at daterange,
   name text,
-	CONSTRAINT temporal_paritioned_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+	CONSTRAINT temporal_partitioned_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 ) PARTITION BY LIST (id);
 CREATE TABLE tp1 PARTITION OF temporal_partitioned FOR VALUES IN ('[1,2)', '[2,3)');
 CREATE TABLE tp2 PARTITION OF temporal_partitioned FOR VALUES IN ('[3,4)', '[4,5)');
+SELECT oid, conislocal, conperiod, conkey FROM pg_constraint WHERE conname = 'temporal_partitioned_pk';
+SELECT oid, conislocal, conperiod, conkey FROM pg_constraint WHERE conname = 'valid_at_not_empty' AND conrelid IN ('temporal_partitioned'::regclass, 'tp1'::regclass, 'tp2'::regclass);
+\d tp1
+-- can't drop the CHECK constraint:
+ALTER TABLE tp1 DROP CONSTRAINT valid_at_not_empty;
+-- dropping the PK drops all the CHECK constraints:
+ALTER TABLE temporal_partitioned DROP CONSTRAINT temporal_partitioned_pk;
+\d temporal_partitioned
+\d tp1
 INSERT INTO temporal_partitioned (id, valid_at, name) VALUES
   ('[1,2)', daterange('2000-01-01', '2000-02-01'), 'one'),
   ('[1,2)', daterange('2000-02-01', '2000-03-01'), 'one'),
@@ -350,7 +459,7 @@ CREATE TABLE temporal_partitioned (
 	id int4range,
 	valid_at daterange,
   name text,
-	CONSTRAINT temporal_paritioned_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
+	CONSTRAINT temporal_partitioned_uq UNIQUE (id, valid_at WITHOUT OVERLAPS)
 ) PARTITION BY LIST (id);
 CREATE TABLE tp1 PARTITION OF temporal_partitioned FOR VALUES IN ('[1,2)', '[2,3)');
 CREATE TABLE tp2 PARTITION OF temporal_partitioned FOR VALUES IN ('[3,4)', '[4,5)');
@@ -1329,7 +1438,7 @@ CREATE TABLE temporal_partitioned_rng (
 	id int4range,
 	valid_at daterange,
   name text,
-	CONSTRAINT temporal_paritioned_rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+	CONSTRAINT temporal_partitioned_rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 ) PARTITION BY LIST (id);
 CREATE TABLE tp1 partition OF temporal_partitioned_rng FOR VALUES IN ('[1,2)', '[3,4)', '[5,6)', '[7,8)', '[9,10)', '[11,12)');
 CREATE TABLE tp2 partition OF temporal_partitioned_rng FOR VALUES IN ('[2,3)', '[4,5)', '[6,7)', '[8,9)', '[10,11)', '[12,13)');
@@ -1337,6 +1446,8 @@ INSERT INTO temporal_partitioned_rng (id, valid_at, name) VALUES
   ('[1,2)', daterange('2000-01-01', '2000-02-01'), 'one'),
   ('[1,2)', daterange('2000-02-01', '2000-03-01'), 'one'),
   ('[2,3)', daterange('2000-01-01', '2010-01-01'), 'two');
+
+-- TODO: partitioned *then* you add the PK
 
 CREATE TABLE temporal_partitioned_fk_rng2rng (
 	id int4range,

@@ -903,6 +903,7 @@ RelationGetNotNullConstraints(Oid relid, bool cooked)
 			cooked->skip_validation = false;
 			cooked->is_local = true;
 			cooked->inhcount = 0;
+			cooked->conperiod = false;
 			cooked->is_no_inherit = conForm->connoinherit;
 
 			notnulls = lappend(notnulls, cooked);

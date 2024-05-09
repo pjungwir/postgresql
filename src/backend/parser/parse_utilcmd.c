@@ -2788,6 +2788,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 
 				checkcon->conname = psprintf("%s_not_empty", key);
 				checkcon->contype = CONSTR_CHECK;
+				checkcon->without_overlaps = true;
 				checkcon->raw_expr = expr;
 				checkcon->cooked_expr = NULL;
 				checkcon->is_no_inherit = false;

@@ -103,7 +103,7 @@ static ObjectAddress AddNewRelationType(const char *typeName,
 static void RelationRemoveInheritance(Oid relid);
 static Oid	StoreRelCheck(Relation rel, const char *ccname, Node *expr,
 						  bool is_validated, bool is_local, int inhcount,
-						  bool is_no_inherit, bool is_internal);
+						  bool is_no_inherit, bool is_internal, bool without_overlaps);
 static void StoreConstraints(Relation rel, List *cooked_constraints,
 							 bool is_internal);
 static bool MergeWithExistingConstraint(Relation rel, const char *ccname, Node *expr,
@@ -2065,7 +2065,7 @@ SetAttrMissing(Oid relid, char *attname, char *value)
 static Oid
 StoreRelCheck(Relation rel, const char *ccname, Node *expr,
 			  bool is_validated, bool is_local, int inhcount,
-			  bool is_no_inherit, bool is_internal)
+			  bool is_no_inherit, bool is_internal, bool without_overlaps)
 {
 	char	   *ccbin;
 	List	   *varList;
@@ -2155,7 +2155,7 @@ StoreRelCheck(Relation rel, const char *ccname, Node *expr,
 							  is_local, /* conislocal */
 							  inhcount, /* coninhcount */
 							  is_no_inherit,	/* connoinherit */
-							  false,	/* conperiod */
+							  without_overlaps,	/* conperiod */
 							  is_internal); /* internally constructed? */
 
 	pfree(ccbin);
@@ -2252,7 +2252,7 @@ StoreConstraints(Relation rel, List *cooked_constraints, bool is_internal)
 					StoreRelCheck(rel, con->name, con->expr,
 								  !con->skip_validation, con->is_local,
 								  con->inhcount, con->is_no_inherit,
-								  is_internal);
+								  is_internal, con->conperiod);
 				numchecks++;
 				break;
 
@@ -2399,6 +2399,7 @@ AddRelationNewConstraints(Relation rel,
 		cooked->is_local = is_local;
 		cooked->inhcount = is_local ? 0 : 1;
 		cooked->is_no_inherit = false;
+		cooked->conperiod = false;
 		cookedConstraints = lappend(cookedConstraints, cooked);
 	}
 
@@ -2471,7 +2472,15 @@ AddRelationNewConstraints(Relation rel,
 												allow_merge, is_local,
 												cdef->initially_valid,
 												cdef->is_no_inherit))
+				{
+					/*
+					 * We cannot merge a conperiod CHECK constraint
+					 * with one that is not conperiod.
+					 */
+					// TODO: elog if we found a non-conperiod constraint.
+
 					continue;
+				}
 			}
 			else
 			{
@@ -2518,7 +2527,8 @@ AddRelationNewConstraints(Relation rel,
 			 */
 			constrOid =
 				StoreRelCheck(rel, ccname, expr, cdef->initially_valid, is_local,
-							  is_local ? 0 : 1, cdef->is_no_inherit, is_internal);
+							  is_local ? 0 : 1, cdef->is_no_inherit, is_internal,
+							  cdef->without_overlaps);
 
 			numchecks++;
 
@@ -2532,6 +2542,7 @@ AddRelationNewConstraints(Relation rel,
 			cooked->is_local = is_local;
 			cooked->inhcount = is_local ? 0 : 1;
 			cooked->is_no_inherit = cdef->is_no_inherit;
+			cooked->conperiod = cdef->without_overlaps;
 			cookedConstraints = lappend(cookedConstraints, cooked);
 		}
 		else if (cdef->contype == CONSTR_NOTNULL)
@@ -2632,6 +2643,7 @@ AddRelationNewConstraints(Relation rel,
 			nncooked->is_local = is_local;
 			nncooked->inhcount = cdef->inhcount;
 			nncooked->is_no_inherit = cdef->is_no_inherit;
+			nncooked->conperiod = false;
 
 			cookedConstraints = lappend(cookedConstraints, nncooked);
 		}

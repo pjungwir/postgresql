@@ -45,6 +45,7 @@ typedef struct CookedConstraint
 	int			inhcount;		/* number of times constraint is inherited */
 	bool		is_no_inherit;	/* constraint has local def and cannot be
 								 * inherited */
+	bool		conperiod;		/* constraint is for WITHOUT OVERLAPS */
 } CookedConstraint;
 
 extern Relation heap_create(const char *relname,

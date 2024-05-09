@@ -1225,6 +1225,36 @@ index_create(Relation heapRelation,
 	CommandCounterIncrement();
 
 	/*
+	 * If the index is a PRIMARY KEY with WITHOUT OVERLAPS,
+	 * we must create a CHECK constraint to prevent range/multirange
+	 * values of 'empty'. Since empty doesn't overlap itself,
+	 * duplicates would be allowed.
+	 */
+	if (isprimary)
+	{
+		ObjectAddress pk_address = InvalidObjectAddress;
+		ObjectAddress check_address = InvalidObjectAddress;
+		Oid pk_oid = InvalidOid;
+		Oid check_oid = InvalidOid;
+
+		if (get_pk_period_check_constraint(heapRelation, &check_oid, &pk_oid))
+		{
+			Assert(OidIsValid(check_oid));
+			Assert(OidIsValid(pk_oid));
+
+			ObjectAddressSet(check_address, ConstraintRelationId, check_oid);
+			ObjectAddressSet(pk_address, ConstraintRelationId, pk_oid);
+
+			/*
+			 * Register the CHECK constraint as an INTERNAL dependency of the PK
+			 * so that it can't be dropped by hand and is dropped automatically
+			 * with the PK.
+			 */
+			recordDependencyOn(&check_address, &pk_address, DEPENDENCY_INTERNAL);
+		}
+	}
+
+	/*
 	 * In bootstrap mode, we have to fill in the index strategy structure with
 	 * information from the catalogs.  If we aren't bootstrapping, then the
 	 * relcache entry has already been rebuilt thanks to sinval update during
