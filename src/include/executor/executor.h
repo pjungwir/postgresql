@@ -642,6 +642,8 @@ extern void check_exclusion_constraint(Relation heap, Relation index,
 									   ItemPointer tupleid,
 									   const Datum *values, const bool *isnull,
 									   EState *estate, bool newIndex);
+extern void ExecWithoutOverlapsNotEmpty(Relation rel, Datum attval,
+										Oid typtype, Oid typtypid);
 
 /*
  * prototypes from functions in execReplication.c

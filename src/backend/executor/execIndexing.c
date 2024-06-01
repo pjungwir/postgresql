@@ -114,6 +114,8 @@
 #include "executor/executor.h"
 #include "nodes/nodeFuncs.h"
 #include "storage/lmgr.h"
+#include "utils/multirangetypes.h"
+#include "utils/rangetypes.h"
 #include "utils/snapmgr.h"
 
 /* waitMode argument to check_exclusion_or_unique_constraint() */
@@ -1096,4 +1098,37 @@ index_expression_changed_walker(Node *node, Bitmapset *allUpdatedCols)
 
 	return expression_tree_walker(node, index_expression_changed_walker,
 								  (void *) allUpdatedCols);
+}
+
+/*
+ * ExecWithoutOverlapsNotEmpty - raise an error if the tuple has an empty
+ * range or multirange in the given attribute.
+ */
+void
+ExecWithoutOverlapsNotEmpty(Relation rel, Datum attval, Oid typtype, Oid atttypid)
+{
+	bool isempty;
+	RangeType *r;
+	MultirangeType *mr;
+
+	switch (typtype)
+	{
+		case TYPTYPE_RANGE:
+			r = DatumGetRangeTypeP(attval);
+			isempty = RangeIsEmpty(r);
+			break;
+		case TYPTYPE_MULTIRANGE:
+			mr = DatumGetMultirangeTypeP(attval);
+			isempty = MultirangeIsEmpty(mr);
+			break;
+		default:
+			elog(ERROR, "Got unknown type for WITHOUT OVERLAPS column: %d", atttypid);
+	}
+
+	/* Report a CHECK_VIOLATION */
+	if (isempty)
+		ereport(ERROR,
+				(errcode(ERRCODE_CHECK_VIOLATION),
+				 errmsg("new row for relation \"%s\" contains empty WITHOUT OVERLAPS value",
+						RelationGetRelationName(rel))));
 }

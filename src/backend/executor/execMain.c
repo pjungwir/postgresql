@@ -59,6 +59,7 @@
 #include "utils/partcache.h"
 #include "utils/rls.h"
 #include "utils/snapmgr.h"
+#include "utils/typcache.h"
 
 
 /* Hooks for plugins to get control in ExecutorStart/Run/Finish/End */
@@ -1984,6 +1985,34 @@ ExecConstraints(ResultRelInfo *resultRelInfo,
 						 val_desc ? errdetail("Failing row contains %s.", val_desc) : 0,
 						 errtablecol(orig_rel, attrChk)));
 			}
+		}
+	}
+
+	/*
+	 * If there are WITHOUT OVERLAPS constraints,
+	 * we must forbid empty range/multirange values.
+	 */
+	if (constr->num_periods > 0)
+	{
+		uint16	i;
+
+		for (i = 0; i < constr->num_periods; i++)
+		{
+			AttrNumber attno = constr->periods[i];
+			Form_pg_attribute att;
+			TypeCacheEntry *typcache;
+			Datum	attval;
+			bool	isnull;
+
+			attval = slot_getattr(slot, attno, &isnull);
+			if (isnull)
+				continue;
+
+			att = TupleDescAttr(tupdesc, attno - 1);
+			typcache = lookup_type_cache(att->atttypid, 0);
+			ExecWithoutOverlapsNotEmpty(rel, attval,
+										typcache->typtype,
+										att->atttypid);
 		}
 	}
 

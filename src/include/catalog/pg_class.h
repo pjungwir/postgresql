@@ -119,6 +119,9 @@ CATALOG(pg_class,1259,RelationRelationId) BKI_BOOTSTRAP BKI_ROWTYPE_OID(83,Relat
 	/* is relation a partition? */
 	bool		relispartition BKI_DEFAULT(f);
 
+	/* # of WITHOUT OVERLAPS constraints for class */
+	int16		relperiods BKI_DEFAULT(0);
+
 	/* link to original rel during table rewrite; otherwise 0 */
 	Oid			relrewrite BKI_DEFAULT(0) BKI_LOOKUP_OPT(pg_class);
 
