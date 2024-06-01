@@ -1394,7 +1394,8 @@ index_concurrently_create_copy(Relation heapRelation, Oid oldIndexId,
 							oldInfo->ii_NullsNotDistinct,
 							false,	/* not ready for inserts */
 							true,
-							indexRelation->rd_indam->amsummarizing);
+							indexRelation->rd_indam->amsummarizing,
+							oldInfo->ii_WithoutOverlaps);
 
 	/*
 	 * Extract the list of column names and the column numbers for the new
@@ -2431,7 +2432,8 @@ BuildIndexInfo(Relation index)
 					   indexStruct->indnullsnotdistinct,
 					   indexStruct->indisready,
 					   false,
-					   index->rd_indam->amsummarizing);
+					   index->rd_indam->amsummarizing,
+					   indexStruct->indisexclusion && indexStruct->indisunique);
 
 	/* fill in attribute numbers */
 	for (i = 0; i < numAtts; i++)
@@ -2490,7 +2492,8 @@ BuildDummyIndexInfo(Relation index)
 					   indexStruct->indnullsnotdistinct,
 					   indexStruct->indisready,
 					   false,
-					   index->rd_indam->amsummarizing);
+					   index->rd_indam->amsummarizing,
+					   indexStruct->indisexclusion && indexStruct->indisunique);
 
 	/* fill in attribute numbers */
 	for (i = 0; i < numAtts; i++)
@@ -3226,7 +3229,6 @@ IndexCheckExclusion(Relation heapRelation,
 	indexInfo->ii_ExpressionsState = NIL;
 	indexInfo->ii_PredicateState = NULL;
 }
-
 
 /*
  * validate_index - support code for concurrent index builds
