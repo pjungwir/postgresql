@@ -229,6 +229,12 @@ CreateTupleDescCopyConstr(TupleDesc tupdesc)
 			}
 		}
 
+		if ((cpy->num_periods = constr->num_periods) > 0)
+		{
+			cpy->periods = (AttrNumber *) palloc(cpy->num_periods * sizeof(AttrNumber));
+			memcpy(cpy->periods, constr->periods, cpy->num_periods * sizeof(AttrNumber));
+		}
+
 		desc->constr = cpy;
 	}
 
@@ -551,6 +557,20 @@ equalTupleDescs(TupleDesc tupdesc1, TupleDesc tupdesc2)
 				  check1->ccnoinherit == check2->ccnoinherit))
 				return false;
 		}
+
+		/*
+		 * They should have the same number of periods,
+		 * with the same attnos.
+		 */
+		n = constr1->num_periods;
+		if (n != constr2->num_periods)
+			return false;
+		for (i = 0; i < n; i++)
+		{
+			if (constr1->periods[i] != constr2->periods[i])
+				return false;
+		}
+
 	}
 	else if (tupdesc2->constr != NULL)
 		return false;

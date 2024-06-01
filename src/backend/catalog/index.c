@@ -1393,7 +1393,8 @@ index_concurrently_create_copy(Relation heapRelation, Oid oldIndexId,
 							oldInfo->ii_NullsNotDistinct,
 							false,	/* not ready for inserts */
 							true,
-							indexRelation->rd_indam->amsummarizing);
+							indexRelation->rd_indam->amsummarizing,
+							oldInfo->ii_WithoutOverlaps);
 
 	/*
 	 * Extract the list of column names and the column numbers for the new
@@ -1994,6 +1995,13 @@ index_constraint_create(Relation heapRelation,
 	recordDependencyOn(&idxaddr, &myself, DEPENDENCY_INTERNAL);
 
 	/*
+	 * If this constraint has WITHOUT OVERLAPS,
+	 * update relperiods in the table's pg_class record.
+	 */
+	if (is_without_overlaps)
+		IncrementRelationNumPeriods(heapRelation);
+
+	/*
 	 * Also, if this is a constraint on a partition, give it partition-type
 	 * dependencies on the parent constraint as well as the table.
 	 */
@@ -2430,7 +2438,8 @@ BuildIndexInfo(Relation index)
 					   indexStruct->indnullsnotdistinct,
 					   indexStruct->indisready,
 					   false,
-					   index->rd_indam->amsummarizing);
+					   index->rd_indam->amsummarizing,
+					   indexStruct->indisexclusion && indexStruct->indisunique);
 
 	/* fill in attribute numbers */
 	for (i = 0; i < numAtts; i++)
@@ -2489,7 +2498,8 @@ BuildDummyIndexInfo(Relation index)
 					   indexStruct->indnullsnotdistinct,
 					   indexStruct->indisready,
 					   false,
-					   index->rd_indam->amsummarizing);
+					   index->rd_indam->amsummarizing,
+					   indexStruct->indisexclusion && indexStruct->indisunique);
 
 	/* fill in attribute numbers */
 	for (i = 0; i < numAtts; i++)
@@ -3147,6 +3157,9 @@ IndexCheckExclusion(Relation heapRelation,
 	EState	   *estate;
 	ExprContext *econtext;
 	Snapshot	snapshot;
+	AttrNumber			withoutOverlapsAttno = InvalidAttrNumber;
+	char				withoutOverlapsTyptype = '\0';
+	Oid					withoutOverlapsTypid = InvalidOid;
 
 	/*
 	 * If we are reindexing the target index, mark it as no longer being
@@ -3155,6 +3168,27 @@ IndexCheckExclusion(Relation heapRelation,
 	 */
 	if (ReindexIsCurrentlyProcessingIndex(RelationGetRelid(indexRelation)))
 		ResetReindexProcessing();
+
+	/*
+	 * If this is for a WITHOUT OVERLAPS constraint,
+	 * then we can check for empty ranges/multiranges in the same pass,
+	 * rather than scanning the table all over again.
+	 * Look up what we need about the WITHOUT OVERLAPS attribute.
+	 */
+	if (indexInfo->ii_WithoutOverlaps)
+	{
+		TupleDesc			tupdesc = RelationGetDescr(heapRelation);
+		Form_pg_attribute	att;
+		TypeCacheEntry	   *typcache;
+
+		withoutOverlapsAttno = indexInfo->ii_IndexAttrNumbers[indexInfo->ii_NumIndexKeyAttrs - 1];
+		att = TupleDescAttr(tupdesc, withoutOverlapsAttno - 1);
+		typcache = lookup_type_cache(att->atttypid, 0);
+
+		withoutOverlapsTyptype = typcache->typtype;
+		withoutOverlapsTypid = att->atttypid;
+	}
+
 
 	/*
 	 * Need an EState for evaluation of index expressions and partial-index
@@ -3194,6 +3228,21 @@ IndexCheckExclusion(Relation heapRelation,
 				continue;
 		}
 
+		if (indexInfo->ii_WithoutOverlaps)
+		{
+			bool attisnull;
+			Datum attval = slot_getattr(slot, withoutOverlapsAttno, &attisnull);
+			/* Nulls are allowed for UNIQUE but not PRIMARY KEY. */
+			if (attisnull)
+				continue;
+			/*
+			 * Check that this tuple doesn't have an empty value.
+			 */
+			ExecWithoutOverlapsNotEmpty(heapRelation, attval,
+										withoutOverlapsTyptype,
+										withoutOverlapsTypid);
+		}
+
 		/*
 		 * Extract index column values, including computing expressions.
 		 */
@@ -3225,7 +3274,6 @@ IndexCheckExclusion(Relation heapRelation,
 	indexInfo->ii_ExpressionsState = NIL;
 	indexInfo->ii_PredicateState = NULL;
 }
-
 
 /*
  * validate_index - support code for concurrent index builds
