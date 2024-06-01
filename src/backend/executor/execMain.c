@@ -63,11 +63,14 @@
 #include "utils/acl.h"
 #include "utils/backend_status.h"
 #include "utils/lsyscache.h"
+#include "utils/multirangetypes.h"
 #include "utils/memutils.h"
 #include "utils/partcache.h"
+#include "utils/rangetypes.h"
 #include "utils/rls.h"
 #include "utils/ruleutils.h"
 #include "utils/snapmgr.h"
+#include "utils/typcache.h"
 
 
 /* Hooks for plugins to get control in ExecutorStart/Run/Finish/End */
@@ -1986,6 +1989,53 @@ ExecConstraints(ResultRelInfo *resultRelInfo,
 						 val_desc ? errdetail("Failing row contains %s.", val_desc) : 0,
 						 errtablecol(orig_rel, attrChk)));
 			}
+		}
+	}
+
+	/*
+	 * If there are WITHOUT OVERLAPS constraints,
+	 * we must forbid empty range/multirange values.
+	 */
+	if (constr->num_periods > 0)
+	{
+		uint16	i;
+
+		for (i = 0; i < constr->num_periods; i++)
+		{
+			AttrNumber attno = constr->periods[i];
+			Form_pg_attribute att;
+			TypeCacheEntry *typcache;
+			Datum	attval;
+			bool	isnull;
+			bool	isempty;
+			RangeType *r;
+			MultirangeType *mr;
+
+			attval = slot_getattr(slot, attno, &isnull);
+			if (isnull)
+				continue;
+
+			att = TupleDescAttr(tupdesc, i);
+			typcache = lookup_type_cache(att->atttypid, 0);
+			switch (typcache->typtype)
+			{
+				case TYPTYPE_RANGE:
+					r = DatumGetRangeTypeP(attval);
+					isempty = RangeIsEmpty(r);
+					break;
+				case TYPTYPE_MULTIRANGE:
+					mr = DatumGetMultirangeTypeP(attval);
+					isempty = MultirangeIsEmpty(mr);
+					break;
+				default:
+					elog(ERROR, "Got unknown type for WITHOUT OVERLAPS column: %d", att->atttypid);
+			}
+
+			if (isempty)
+				ereport(ERROR,
+						(errcode(ERRCODE_CHECK_VIOLATION), // TODO: wrong errcode
+						 errmsg("new row for relation \"%s\" contains empty WITHOUT OVERLAPS value",
+								RelationGetRelationName(rel))));
 		}
 	}
 
