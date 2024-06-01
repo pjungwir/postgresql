@@ -2397,7 +2397,8 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 	 * For UNIQUE and PRIMARY KEY, we just have a list of column names.
 	 *
 	 * Make sure referenced keys exist.  If we are making a PRIMARY KEY index,
-	 * also make sure they are NOT NULL.
+	 * also make sure they are NOT NULL.  For WITHOUT OVERLAPS constraints,
+	 * we make sure the last part is a range or multirange.
 	 */
 	else
 	{
@@ -2409,6 +2410,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 			ColumnDef  *column = NULL;
 			ListCell   *columns;
 			IndexElem  *iparam;
+			Oid			typid = InvalidOid;
 
 			/* Make sure referenced column exists. */
 			foreach(columns, cxt->columns)
@@ -2420,6 +2422,9 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 					break;
 				}
 			}
+			if (!found)
+				column = NULL;
+
 			if (found)
 			{
 				/*
@@ -2475,6 +2480,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 						if (strcmp(key, inhname) == 0)
 						{
 							found = true;
+							typid = inhattr->atttypid;
 
 							/*
 							 * It's tempting to set forced_not_null if the
@@ -2520,6 +2526,45 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 								(errcode(ERRCODE_DUPLICATE_COLUMN),
 								 errmsg("column \"%s\" appears twice in unique constraint",
 										key),
+								 parser_errposition(cxt->pstate, constraint->location)));
+				}
+			}
+
+			/* The WITHOUT OVERLAPS part (if any) must be a range or multirange type. */
+			if (constraint->without_overlaps && lc == list_last_cell(constraint->keys))
+			{
+				if (!found && cxt->isalter)
+				{
+					/*
+					 * Look up the column type on existing table.
+					 * If we can't find it, let things fail in DefineIndex.
+					 */
+					Relation rel = cxt->rel;
+					for (int i = 0; i < rel->rd_att->natts; i++)
+					{
+						Form_pg_attribute attr = TupleDescAttr(rel->rd_att, i);
+						const char *attname;
+
+						if (attr->attisdropped)
+							break;
+
+						attname = NameStr(attr->attname);
+						if (strcmp(attname, key) == 0)
+						{
+							typid = attr->atttypid;
+							break;
+						}
+					}
+				}
+				if (found)
+				{
+					if (!OidIsValid(typid) && column)
+						typid = typenameTypeId(NULL, column->typeName);
+
+					if (!OidIsValid(typid) || !(type_is_range(typid) || type_is_multirange(typid)))
+						ereport(ERROR,
+								(errcode(ERRCODE_DATATYPE_MISMATCH),
+								 errmsg("column \"%s\" in WITHOUT OVERLAPS is not a range or multirange type", key),
 								 parser_errposition(cxt->pstate, constraint->location)));
 				}
 			}
