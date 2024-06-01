@@ -266,6 +266,11 @@ BEGIN;
   INSERT INTO temporal_rng (id, valid_at) VALUES ('[1,2)', daterange('2018-01-01', '2018-01-05'));
   ALTER TABLE temporal_rng ADD CONSTRAINT temporal_rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
 ROLLBACK;
+-- rejects empty:
+BEGIN;
+  INSERT INTO temporal_rng (id, valid_at) VALUES ('[3,4)', 'empty');
+  ALTER TABLE temporal_rng ADD CONSTRAINT temporal_rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+ROLLBACK;
 ALTER TABLE temporal_rng ADD CONSTRAINT temporal_rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
 DELETE FROM temporal_rng;
 
@@ -283,6 +288,8 @@ INSERT INTO temporal_rng (id, valid_at) VALUES ('[3,4)', daterange('2018-01-01',
 INSERT INTO temporal_rng (id, valid_at) VALUES ('[1,2)', daterange('2018-01-01', '2018-01-05'));
 INSERT INTO temporal_rng (id, valid_at) VALUES (NULL, daterange('2018-01-01', '2018-01-05'));
 INSERT INTO temporal_rng (id, valid_at) VALUES ('[3,4)', NULL);
+-- rejects empty:
+INSERT INTO temporal_rng (id, valid_at) VALUES ('[3,4)', 'empty');
 SELECT * FROM temporal_rng ORDER BY id, valid_at;
 
 --
@@ -321,6 +328,11 @@ UPDATE  temporal_rng
 SET     id = '[1,2)',
         valid_at = NULL
 WHERE   id = '[21,22)';
+-- rejects empty:
+UPDATE  temporal_rng
+SET     id = '[1,2)',
+        valid_at = 'empty'
+WHERE   id = '[21,22)';
 SELECT * FROM temporal_rng ORDER BY id, valid_at;
 
 --
@@ -347,6 +359,11 @@ BEGIN;
   INSERT INTO temporal_rng3 (id, valid_at) VALUES ('[1,2)', daterange('2018-01-01', '2018-01-05'));
   ALTER TABLE temporal_rng3 ADD CONSTRAINT temporal_rng3_uq UNIQUE (id, valid_at WITHOUT OVERLAPS);
 ROLLBACK;
+-- rejects empty:
+BEGIN;
+  INSERT INTO temporal_rng3 (id, valid_at) VALUES ('[3,4)', 'empty');
+  ALTER TABLE temporal_rng3 ADD CONSTRAINT temporal_rng3_uq UNIQUE (id, valid_at WITHOUT OVERLAPS);
+ROLLBACK;
 ALTER TABLE temporal_rng3 ADD CONSTRAINT temporal_rng3_uq UNIQUE (id, valid_at WITHOUT OVERLAPS);
 DELETE FROM temporal_rng3;
 
@@ -364,6 +381,8 @@ INSERT INTO temporal_rng3 (id, valid_at) VALUES ('[3,4)', NULL);
 
 -- should fail:
 INSERT INTO temporal_rng3 (id, valid_at) VALUES ('[1,2)', daterange('2018-01-01', '2018-01-05'));
+-- rejects empty:
+INSERT INTO temporal_rng3 (id, valid_at) VALUES ('[3,4)', 'empty');
 SELECT * FROM temporal_rng3 ORDER BY id, valid_at;
 
 --
@@ -401,6 +420,15 @@ SELECT * FROM temporal_rng3 ORDER BY id, valid_at;
 UPDATE  temporal_rng3
 SET     valid_at = daterange('2018-03-01', '2018-05-05')
 WHERE   id = '[1,2)' AND valid_at IS NULL;
+-- rejects empty:
+UPDATE  temporal_rng3
+SET     valid_at = 'empty'
+WHERE   id = '[1,2)' AND valid_at IS NULL;
+-- still rejects empty when scalar part is NULL:
+UPDATE  temporal_rng3
+SET     id = NULL,
+        valid_at = 'empty'
+WHERE   id = '[1,2)' AND valid_at IS NULL;
 SELECT * FROM temporal_rng3 ORDER BY id, valid_at;
 DROP TABLE temporal_rng3;
 
@@ -423,6 +451,11 @@ BEGIN;
   INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[1,2)', datemultirange(daterange('2018-01-01', '2018-01-05')));
   ALTER TABLE temporal_mltrng ADD CONSTRAINT temporal_mltrng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
 ROLLBACK;
+-- rejects empty:
+BEGIN;
+  INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[3,4)', '{}');
+  ALTER TABLE temporal_mltrng ADD CONSTRAINT temporal_mltrng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+ROLLBACK;
 ALTER TABLE temporal_mltrng ADD CONSTRAINT temporal_mltrng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
 DELETE FROM temporal_mltrng;
 
@@ -440,6 +473,8 @@ INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[3,4)', datemultirange(dater
 INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[1,2)', datemultirange(daterange('2018-01-01', '2018-01-05')));
 INSERT INTO temporal_mltrng (id, valid_at) VALUES (NULL, datemultirange(daterange('2018-01-01', '2018-01-05')));
 INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[3,4)', NULL);
+-- rejects empty:
+INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[3,4)', '{}');
 SELECT * FROM temporal_mltrng ORDER BY id, valid_at;
 
 --
@@ -478,6 +513,11 @@ UPDATE  temporal_mltrng
 SET     id = '[1,2)',
         valid_at = NULL
 WHERE   id = '[21,22)';
+-- rejects empty:
+UPDATE  temporal_mltrng
+SET     id = '[1,2)',
+        valid_at = '{}'
+WHERE   id = '[21,22)';
 SELECT * FROM temporal_mltrng ORDER BY id, valid_at;
 
 --
@@ -504,6 +544,11 @@ BEGIN;
   INSERT INTO temporal_mltrng3 (id, valid_at) VALUES ('[1,2)', datemultirange(daterange('2018-01-01', '2018-01-05')));
   ALTER TABLE temporal_mltrng3 ADD CONSTRAINT temporal_mltrng3_uq UNIQUE (id, valid_at WITHOUT OVERLAPS);
 ROLLBACK;
+-- rejects empty:
+BEGIN;
+  INSERT INTO temporal_mltrng3 (id, valid_at) VALUES ('[3,4)', '{}');
+  ALTER TABLE temporal_mltrng3 ADD CONSTRAINT temporal_mltrng3_uq UNIQUE (id, valid_at WITHOUT OVERLAPS);
+ROLLBACK;
 ALTER TABLE temporal_mltrng3 ADD CONSTRAINT temporal_mltrng3_uq UNIQUE (id, valid_at WITHOUT OVERLAPS);
 DELETE FROM temporal_mltrng3;
 
@@ -521,6 +566,8 @@ INSERT INTO temporal_mltrng3 (id, valid_at) VALUES ('[3,4)', NULL);
 
 -- should fail:
 INSERT INTO temporal_mltrng3 (id, valid_at) VALUES ('[1,2)', datemultirange(daterange('2018-01-01', '2018-01-05')));
+-- rejects empty:
+INSERT INTO temporal_mltrng3 (id, valid_at) VALUES ('[3,4)', '{}');
 SELECT * FROM temporal_mltrng3 ORDER BY id, valid_at;
 
 --
@@ -557,6 +604,15 @@ SELECT * FROM temporal_mltrng3 ORDER BY id, valid_at;
 -- should fail:
 UPDATE  temporal_mltrng3
 SET     valid_at = datemultirange(daterange('2018-03-01', '2018-05-05'))
+WHERE   id = '[1,2)' AND valid_at IS NULL;
+-- rejects empty:
+UPDATE  temporal_mltrng3
+SET     valid_at = '{}'
+WHERE   id = '[1,2)' AND valid_at IS NULL;
+-- still rejects empty when scalar part is NULL:
+UPDATE  temporal_mltrng3
+SET     id = NULL,
+        valid_at = '{}'
 WHERE   id = '[1,2)' AND valid_at IS NULL;
 SELECT * FROM temporal_mltrng3 ORDER BY id, valid_at;
 DROP TABLE temporal_mltrng3;
@@ -609,6 +665,12 @@ CREATE TABLE temporal_partitioned (
 ) PARTITION BY LIST (id);
 CREATE TABLE tp1 PARTITION OF temporal_partitioned FOR VALUES IN ('[1,2)', '[2,3)');
 CREATE TABLE tp2 PARTITION OF temporal_partitioned FOR VALUES IN ('[3,4)', '[4,5)');
+SELECT relname, relperiods FROM pg_class WHERE relname IN ('temporal_partitioned', 'tp1', 'tp2') ORDER BY relname;
+ALTER TABLE temporal_partitioned DETACH PARTITION tp1;
+SELECT relname, relperiods FROM pg_class WHERE relname = 'tp1';
+ALTER TABLE tp1 DROP CONSTRAINT tp1_pkey;
+ALTER TABLE temporal_partitioned ATTACH PARTITION tp1 FOR VALUES IN ('[1,2)', '[2,3)');
+SELECT relname, relperiods FROM pg_class WHERE relname = 'tp1';
 INSERT INTO temporal_partitioned (id, valid_at, name) VALUES
   ('[1,2)', daterange('2000-01-01', '2000-02-01'), 'one'),
   ('[1,2)', daterange('2000-02-01', '2000-03-01'), 'one'),
@@ -627,6 +689,12 @@ CREATE TABLE temporal_partitioned (
 ) PARTITION BY LIST (id);
 CREATE TABLE tp1 PARTITION OF temporal_partitioned FOR VALUES IN ('[1,2)', '[2,3)');
 CREATE TABLE tp2 PARTITION OF temporal_partitioned FOR VALUES IN ('[3,4)', '[4,5)');
+SELECT relname, relperiods FROM pg_class WHERE relname IN ('temporal_partitioned', 'tp1', 'tp2') ORDER BY relname;
+ALTER TABLE temporal_partitioned DETACH PARTITION tp1;
+SELECT relname, relperiods FROM pg_class WHERE relname = 'tp1';
+ALTER TABLE tp1 DROP CONSTRAINT tp1_id_valid_at_excl;
+ALTER TABLE temporal_partitioned ATTACH PARTITION tp1 FOR VALUES IN ('[1,2)', '[2,3)');
+SELECT relname, relperiods FROM pg_class WHERE relname = 'tp1';
 INSERT INTO temporal_partitioned (id, valid_at, name) VALUES
   ('[1,2)', daterange('2000-01-01', '2000-02-01'), 'one'),
   ('[1,2)', daterange('2000-02-01', '2000-03-01'), 'one'),
