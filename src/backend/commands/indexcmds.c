@@ -16,6 +16,7 @@
 #include "postgres.h"
 
 #include "access/amapi.h"
+#include "access/gist.h"
 #include "access/heapam.h"
 #include "access/htup_details.h"
 #include "access/reloptions.h"
@@ -918,6 +919,26 @@ DefineIndex(Oid tableId,
 					  accessMethodName, accessMethodId,
 					  amcanorder, stmt->isconstraint, root_save_userid,
 					  root_save_sec_context, &root_save_nestlevel);
+
+	/*
+	 * GiST indexes wanting to be unique require a stratnum support proc
+	 * that can translate RTEqualStrategyNumber,
+	 * so that we have a consistent definition for "equals".
+	 */
+	if (stmt->unique && accessMethodId == GIST_AM_OID)
+	{
+		int	i;
+
+		for (i = 0; i < indexInfo->ii_NumIndexKeyAttrs; i++)
+		{
+			Oid	equalop;
+			StrategyNumber stratnum = RTEqualStrategyNumber;
+
+			/* No need to save these values; the index will look them up */
+			GetOperatorFromWellKnownStrategy(opclassIds[i], typeIds[i],
+											 &stratnum, &equalop);
+		}
+	}
 
 	/*
 	 * Extra checks when creating a PRIMARY KEY index.
@@ -2382,6 +2403,81 @@ GetDefaultOpClass(Oid type_id, Oid am_id)
 
 	return InvalidOid;
 }
+
+/*
+ * GetOperatorFromWellKnownStrategy
+ *
+ * opclass - the opclass to use
+ * atttype - the type to ask about
+ * strat - holds the input and output strategy number
+ * opid - holds the operator we found
+ *
+ * Finds an operator from a "well-known" strategy number.  This is used for
+ * unique GiST indexes to look up equality operators, since the strategy
+ * numbers for non-btree indexams need not follow any fixed scheme.  We ask
+ * an opclass support function to translate from the well-known number to an
+ * internal value.  If the function isn't defined or it gives no result, we
+ * raise an error.  Finally we use that strategy to look up the operator.
+ */
+void
+GetOperatorFromWellKnownStrategy(Oid opclass, Oid atttype,
+								 StrategyNumber *strat, Oid *opid)
+{
+	Oid		opfamily;
+	Oid		opcintype;
+	StrategyNumber instrat = *strat;
+	HeapTuple tuple;
+	Form_pg_opclass cla_tup;
+
+	/*
+	 * For now we expect only RTEqual,
+	 * but temporal constraints will need RTOverlap too.
+	 */
+	Assert(instrat == RTEqualStrategyNumber);
+
+	tuple = SearchSysCache1(CLAOID, ObjectIdGetDatum(opclass));
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for operator class %u", opclass);
+
+	cla_tup = (Form_pg_opclass) GETSTRUCT(tuple);
+	opfamily = cla_tup->opcfamily;
+	opcintype = cla_tup->opcintype;
+
+	ReleaseSysCache(tuple);
+
+	/*
+	 * Ask the opclass to translate to its internal stratnum
+	 *
+	 * For now we only need GiST support, but this could support other
+	 * indexams if we wanted.
+	 */
+
+	Assert(get_opclass_method(opclass) == GIST_AM_OID);
+	*strat = GistTranslateStratnum(opclass, instrat);
+	if (*strat == InvalidStrategy)
+		ereport(ERROR,
+				errcode(ERRCODE_UNDEFINED_OBJECT),
+				errmsg("could not identify an equality operator for type %s", format_type_be(atttype)),
+				errdetail("Could not translate strategy number %d for operator class \"%s\" for access method \"%s\".",
+						  instrat, NameStr(((Form_pg_opclass) GETSTRUCT(tuple))->opcname), "gist"));
+
+	/* Get the operator for that strategy */
+
+	*opid = get_opfamily_member(opfamily, opcintype, opcintype, *strat);
+	if (!OidIsValid(*opid))
+	{
+		tuple = SearchSysCache1(OPFAMILYOID, ObjectIdGetDatum(opfamily));
+		if (!HeapTupleIsValid(tuple))
+			elog(ERROR, "cache lookup failed for operator family %u", opfamily);
+
+		ereport(ERROR,
+				errcode(ERRCODE_UNDEFINED_OBJECT),
+				errmsg("could not identify an equality operator for type %s", format_type_be(atttype)),
+				errdetail("There is no suitable operator in operator family \"%s\" for access method \"%s\".",
+						  NameStr(((Form_pg_opfamily) GETSTRUCT(tuple))->opfname), "gist"));
+	}
+}
+
 
 /*
  *	makeObjectName()

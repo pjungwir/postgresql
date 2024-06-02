@@ -66,7 +66,7 @@ gisthandler(PG_FUNCTION_ARGS)
 	amroutine->amcanorder = false;
 	amroutine->amcanorderbyop = true;
 	amroutine->amcanbackward = false;
-	amroutine->amcanunique = false;
+	amroutine->amcanunique = true;
 	amroutine->amcanmulticol = true;
 	amroutine->amoptionalkey = true;
 	amroutine->amsearcharray = false;

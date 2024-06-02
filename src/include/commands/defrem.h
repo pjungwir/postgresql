@@ -14,6 +14,7 @@
 #ifndef DEFREM_H
 #define DEFREM_H
 
+#include "access/stratnum.h"
 #include "catalog/objectaddress.h"
 #include "nodes/params.h"
 #include "parser/parse_node.h"
@@ -48,6 +49,8 @@ extern bool CheckIndexCompatible(Oid oldId,
 extern Oid	GetDefaultOpClass(Oid type_id, Oid am_id);
 extern Oid	ResolveOpClass(const List *opclass, Oid attrType,
 						   const char *accessMethodName, Oid accessMethodId);
+extern void GetOperatorFromWellKnownStrategy(Oid opclass, Oid atttype,
+											 StrategyNumber *strat, Oid *opid);
 
 /* commands/functioncmds.c */
 extern ObjectAddress CreateFunction(ParseState *pstate, CreateFunctionStmt *stmt);

@@ -186,3 +186,27 @@ create index gist_tbl_box_index on gist_tbl using gist (b);
 insert into gist_tbl
   select box(point(0.05*i, 0.05*i)) from generate_series(0,10) as i;
 drop table gist_tbl;
+
+--
+-- test unique indexes
+--
+
+-- index first rows second:
+create table gist_tbl (r int4range);
+create unique index gist_tbl_uq on gist_tbl using gist (r);
+insert into gist_tbl values ('[1,2)');
+insert into gist_tbl values ('[2,3)');
+insert into gist_tbl values ('[1,2)');
+select * from gist_tbl;
+drop table gist_tbl;
+
+-- rows first index second:
+create table gist_tbl (r int4range);
+insert into gist_tbl values ('[1,2)');
+insert into gist_tbl values ('[2,3)');
+create unique index gist_tbl_uq on gist_tbl using gist (r);
+drop index gist_tbl_uq;
+insert into gist_tbl values ('[1,2)');
+create unique index gist_tbl_uq on gist_tbl using gist (r);
+select * from gist_tbl;
+drop table gist_tbl;

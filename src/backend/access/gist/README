@@ -334,7 +334,7 @@ Level        Tree (level_step = 1)                Tree (level_step = 2)
 
 (b) - buffer
 
-Logically, a buffer is just bunch of tuples. Physically, it is divided in
+Logically, a buffer is just a bunch of tuples. Physically, it is divided into
 pages, backed by a temporary file. Each buffer can be in one of two states:
 a) Last page of the buffer is kept in main memory. A node buffer is
 automatically switched to this state when a new index tuple is added to it,
