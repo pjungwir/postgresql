@@ -690,7 +690,8 @@ RelationBuildTupleDesc(Relation relation)
 		constr->has_generated_stored ||
 		ndef > 0 ||
 		attrmiss ||
-		relation->rd_rel->relchecks > 0)
+		relation->rd_rel->relchecks > 0 ||
+		relation->rd_rel->relperiods > 0)
 	{
 		relation->rd_att->constr = constr;
 
@@ -705,6 +706,15 @@ RelationBuildTupleDesc(Relation relation)
 			CheckConstraintFetch(relation);
 		else
 			constr->num_check = 0;
+
+		/*
+		 * Remember if any attributes have a PK or UNIQUE constraint
+		 * using WITHOUT OVERLAPS. We must forbid empties for them.
+		 */
+		if (relation->rd_rel->relperiods > 0)	/* WITHOUT OVERLAPS */
+			WithoutOverlapsFetch(relation)
+		else
+			constr->num_periods = 0;
 	}
 	else
 	{
@@ -4614,6 +4624,73 @@ CheckConstraintFetch(Relation relation)
 	/* Install array only after it's fully valid */
 	relation->rd_att->constr->check = check;
 	relation->rd_att->constr->num_check = found;
+}
+
+/*
+ * Load any WITHOUT OVERLAPS attributes for the relation.
+ *
+ * These are not allowed to hold empty values.
+ */
+static void
+WithoutOverlapsFetch(Relation relation)
+{
+	AttrNumber *periods;
+	int			nperiods = relation->rd_rel->relperiods;
+	Relation	conrel;
+	SysScanDesc	conscan;
+	ScanKeyData	skey[1];
+	HeapTuple	htup;
+	int			found = 0;
+
+	/* Allocate array with room for as many entries as expected */
+	periods = (AttrNumber *)
+		MemoryContextAllocZero(CacheMemoryContext,
+							   nperiods * sizeof(AttrNumber));
+
+	/* Search pg_constraint for relevant entries */
+	ScanKeyInit(&skey[0],
+				Anum_pg_constraint_conrelid,
+				BTEqualStrategyNumber, F_OIDEQ,
+				ObjectIdGetDatum(RelationGetRelid(relation)));
+
+	conrel = table_open(ConstraintRelationId, AccessShareLock);
+	conscan = systable_beginscan(conrel, ConstraintRelidTypidNameIndexId, true,
+								 NULL, 1, skey);
+
+	while (HeapTupleIsValid(htup = systable_getnext(conscan)))
+	{
+		Form_pg_constraint conform = (Form_pg_constraint) GETSTRUCT(htup);
+		Datum		val;
+		bool		isnull;
+
+		/* We want conperiod constraints only */
+		if (!conform->conperiod)
+			continue;
+
+		/* protect limited size of array */
+		if (found >= nperiods)
+		{
+			elog(WARNING, "unexpected pg_constraint record found for relation \"%s\"",
+				 RelationGetRelationName(relation));
+			break;
+		}
+
+		periods[found] = conkey[last]; // TODO
+		found++;
+	}
+
+	systable_endscan(conscan);
+	table_close(conrel, AccessShareLock);
+
+	if (found != nperiods)
+		elog(WARNING, "%d pg_constraint record(s) missing for relation \"%s\"",
+				nperiods - found, RelationGetRelationName(relation));
+
+	// TODO: sort the list?
+
+	/* Install array only after it's fully valid */
+	relation->rd_att->constr->periods = periods;
+	relation->rd_att->constr->num_periods = found;
 }
 
 /*
