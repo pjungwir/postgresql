@@ -684,14 +684,20 @@ RelationBuildTupleDesc(Relation relation)
 		TupleDescAttr(relation->rd_att, 0)->attcacheoff = 0;
 
 	/*
+	 * Remember if any attributes have a PK or UNIQUE constraint
+	 * using WITHOUT OVERLAPS. We must forbid empties for them.
+	 */
+	if (!IsBootstrapProcessingMode())
+		WithoutOverlapsFetch(relation);
+
+	/*
 	 * Set up constraint/default info
 	 */
 	if (constr->has_not_null ||
 		constr->has_generated_stored ||
 		ndef > 0 ||
 		attrmiss ||
-		relation->rd_rel->relchecks > 0 ||
-		relation->rd_rel->relperiods > 0)
+		relation->rd_rel->relchecks > 0)
 	{
 		relation->rd_att->constr = constr;
 
@@ -706,15 +712,6 @@ RelationBuildTupleDesc(Relation relation)
 			CheckConstraintFetch(relation);
 		else
 			constr->num_check = 0;
-
-		/*
-		 * Remember if any attributes have a PK or UNIQUE constraint
-		 * using WITHOUT OVERLAPS. We must forbid empties for them.
-		 */
-		if (relation->rd_rel->relperiods > 0)	/* WITHOUT OVERLAPS */
-			WithoutOverlapsFetch(relation);
-		else
-			constr->num_periods = 0;
 	}
 	else
 	{
@@ -4683,9 +4680,11 @@ CheckConstraintFetch(Relation relation)
 static void
 WithoutOverlapsFetch(Relation relation)
 {
+	relation->rd_att->constr->periods = NULL;
+	relation->rd_att->constr->num_periods = 0;
+#if false
 	Bitmapset  *periods = NULL;
 	AttrNumber *result;
-	int			nperiods = relation->rd_rel->relperiods;
 	Relation	conrel;
 	SysScanDesc	conscan;
 	ScanKeyData	skey[1];
@@ -4721,14 +4720,6 @@ WithoutOverlapsFetch(Relation relation)
 			conform->contype != CONSTRAINT_UNIQUE)
 			continue;
 
-		/* protect limited size of array */
-		if (found >= nperiods)
-		{
-			elog(WARNING, "unexpected pg_constraint record found for relation \"%s\"",
-				 RelationGetRelationName(relation));
-			break;
-		}
-
 		/* Get the attno of the WITHOUT OVERLAPS column */
 		val = heap_getattr(htup, Anum_pg_constraint_conkey,
 						   RelationGetDescr(conrel), &isnull);
@@ -4755,24 +4746,29 @@ WithoutOverlapsFetch(Relation relation)
 	systable_endscan(conscan);
 	table_close(conrel, AccessShareLock);
 
-	if (found != nperiods)
-		elog(WARNING, "%d pg_constraint record(s) missing for relation \"%s\"",
-				nperiods - found, RelationGetRelationName(relation));
-
 	/* Put everything we found into an array */
 	found = bms_num_members(periods);
-	result = (AttrNumber *)
-		MemoryContextAllocZero(CacheMemoryContext,
-							   found * sizeof(AttrNumber));
-	attno = -1;
-	found = 0;
-	while ((attno = bms_next_member(periods, attno)) >= 0)
-		result[found++] = attno;
-	bms_free(periods);
+	if (found > 0)
+	{
+		result = (AttrNumber *)
+			MemoryContextAllocZero(CacheMemoryContext,
+								   found * sizeof(AttrNumber));
+		attno = -1;
+		found = 0;
+		while ((attno = bms_next_member(periods, attno)) >= 0)
+			result[found++] = attno;
+		bms_free(periods);
 
-	/* Install array only after it's fully valid */
-	relation->rd_att->constr->periods = result;
-	relation->rd_att->constr->num_periods = found;
+		/* Install array only after it's fully valid */
+		relation->rd_att->constr->periods = result;
+		relation->rd_att->constr->num_periods = found;
+	}
+	else
+	{
+		relation->rd_att->constr->periods = NULL;
+		relation->rd_att->constr->num_periods = 0;
+	}
+#endif
 }
 
 /*

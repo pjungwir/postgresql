@@ -1995,13 +1995,6 @@ index_constraint_create(Relation heapRelation,
 	recordDependencyOn(&idxaddr, &myself, DEPENDENCY_INTERNAL);
 
 	/*
-	 * If this constraint has WITHOUT OVERLAPS,
-	 * update relperiods in the table's pg_class record.
-	 */
-	if (is_without_overlaps)
-		IncrementRelationNumPeriods(heapRelation);
-
-	/*
 	 * Also, if this is a constraint on a partition, give it partition-type
 	 * dependencies on the parent constraint as well as the table.
 	 */

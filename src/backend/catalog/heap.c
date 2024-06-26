@@ -934,7 +934,6 @@ InsertPgClassTuple(Relation pg_class_desc,
 	values[Anum_pg_class_relispopulated - 1] = BoolGetDatum(rd_rel->relispopulated);
 	values[Anum_pg_class_relreplident - 1] = CharGetDatum(rd_rel->relreplident);
 	values[Anum_pg_class_relispartition - 1] = BoolGetDatum(rd_rel->relispartition);
-	values[Anum_pg_class_relperiods - 1] = Int16GetDatum(rd_rel->relperiods);
 	values[Anum_pg_class_relrewrite - 1] = ObjectIdGetDatum(rd_rel->relrewrite);
 	values[Anum_pg_class_relfrozenxid - 1] = TransactionIdGetDatum(rd_rel->relfrozenxid);
 	values[Anum_pg_class_relminmxid - 1] = MultiXactIdGetDatum(rd_rel->relminmxid);
@@ -2677,40 +2676,6 @@ SetRelationNumChecks(Relation rel, int numchecks)
 		/* Skip the disk update, but force relcache inval anyway */
 		CacheInvalidateRelcache(rel);
 	}
-
-	heap_freetuple(reltup);
-	table_close(relrel, RowExclusiveLock);
-}
-
-/*
- * Update the count of WITHOUT OVERLAPS constraints
- * in the relation's pg_class tuple.
- *
- * Caller had better hold exclusive lock on the relation.
- *
- * An important side effect is that a SI update message will be sent out for
- * the pg_class tuple, which will force other backends to rebuild their
- * relcache entries for the rel.  Also, this backend will rebuild its
- * own relcache entry at the next CommandCounterIncrement.
- */
-void
-IncrementRelationNumPeriods(Relation rel)
-{
-	Relation	relrel;
-	HeapTuple	reltup;
-	Form_pg_class relStruct;
-
-	relrel = table_open(RelationRelationId, RowExclusiveLock);
-	reltup = SearchSysCacheCopy1(RELOID,
-								 ObjectIdGetDatum(RelationGetRelid(rel)));
-	if (!HeapTupleIsValid(reltup))
-		elog(ERROR, "cache lookup failed for relation %u",
-			 RelationGetRelid(rel));
-	relStruct = (Form_pg_class) GETSTRUCT(reltup);
-
-	relStruct->relperiods = relStruct->relperiods + 1;
-
-	CatalogTupleUpdate(relrel, &reltup->t_self, reltup);
 
 	heap_freetuple(reltup);
 	table_close(relrel, RowExclusiveLock);

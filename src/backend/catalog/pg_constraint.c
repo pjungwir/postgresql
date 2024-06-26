@@ -666,39 +666,6 @@ RemoveConstraintById(Oid conId)
 
 			table_close(pgrel, RowExclusiveLock);
 		}
-		/*
-		 * Similarly we need to update the relperiods count if it is a check
-		 * constraint PRIMARY KEY or UNIQUE constraint using WIHOUT OVERLAPS.
-		 * This update will force backends to rebuild relcache entries when
-		 * we commit.
-		 */
-		else if (con->conperiod &&
-				(con->contype == CONSTRAINT_PRIMARY || con->contype == CONSTRAINT_UNIQUE))
-		{
-			Relation	pgrel;
-			HeapTuple	relTup;
-			Form_pg_class classForm;
-
-			pgrel = table_open(RelationRelationId, RowExclusiveLock);
-			relTup = SearchSysCacheCopy1(RELOID,
-										 ObjectIdGetDatum(con->conrelid));
-			if (!HeapTupleIsValid(relTup))
-				elog(ERROR, "cache lookup failed for relation %u",
-					 con->conrelid);
-			classForm = (Form_pg_class) GETSTRUCT(relTup);
-
-			if (classForm->relperiods == 0)	/* should not happen */
-				elog(ERROR, "relation \"%s\" has relperiods = 0",
-					 RelationGetRelationName(rel));
-			classForm->relperiods--;
-
-			CatalogTupleUpdate(pgrel, &relTup->t_self, relTup);
-
-			heap_freetuple(relTup);
-
-			table_close(pgrel, RowExclusiveLock);
-		}
-
 
 		/* Keep lock on constraint's rel until end of xact */
 		table_close(rel, NoLock);

@@ -143,7 +143,6 @@ extern void CheckAttributeType(const char *attname,
 							   Oid atttypid, Oid attcollation,
 							   List *containing_rowtypes,
 							   int flags);
-extern void IncrementRelationNumPeriods(Relation rel);
 
 /* pg_partitioned_table catalog manipulation functions */
 extern void StorePartitionKey(Relation rel,
