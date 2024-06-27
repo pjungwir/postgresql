@@ -5085,10 +5085,16 @@ inline_set_returning_function(PlannerInfo *root, RangeTblEntry *rte)
 	if (rte->funcordinality)
 		return NULL;
 
-	/* Fail if RTE isn't a single, simple FuncExpr */
 	if (list_length(rte->functions) != 1)
 		return NULL;
 	rtfunc = (RangeTblFunction *) linitial(rte->functions);
+
+	/*
+	 * If the SRF was inlined using SupportRequestInline, then we expect a
+	 * Query, otherwise a FuncExpr. Either way, only one item.
+	 */
+	if (IsA(rtfunc->funcexpr, Query))
+		return (Query *)rtfunc->funcexpr;
 
 	if (!IsA(rtfunc->funcexpr, FuncExpr))
 		return NULL;
