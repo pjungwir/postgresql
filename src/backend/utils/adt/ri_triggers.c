@@ -399,6 +399,58 @@ RI_FKey_check(TriggerData *trigdata)
 		 *  HAVING $n <@ range_agg(x1.r)
 		 * Note if FOR KEY SHARE ever allows GROUP BY and HAVING
 		 * we can make this a bit simpler.
+		 *
+		 * Vik's version (adapted by me) is:
+		 *
+		 * SELECT  1
+		 * FROM	   (
+		 *		     SELECT  uk.uk_start_value,
+		 *					 uk.uk_end_value,
+		 *					 NULLIF(LAG(uk.uk_end_value) OVER (ORDER BY uk.uk_start_value), uk.uk_start_value) AS x
+		 *			 FROM	(
+		 *					 -- Watch out for unbounded ranges.
+		 *					 -- Using +-Infinity is not really correct,
+		 *					 -- since null should be even greater/less than that,
+		 *					 -- but it's close enough for benchmarking.
+		 *					 SELECT  coalesce(lower(x.pkperiodatt), '-Infinity') AS uk_start_value,
+		 *							 coalesce(upper(x.pkperiodatt), 'Infinity') AS uk_end_value
+		 *					 FROM    pktable AS x
+		 *					 WHERE	 pkatt1 = $1 [AND ...]
+		 *					 AND	 pkperiodatt && $n
+		 *					 FOR KEY SHARE OF x
+		 *					) AS uk
+		 *		   ) AS uk
+		 * WHERE   uk.uk_start_value < coalesce(upper($n), 'Infinity')
+		 * AND	   uk.uk_end_value >= coalesce(lower($n), '-Infinity')
+		 * HAVING  MIN(uk.uk_start_value) <= coalesce(lower($n), '-Infinity')
+		 * AND	   MAX(uk.uk_end_value) >= coalesce(upper($n), 'Infinity')
+		 * AND	   array_agg(uk.x) FILTER (WHERE uk.x IS NOT NULL) IS NULL
+		 *
+		 * This is Vik's but he fails on a result and we want to fail on no result:
+		 *
+		 *   SELECT EXISTS (
+		 *     SELECT 1 FROM fktable AS fk
+		 *     WHERE NOT EXISTS (
+		 *       SELECT
+		 *       FROM (SELECT uk.uk_start_value,
+		 *					  uk.uk_end_value,
+		 *					  NULLIF(LAG(uk.uk_end_value) OVER (ORDER BY uk.uk_start_value), uk.uk_start_value) AS x
+		 *			   FROM (SELECT	LOWER(uk.pkperiodatt) AS uk_start_value,
+		 *							UPPER(uk.pkperiodatt) AS uk_end_value
+		 *					 FROM	pktable AS uk
+		 *					 WHERE	pkatt1 = fkatt1 [AND ...]
+		 *					 AND	lower(uk.pkperiodatt) <= upper(fk.fkperiodatt)
+		 *					 AND	upper(uk.pkperiodatt) >= lower(fk.fkperiodatt)
+		 *					 FOR KEY SHARE
+		 *					) AS uk
+		 *			  ) AS uk
+		 *	     WHERE	uk.uk_start_value < upper($n)
+		 *	     AND	uk.uk_end_value >= lower($n)
+		 *	     HAVING MIN(uk.uk_start_value) <= lower($n)
+		 *	     AND	MAX(uk.uk_end_value) >= upper($n)
+		 *	     AND	array_agg(uk.x) FILTER (WHERE uk.x IS NOT NULL) IS NULL
+		 *	   ) AND    fkatt1 = $1 [AND ...]
+		 *
 		 * ----------
 		 */
 		initStringInfo(&querybuf);
@@ -407,12 +459,25 @@ RI_FKey_check(TriggerData *trigdata)
 		quoteRelationName(pkrelname, pk_rel);
 		if (riinfo->hasperiod)
 		{
+#if defined(RI_TEMPORAL_IMPL_LAG)
+			quoteOneName(attname,
+						 RIAttName(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]));
+
+			appendStringInfo(&querybuf, "SELECT 1 FROM ( ");
+			appendStringInfo(&querybuf, "  SELECT  uk.uk_start_value, uk.uk_end_value, ");
+			appendStringInfo(&querybuf, "          NULLIF(LAG(uk.uk_end_value) OVER (ORDER BY uk.uk_start_value), uk.uk_start_value) AS x ");
+			appendStringInfo(&querybuf, "  FROM    ( ");
+			appendStringInfo(&querybuf, "    SELECT  COALESCE(LOWER(x.%s), '-Infinity') AS uk_start_value, ", attname);
+			appendStringInfo(&querybuf, "            COALESCE(UPPER(x.%s), 'Infinity') AS uk_end_value ", attname);
+			appendStringInfo(&querybuf, "    FROM    %s%s AS x", pk_only, pkrelname);
+#else
 			quoteOneName(attname,
 						 RIAttName(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]));
 
 			appendStringInfo(&querybuf,
 							 "SELECT 1 FROM (SELECT %s AS r FROM %s%s x",
 							 attname, pk_only, pkrelname);
+#endif
 		}
 		else
 		{
@@ -438,6 +503,17 @@ RI_FKey_check(TriggerData *trigdata)
 		appendStringInfoString(&querybuf, " FOR KEY SHARE OF x");
 		if (riinfo->hasperiod)
 		{
+#if defined(RI_TEMPORAL_IMPL_LAG)
+			sprintf(paramname, "$%d", riinfo->nkeys);
+
+			appendStringInfo(&querybuf, "  ) AS uk ");
+			appendStringInfo(&querybuf, ") AS uk ");
+			appendStringInfo(&querybuf, "WHERE uk.uk_start_value < COALESCE(UPPER(%s), 'Infinity') ", paramname);
+			appendStringInfo(&querybuf, "AND   uk.uk_end_value >= COALESCE(LOWER(%s), '-Infinity') ", paramname);
+			appendStringInfo(&querybuf, "HAVING MIN(uk.uk_start_value) <= COALESCE(LOWER(%s), '-Infinity') ", paramname);
+			appendStringInfo(&querybuf, "AND    MAX(uk.uk_end_value) >= COALESCE(UPPER(%s), 'Infinity') ", paramname);
+			appendStringInfo(&querybuf, "AND    array_agg(uk.x) FILTER (WHERE uk.x IS NOT NULL) IS NULL");
+#else
 			Oid			fk_type = RIAttType(fk_rel, riinfo->fk_attnums[riinfo->nkeys - 1]);
 
 			appendStringInfo(&querybuf, ") x1 HAVING ");
@@ -447,6 +523,7 @@ RI_FKey_check(TriggerData *trigdata)
 							riinfo->agged_period_contained_by_oper,
 							"pg_catalog.range_agg", ANYMULTIRANGEOID);
 			appendStringInfo(&querybuf, "(x1.r)");
+#endif
 		}
 
 		/* Prepare and save the plan */
@@ -571,6 +648,34 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 		 *  HAVING $n <@ range_agg(x1.r)
 		 * Note if FOR KEY SHARE ever allows GROUP BY and HAVING
 		 * we can make this a bit simpler.
+		 *
+		 * Vik's version (modified by me) is:
+		 *
+		 * SELECT  1
+		 * FROM	   (
+		 *		     SELECT  uk.uk_start_value,
+		 *					 uk.uk_end_value,
+		 *					 NULLIF(LAG(uk.uk_end_value) OVER (ORDER BY uk.uk_start_value), uk.uk_start_value) AS x
+		 *			 FROM	(
+		 *					 -- Watch out for unbounded ranges.
+		 *					 -- Using +-Infinity is not really correct,
+		 *					 -- since null should be even greater/less than that,
+		 *					 -- but it's close enough for benchmarking.
+		 *					 -- TODO: Why can't I just use NULLs here? Then it would work for any rangetype.
+		 *					 -- (TODO: if I fix it here I must fix it in the other place too.....)
+		 *					 SELECT  coalesce(lower(x.pkperiodatt), '-Infinity') AS uk_start_value,
+		 *							 coalesce(upper(x.pkperiodatt), 'Infinity') AS uk_end_value
+		 *					 FROM    pktable AS x
+		 *					 WHERE	 pkatt1 = $1 [AND ...]
+		 *					 AND	 uk.pkperiodatt && $n
+		 *					 FOR KEY SHARE OF x
+		 *					) AS uk
+		 *		   ) AS uk
+		 * WHERE   uk.uk_start_value < coalesce(upper($n), 'Infinity')
+		 * AND	   uk.uk_end_value >= coalesce(lower($n), '-Infinity')
+		 * HAVING  MIN(uk.uk_start_value) <= coalesce(lower($n), '-Infinity')
+		 * AND	   MAX(uk.uk_end_value) >= coalesce(upper($n), 'Infinity')
+		 * AND	   array_agg(uk.x) FILTER (WHERE uk.x IS NOT NULL) IS NULL
 		 * ----------
 		 */
 		initStringInfo(&querybuf);
@@ -579,11 +684,24 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 		quoteRelationName(pkrelname, pk_rel);
 		if (riinfo->hasperiod)
 		{
+#if defined(RI_TEMPORAL_IMPL_LAG)
+			quoteOneName(attname, RIAttName(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]));
+
+			appendStringInfo(&querybuf, "SELECT 1 FROM ( ");
+			appendStringInfo(&querybuf, "  SELECT uk.uk_start_value, uk.uk_end_value, ");
+			appendStringInfo(&querybuf, "         NULLIF(LAG(uk.uk_end_value) OVER (ORDER BY uk.uk_start_value), uk.uk_start_value) AS x ");
+			appendStringInfo(&querybuf, "  FROM   ( ");
+			appendStringInfo(&querybuf, "    SELECT  COALESCE(LOWER(x.%s), '-Infinity') AS uk_start_value, ", attname);
+			appendStringInfo(&querybuf, "            COALESCE(UPPER(x.%s), 'Infinity') AS uk_end_value ", attname);
+			appendStringInfo(&querybuf, "    FROM    %s%s AS x", pk_only, pkrelname);
+
+#else
 			quoteOneName(attname, RIAttName(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]));
 
 			appendStringInfo(&querybuf,
 							 "SELECT 1 FROM (SELECT %s AS r FROM %s%s x",
 							 attname, pk_only, pkrelname);
+#endif
 		}
 		else
 		{
@@ -608,6 +726,17 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 		appendStringInfoString(&querybuf, " FOR KEY SHARE OF x");
 		if (riinfo->hasperiod)
 		{
+#if defined(RI_TEMPORAL_IMPL_LAG)
+			sprintf(paramname, "$%d", riinfo->nkeys);
+
+			appendStringInfo(&querybuf, "  ) AS uk ");
+			appendStringInfo(&querybuf, ") AS uk ");
+			appendStringInfo(&querybuf, "WHERE uk.uk_start_value < COALESCE(UPPER(%s), 'Infinity') ", paramname);
+			appendStringInfo(&querybuf, "AND   uk.uk_end_value >= COALESCE(LOWER(%s), '-Infinity') ", paramname);
+			appendStringInfo(&querybuf, "HAVING MIN(uk.uk_start_value) <= COALESCE(LOWER(%s), '-Infinity') ", paramname);
+			appendStringInfo(&querybuf, "AND    MAX(uk.uk_end_value) >= COALESCE(UPPER(%s), 'Infinity') ", paramname);
+			appendStringInfo(&querybuf, "AND    array_agg(uk.x) FILTER (WHERE uk.x IS NOT NULL) IS NULL");
+#else
 			Oid			fk_type = RIAttType(fk_rel, riinfo->fk_attnums[riinfo->nkeys - 1]);
 
 			appendStringInfo(&querybuf, ") x1 HAVING ");
@@ -617,6 +746,7 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 							riinfo->agged_period_contained_by_oper,
 							"pg_catalog.range_agg", ANYMULTIRANGEOID);
 			appendStringInfo(&querybuf, "(x1.r)");
+#endif
 		}
 
 		/* Prepare and save the plan */
