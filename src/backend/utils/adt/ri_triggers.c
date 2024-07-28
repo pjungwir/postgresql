@@ -377,6 +377,13 @@ RI_FKey_check(TriggerData *trigdata)
 		const char *querysep;
 		Oid			queryoids[RI_MAX_NUMKEYS];
 		const char *pk_only;
+#if defined(RI_TEMPORAL_IMPL_EXISTS)
+		StringInfoData pkfkmatchbuf;
+		StringInfoData pkpkmatchbuf;
+
+		initStringInfo(&pkfkmatchbuf);
+		initStringInfo(&pkpkmatchbuf);
+#endif
 
 		/* ----------
 		 * The query string built is
@@ -451,6 +458,55 @@ RI_FKey_check(TriggerData *trigdata)
 		 *	     AND	array_agg(uk.x) FILTER (WHERE uk.x IS NOT NULL) IS NULL
 		 *	   ) AND    fkatt1 = $1 [AND ...]
 		 *
+		 * This is Richard Snodgrass's (adapted for Postgres and not a CHECK constraint):
+		 *
+		 *   SELECT 1
+		 *   -- There was a PK when the FK started:
+		 *   WHERE EXISTS
+		 *     SELECT  1
+		 *	   FROM    [ONLY] <pktable>
+		 *     WHERE   pkatt1 = $1 [AND ...]
+		 *     AND     COALESCE(lower(pkperiodatt), '-Infinity')
+		 *          <= COALESCE(lower($n), '-Infinity')
+		 *     AND     COALESCE(lower($n), '-Infinity')
+		 *          <  COALESCE(upper(pkperiodatt), 'Infinity')
+		 *     FOR KEY SHARE OF <pktable>
+		 *   )
+		 *   -- There was a PK when the FK ended:
+		 *   AND EXISTS (
+		 *     SELECT  1
+		 *	   FROM    [ONLY] <pktable>
+		 *     WHERE   pkatt1 = $1 [AND ...]
+		 *     AND     COALESCE(lower(pkperiodatt), '-Infinity')
+		 *          <  COALESCE(upper($n), 'Infinity')
+		 *     AND     COALESCE(upper($n), 'Infinity')
+		 *          <= COALESCE(upper(pkperiodatt), 'Infinity')
+		 *     FOR KEY SHARE OF <pktable>
+		 *   )
+		 *   -- There are no gaps in the PK:
+		 *   -- (i.e. there is no PK that ends early,
+		 *   -- unless a matching PK record starts right away)
+		 *   AND NOT EXISTS (
+		 *     SELECT  1
+		 *	   FROM    [ONLY] <pktable> AS pk1
+		 *     WHERE   pkatt1 = $1 [AND ...]
+		 *     AND     COALESCE(lower($n), '-Infinity')
+		 *          <  COALESCE(upper(pkperiodatt), 'Infinity')
+		 *     AND     COALESCE(upper(pkperiodatt), 'Infinity')
+		 *          <  COALESCE(upper($n), 'Infinity')
+		 *     AND     NOT EXISTS (
+		 *               SELECT  1
+		 *               FROM    [ONLY] <pktable> AS pk2
+		 *               WHERE   pk1.pkatt1 = pk2.pkatt1 [AND ...]
+		 *                       -- but skip pk1.pkperiodatt && pk2.pkperiodatt
+		 *               AND     COALESCE(lower(pk2.pkperiodatt), '-Infinity')
+		 *                    <= COALESCE(upper(pk1.pkperiodatt), 'Infinity')
+		 *                       COALESCE(upper(pk1.pkperiodatt), 'Infinity')
+		 *                    <  COALESCE(upper(pk2.pkperiodatt), 'Infinity')
+		 *               FOR KEY SHARE OF pk2
+		 *     )
+		 *     FOR KEY SHARE OF pk1
+		 *   )
 		 * ----------
 		 */
 		initStringInfo(&querybuf);
@@ -470,6 +526,9 @@ RI_FKey_check(TriggerData *trigdata)
 			appendStringInfo(&querybuf, "    SELECT  COALESCE(LOWER(x.%s), '-Infinity') AS uk_start_value, ", attname);
 			appendStringInfo(&querybuf, "            COALESCE(UPPER(x.%s), 'Infinity') AS uk_end_value ", attname);
 			appendStringInfo(&querybuf, "    FROM    %s%s AS x", pk_only, pkrelname);
+#elif defined(RI_TEMPORAL_IMPL_EXISTS)
+			appendStringInfo(&querybuf,
+							 "SELECT 1 ");
 #else
 			quoteOneName(attname,
 						 RIAttName(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]));
@@ -493,6 +552,29 @@ RI_FKey_check(TriggerData *trigdata)
 			quoteOneName(attname,
 						 RIAttName(pk_rel, riinfo->pk_attnums[i]));
 			sprintf(paramname, "$%d", i + 1);
+#if defined(RI_TEMPORAL_IMPL_EXISTS)
+			if (riinfo->hasperiod) {
+				char	pk1attname[MAX_QUOTED_NAME_LEN + 4];
+				char	pk2attname[MAX_QUOTED_NAME_LEN + 4];
+
+				ri_GenerateQual(&pkfkmatchbuf, querysep,
+								attname, pk_type,
+								riinfo->pf_eq_oprs[i],
+								paramname, fk_type);
+				if (i < riinfo->nkeys - 1)
+				{
+					sprintf(pk1attname, "pk1.%s", attname);
+					sprintf(pk2attname, "pk2.%s", attname);
+					ri_GenerateQual(&pkpkmatchbuf, querysep,
+									pk1attname, pk_type,
+									riinfo->pp_eq_oprs[i],
+									pk2attname, pk_type);
+				}
+				querysep = "AND";
+				queryoids[i] = fk_type;
+				continue;
+			}
+#endif
 			ri_GenerateQual(&querybuf, querysep,
 							attname, pk_type,
 							riinfo->pf_eq_oprs[i],
@@ -500,7 +582,9 @@ RI_FKey_check(TriggerData *trigdata)
 			querysep = "AND";
 			queryoids[i] = fk_type;
 		}
+#if !defined(RI_TEMPORAL_IMPL_EXISTS)
 		appendStringInfoString(&querybuf, " FOR KEY SHARE OF x");
+#endif
 		if (riinfo->hasperiod)
 		{
 #if defined(RI_TEMPORAL_IMPL_LAG)
@@ -513,6 +597,54 @@ RI_FKey_check(TriggerData *trigdata)
 			appendStringInfo(&querybuf, "HAVING MIN(uk.uk_start_value) <= COALESCE(LOWER(%s), '-Infinity') ", paramname);
 			appendStringInfo(&querybuf, "AND    MAX(uk.uk_end_value) >= COALESCE(UPPER(%s), 'Infinity') ", paramname);
 			appendStringInfo(&querybuf, "AND    array_agg(uk.x) FILTER (WHERE uk.x IS NOT NULL) IS NULL");
+#elif defined(RI_TEMPORAL_IMPL_EXISTS)
+			quoteOneName(attname,
+						 RIAttName(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]));
+			sprintf(paramname, "$%d", riinfo->nkeys);
+
+			/* There was a PK when the FK started: */
+			appendStringInfo(&querybuf, "WHERE EXISTS ( ");
+			appendStringInfo(&querybuf, "  SELECT  1 ");
+			appendStringInfo(&querybuf, "  FROM %s%s x ", pk_only, pkrelname);
+			appendStringInfo(&querybuf, "  %s ", pkfkmatchbuf.data);
+			appendStringInfo(&querybuf, "  AND COALESCE(LOWER(%s), '-Infinity') ", attname);
+			appendStringInfo(&querybuf, "   <= COALESCE(LOWER(%s), '-Infinity') ", paramname);
+			appendStringInfo(&querybuf, "  AND COALESCE(LOWER(%s), '-Infinity') ", paramname);
+			appendStringInfo(&querybuf, "   <  COALESCE(UPPER(%s), ' Infinity') ", attname);
+			appendStringInfo(&querybuf, "  FOR KEY SHARE OF x");
+			appendStringInfo(&querybuf, ") ");
+			/* There was a PK when the FK ended: */
+			appendStringInfo(&querybuf, "AND EXISTS ( ");
+			appendStringInfo(&querybuf, "  SELECT  1 ");
+			appendStringInfo(&querybuf, "  FROM %s%s x ", pk_only, pkrelname);
+			appendStringInfo(&querybuf, "  %s ", pkfkmatchbuf.data);
+			appendStringInfo(&querybuf, "  AND COALESCE(LOWER(%s), '-Infinity') ", attname);
+			appendStringInfo(&querybuf, "   <  COALESCE(UPPER(%s), ' Infinity') ", paramname);
+			appendStringInfo(&querybuf, "  AND COALESCE(UPPER(%s), ' Infinity') ", paramname);
+			appendStringInfo(&querybuf, "   <= COALESCE(UPPER(%s), ' Infinity') ", attname);
+			appendStringInfo(&querybuf, "  FOR KEY SHARE OF x ");
+			appendStringInfo(&querybuf, ") ");
+			/* There are no gaps in the PK: */
+			appendStringInfo(&querybuf, "AND NOT EXISTS ( ");
+			appendStringInfo(&querybuf, "  SELECT  1 ");
+			appendStringInfo(&querybuf, "  FROM %s%s AS pk1 ", pk_only, pkrelname);
+			appendStringInfo(&querybuf, "  %s ", pkfkmatchbuf.data);
+			appendStringInfo(&querybuf, "  AND COALESCE(LOWER(%s), '-Infinity') ", paramname);
+			appendStringInfo(&querybuf, "   <  COALESCE(UPPER(%s), ' Infinity') ", attname);
+			appendStringInfo(&querybuf, "  AND COALESCE(UPPER(%s), ' Infinity') ", attname);
+			appendStringInfo(&querybuf, "   <  COALESCE(UPPER(%s), ' Infinity') ", paramname);
+			appendStringInfo(&querybuf, "  AND NOT EXISTS ( ");
+			appendStringInfo(&querybuf, "    SELECT  1 ");
+			appendStringInfo(&querybuf, "    FROM %s%s AS pk2 ", pk_only, pkrelname);
+			appendStringInfo(&querybuf, "    %s ", pkpkmatchbuf.data);
+			appendStringInfo(&querybuf, "    AND COALESCE(LOWER(pk2.%s), '-Infinity') ", attname);
+			appendStringInfo(&querybuf, "     <= COALESCE(UPPER(pk1.%s), ' Infinity') ", attname);
+			appendStringInfo(&querybuf, "    AND COALESCE(UPPER(pk1.%s), ' Infinity') ", attname);
+			appendStringInfo(&querybuf, "     <  COALESCE(UPPER(pk2.%s), ' Infinity') ", attname);
+			appendStringInfo(&querybuf, "    FOR KEY SHARE OF pk2");
+			appendStringInfo(&querybuf, "  ) ");
+			appendStringInfo(&querybuf, "  FOR KEY SHARE OF pk1");
+			appendStringInfo(&querybuf, ") ");
 #else
 			Oid			fk_type = RIAttType(fk_rel, riinfo->fk_attnums[riinfo->nkeys - 1]);
 
@@ -626,6 +758,13 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 		const char *querysep;
 		const char *pk_only;
 		Oid			queryoids[RI_MAX_NUMKEYS];
+#if defined(RI_TEMPORAL_IMPL_EXISTS)
+		StringInfoData pkfkmatchbuf;
+		StringInfoData pkpkmatchbuf;
+
+		initStringInfo(&pkfkmatchbuf);
+		initStringInfo(&pkpkmatchbuf);
+#endif
 
 		/* ----------
 		 * The query string built is
@@ -676,6 +815,58 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 		 * HAVING  MIN(uk.uk_start_value) <= coalesce(lower($n), '-Infinity')
 		 * AND	   MAX(uk.uk_end_value) >= coalesce(upper($n), 'Infinity')
 		 * AND	   array_agg(uk.x) FILTER (WHERE uk.x IS NOT NULL) IS NULL
+		 *
+		 * This is Richard Snodgrass's (adapted for Postgres and not a CHECK constraint):
+		 *
+		 *   SELECT 1
+		 *   -- There was a PK when the FK started:
+		 *   WHERE EXISTS
+		 *     SELECT  1
+		 *	   FROM    [ONLY] <pktable>
+		 *     WHERE   pkatt1 = $1 [AND ...]
+		 *     AND     COALESCE(lower(pkperiodatt), '-Infinity')
+		 *          <= COALESCE(lower($n), '-Infinity')
+		 *     AND     COALESCE(lower($n), '-Infinity')
+		 *          <  COALESCE(upper(pkperiodatt), 'Infinity')
+		 *     FOR KEY SHARE OF <pktable>
+		 *   )
+		 *   -- There was a PK when the FK ended:
+		 *   AND EXISTS (
+		 *     SELECT  1
+		 *	   FROM    [ONLY] <pktable>
+		 *     WHERE   pkatt1 = $1 [AND ...]
+		 *     AND     COALESCE(lower(pkperiodatt), '-Infinity')
+		 *          <  COALESCE(upper($n), 'Infinity')
+		 *     AND     COALESCE(upper($n), 'Infinity')
+		 *          <= COALESCE(upper(pkperiodatt), 'Infinity')
+		 *     FOR KEY SHARE OF <pktable>
+		 *   )
+		 *   -- There are no gaps in the PK:
+		 *   -- (i.e. there is no PK that ends early,
+		 *   -- unless a matching PK record starts right away)
+		 *   AND NOT EXISTS (
+		 *     SELECT  1
+		 *	   FROM    [ONLY] <pktable> AS pk1
+		 *     WHERE   pkatt1 = $1 [AND ...]
+		 *     AND     COALESCE(lower($n), '-Infinity')
+		 *          <  COALESCE(upper(pkperiodatt), 'Infinity')
+		 *     AND     COALESCE(upper(pkperiodatt), 'Infinity')
+		 *          <  COALESCE(upper($n), 'Infinity')
+		 *     AND     NOT EXISTS (
+		 *               SELECT  1
+		 *               FROM    [ONLY] <pktable> AS pk2
+		 *               WHERE   pk1.pkatt1 = pk2.pkatt1 [AND ...]
+		 *                       -- but skip pk1.pkperiodatt && pk2.pkperiodatt
+		 *               AND     COALESCE(lower(pk2.pkperiodatt), '-Infinity')
+		 *                    <= COALESCE(upper(pk1.pkperiodatt), 'Infinity')
+		 *                       COALESCE(upper(pk1.pkperiodatt), 'Infinity')
+		 *                    <  COALESCE(upper(pk2.pkperiodatt), 'Infinity')
+		 *               FOR KEY SHARE OF pk2
+		 *     )
+		 *     FOR KEY SHARE OF pk1
+		 *   )
+		 *
+		 *
 		 * ----------
 		 */
 		initStringInfo(&querybuf);
@@ -695,6 +886,9 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 			appendStringInfo(&querybuf, "            COALESCE(UPPER(x.%s), 'Infinity') AS uk_end_value ", attname);
 			appendStringInfo(&querybuf, "    FROM    %s%s AS x", pk_only, pkrelname);
 
+#elif defined(RI_TEMPORAL_IMPL_EXISTS)
+			appendStringInfo(&querybuf,
+							 "SELECT 1 ");
 #else
 			quoteOneName(attname, RIAttName(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]));
 
@@ -716,6 +910,29 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 			quoteOneName(attname,
 						 RIAttName(pk_rel, riinfo->pk_attnums[i]));
 			sprintf(paramname, "$%d", i + 1);
+#if defined(RI_TEMPORAL_IMPL_EXISTS)
+			if (riinfo->hasperiod) {
+				char	pk1attname[MAX_QUOTED_NAME_LEN + 4];
+				char	pk2attname[MAX_QUOTED_NAME_LEN + 4];
+
+				ri_GenerateQual(&pkfkmatchbuf, querysep,
+								attname, pk_type,
+								riinfo->pf_eq_oprs[i],
+								paramname, pk_type);
+				if (i < riinfo->nkeys - 1)
+				{
+					sprintf(pk1attname, "pk1.%s", attname);
+					sprintf(pk2attname, "pk2.%s", attname);
+					ri_GenerateQual(&pkpkmatchbuf, querysep,
+									pk1attname, pk_type,
+									riinfo->pp_eq_oprs[i],
+									pk2attname, pk_type);
+				}
+				querysep = "AND";
+				queryoids[i] = pk_type;
+				continue;
+			}
+#endif
 			ri_GenerateQual(&querybuf, querysep,
 							attname, pk_type,
 							riinfo->pp_eq_oprs[i],
@@ -723,7 +940,9 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 			querysep = "AND";
 			queryoids[i] = pk_type;
 		}
+#if !defined(RI_TEMPORAL_IMPL_EXISTS)
 		appendStringInfoString(&querybuf, " FOR KEY SHARE OF x");
+#endif
 		if (riinfo->hasperiod)
 		{
 #if defined(RI_TEMPORAL_IMPL_LAG)
@@ -736,6 +955,54 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 			appendStringInfo(&querybuf, "HAVING MIN(uk.uk_start_value) <= COALESCE(LOWER(%s), '-Infinity') ", paramname);
 			appendStringInfo(&querybuf, "AND    MAX(uk.uk_end_value) >= COALESCE(UPPER(%s), 'Infinity') ", paramname);
 			appendStringInfo(&querybuf, "AND    array_agg(uk.x) FILTER (WHERE uk.x IS NOT NULL) IS NULL");
+#elif defined(RI_TEMPORAL_IMPL_EXISTS)
+			quoteOneName(attname,
+						 RIAttName(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]));
+			sprintf(paramname, "$%d", riinfo->nkeys);
+
+			/* There was a PK when the FK started: */
+			appendStringInfo(&querybuf, "WHERE EXISTS ( ");
+			appendStringInfo(&querybuf, "  SELECT  1 ");
+			appendStringInfo(&querybuf, "  FROM %s%s x ", pk_only, pkrelname);
+			appendStringInfo(&querybuf, "  %s ", pkfkmatchbuf.data);
+			appendStringInfo(&querybuf, "  AND COALESCE(LOWER(%s), '-Infinity') ", attname);
+			appendStringInfo(&querybuf, "   <= COALESCE(LOWER(%s), '-Infinity') ", paramname);
+			appendStringInfo(&querybuf, "  AND COALESCE(LOWER(%s), '-Infinity') ", paramname);
+			appendStringInfo(&querybuf, "   <  COALESCE(UPPER(%s), ' Infinity') ", attname);
+			appendStringInfo(&querybuf, "  FOR KEY SHARE OF x ");
+			appendStringInfo(&querybuf, ") ");
+			/* There was a PK when the FK ended: */
+			appendStringInfo(&querybuf, "AND EXISTS ( ");
+			appendStringInfo(&querybuf, "  SELECT  1 ");
+			appendStringInfo(&querybuf, "  FROM %s%s x ", pk_only, pkrelname);
+			appendStringInfo(&querybuf, "  %s ", pkfkmatchbuf.data);
+			appendStringInfo(&querybuf, "  AND COALESCE(LOWER(%s), '-Infinity') ", attname);
+			appendStringInfo(&querybuf, "   <  COALESCE(UPPER(%s), ' Infinity') ", paramname);
+			appendStringInfo(&querybuf, "  AND COALESCE(UPPER(%s), ' Infinity') ", paramname);
+			appendStringInfo(&querybuf, "   <= COALESCE(UPPER(%s), ' Infinity') ", attname);
+			appendStringInfo(&querybuf, "  FOR KEY SHARE OF x ");
+			appendStringInfo(&querybuf, ") ");
+			/* There are no gaps in the PK: */
+			appendStringInfo(&querybuf, "AND NOT EXISTS ( ");
+			appendStringInfo(&querybuf, "  SELECT  1 ");
+			appendStringInfo(&querybuf, "  FROM %s%s AS pk1 ", pk_only, pkrelname);
+			appendStringInfo(&querybuf, "  %s ", pkfkmatchbuf.data);
+			appendStringInfo(&querybuf, "  AND COALESCE(LOWER(%s), '-Infinity') ", paramname);
+			appendStringInfo(&querybuf, "   <  COALESCE(UPPER(%s), ' Infinity') ", attname);
+			appendStringInfo(&querybuf, "  AND COALESCE(UPPER(%s), ' Infinity') ", attname);
+			appendStringInfo(&querybuf, "   <  COALESCE(UPPER(%s), ' Infinity') ", paramname);
+			appendStringInfo(&querybuf, "  AND NOT EXISTS ( ");
+			appendStringInfo(&querybuf, "    SELECT  1 ");
+			appendStringInfo(&querybuf, "    FROM %s%s AS pk2 ", pk_only, pkrelname);
+			appendStringInfo(&querybuf, "    %s ", pkpkmatchbuf.data);
+			appendStringInfo(&querybuf, "    AND COALESCE(LOWER(pk2.%s), '-Infinity') ", attname);
+			appendStringInfo(&querybuf, "     <= COALESCE(UPPER(pk1.%s), ' Infinity') ", attname);
+			appendStringInfo(&querybuf, "    AND COALESCE(UPPER(pk1.%s), ' Infinity') ", attname);
+			appendStringInfo(&querybuf, "     <  COALESCE(UPPER(pk2.%s), ' Infinity') ", attname);
+			appendStringInfo(&querybuf, "    FOR KEY SHARE OF pk2 ");
+			appendStringInfo(&querybuf, "  ) ");
+			appendStringInfo(&querybuf, "  FOR KEY SHARE OF pk1 ");
+			appendStringInfo(&querybuf, ") ");
 #else
 			Oid			fk_type = RIAttType(fk_rel, riinfo->fk_attnums[riinfo->nkeys - 1]);
 
