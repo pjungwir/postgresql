@@ -399,7 +399,7 @@ ROLLBACK;
 BEGIN;
   INSERT INTO temporal_rng (id, valid_at) VALUES ('[3,4)', 'empty');
   ALTER TABLE temporal_rng ADD CONSTRAINT temporal_rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
-ERROR:  new row for relation "temporal_rng" contains empty WITHOUT OVERLAPS value
+ERROR:  empty WITHOUT OVERLAPS value found in column "valid_at" in relation "temporal_rng"
 ROLLBACK;
 ALTER TABLE temporal_rng ADD CONSTRAINT temporal_rng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
 DELETE FROM temporal_rng;
@@ -423,7 +423,7 @@ ERROR:  null value in column "valid_at" of relation "temporal_rng" violates not-
 DETAIL:  Failing row contains ([3,4), null).
 -- rejects empty:
 INSERT INTO temporal_rng (id, valid_at) VALUES ('[3,4)', 'empty');
-ERROR:  new row for relation "temporal_rng" contains empty WITHOUT OVERLAPS value
+ERROR:  empty WITHOUT OVERLAPS value found in column "valid_at" in relation "temporal_rng"
 SELECT * FROM temporal_rng ORDER BY id, valid_at;
   id   |        valid_at         
 -------+-------------------------
@@ -487,7 +487,7 @@ UPDATE  temporal_rng
 SET     id = '[1,2)',
         valid_at = 'empty'
 WHERE   id = '[21,22)';
-ERROR:  new row for relation "temporal_rng" contains empty WITHOUT OVERLAPS value
+ERROR:  empty WITHOUT OVERLAPS value found in column "valid_at" in relation "temporal_rng"
 SELECT * FROM temporal_rng ORDER BY id, valid_at;
    id    |        valid_at         
 ---------+-------------------------
@@ -524,7 +524,7 @@ ROLLBACK;
 BEGIN;
   INSERT INTO temporal_rng3 (id, valid_at) VALUES ('[3,4)', 'empty');
   ALTER TABLE temporal_rng3 ADD CONSTRAINT temporal_rng3_uq UNIQUE (id, valid_at WITHOUT OVERLAPS);
-ERROR:  new row for relation "temporal_rng3" contains empty WITHOUT OVERLAPS value
+ERROR:  empty WITHOUT OVERLAPS value found in column "valid_at" in relation "temporal_rng3"
 ROLLBACK;
 ALTER TABLE temporal_rng3 ADD CONSTRAINT temporal_rng3_uq UNIQUE (id, valid_at WITHOUT OVERLAPS);
 DELETE FROM temporal_rng3;
@@ -544,7 +544,7 @@ ERROR:  conflicting key value violates exclusion constraint "temporal_rng3_uq"
 DETAIL:  Key (id, valid_at)=([1,2), [2018-01-01,2018-01-05)) conflicts with existing key (id, valid_at)=([1,2), [2018-01-02,2018-02-03)).
 -- rejects empty:
 INSERT INTO temporal_rng3 (id, valid_at) VALUES ('[3,4)', 'empty');
-ERROR:  new row for relation "temporal_rng3" contains empty WITHOUT OVERLAPS value
+ERROR:  empty WITHOUT OVERLAPS value found in column "valid_at" in relation "temporal_rng3"
 SELECT * FROM temporal_rng3 ORDER BY id, valid_at;
   id   |        valid_at         
 -------+-------------------------
@@ -606,13 +606,13 @@ DETAIL:  Key (id, valid_at)=([1,2), [2018-03-01,2018-05-05)) conflicts with exis
 UPDATE  temporal_rng3
 SET     valid_at = 'empty'
 WHERE   id = '[1,2)' AND valid_at IS NULL;
-ERROR:  new row for relation "temporal_rng3" contains empty WITHOUT OVERLAPS value
+ERROR:  empty WITHOUT OVERLAPS value found in column "valid_at" in relation "temporal_rng3"
 -- still rejects empty when scalar part is NULL:
 UPDATE  temporal_rng3
 SET     id = NULL,
         valid_at = 'empty'
 WHERE   id = '[1,2)' AND valid_at IS NULL;
-ERROR:  new row for relation "temporal_rng3" contains empty WITHOUT OVERLAPS value
+ERROR:  empty WITHOUT OVERLAPS value found in column "valid_at" in relation "temporal_rng3"
 SELECT * FROM temporal_rng3 ORDER BY id, valid_at;
   id   |        valid_at         
 -------+-------------------------
@@ -647,7 +647,7 @@ ROLLBACK;
 BEGIN;
   INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[3,4)', '{}');
   ALTER TABLE temporal_mltrng ADD CONSTRAINT temporal_mltrng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
-ERROR:  new row for relation "temporal_mltrng" contains empty WITHOUT OVERLAPS value
+ERROR:  empty WITHOUT OVERLAPS value found in column "valid_at" in relation "temporal_mltrng"
 ROLLBACK;
 ALTER TABLE temporal_mltrng ADD CONSTRAINT temporal_mltrng_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
 DELETE FROM temporal_mltrng;
@@ -671,7 +671,7 @@ ERROR:  null value in column "valid_at" of relation "temporal_mltrng" violates n
 DETAIL:  Failing row contains ([3,4), null).
 -- rejects empty:
 INSERT INTO temporal_mltrng (id, valid_at) VALUES ('[3,4)', '{}');
-ERROR:  new row for relation "temporal_mltrng" contains empty WITHOUT OVERLAPS value
+ERROR:  empty WITHOUT OVERLAPS value found in column "valid_at" in relation "temporal_mltrng"
 SELECT * FROM temporal_mltrng ORDER BY id, valid_at;
   id   |         valid_at          
 -------+---------------------------
@@ -735,7 +735,7 @@ UPDATE  temporal_mltrng
 SET     id = '[1,2)',
         valid_at = '{}'
 WHERE   id = '[21,22)';
-ERROR:  new row for relation "temporal_mltrng" contains empty WITHOUT OVERLAPS value
+ERROR:  empty WITHOUT OVERLAPS value found in column "valid_at" in relation "temporal_mltrng"
 SELECT * FROM temporal_mltrng ORDER BY id, valid_at;
    id    |         valid_at          
 ---------+---------------------------
@@ -772,7 +772,7 @@ ROLLBACK;
 BEGIN;
   INSERT INTO temporal_mltrng3 (id, valid_at) VALUES ('[3,4)', '{}');
   ALTER TABLE temporal_mltrng3 ADD CONSTRAINT temporal_mltrng3_uq UNIQUE (id, valid_at WITHOUT OVERLAPS);
-ERROR:  new row for relation "temporal_mltrng3" contains empty WITHOUT OVERLAPS value
+ERROR:  empty WITHOUT OVERLAPS value found in column "valid_at" in relation "temporal_mltrng3"
 ROLLBACK;
 ALTER TABLE temporal_mltrng3 ADD CONSTRAINT temporal_mltrng3_uq UNIQUE (id, valid_at WITHOUT OVERLAPS);
 DELETE FROM temporal_mltrng3;
@@ -792,7 +792,7 @@ ERROR:  conflicting key value violates exclusion constraint "temporal_mltrng3_uq
 DETAIL:  Key (id, valid_at)=([1,2), {[2018-01-01,2018-01-05)}) conflicts with existing key (id, valid_at)=([1,2), {[2018-01-02,2018-02-03)}).
 -- rejects empty:
 INSERT INTO temporal_mltrng3 (id, valid_at) VALUES ('[3,4)', '{}');
-ERROR:  new row for relation "temporal_mltrng3" contains empty WITHOUT OVERLAPS value
+ERROR:  empty WITHOUT OVERLAPS value found in column "valid_at" in relation "temporal_mltrng3"
 SELECT * FROM temporal_mltrng3 ORDER BY id, valid_at;
   id   |         valid_at          
 -------+---------------------------
@@ -854,13 +854,13 @@ DETAIL:  Key (id, valid_at)=([1,2), {[2018-03-01,2018-05-05)}) conflicts with ex
 UPDATE  temporal_mltrng3
 SET     valid_at = '{}'
 WHERE   id = '[1,2)' AND valid_at IS NULL;
-ERROR:  new row for relation "temporal_mltrng3" contains empty WITHOUT OVERLAPS value
+ERROR:  empty WITHOUT OVERLAPS value found in column "valid_at" in relation "temporal_mltrng3"
 -- still rejects empty when scalar part is NULL:
 UPDATE  temporal_mltrng3
 SET     id = NULL,
         valid_at = '{}'
 WHERE   id = '[1,2)' AND valid_at IS NULL;
-ERROR:  new row for relation "temporal_mltrng3" contains empty WITHOUT OVERLAPS value
+ERROR:  empty WITHOUT OVERLAPS value found in column "valid_at" in relation "temporal_mltrng3"
 SELECT * FROM temporal_mltrng3 ORDER BY id, valid_at;
   id   |         valid_at          
 -------+---------------------------

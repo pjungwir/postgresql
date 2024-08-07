@@ -143,6 +143,8 @@ static bool index_unchanged_by_update(ResultRelInfo *resultRelInfo,
 									  Relation indexRelation);
 static bool index_expression_changed_walker(Node *node,
 											Bitmapset *allUpdatedCols);
+static void ExecWithoutOverlapsNotEmpty(Relation rel, NameData attname, Datum attval,
+										char typtype, Oid atttypid);
 
 /* ----------------------------------------------------------------
  *		ExecOpenIndices
@@ -742,7 +744,8 @@ check_exclusion_or_unique_constraint(Relation heap, Relation index,
 			TupleDesc tupdesc = RelationGetDescr(heap);
 			Form_pg_attribute att = TupleDescAttr(tupdesc, attno - 1);
 			TypeCacheEntry *typcache = lookup_type_cache(att->atttypid, 0);
-			ExecWithoutOverlapsNotEmpty(heap, values[indnkeyatts - 1],
+			ExecWithoutOverlapsNotEmpty(heap, att->attname,
+										values[indnkeyatts - 1],
 										typcache->typtype, att->atttypid);
 		}
 	}
@@ -1129,8 +1132,8 @@ index_expression_changed_walker(Node *node, Bitmapset *allUpdatedCols)
  * ExecWithoutOverlapsNotEmpty - raise an error if the tuple has an empty
  * range or multirange in the given attribute.
  */
-void
-ExecWithoutOverlapsNotEmpty(Relation rel, Datum attval, Oid typtype, Oid atttypid)
+static void
+ExecWithoutOverlapsNotEmpty(Relation rel, NameData attname, Datum attval, char typtype, Oid atttypid)
 {
 	bool isempty;
 	RangeType *r;
@@ -1147,13 +1150,14 @@ ExecWithoutOverlapsNotEmpty(Relation rel, Datum attval, Oid typtype, Oid atttypi
 			isempty = MultirangeIsEmpty(mr);
 			break;
 		default:
-			elog(ERROR, "Got unknown type for WITHOUT OVERLAPS column: %d", atttypid);
+			elog(ERROR, "WITHOUT OVERLAPS column \"%s\" is not a range or multirange",
+				 NameStr(attname));
 	}
 
 	/* Report a CHECK_VIOLATION */
 	if (isempty)
 		ereport(ERROR,
 				(errcode(ERRCODE_CHECK_VIOLATION),
-				 errmsg("new row for relation \"%s\" contains empty WITHOUT OVERLAPS value",
-						RelationGetRelationName(rel))));
+				 errmsg("empty WITHOUT OVERLAPS value found in column \"%s\" in relation \"%s\"",
+						NameStr(attname), RelationGetRelationName(rel))));
 }
