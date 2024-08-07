@@ -599,13 +599,13 @@
       <row>
        <entry><function>intersect</function></entry>
        <entry>computes intersection with <literal>FOR PORTION OF</literal>
-        bounds</entry>
+        bounds (optional)</entry>
        <entry>13</entry>
       </row>
       <row>
        <entry><function>without_portion</function></entry>
        <entry>computes remaining duration(s) outside
-       <literal>FOR PORTION OF</literal> bounds</entry>
+       <literal>FOR PORTION OF</literal> bounds (optional)</entry>
        <entry>14</entry>
       </row>
      </tbody>

@@ -1276,7 +1276,8 @@ my_range_intersect(PG_FUNCTION_ARGS)
     TypeCacheEntry *typcache;
 
     /* Different types should be prevented by ANYRANGE matching rules */
-    if (RangeTypeGetOid(r1) != RangeTypeGetOid(r2))                                                                  elog(ERROR, "range types do not match");
+    if (RangeTypeGetOid(r1) != RangeTypeGetOid(r2))
+        elog(ERROR, "range types do not match");
 
     typcache = range_get_typcache(fcinfo, RangeTypeGetOid(r1));
 
