@@ -1292,7 +1292,7 @@ range_without_portion(PG_FUNCTION_ARGS)
  * remaining and their count (respectively) after subtracting r2 from r1.
  * The array should never contain empty ranges.
  * The outputs will be ordered. We expect that outputs is an array of
- * RangeType pointers, already allocated with two slots.
+ * RangeType pointers, already allocated with two elements.
  */
 void
 range_without_portion_internal(TypeCacheEntry *typcache, RangeType *r1,

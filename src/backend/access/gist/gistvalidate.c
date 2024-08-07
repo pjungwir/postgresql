@@ -353,6 +353,8 @@ gistadjustmembers(Oid opfamilyoid,
 			case GIST_OPTIONS_PROC:
 			case GIST_SORTSUPPORT_PROC:
 			case GIST_STRATNUM_PROC:
+			case GIST_INTERSECT_PROC:
+			case GIST_WITHOUT_PORTION_PROC:
 				/* Optional, so force it to be a soft family dependency */
 				op->ref_is_hard = false;
 				op->ref_is_family = true;
