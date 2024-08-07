@@ -985,11 +985,11 @@ WITH ( MODULUS <replaceable class="parameter">numeric_literal</replaceable>, REM
       duplicates so long as the duplicates don't overlap in the
       <literal>WITHOUT OVERLAPS</literal> column.  (This is sometimes called a
       temporal key, if the column is a range of dates or timestamps, but
-      PostgreSQL allows ranges over any base type.)  In effect, such a
-      constraint is enforced with an <literal>EXCLUDE</literal> constraint
-      rather than a <literal>UNIQUE</literal> constraint.  So for example
-      <literal>UNIQUE (id, valid_at WITHOUT OVERLAPS)</literal> behaves like
-      <literal>EXCLUDE USING GIST (id WITH =, valid_at WITH
+      <productname>PostgreSQL</productname> allows ranges over any base type.)
+      In effect, such a constraint is enforced with an <literal>EXCLUDE</literal>
+      constraint rather than a <literal>UNIQUE</literal> constraint.  So for
+      example <literal>UNIQUE (id, valid_at WITHOUT OVERLAPS)</literal> behaves
+      like <literal>EXCLUDE USING GIST (id WITH =, valid_at WITH
       &amp;&amp;)</literal>.  The <literal>WITHOUT OVERLAPS</literal> column
       must have a range or multirange type.  (Technically, any type is allowed
       whose default GiST opclass includes an overlaps operator.  See the

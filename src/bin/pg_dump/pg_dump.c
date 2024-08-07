@@ -7500,7 +7500,7 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 		appendPQExpBufferStr(query,
 							 "false AS indnullsnotdistinct, ");
 
-	if (fout->remoteVersion >= 170000)
+	if (fout->remoteVersion >= 180000)
 		appendPQExpBufferStr(query,
 							 "c.conperiod ");
 	else

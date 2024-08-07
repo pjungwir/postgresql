@@ -879,6 +879,11 @@ DefineIndex(Oid tableId,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("access method \"%s\" does not support exclusion constraints",
 						accessMethodName)));
+	if (stmt->iswithoutoverlaps && strcmp(accessMethodName, "gist") != 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("access method \"%s\" does not support WITHOUT OVERLAPS constraints",
+						accessMethodName)));
 
 	amcanorder = amRoutine->amcanorder;
 	amoptions = amRoutine->amoptions;
@@ -1893,12 +1898,23 @@ ComputeIndexAttrs(IndexInfo *indexInfo,
 	else
 		nextExclOp = NULL;
 
-	/* exclusionOpNames can be non-NIL if we are creating a partition */
-	if (iswithoutoverlaps && exclusionOpNames == NIL)
+	/*
+	 * If this is a WITHOUT OVERLAPS constraint,
+	 * we need space for exclusion ops,
+	 * but we don't need to parse anything,
+	 * so we can let nextExclOp be NULL.
+	 * Note that for partitions/inheriting/LIKE,
+	 * exclusionOpNames will be set, so we already allocated above.
+	 */
+	if (iswithoutoverlaps)
 	{
-		indexInfo->ii_ExclusionOps = palloc_array(Oid, nkeycols);
-		indexInfo->ii_ExclusionProcs = palloc_array(Oid, nkeycols);
-		indexInfo->ii_ExclusionStrats = palloc_array(uint16, nkeycols);
+		if (exclusionOpNames == NIL)
+		{
+			indexInfo->ii_ExclusionOps = palloc_array(Oid, nkeycols);
+			indexInfo->ii_ExclusionProcs = palloc_array(Oid, nkeycols);
+			indexInfo->ii_ExclusionStrats = palloc_array(uint16, nkeycols);
+		}
+		nextExclOp = NULL;
 	}
 
 	if (OidIsValid(ddl_userid))
