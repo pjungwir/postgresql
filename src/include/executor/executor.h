@@ -265,6 +265,9 @@ extern void ExecSetTupleBound(int64 tuples_needed, PlanState *child_node);
  * ----------------------------------------------------------------
  */
 #ifndef FRONTEND
+#ifdef INSTRUMENT_FKS
+extern TupleTableSlot * ExecProcNode(PlanState *node);
+#else
 static inline TupleTableSlot *
 ExecProcNode(PlanState *node)
 {
@@ -273,6 +276,7 @@ ExecProcNode(PlanState *node)
 
 	return node->ExecProcNode(node);
 }
+#endif
 #endif
 
 /*

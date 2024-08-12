@@ -97,6 +97,18 @@ static void EvalPlanQualStart(EPQState *epqstate, Plan *planTree);
 
 /* end of local decls */
 
+#ifndef FRONTEND
+#ifdef INSTRUMENT_FKS
+TupleTableSlot *
+ExecProcNode(PlanState *node)
+{
+	if (node->chgParam != NULL) /* something changed? */
+		ExecReScan(node);		/* let ReScan handle this */
+
+	return node->ExecProcNode(node);
+}
+#endif
+#endif
 
 /* ----------------------------------------------------------------
  *		ExecutorStart
