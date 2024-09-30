@@ -52,6 +52,7 @@
 
 #include "postgres.h"
 
+#include "access/heapam.h"
 #include "access/htup_details.h"
 #include "access/tableam.h"
 #include "access/xact.h"
@@ -59,10 +60,12 @@
 #include "executor/execPartition.h"
 #include "executor/executor.h"
 #include "executor/nodeModifyTable.h"
+#include "executor/spi.h"
 #include "foreign/fdwapi.h"
 #include "miscadmin.h"
 #include "nodes/nodeFuncs.h"
 #include "optimizer/optimizer.h"
+#include "parser/parse_relation.h"
 #include "rewrite/rewriteHandler.h"
 #include "storage/lmgr.h"
 #include "utils/array.h"
@@ -125,6 +128,19 @@ typedef struct UpdateContext
 	LockTupleMode lockmode;
 } UpdateContext;
 
+/*
+ * FPO_QueryHashEntry
+ */
+typedef struct FPO_QueryHashEntry {
+	Oid			key;
+	SPIPlanPtr	plan;
+} FPO_QueryHashEntry;
+
+/*
+ * Plan cache for FOR PORTION OF inserts
+ */
+#define FPO_INIT_QUERYHASHSIZE 32
+static HTAB *fpo_query_cache = NULL;
 
 static void ExecBatchInsert(ModifyTableState *mtstate,
 							ResultRelInfo *resultRelInfo,
@@ -146,6 +162,9 @@ static bool ExecOnConflictUpdate(ModifyTableContext *context,
 								 TupleTableSlot *excludedSlot,
 								 bool canSetTag,
 								 TupleTableSlot **returning);
+static void fpo_InitHashTable(void);
+static SPIPlanPtr fpo_FetchPreparedPlan(Oid relid);
+static void fpo_HashPreparedPlan(Oid relid, SPIPlanPtr plan);
 static void ExecForPortionOfLeftovers(ModifyTableContext *context,
 									  EState *estate,
 									  ResultRelInfo *resultRelInfo,
@@ -1222,6 +1241,106 @@ ExecInsert(ModifyTableContext *context,
 }
 
 /* ----------------------------------------------------------------
+ *		fpo_InitHashTable
+ *
+ *		Creates a hash table to hold SPI plans to insert leftovers
+ *		from a PORTION OF UPDATE/DELETE
+ * ----------------------------------------------------------------
+ */
+static void
+fpo_InitHashTable(void)
+{
+	HASHCTL		ctl;
+
+	ctl.keysize = sizeof(Oid);
+	ctl.entrysize = sizeof(FPO_QueryHashEntry);
+	fpo_query_cache = hash_create("FPO_query_cache",
+								  FPO_INIT_QUERYHASHSIZE,
+								  &ctl, HASH_ELEM | HASH_BLOBS);
+}
+
+/* ----------------------------------------------------------------
+ *		fpo_FetchPreparedPlan
+ *
+ *		Lookup for a query key in our private hash table of
+ *		prepared and saved SPI execution plans. Returns the plan
+ *		if found or NULL.
+ * ----------------------------------------------------------------
+ */
+static SPIPlanPtr
+fpo_FetchPreparedPlan(Oid relid)
+{
+	FPO_QueryHashEntry *entry;
+	SPIPlanPtr	plan;
+
+	if (!fpo_query_cache)
+		fpo_InitHashTable();
+
+	/*
+	 * Lookup for the key
+	 */
+	entry = (FPO_QueryHashEntry *) hash_search(fpo_query_cache,
+											   &relid,
+											   HASH_FIND, NULL);
+
+	if (!entry)
+		return NULL;
+
+	/*
+	 * Check whether the plan is still valid.  If it isn't, we don't want to
+	 * simply rely on plancache.c to regenerate it; rather we should start
+	 * from scratch and rebuild the query text too.  This is to cover cases
+	 * such as table/column renames.  We depend on the plancache machinery to
+	 * detect possible invalidations, though.
+	 *
+	 * CAUTION: this check is only trustworthy if the caller has already
+	 * locked both FK and PK rels.
+	 */
+	plan = entry->plan;
+	if (plan && SPI_plan_is_valid(plan))
+		return plan;
+
+	/*
+	 * Otherwise we might as well flush the cached plan now, to free a little
+	 * memory space before we make a new one.
+	 */
+	entry->plan = NULL;
+	if (plan)
+		SPI_freeplan(plan);
+
+	return NULL;
+}
+
+/* ----------------------------------------------------------------
+ *		fpo_HashPreparedPlan
+ *
+ *		Add another plan to our private SPI query plan hashtable.
+ * ----------------------------------------------------------------
+ */
+static void
+fpo_HashPreparedPlan(Oid relid, SPIPlanPtr plan)
+{
+	FPO_QueryHashEntry *entry;
+	bool		found;
+
+	/*
+	 * On the first call initialize the hashtable
+	 */
+	if (!fpo_query_cache)
+		fpo_InitHashTable();
+
+	/*
+	 * Add the new plan. We might be overwriting an entry previously found
+	 * invalid by fpo_FetchPreparedPlan.
+	 */
+	entry = (FPO_QueryHashEntry *) hash_search(fpo_query_cache,
+											   &relid,
+											   HASH_ENTER, &found);
+	Assert(!found || entry->plan == NULL);
+	entry->plan = plan;
+}
+
+/* ----------------------------------------------------------------
  *		ExecForPortionOfLeftovers
  *
  *		Insert tuples for the untouched portion of a row in a FOR
@@ -1238,18 +1357,20 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	ModifyTable *node = (ModifyTable *) mtstate->ps.plan;
 	ForPortionOfExpr *forPortionOf = (ForPortionOfExpr *) node->forPortionOf;
 	AttrNumber	rangeAttno;
+	Oid	relid;
+	TupleDesc tupdesc;
+	int	natts;
 	Datum	oldRange;
-	bool isNull = false;
 	TypeCacheEntry *typcache;
 	ForPortionOfState *fpoState = resultRelInfo->ri_forPortionOf;
 	TupleTableSlot *oldtupleSlot = fpoState->fp_Existing;
-	TupleTableSlot *leftoverSlot = fpoState->fp_Leftover;
+	TupleTableSlot *leftoverSlot;
 	TupleConversionMap *map = NULL;
 	HeapTuple oldtuple = NULL;
-	CmdType	oldOperation;
-	TransitionCaptureState *oldTcs;
 	FmgrInfo flinfo;
 	ReturnSetInfo rsi;
+	Relation rel;
+	bool hasPeriod = false;
 	bool didInit = false;
 	bool shouldFree = false;
 	LOCAL_FCINFO(fcinfo, 2);
@@ -1269,8 +1390,8 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 		elog(ERROR, "failed to fetch tuple for FOR PORTION OF");
 
 	/*
-	 * Get the old range of the record being updated.
-	 * Must read with the attno of the leaf partition being updated
+	 * Get the old range of the record being updated/deleted.
+	 * Must read with the attno of the leaf partition.
 	 */
 
 	rangeAttno = forPortionOf->rangeVar->varattno;
@@ -1278,14 +1399,15 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 		map = ExecGetChildToRootMap(resultRelInfo);
 	if (map != NULL)
 		rangeAttno = map->attrMap->attnums[rangeAttno - 1];
-	oldRange = slot_getattr(oldtupleSlot, rangeAttno, &isNull);
+	slot_getallattrs(oldtupleSlot);
 
-	if (isNull)
+	if (oldtupleSlot->tts_isnull[rangeAttno - 1])
 		elog(ERROR, "found a NULL range in a temporal table");
+	oldRange = oldtupleSlot->tts_values[rangeAttno - 1];
 
 	/*
-	 * Get the range's type cache entry. This is worth caching for the whole UPDATE
-	 * as range functions do.
+	 * Get the range's type cache entry. This is worth caching for the whole
+	 * UPDATE/DELETE as range functions do.
 	 */
 
 	typcache = fpoState->fp_leftoverstypcache;
@@ -1317,9 +1439,22 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	fcinfo->args[1].value = fpoState->fp_targetRange;
 	fcinfo->args[1].isnull = false;
 
+	/*
+	 * If there are partitions, we must insert into the root table,
+	 * so we get tuple routing. We already set up leftoverSlot
+	 * with the root tuple descriptor.
+	 */
+	if (resultRelInfo->ri_RootResultRelInfo)
+		resultRelInfo = resultRelInfo->ri_RootResultRelInfo;
+
+	rel = resultRelInfo->ri_RelationDesc;
+	relid = RelationGetRelid(rel);
+
 	while (true)
 	{
 		Datum leftover = FunctionCallInvoke(fcinfo);
+		SPIPlanPtr	qplan = NULL;
+		int spi_result;
 
 		/* Are we done? */
 		if (rsi.isDone == ExprEndResult)
@@ -1331,91 +1466,171 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 		if (!didInit)
 		{
 			/*
-			 * Make a copy of the pre-UPDATE row.
-			 * Then we'll overwrite the range column below.
 			 * Convert oldtuple to the base table's format if necessary.
 			 * We need to insert leftovers through the root partition
 			 * so they get routed correctly.
 			 */
 			if (map != NULL)
+			{
 				leftoverSlot = execute_attr_map_slot(map->attrMap,
 													 oldtupleSlot,
-													 leftoverSlot);
+													 fpoState->fp_Leftover);
+			}
 			else
+				leftoverSlot = oldtupleSlot;
+
+			hasPeriod = forPortionOf->startVar;
+			tupdesc = leftoverSlot->tts_tupleDescriptor;
+			natts = tupdesc->natts;
+
+			/*
+			 * If targeting a leaf partition,
+			 * it may not have fp_values/fp_nulls yet.
+			 */
+			if (!fpoState->fp_values)
 			{
-				oldtuple = ExecFetchSlotHeapTuple(oldtupleSlot, false, &shouldFree);
-				ExecForceStoreHeapTuple(oldtuple, leftoverSlot, false);
+				fpoState->fp_values = palloc(natts * sizeof(Datum));
+				fpoState->fp_nulls = palloc(natts * sizeof(char));
 			}
 
-			/* Save some mtstate things so we can restore them below. */
-			// TODO: Do we need a more systematic way of doing this,
-			// e.g. a new mtstate or even a separate ForPortionOfLeftovers node?
-			oldOperation = mtstate->operation;
-			mtstate->operation = CMD_INSERT;
-			oldTcs = mtstate->mt_transition_capture;
+			/*
+			 * Copy (potentially mapped) oldtuple values into SPI input arrays.
+			 * We'll overwrite the range/start/end attributes below.
+			 */
+			memcpy(fpoState->fp_values, leftoverSlot->tts_values, natts * sizeof(Datum));
+
+			SPI_connect();
 
 			didInit = true;
 		}
 
-		/* store the new range */
-		if (forPortionOf->startVar)
+		/*
+		 * Build an SPI plan if we don't have one yet.
+		 * We always insert into the root partition,
+		 * so that we get tuple routing.
+		 * Therefore the plan is the same no matter which leaf
+		 * we are updating/deleting.
+		 */
+		if (!qplan && !(qplan = fpo_FetchPreparedPlan(relid)))
 		{
-			/* For PERIODs we must split the range into start and end columns */
+			Relation rel = resultRelInfo->ri_RelationDesc;
+			Oid	*types = palloc0(natts * sizeof(Oid));
+			int i;
+			bool started = false;
+			StringInfoData querybuf;
+			StringInfoData parambuf;
+			const char *tablename;
+			const char *schemaname;
+			const char *colname;
 
-			RangeType  *r = DatumGetRangeTypeP(leftover);
-			RangeBound	lower;
-			RangeBound	upper;
-			bool		empty;
+			initStringInfo(&querybuf);
+			initStringInfo(&parambuf);
 
-			range_deserialize(typcache, r, &lower, &upper, &empty);
+			schemaname = get_namespace_name(RelationGetNamespace(rel));
+			tablename = RelationGetRelationName(rel);
+			appendStringInfo(&querybuf, "INSERT INTO %s (",
+							 quote_qualified_identifier(schemaname, tablename));
 
-			if (lower.infinite)
-			{
-				leftoverSlot->tts_values[forPortionOf->startVar->varattno - 1] = 0;
-				leftoverSlot->tts_isnull[forPortionOf->startVar->varattno - 1] = true;
+			for (i = 0; i < natts; i++) {
+				/* Don't try to insert into dropped or generated columns */
+				if (tupdesc->attrs[i].attisdropped || tupdesc->attrs[i].attgenerated)
+					continue;
+
+				types[i] = tupdesc->attrs[i].atttypid;
+
+				colname = quote_identifier(NameStr(*attnumAttName(rel, i + 1)));
+				if (started)
+				{
+					appendStringInfo(&querybuf, ", %s", colname);
+					appendStringInfo(&parambuf, ", $%d", i + 1);
+				}
+				else
+				{
+					appendStringInfo(&querybuf, "%s", colname);
+					appendStringInfo(&parambuf, "$%d", i + 1);
+				}
+				started = true;
 			}
+			appendStringInfo(&querybuf, ") VALUES (%s)", parambuf.data);
+
+			qplan = SPI_prepare(querybuf.data, natts, types);
+			if (!qplan)
+				elog(ERROR, "SPI_prepare returned %s for %s",
+						SPI_result_code_string(SPI_result), querybuf.data);
+
+			SPI_keepplan(qplan);
+			fpo_HashPreparedPlan(relid, qplan);
+		}
+
+		/*
+		 * Set up the SPI params.
+		 * Copy most attributes' old values,
+		 * but for the range/start/end use the leftover.
+		 */
+
+		/* Convert bool null array to SPI char array */
+		for (int i = 0; i < natts; i++)
+		{
+			/*
+			 * Don't try to insert into dropped or generated columns.
+			 * Tell SPI these params are null just to be safe.
+			 */
+			if (tupdesc->attrs[i].attisdropped || tupdesc->attrs[i].attgenerated)
+				fpoState->fp_nulls[i] = 'n';
+			else
+				fpoState->fp_nulls[i] = leftoverSlot->tts_isnull[i] ? 'n' : ' ';
+		}
+
+		if (hasPeriod)
+		{
+			RangeType  *leftoverRange;
+			RangeBound	leftoverLower;
+			RangeBound	leftoverUpper;
+			bool		leftoverEmpty;
+			AttrNumber	startAttno;
+			AttrNumber	endAttno;
+
+			leftoverRange = DatumGetRangeTypeP(leftover);
+			range_deserialize(typcache, leftoverRange, &leftoverLower, &leftoverUpper, &leftoverEmpty);
+
+			startAttno = forPortionOf->startVar->varattno;
+			endAttno = forPortionOf->endVar->varattno;
+
+			if (leftoverLower.infinite)
+				fpoState->fp_nulls[startAttno - 1] = 'n';
 			else
 			{
-				leftoverSlot->tts_values[forPortionOf->startVar->varattno - 1] = lower.val;
-				leftoverSlot->tts_isnull[forPortionOf->startVar->varattno - 1] = false;
+				fpoState->fp_nulls[startAttno - 1] = ' ';
+				fpoState->fp_values[startAttno - 1] = leftoverLower.val;
 			}
 
-			if (upper.infinite)
-			{
-				leftoverSlot->tts_values[forPortionOf->endVar->varattno - 1] = 0;
-				leftoverSlot->tts_isnull[forPortionOf->endVar->varattno - 1] = true;
-			}
+			if (leftoverUpper.infinite)
+				fpoState->fp_nulls[endAttno - 1] = 'n';
 			else
 			{
-				leftoverSlot->tts_values[forPortionOf->endVar->varattno - 1] = upper.val;
-				leftoverSlot->tts_isnull[forPortionOf->endVar->varattno - 1] = false;
+				fpoState->fp_nulls[endAttno - 1] = ' ';
+				fpoState->fp_values[endAttno - 1] = leftoverUpper.val;
 			}
 		}
 		else
 		{
-			/* Just store into the range/whatever column */
-
-			leftoverSlot->tts_values[forPortionOf->rangeVar->varattno - 1] = leftover;
-			leftoverSlot->tts_isnull[forPortionOf->rangeVar->varattno - 1] = false;
+			fpoState->fp_nulls[forPortionOf->rangeVar->varattno - 1] = ' ';
+			fpoState->fp_values[forPortionOf->rangeVar->varattno - 1] = leftover;
 		}
-		ExecMaterializeSlot(leftoverSlot);
 
-		/*
-		 * If there are partitions, we must insert into the root table,
-		 * so we get tuple routing. We already set up leftoverSlot
-		 * with the root tuple descriptor.
-		 */
-		if (resultRelInfo->ri_RootResultRelInfo)
-			resultRelInfo = resultRelInfo->ri_RootResultRelInfo;
-
-		ExecSetupTransitionCaptureState(mtstate, estate);
-		ExecInsert(context, resultRelInfo, leftoverSlot, node->canSetTag, NULL, NULL);
+		spi_result = SPI_execute_snapshot(qplan,
+										  fpoState->fp_values,
+										  fpoState->fp_nulls,
+										  GetLatestSnapshot(),
+										  InvalidSnapshot, false, true, 0);
+		if (spi_result != SPI_OK_INSERT)
+			elog(ERROR, "SPI_execute_snapshot returned %s", SPI_result_code_string(spi_result));
 	}
 
 	if (didInit)
 	{
-		mtstate->operation = oldOperation;
-		mtstate->mt_transition_capture = oldTcs;
+		if (SPI_finish() != SPI_OK_FINISH)
+			elog(ERROR, "SPI_finish failed");
 
 		if (shouldFree)
 			heap_freetuple(oldtuple);
@@ -4868,6 +5083,7 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 	 */
 	if (node->forPortionOf)
 	{
+		ResultRelInfo *rootResultRelInfo;
 		TupleDesc tupDesc;
 		ForPortionOfExpr *forPortionOf;
 		Datum	targetRange;
@@ -4876,11 +5092,11 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 		ExprState *exprState;
 		ForPortionOfState *fpoState;
 
-		resultRelInfo = mtstate->resultRelInfo;
-		if (resultRelInfo->ri_RootResultRelInfo)
-			resultRelInfo = resultRelInfo->ri_RootResultRelInfo;
+		rootResultRelInfo = mtstate->resultRelInfo;
+		if (rootResultRelInfo->ri_RootResultRelInfo)
+			rootResultRelInfo = rootResultRelInfo->ri_RootResultRelInfo;
 
-		tupDesc = resultRelInfo->ri_RelationDesc->rd_att;
+		tupDesc = rootResultRelInfo->ri_RelationDesc->rd_att;
 		forPortionOf = (ForPortionOfExpr *) node->forPortionOf;
 
 		/* Eval the FOR PORTION OF target */
@@ -4904,7 +5120,7 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 		/* Initialize slot for the existing tuple */
 
 		fpoState->fp_Existing =
-			table_slot_create(resultRelInfo->ri_RelationDesc,
+			table_slot_create(rootResultRelInfo->ri_RelationDesc,
 							  &mtstate->ps.state->es_tupleTable);
 
 		/* Create the tuple slot for INSERTing the leftovers */
@@ -4912,10 +5128,15 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 		fpoState->fp_Leftover =
 			ExecInitExtraTupleSlot(mtstate->ps.state, tupDesc, &TTSOpsVirtual);
 
+		/* Allocate our SPI param arrays here so we can reuse them */
+		fpoState->fp_values = palloc(tupDesc->natts * sizeof(Datum));
+		fpoState->fp_nulls = palloc(tupDesc->natts * sizeof(char));
+
 		/*
 		 * We must attach the ForPortionOfState to all result rels,
 		 * in case of a cross-partition update or triggers firing
 		 * on partitions.
+		 * XXX: Can we defer this to only the leafs we touch?
 		 */
 		for (i = 0; i < nrels; i++)
 		{
@@ -4932,6 +5153,13 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 			leafState->fp_Existing =
 				table_slot_create(resultRelInfo->ri_RelationDesc,
 								  &mtstate->ps.state->es_tupleTable);
+			/*
+			 * Leafs need them own SPI input arrays
+			 * since they might have extra attributes,
+			 * but we'll allocate those as needed.
+			 */
+			leafState->fp_values = NULL;
+			leafState->fp_nulls = NULL;
 
 			resultRelInfo->ri_forPortionOf = leafState;
 		}
@@ -4939,37 +5167,6 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 		/* Make sure the root relation has the FOR PORTION OF clause too. */
 		if (node->rootRelation > 0)
 			mtstate->rootResultRelInfo->ri_forPortionOf = fpoState;
-
-		if (rel->rd_rel->relkind == RELKIND_PARTITIONED_TABLE &&
-				mtstate->mt_partition_tuple_routing == NULL)
-		{
-			/*
-			 * We will need tuple routing to insert leftovers.
-			 * Since we are initializing things before ExecCrossPartitionUpdate runs,
-			 * we must do everything it needs as well.
-			 */
-			if (mtstate->mt_partition_tuple_routing == NULL)
-			{
-				Relation	rootRel = mtstate->rootResultRelInfo->ri_RelationDesc;
-				MemoryContext oldcxt;
-
-				/* Things built here have to last for the query duration. */
-				oldcxt = MemoryContextSwitchTo(estate->es_query_cxt);
-
-				mtstate->mt_partition_tuple_routing =
-					ExecSetupPartitionTupleRouting(estate, rootRel);
-
-				/*
-				 * Before a partition's tuple can be re-routed, it must first be
-				 * converted to the root's format, so we'll need a slot for storing
-				 * such tuples.
-				 */
-				Assert(mtstate->mt_root_tuple_slot == NULL);
-				mtstate->mt_root_tuple_slot = table_slot_create(rootRel, NULL);
-
-				MemoryContextSwitchTo(oldcxt);
-			}
-		}
 
 		/* Don't free the ExprContext here because the result must last for the whole query */
 	}

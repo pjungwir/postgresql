@@ -451,6 +451,8 @@ typedef struct ForPortionOfState
 	TypeCacheEntry *fp_leftoverstypcache;	/* type cache entry of the range */
 	TupleTableSlot *fp_Existing;		/* slot to store old tuple */
 	TupleTableSlot *fp_Leftover;		/* slot to store leftover */
+	Datum  *fp_values;	/* SPI input for leftover values */
+	char   *fp_nulls;	/* SPI input for nulls */
 } ForPortionOfState;
 
 /*

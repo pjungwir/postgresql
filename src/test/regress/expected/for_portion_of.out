@@ -384,10 +384,14 @@ SET name = 'five^4'
 WHERE id = '[5,6)';
 NOTICE:  BEFORE UPDATE STATEMENT <NULL> of <NULL>
 NOTICE:  BEFORE UPDATE ROW ["Fri Jan 01 00:00:00 2021","Sat Jan 01 00:00:00 2022") of ["Mon Jun 01 00:00:00 2020","Wed Jan 01 00:00:00 2025")
+NOTICE:  BEFORE INSERT STATEMENT <NULL> of <NULL>
 NOTICE:  BEFORE INSERT ROW ["Mon Jun 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") of <NULL>
-NOTICE:  BEFORE INSERT ROW ["Sat Jan 01 00:00:00 2022","Wed Jan 01 00:00:00 2025") of <NULL>
 NOTICE:  AFTER INSERT ROW ["Mon Jun 01 00:00:00 2020","Fri Jan 01 00:00:00 2021") of <NULL>
+NOTICE:  AFTER INSERT STATEMENT <NULL> of <NULL>
+NOTICE:  BEFORE INSERT STATEMENT <NULL> of <NULL>
+NOTICE:  BEFORE INSERT ROW ["Sat Jan 01 00:00:00 2022","Wed Jan 01 00:00:00 2025") of <NULL>
 NOTICE:  AFTER INSERT ROW ["Sat Jan 01 00:00:00 2022","Wed Jan 01 00:00:00 2025") of <NULL>
+NOTICE:  AFTER INSERT STATEMENT <NULL> of <NULL>
 NOTICE:  AFTER UPDATE ROW ["Fri Jan 01 00:00:00 2021","Sat Jan 01 00:00:00 2022") of ["Mon Jun 01 00:00:00 2020","Wed Jan 01 00:00:00 2025")
 NOTICE:  AFTER UPDATE STATEMENT <NULL> of <NULL>
 DELETE FROM for_portion_of_test
@@ -395,10 +399,14 @@ FOR PORTION OF valid_at FROM '2023-01-01' TO '2024-01-01'
 WHERE id = '[5,6)';
 NOTICE:  BEFORE DELETE STATEMENT <NULL> of <NULL>
 NOTICE:  BEFORE DELETE ROW <NULL> of ["Sat Jan 01 00:00:00 2022","Wed Jan 01 00:00:00 2025")
+NOTICE:  BEFORE INSERT STATEMENT <NULL> of <NULL>
 NOTICE:  BEFORE INSERT ROW ["Sat Jan 01 00:00:00 2022","Sun Jan 01 00:00:00 2023") of <NULL>
-NOTICE:  BEFORE INSERT ROW ["Mon Jan 01 00:00:00 2024","Wed Jan 01 00:00:00 2025") of <NULL>
 NOTICE:  AFTER INSERT ROW ["Sat Jan 01 00:00:00 2022","Sun Jan 01 00:00:00 2023") of <NULL>
+NOTICE:  AFTER INSERT STATEMENT <NULL> of <NULL>
+NOTICE:  BEFORE INSERT STATEMENT <NULL> of <NULL>
+NOTICE:  BEFORE INSERT ROW ["Mon Jan 01 00:00:00 2024","Wed Jan 01 00:00:00 2025") of <NULL>
 NOTICE:  AFTER INSERT ROW ["Mon Jan 01 00:00:00 2024","Wed Jan 01 00:00:00 2025") of <NULL>
+NOTICE:  AFTER INSERT STATEMENT <NULL> of <NULL>
 NOTICE:  AFTER DELETE ROW <NULL> of ["Sat Jan 01 00:00:00 2022","Wed Jan 01 00:00:00 2025")
 NOTICE:  AFTER DELETE STATEMENT <NULL> of <NULL>
 SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
@@ -483,8 +491,10 @@ BEGIN;
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-01-15' TO '2019-01-01'
   SET name = '2018-01-15_to_2019-01-01';
-NOTICE:  for_portion_of_test_insert_trig: INSERT ROW, NEW table = ("[1,2)","[01-01-2018,01-15-2018)",one), ("[1,2)","[01-01-2019,01-01-2020)",one)
-NOTICE:  for_portion_of_test_insert_trig: INSERT ROW, NEW table = ("[1,2)","[01-01-2018,01-15-2018)",one), ("[1,2)","[01-01-2019,01-01-2020)",one)
+NOTICE:  for_portion_of_test_insert_trig: INSERT ROW, NEW table = ("[1,2)","[01-01-2018,01-15-2018)",one)
+NOTICE:  for_portion_of_test_insert_trig_stmt: INSERT STATEMENT, NEW table = ("[1,2)","[01-01-2018,01-15-2018)",one)
+NOTICE:  for_portion_of_test_insert_trig: INSERT ROW, NEW table = ("[1,2)","[01-01-2019,01-01-2020)",one)
+NOTICE:  for_portion_of_test_insert_trig_stmt: INSERT STATEMENT, NEW table = ("[1,2)","[01-01-2019,01-01-2020)",one)
 NOTICE:  for_portion_of_test_update_trig: UPDATE ROW, OLD table = ("[1,2)","[01-01-2018,01-01-2020)",one), NEW table = ("[1,2)","[01-15-2018,01-01-2019)",2018-01-15_to_2019-01-01)
 NOTICE:  for_portion_of_test_update_trig_stmt: UPDATE STATEMENT, OLD table = ("[1,2)","[01-01-2018,01-01-2020)",one), NEW table = ("[1,2)","[01-15-2018,01-01-2019)",2018-01-15_to_2019-01-01)
 ROLLBACK;
@@ -492,6 +502,7 @@ BEGIN;
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM NULL TO '2018-01-21';
 NOTICE:  for_portion_of_test_insert_trig: INSERT ROW, NEW table = ("[1,2)","[01-21-2018,01-01-2020)",one)
+NOTICE:  for_portion_of_test_insert_trig_stmt: INSERT STATEMENT, NEW table = ("[1,2)","[01-21-2018,01-01-2020)",one)
 NOTICE:  for_portion_of_test_delete_trig: DELETE ROW, OLD table = ("[1,2)","[01-01-2018,01-01-2020)",one)
 NOTICE:  for_portion_of_test_delete_trig_stmt: DELETE STATEMENT, OLD table = ("[1,2)","[01-01-2018,01-01-2020)",one)
 ROLLBACK;
@@ -500,6 +511,7 @@ UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM NULL TO '2018-01-02'
   SET name = 'NULL_to_2018-01-01';
 NOTICE:  for_portion_of_test_insert_trig: INSERT ROW, NEW table = ("[1,2)","[01-02-2018,01-01-2020)",one)
+NOTICE:  for_portion_of_test_insert_trig_stmt: INSERT STATEMENT, NEW table = ("[1,2)","[01-02-2018,01-01-2020)",one)
 NOTICE:  for_portion_of_test_update_trig: UPDATE ROW, OLD table = ("[1,2)","[01-01-2018,01-01-2020)",one), NEW table = ("[1,2)","[01-01-2018,01-02-2018)",NULL_to_2018-01-01)
 NOTICE:  for_portion_of_test_update_trig_stmt: UPDATE STATEMENT, OLD table = ("[1,2)","[01-01-2018,01-01-2020)",one), NEW table = ("[1,2)","[01-01-2018,01-02-2018)",NULL_to_2018-01-01)
 ROLLBACK;
