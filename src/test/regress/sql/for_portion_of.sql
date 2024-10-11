@@ -274,6 +274,34 @@ FOR PORTION OF valid_at
 SET name = 'one^3'
 WHERE id = '[1,2)';
 
+-- FOR PORTION OF allows params in sql:
+CREATE FUNCTION fpo_sql_update(target_from date, target_til date)
+RETURNS VOID
+AS $$
+  UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at
+    FROM $1 TO $2
+  SET name = concat(name, '*')
+  WHERE id = '[1,2)';
+$$
+LANGUAGE sql;
+SELECT fpo_sql_update('2018-01-01', '2019-01-01');
+
+-- FOR PORTION OF allows params in plpgsql:
+CREATE FUNCTION fpo_plpgsql_update(target_from date, target_til date)
+RETURNS VOID
+AS $$
+BEGIN
+  UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at
+    FROM $1 TO $2
+  SET name = concat(name, '+')
+  WHERE id = '[1,2)';
+END;
+$$
+LANGUAGE plpgsql;
+SELECT fpo_plpgsql_update('2018-06-01', '2019-01-01');
+
 SELECT * FROM for_portion_of_test2 ORDER BY id, valid_at;
 DROP TABLE for_portion_of_test2;
 
