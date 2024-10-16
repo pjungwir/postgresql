@@ -835,7 +835,7 @@ IsIndexUsableForReplicaIdentityFull(Relation idxrel, AttrMap *attrmap)
 	AttrNumber	keycol;
 
 	/* Ensure that the index access method has a valid equal strategy */
-	if (get_equal_strategy_number_for_am(idxrel->rd_rel->relam) == InvalidStrategy)
+	if (get_equal_strategy_number_for_am(idxrel->rd_rel->relam, InvalidOid) == InvalidStrategy)
 		return false;
 
 	/* The index must not be a partial index */
