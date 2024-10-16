@@ -15,6 +15,7 @@
 #include "postgres.h"
 
 #include "access/genam.h"
+#include "access/gist.h"
 #include "access/relscan.h"
 #include "access/tableam.h"
 #include "access/transam.h"
@@ -77,7 +78,11 @@ get_equal_strategy_number(Oid opclass)
 {
 	Oid			am = get_opclass_method(opclass);
 
-	return get_equal_strategy_number_for_am(am);
+	/* For GiST indexes we need to ask the opclass what strategy number to use. */
+	if (am == GIST_AM_OID)
+		return GistTranslateStratnum(opclass, RTEqualStrategyNumber);
+	else
+		return get_equal_strategy_number_for_am(am);
 }
 
 /*
@@ -134,6 +139,8 @@ build_replindex_scan_key(ScanKey skey, Relation rel, Relation idxrel,
 		optype = get_opclass_input_type(opclass->values[index_attoff]);
 		opfamily = get_opclass_family(opclass->values[index_attoff]);
 		eq_strategy = get_equal_strategy_number(opclass->values[index_attoff]);
+		if (!OidIsValid(eq_strategy))
+			elog(ERROR, "missing equal strategy for opclass %u", opclass->values[index_attoff]);
 
 		operator = get_opfamily_member(opfamily, optype,
 									   optype,
