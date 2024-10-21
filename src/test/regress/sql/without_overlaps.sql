@@ -681,9 +681,7 @@ INSERT INTO temporal_partitioned (id, valid_at, name) VALUES
   ('[1,2)', daterange('2000-01-01', '2000-02-01'), 'one'),
   ('[1,2)', daterange('2000-02-01', '2000-03-01'), 'one'),
   ('[3,4)', daterange('2000-01-01', '2010-01-01'), 'three');
-SELECT * FROM temporal_partitioned ORDER BY id, valid_at;
-SELECT * FROM tp1 ORDER BY id, valid_at;
-SELECT * FROM tp2 ORDER BY id, valid_at;
+SELECT tableoid::regclass, * FROM temporal_partitioned ORDER BY id, valid_at;
 UPDATE  temporal_partitioned
   FOR PORTION OF valid_at FROM '2000-01-15' TO '2000-02-15'
   SET name = 'one2'
@@ -699,7 +697,7 @@ UPDATE  temporal_partitioned
 DELETE FROM temporal_partitioned
   FOR PORTION OF valid_at FROM '2000-01-15' TO '2000-02-15'
   WHERE id = '[3,4)';
-SELECT * FROM temporal_partitioned ORDER BY id, valid_at;
+SELECT tableoid::regclass, * FROM temporal_partitioned ORDER BY id, valid_at;
 DROP TABLE temporal_partitioned;
 
 -- temporal UNIQUE:
@@ -715,9 +713,7 @@ INSERT INTO temporal_partitioned (id, valid_at, name) VALUES
   ('[1,2)', daterange('2000-01-01', '2000-02-01'), 'one'),
   ('[1,2)', daterange('2000-02-01', '2000-03-01'), 'one'),
   ('[3,4)', daterange('2000-01-01', '2010-01-01'), 'three');
-SELECT * FROM temporal_partitioned ORDER BY id, valid_at;
-SELECT * FROM tp1 ORDER BY id, valid_at;
-SELECT * FROM tp2 ORDER BY id, valid_at;
+SELECT tableoid::regclass, * FROM temporal_partitioned ORDER BY id, valid_at;
 UPDATE  temporal_partitioned
   FOR PORTION OF valid_at FROM '2000-01-15' TO '2000-02-15'
   SET name = 'one2'
@@ -733,7 +729,7 @@ UPDATE  temporal_partitioned
 DELETE FROM temporal_partitioned
   FOR PORTION OF valid_at FROM '2000-01-15' TO '2000-02-15'
   WHERE id = '[3,4)';
-SELECT * FROM temporal_partitioned ORDER BY id, valid_at;
+SELECT tableoid::regclass, * FROM temporal_partitioned ORDER BY id, valid_at;
 DROP TABLE temporal_partitioned;
 
 -- ALTER TABLE REPLICA IDENTITY
