@@ -880,8 +880,13 @@ CREATE FUNCTION dump_trigger()
 RETURNS TRIGGER LANGUAGE plpgsql AS
 $$
 BEGIN
-  RAISE NOTICE '%: % % %:',
-    TG_NAME, TG_WHEN, TG_OP, TG_LEVEL;
+  IF TG_PERIOD_NAME IS NOT NULL THEN
+    RAISE NOTICE '%: % % FOR PORTION OF % (%) %:',
+      TG_NAME, TG_WHEN, TG_OP, TG_PERIOD_NAME, TG_PERIOD_BOUNDS, TG_LEVEL;
+  ELSE
+    RAISE NOTICE '%: % % %:',
+      TG_NAME, TG_WHEN, TG_OP, TG_LEVEL;
+  END IF;
 
   IF TG_ARGV[0] THEN
     RAISE NOTICE '  old: %', (SELECT string_agg(old_table::text, '\n       ') FROM old_table);
