@@ -717,6 +717,33 @@ do_compile(FunctionCallInfo fcinfo,
 			var->dtype = PLPGSQL_DTYPE_PROMISE;
 			((PLpgSQL_var *) var)->promise = PLPGSQL_PROMISE_TG_ARGV;
 
+			/* Add the variable tg_period_name */
+			var = plpgsql_build_variable("tg_period_name", 0,
+										 plpgsql_build_datatype(TEXTOID,
+																-1,
+																function->fn_input_collation,
+																NULL),
+										 true);
+			Assert(var->dtype == PLPGSQL_DTYPE_VAR);
+			var->dtype = PLPGSQL_DTYPE_PROMISE;
+			((PLpgSQL_var *) var)->promise = PLPGSQL_PROMISE_TG_PERIOD_NAME;
+
+			/*
+			 * Add the variable to tg_period_bounds.
+			 * This could be any rangetype or multirangetype
+			 * or user-supplied type,
+			 * so the best we can offer is a TEXT variable.
+			 */
+			var = plpgsql_build_variable("tg_period_bounds", 0,
+										 plpgsql_build_datatype(TEXTOID,
+																-1,
+																function->fn_input_collation,
+																NULL),
+										 true);
+			Assert(var->dtype == PLPGSQL_DTYPE_VAR);
+			var->dtype = PLPGSQL_DTYPE_PROMISE;
+			((PLpgSQL_var *) var)->promise = PLPGSQL_PROMISE_TG_PERIOD_BOUNDS;
+
 			break;
 
 		case PLPGSQL_EVENT_TRIGGER:
