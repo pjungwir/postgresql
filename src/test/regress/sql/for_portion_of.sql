@@ -396,16 +396,18 @@ RETURNS TRIGGER LANGUAGE plpgsql AS
 $$
 BEGIN
   IF TG_OP = 'INSERT' THEN
-    RAISE NOTICE '%: % %, NEW table = %',
-      TG_NAME, TG_OP, TG_LEVEL, (SELECT string_agg(new_table::text, ', ' ORDER BY id) FROM new_table);
+    RAISE NOTICE '%: % FOR PORTION OF % (%) %, NEW table = %',
+      TG_NAME, TG_OP, TG_PERIOD_NAME, TG_PERIOD_BOUNDS, TG_LEVEL,
+      (SELECT string_agg(new_table::text, ', ' ORDER BY id) FROM new_table);
   ELSIF TG_OP = 'UPDATE' THEN
-    RAISE NOTICE '%: % %, OLD table = %, NEW table = %',
-      TG_NAME, TG_OP, TG_LEVEL,
+    RAISE NOTICE '%: % FOR PORTION OF % (%) %, OLD table = %, NEW table = %',
+      TG_NAME, TG_OP, TG_PERIOD_NAME, TG_PERIOD_BOUNDS, TG_LEVEL,
       (SELECT string_agg(old_table::text, ', ' ORDER BY id) FROM old_table),
       (SELECT string_agg(new_table::text, ', ' ORDER BY id) FROM new_table);
   ELSIF TG_OP = 'DELETE' THEN
-    RAISE NOTICE '%: % %, OLD table = %',
-      TG_NAME, TG_OP, TG_LEVEL, (SELECT string_agg(old_table::text, ', ' ORDER BY id) FROM old_table);
+    RAISE NOTICE '%: % FOR PORTION OF % (%) %, OLD table = %',
+      TG_NAME, TG_OP, TG_PERIOD_NAME, TG_PERIOD_BOUNDS, TG_LEVEL,
+      (SELECT string_agg(old_table::text, ', ' ORDER BY id) FROM old_table);
   END IF;
   RETURN NULL;
 END;
