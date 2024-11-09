@@ -1613,7 +1613,8 @@ DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
 void
 FindFKPeriodOpers(Oid opclass,
 				  Oid *containedbyoperoid,
-				  Oid *aggedcontainedbyoperoid)
+				  Oid *aggedcontainedbyoperoid,
+				  Oid *intersectoperoid)
 {
 	Oid			opfamily = InvalidOid;
 	Oid			opcintype = InvalidOid;
@@ -1654,6 +1655,17 @@ FindFKPeriodOpers(Oid opclass,
 									 ANYMULTIRANGEOID,
 									 aggedcontainedbyoperoid,
 									 &strat);
+
+	switch (opcintype) {
+		case ANYRANGEOID:
+			*intersectoperoid = OID_RANGE_INTERSECT_RANGE_OP;
+			break;
+		case ANYMULTIRANGEOID:
+			*intersectoperoid = OID_MULTIRANGE_INTERSECT_MULTIRANGE_OP;
+			break;
+		default:
+			elog(ERROR, "Unexpected opcintype: %u", opcintype);
+	}
 }
 
 /*
