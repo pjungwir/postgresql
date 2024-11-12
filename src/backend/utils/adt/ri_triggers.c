@@ -131,6 +131,7 @@ typedef struct RI_ConstraintInfo
 	Oid			period_contained_by_oper;	/* anyrange <@ anyrange */
 	Oid			agged_period_contained_by_oper; /* fkattr <@ range_agg(pkattr) */
 	Oid			period_intersect_oper;	/* anyrange * anyrange */
+	Oid			without_portion_proc;	/* anyrange - anyrange SRF */
 	dlist_node	valid_link;		/* Link in list of valid entries */
 } RI_ConstraintInfo;
 
@@ -208,7 +209,7 @@ static void ri_BuildQueryKey(RI_QueryKey *key,
 							 const RI_ConstraintInfo *riinfo,
 							 int32 constr_queryno);
 static bool ri_KeysEqual(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
-						 const RI_ConstraintInfo *riinfo, bool rel_is_pk);
+						 const RI_ConstraintInfo *riinfo, bool rel_is_pk, bool skip_period);
 static bool ri_CompareWithCast(Oid eq_opr, Oid typeid, Oid collid,
 							   Datum lhs, Datum rhs);
 
@@ -230,6 +231,7 @@ static bool ri_PerformCheck(const RI_ConstraintInfo *riinfo,
 							RI_QueryKey *qkey, SPIPlanPtr qplan,
 							Relation fk_rel, Relation pk_rel,
 							TupleTableSlot *oldslot, TupleTableSlot *newslot,
+							int periodParam, Datum period,
 							bool is_restrict,
 							bool detectNewRows, int expect_OK);
 static void ri_ExtractValues(Relation rel, TupleTableSlot *slot,
@@ -452,6 +454,7 @@ RI_FKey_check(TriggerData *trigdata)
 	ri_PerformCheck(riinfo, &qkey, qplan,
 					fk_rel, pk_rel,
 					NULL, newslot,
+					-1, (Datum) 0,
 					false,
 					pk_rel->rd_rel->relkind == RELKIND_PARTITIONED_TABLE,
 					SPI_OK_SELECT);
@@ -617,6 +620,7 @@ ri_Check_Pk_Match(Relation pk_rel, Relation fk_rel,
 	result = ri_PerformCheck(riinfo, &qkey, qplan,
 							 fk_rel, pk_rel,
 							 oldslot, NULL,
+							 -1, (Datum) 0,
 							 false,
 							 true,	/* treat like update */
 							 SPI_OK_SELECT);
@@ -715,8 +719,18 @@ ri_restrict(TriggerData *trigdata, bool is_no_action)
 	Relation	fk_rel;
 	Relation	pk_rel;
 	TupleTableSlot *oldslot;
+	TupleTableSlot *newslot;
 	RI_QueryKey qkey;
 	SPIPlanPtr	qplan;
+	AttrNumber	pkperiodattno = InvalidAttrNumber;
+	AttrNumber	fkperiodattno = InvalidAttrNumber;
+	int			targetRangeParam = -1;
+	Datum		targetRange = (Datum) 0;
+	FmgrInfo	flinfo;
+	ReturnSetInfo	rsi;
+	LOCAL_FCINFO(fcinfo, 2);
+	bool		multiplelost = false;
+	bool		finished = false;
 
 	riinfo = ri_FetchConstraintInfo(trigdata->tg_trigger,
 									trigdata->tg_relation, true);
@@ -730,6 +744,7 @@ ri_restrict(TriggerData *trigdata, bool is_no_action)
 	fk_rel = table_open(riinfo->fk_relid, RowShareLock);
 	pk_rel = trigdata->tg_relation;
 	oldslot = trigdata->tg_trigslot;
+	newslot = trigdata->tg_newslot;
 
 	/*
 	 * If another PK row now exists providing the old key values, we should
@@ -745,6 +760,12 @@ ri_restrict(TriggerData *trigdata, bool is_no_action)
 	{
 		table_close(fk_rel, RowShareLock);
 		return PointerGetDatum(NULL);
+	}
+
+	if (riinfo->hasperiod)
+	{
+		pkperiodattno = riinfo->pk_attnums[riinfo->nkeys - 1];
+		fkperiodattno = riinfo->fk_attnums[riinfo->nkeys - 1];
 	}
 
 	SPI_connect();
@@ -821,17 +842,27 @@ ri_restrict(TriggerData *trigdata, bool is_no_action)
 		 * We need the coalesce in case the first subquery returns no rows.
 		 * We need the second subquery because FOR KEY SHARE doesn't support
 		 * aggregate queries.
+		 *
+		 * For RESTRICT keys we can't query pktable, so instead we use the old
+		 * and new periods to see what was removed, and look for references
+		 * matching that. If the scalar key part changed, then this is
+		 * (where $n is the old period and $2n the new):
+		 *   $n && x.fkperiod
+		 * But if the scalar key part didn't change, then we only lost part of
+		 * the time span, so we should look for:
+		 *   (SELECT range_agg(r) FROM without_portion($n, $2n) wo(r))
+		 *     && x.fkperiod
 		 */
 		if (riinfo->hasperiod && is_no_action)
 		{
-			Oid			pk_period_type = RIAttType(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]);
-			Oid			fk_period_type = RIAttType(fk_rel, riinfo->fk_attnums[riinfo->nkeys - 1]);
+			Oid			pk_period_type = RIAttType(pk_rel, pkperiodattno);
+			Oid			fk_period_type = RIAttType(fk_rel, fkperiodattno);
 			StringInfoData intersectbuf;
 			StringInfoData replacementsbuf;
 			char	   *pk_only = pk_rel->rd_rel->relkind == RELKIND_PARTITIONED_TABLE ?
 				"" : "ONLY ";
 
-			quoteOneName(attname, RIAttName(fk_rel, riinfo->fk_attnums[riinfo->nkeys - 1]));
+			quoteOneName(attname, RIAttName(fk_rel, fkperiodattno));
 			sprintf(paramname, "$%d", riinfo->nkeys);
 
 			appendStringInfoString(&querybuf, " AND NOT coalesce(");
@@ -849,7 +880,7 @@ ri_restrict(TriggerData *trigdata, bool is_no_action)
 			initStringInfo(&replacementsbuf);
 			appendStringInfoString(&replacementsbuf, "(SELECT pg_catalog.range_agg(r) FROM ");
 
-			quoteOneName(periodattname, RIAttName(pk_rel, riinfo->pk_attnums[riinfo->nkeys - 1]));
+			quoteOneName(periodattname, RIAttName(pk_rel, pkperiodattno));
 			quoteRelationName(pkrelname, pk_rel);
 			appendStringInfo(&replacementsbuf, "(SELECT y.%s r FROM %s%s y",
 							 periodattname, pk_only, pkrelname);
@@ -889,13 +920,86 @@ ri_restrict(TriggerData *trigdata, bool is_no_action)
 
 	/*
 	 * We have a plan now. Run it to check for existing references.
+	 *
+	 * Normally we only loop once here. But if
+	 * we have a RESTRICT constraint with a PERIOD,
+	 * we must only consider the timespan that was lost.
+	 *
+	 * If the scalar key part was UPDATEd,
+	 * then all of oldslot.pkperiod was lost
+	 * (whether the endpoints changed or not).
+	 * That's what we already check by default.
+	 *
+	 * Otherwise only oldslot.pkperiod - newslot.pkperiod was lost.
+	 * That may be more than one range, so we use the
+	 * without_portion set-returning function and loop
+	 * over its results. It also may be empty,
+	 * meaning nothing was lost, and no check is required.
+	 * We shouldn't be here if neither the scalar nor PERIOD part changed,
+	 * but it's easy to support anyway.
+	 *
+	 * For a DELETE, oldslot.pkperiod was lost,
+	 * which is what we check for by default.
 	 */
-	ri_PerformCheck(riinfo, &qkey, qplan,
-					fk_rel, pk_rel,
-					oldslot, NULL,
-					!is_no_action,
-					true,		/* must detect new rows */
-					SPI_OK_SELECT);
+	if (riinfo->hasperiod && !is_no_action)
+	{
+		if (TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event)
+			&& ri_KeysEqual(pk_rel, oldslot, newslot, riinfo, true, true))
+		{
+			multiplelost = true;
+
+			fmgr_info(riinfo->without_portion_proc, &flinfo);
+			rsi.type = T_ReturnSetInfo;
+			rsi.econtext = CreateStandaloneExprContext();
+			rsi.expectedDesc = NULL;
+			rsi.allowedModes = (int) (SFRM_ValuePerCall);
+			rsi.returnMode = SFRM_ValuePerCall;
+			rsi.setResult = NULL;
+			rsi.setDesc = NULL;
+
+			InitFunctionCallInfoData(*fcinfo, &flinfo, 2, InvalidOid, NULL, (Node *) &rsi);
+			fcinfo->args[0].value = slot_getattr(oldslot, pkperiodattno,
+												 &fcinfo->args[0].isnull);
+			fcinfo->args[1].value = slot_getattr(newslot, pkperiodattno,
+												 &fcinfo->args[1].isnull);
+
+			targetRangeParam = riinfo->nkeys;
+		}
+	}
+
+	while (!finished)
+	{
+		if (multiplelost)
+		{
+			/* Compute a span that was actually lost. */
+			targetRange = FunctionCallInvoke(fcinfo);
+
+			/*
+			 * If we have no more lost spans to check, we're done.
+			 * If no span was lost, we don't even need to check the foreign key.
+			 */
+			if (rsi.isDone == ExprEndResult)
+				break;
+
+			if (fcinfo->isnull)
+				elog(ERROR, "Get a null from without_portion function");
+		}
+		else
+			finished = true;
+
+		ri_PerformCheck(riinfo, &qkey, qplan,
+						fk_rel, pk_rel,
+						oldslot, NULL,
+						targetRangeParam, targetRange,
+						!is_no_action,
+						true,		/* must detect new rows */
+						SPI_OK_SELECT);
+
+	}
+
+	/* Free this before we shut down SPI since our memctx is a child */
+	if (multiplelost)
+		FreeExprContext(rsi.econtext, false);
 
 	if (SPI_finish() != SPI_OK_FINISH)
 		elog(ERROR, "SPI_finish failed");
@@ -995,6 +1099,7 @@ RI_FKey_cascade_del(PG_FUNCTION_ARGS)
 	ri_PerformCheck(riinfo, &qkey, qplan,
 					fk_rel, pk_rel,
 					oldslot, NULL,
+					-1, (Datum) 0,
 					false,
 					true,		/* must detect new rows */
 					SPI_OK_DELETE);
@@ -1112,6 +1217,7 @@ RI_FKey_cascade_upd(PG_FUNCTION_ARGS)
 	ri_PerformCheck(riinfo, &qkey, qplan,
 					fk_rel, pk_rel,
 					oldslot, newslot,
+					-1, (Datum) 0,
 					false,
 					true,		/* must detect new rows */
 					SPI_OK_UPDATE);
@@ -1340,6 +1446,7 @@ ri_set(TriggerData *trigdata, bool is_set_null, int tgkind)
 	ri_PerformCheck(riinfo, &qkey, qplan,
 					fk_rel, pk_rel,
 					oldslot, NULL,
+					-1, (Datum) 0,
 					false,
 					true,		/* must detect new rows */
 					SPI_OK_UPDATE);
@@ -1398,7 +1505,7 @@ RI_FKey_pk_upd_check_required(Trigger *trigger, Relation pk_rel,
 		return false;
 
 	/* If all old and new key values are equal, no check is needed */
-	if (newslot && ri_KeysEqual(pk_rel, oldslot, newslot, riinfo, true))
+	if (newslot && ri_KeysEqual(pk_rel, oldslot, newslot, riinfo, true, false))
 		return false;
 
 	/* Else we need to fire the trigger. */
@@ -1491,7 +1598,7 @@ RI_FKey_fk_upd_check_required(Trigger *trigger, Relation fk_rel,
 		return true;
 
 	/* If all old and new key values are equal, no check is needed */
-	if (ri_KeysEqual(fk_rel, oldslot, newslot, riinfo, false))
+	if (ri_KeysEqual(fk_rel, oldslot, newslot, riinfo, false, false))
 		return false;
 
 	/* Else we need to fire the trigger. */
@@ -2339,10 +2446,11 @@ ri_LoadConstraintInfo(Oid constraintOid)
 	{
 		Oid			opclass = get_index_column_opclass(conForm->conindid, riinfo->nkeys);
 
-		FindFKPeriodOpers(opclass,
-						  &riinfo->period_contained_by_oper,
-						  &riinfo->agged_period_contained_by_oper,
-						  &riinfo->period_intersect_oper);
+		FindFKPeriodOpersAndProcs(opclass,
+								  &riinfo->period_contained_by_oper,
+								  &riinfo->agged_period_contained_by_oper,
+								  &riinfo->period_intersect_oper,
+								  &riinfo->without_portion_proc);
 	}
 
 	ReleaseSysCache(tup);
@@ -2485,6 +2593,7 @@ ri_PerformCheck(const RI_ConstraintInfo *riinfo,
 				RI_QueryKey *qkey, SPIPlanPtr qplan,
 				Relation fk_rel, Relation pk_rel,
 				TupleTableSlot *oldslot, TupleTableSlot *newslot,
+				int periodParam, Datum period,
 				bool is_restrict,
 				bool detectNewRows, int expect_OK)
 {
@@ -2497,8 +2606,8 @@ ri_PerformCheck(const RI_ConstraintInfo *riinfo,
 	int			spi_result;
 	Oid			save_userid;
 	int			save_sec_context;
-	Datum		vals[RI_MAX_NUMKEYS * 2];
-	char		nulls[RI_MAX_NUMKEYS * 2];
+	Datum		vals[RI_MAX_NUMKEYS * 2 + 1];
+	char		nulls[RI_MAX_NUMKEYS * 2 + 1];
 
 	/*
 	 * Use the query type code to determine whether the query is run against
@@ -2540,6 +2649,12 @@ ri_PerformCheck(const RI_ConstraintInfo *riinfo,
 	{
 		ri_ExtractValues(source_rel, oldslot, riinfo, source_is_pk,
 						 vals, nulls);
+	}
+	/* Add/replace a query param for the PERIOD if needed */
+	if (period)
+	{
+		vals[periodParam - 1] = period;
+		nulls[periodParam - 1] = ' ';
 	}
 
 	/*
@@ -2975,6 +3090,9 @@ ri_HashPreparedPlan(RI_QueryKey *key, SPIPlanPtr plan)
  * For normal FKs we check for equality.
  * For temporal FKs we check that the PK side is a superset of its old value,
  * or the FK side is a subset of its old value.
+ * If skip_period is set, we ignore the last key element.
+ * This lets us ask if the scalar key parts changed,
+ * ignoring the PERIOD.
  *
  * Note: at some point we might wish to redefine this as checking for
  * "IS NOT DISTINCT" rather than "=", that is, allow two nulls to be
@@ -2983,9 +3101,11 @@ ri_HashPreparedPlan(RI_QueryKey *key, SPIPlanPtr plan)
  */
 static bool
 ri_KeysEqual(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
-			 const RI_ConstraintInfo *riinfo, bool rel_is_pk)
+			 const RI_ConstraintInfo *riinfo, bool rel_is_pk, bool skip_period)
 {
 	const int16 *attnums;
+
+	Assert(skip_period ? riinfo->hasperiod : true);
 
 	if (rel_is_pk)
 		attnums = riinfo->pk_attnums;
@@ -2993,7 +3113,7 @@ ri_KeysEqual(Relation rel, TupleTableSlot *oldslot, TupleTableSlot *newslot,
 		attnums = riinfo->fk_attnums;
 
 	/* XXX: could be worthwhile to fetch all necessary attrs at once */
-	for (int i = 0; i < riinfo->nkeys; i++)
+	for (int i = 0; i < riinfo->nkeys - (skip_period ? 1 : 0); i++)
 	{
 		Datum		oldvalue;
 		Datum		newvalue;
