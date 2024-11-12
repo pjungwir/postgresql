@@ -1600,21 +1600,25 @@ DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
 }
 
 /*
- * FindFkPeriodOpers -
+ * FindFkPeriodOpersAndProcs -
  *
- * Looks up the operator oids used for the PERIOD part of a temporal foreign key.
+ * Looks up the operator and procedure oids used for the PERIOD part of a temporal foreign key.
  * The opclass should be the opclass of that PERIOD element.
  * Everything else is an output: containedbyoperoid is the ContainedBy operator for
  * types matching the PERIOD element.
  * aggedcontainedbyoperoid is also a ContainedBy operator,
  * but one whose rhs is a multirange.
  * That way foreign keys can compare fkattr <@ range_agg(pkattr).
+ * withoutportionoid is a set-returning function computing
+ * the difference between one range and another,
+ * returning each result range in a separate row.
  */
 void
-FindFKPeriodOpers(Oid opclass,
-				  Oid *containedbyoperoid,
-				  Oid *aggedcontainedbyoperoid,
-				  Oid *intersectoperoid)
+FindFKPeriodOpersAndProcs(Oid opclass,
+						  Oid *containedbyoperoid,
+						  Oid *aggedcontainedbyoperoid,
+						  Oid *intersectoperoid,
+						  Oid *withoutportionoid)
 {
 	Oid			opfamily = InvalidOid;
 	Oid			opcintype = InvalidOid;
@@ -1666,6 +1670,15 @@ FindFKPeriodOpers(Oid opclass,
 		default:
 			elog(ERROR, "Unexpected opcintype: %u", opcintype);
 	}
+
+	*withoutportionoid = InvalidOid;
+	*withoutportionoid = get_opfamily_proc(opfamily, opcintype, opcintype, GIST_WITHOUT_PORTION_PROC);
+	if (!OidIsValid(*withoutportionoid))
+		ereport(ERROR,
+				errcode(ERRCODE_UNDEFINED_OBJECT),
+				errmsg("could not identify a without_overlaps support function for type %s", format_type_be(opcintype)),
+				errhint("Define a without_overlaps support function for operator class \"%d\" for access method \"%s\".",
+						opclass, "gist"));
 }
 
 /*
