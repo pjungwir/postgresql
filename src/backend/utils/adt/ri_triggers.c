@@ -2019,6 +2019,7 @@ tri_set(TriggerData *trigdata, bool is_set_null, int tgkind)
 					fk_rel, pk_rel,
 					oldslot, NULL,
 					riinfo->nkeys + 1, targetRange,
+					false,
 					true,		/* must detect new rows */
 					SPI_OK_UPDATE);
 
