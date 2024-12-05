@@ -1769,6 +1769,7 @@ RI_FKey_period_cascade_upd(PG_FUNCTION_ARGS)
 					fk_rel, pk_rel,
 					oldslot, newslot,
 					riinfo->nkeys * 2 + 1, targetRange,
+					false,
 					true,		/* must detect new rows */
 					SPI_OK_UPDATE);
 
