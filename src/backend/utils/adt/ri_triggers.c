@@ -1626,6 +1626,7 @@ RI_FKey_period_cascade_del(PG_FUNCTION_ARGS)
 					fk_rel, pk_rel,
 					oldslot, NULL,
 					riinfo->nkeys + 1, targetRange,
+					false,
 					true,	   /* must detect new rows */
 					SPI_OK_DELETE);
 
