@@ -1545,24 +1545,46 @@ transformForPortionOfClause(ParseState *pstate,
 
 		if (result->startVar)
 		{
-			Expr *boundTLEExpr;
+			FuncExpr *boundTLEExpr;
+			Oid arg_types[1] = {ANYRANGEOID};
+			FuncDetailCode fdresult;
+			Oid rettype;
+			bool retset;
+			int nvargs;
+			Oid vatype;
+			Oid *declared_arg_types;
+			Oid elemtypid = get_range_subtype(attr->atttypid);
 
 			/* set the start column */
-			boundTLEExpr = (Expr *) makeFuncCall(SystemFuncName("lower"),
-					list_make1(rangeTLEExpr),
-					COERCE_EXPLICIT_CALL,
-					forPortionOf->location);
-			boundTLEExpr = (Expr *) transformExpr(pstate, (Node *) boundTLEExpr, EXPR_KIND_UPDATE_PORTION);
-			tle = makeTargetEntry(boundTLEExpr, start_attno, startcolname, false);
+			fdresult = func_get_detail(SystemFuncName("lower"), NIL, NIL, 1,
+									   arg_types,
+									   false, false, false,
+									   &funcid, &rettype, &retset,
+									   &nvargs, &vatype,
+									   &declared_arg_types, NULL);
+			if (fdresult != FUNCDETAIL_NORMAL)
+				elog(ERROR, "failed to find lower(anyrange) function");
+			boundTLEExpr = makeFuncExpr(funcid,
+										elemtypid,
+										list_make1(rangeTLEExpr),
+										InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
+			tle = makeTargetEntry((Expr *) boundTLEExpr, start_attno, startcolname, false);
 			result->rangeTargetList = lappend(result->rangeTargetList, tle);
 
 			/* set the end column */
-			boundTLEExpr = (Expr *) makeFuncCall(SystemFuncName("upper"),
-					list_make1(rangeTLEExpr),
-					COERCE_EXPLICIT_CALL,
-					forPortionOf->location);
-			boundTLEExpr = (Expr *) transformExpr(pstate, (Node *) boundTLEExpr, EXPR_KIND_UPDATE_PORTION);
-			tle = makeTargetEntry(boundTLEExpr, end_attno, endcolname, false);
+			fdresult = func_get_detail(SystemFuncName("upper"), NIL, NIL, 1,
+									   arg_types,
+									   false, false, false,
+									   &funcid, &rettype, &retset,
+									   &nvargs, &vatype,
+									   &declared_arg_types, NULL);
+			if (fdresult != FUNCDETAIL_NORMAL)
+				elog(ERROR, "failed to find upper(anyrange) function");
+			boundTLEExpr = makeFuncExpr(funcid,
+										elemtypid,
+										list_make1(rangeTLEExpr),
+										InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
+			tle = makeTargetEntry((Expr *) boundTLEExpr, end_attno, endcolname, false);
 			result->rangeTargetList = lappend(result->rangeTargetList, tle);
 
 			/*
@@ -1576,7 +1598,7 @@ transformForPortionOfClause(ParseState *pstate,
 		}
 		else
 		{
-			tle = makeTargetEntry(rangeTLEExpr, range_attno, range_name, false);
+			tle = makeTargetEntry((Expr *) rangeTLEExpr, range_attno, range_name, false);
 			result->rangeTargetList = lappend(result->rangeTargetList, tle);
 
 			/* Mark the range column as requiring update permissions */
