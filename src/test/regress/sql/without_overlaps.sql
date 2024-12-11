@@ -3604,7 +3604,8 @@ DELETE FROM temporal_per WHERE id = '[5,6)';
 INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
   ('[5,6)', '2018-01-01', '2018-02-01'),
   ('[5,6)', '2018-02-01', '2018-03-01');
-INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[3,4)', '2018-01-05', '2018-01-10', '[5,6)');
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES
+  ('[3,4)', '2018-01-05', '2018-01-10', '[5,6)');
 UPDATE temporal_per SET valid_from = '2016-02-01', valid_til = '2016-03-01'
 WHERE id = '[5,6)' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
 -- A PK update sliding the edge between two referenced rows:
@@ -3619,6 +3620,33 @@ SET valid_from = CASE WHEN valid_from = '2018-01-01' THEN '2018-01-01'
     valid_til =  CASE WHEN valid_from = '2018-01-01' THEN '2018-01-05'
                       WHEN valid_from = '2018-02-01' THEN '2018-03-01' END::date
 WHERE id = '[6,7)';
+-- a PK update shrinking the referenced range but still valid:
+-- There are two references: one fulfilled by the first pk row,
+-- the other fulfilled by both pk rows combined.
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
+  ('[1,2)', '2018-01-01', '2018-03-01'),
+  ('[1,2)', '2018-03-01', '2018-06-01');
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES
+  ('[1,2)', '2018-01-15', '2018-02-01', '[1,2)'),
+  ('[2,3)', '2018-01-15', '2018-05-01', '[1,2)');
+UPDATE temporal_per SET valid_from = '2018-01-15', valid_til = '2018-03-01'
+WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
+-- a PK update growing the referenced range is fine:
+UPDATE temporal_per SET valid_from = '2018-01-01', valid_til = '2018-03-01'
+WHERE id = '[1,2)' AND valid_at @> '2018-01-25'::date;
+-- a PK update shrinking the referenced range and changing the id invalidates the whole range:
+UPDATE temporal_per SET id = '[2,3)', valid_from = '2018-01-15', valid_til = '2018-03-01'
+WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
+-- a PK update changing only the id invalidates the whole range:
+UPDATE temporal_per SET id = '[2,3)'
+WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
+-- a PK update that loses time from both ends, but is still valid:
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
+  ('[2,3)', '2018-01-01', '2018-03-01');
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES
+  ('[5,6)', '2018-01-15', '2018-02-01', '[2,3)');
+UPDATE temporal_per SET valid_from = '2018-01-15', valid_til = '2018-02-15'
+WHERE id = '[2,3)';
 -- a PK update that fails because both are referenced:
 UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01'
 WHERE id = '[5,6)' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
@@ -3671,7 +3699,8 @@ DELETE FROM temporal_per WHERE id = '[5,6)';
 INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
   ('[5,6)', '2018-01-01', '2018-02-01'),
   ('[5,6)', '2018-02-01', '2018-03-01');
-INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[3,4)', '2018-01-05', '2018-01-10', '[5,6)');
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES
+  ('[3,4)', '2018-01-05', '2018-01-10', '[5,6)');
 UPDATE temporal_per SET valid_from = '2016-02-01', valid_til = '2016-03-01'
 WHERE id = '[5,6)' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
 -- A PK update sliding the edge between two referenced rows:
@@ -3686,6 +3715,33 @@ SET valid_from = CASE WHEN valid_from = '2018-01-01' THEN '2018-01-01'
     valid_til =  CASE WHEN valid_from = '2018-01-01' THEN '2018-01-05'
                       WHEN valid_from = '2018-02-01' THEN '2018-03-01' END::date
 WHERE id = '[6,7)';
+-- a PK update shrinking the referenced range but still valid:
+-- There are two references: one fulfilled by the first pk row,
+-- the other fulfilled by both pk rows combined.
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
+  ('[1,2)', '2018-01-01', '2018-03-01'),
+  ('[1,2)', '2018-03-01', '2018-06-01');
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES
+  ('[1,2)', '2018-01-15', '2018-02-01', '[1,2)'),
+  ('[2,3)', '2018-01-15', '2018-05-01', '[1,2)');
+UPDATE temporal_per SET valid_from = '2018-01-15', valid_til = '2018-03-01'
+WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
+-- a PK update growing the referenced range is fine:
+UPDATE temporal_per SET valid_from = '2018-01-01', valid_til = '2018-03-01'
+WHERE id = '[1,2)' AND valid_at @> '2018-01-25'::date;
+-- a PK update shrinking the referenced range and changing the id invalidates the whole range:
+UPDATE temporal_per SET id = '[2,3)', valid_from = '2018-01-15', valid_til = '2018-03-01'
+WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
+-- a PK update changing only the id invalidates the whole range:
+UPDATE temporal_per SET id = '[2,3)'
+WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
+-- a PK update that loses time from both ends, but is still valid:
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
+  ('[2,3)', '2018-01-01', '2018-03-01');
+INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES
+  ('[5,6)', '2018-01-15', '2018-02-01', '[2,3)');
+UPDATE temporal_per SET valid_from = '2018-01-15', valid_til = '2018-02-15'
+WHERE id = '[2,3)';
 -- a PK update that fails because both are referenced (even before commit):
 BEGIN;
   ALTER TABLE temporal_fk_per2per
@@ -4474,7 +4530,8 @@ DELETE FROM temporal_per WHERE id = '[5,6)';
 INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
   ('[5,6)', '2018-01-01', '2018-02-01'),
   ('[5,6)', '2018-02-01', '2018-03-01');
-INSERT INTO temporal_fk_rng2per (id, valid_at, parent_id) VALUES ('[3,4)', '[2018-01-05,2018-01-10)', '[5,6)');
+INSERT INTO temporal_fk_rng2per (id, valid_at, parent_id) VALUES
+  ('[3,4)', '[2018-01-05,2018-01-10)', '[5,6)');
 UPDATE temporal_per SET valid_from = '2016-02-01', valid_til = '2016-03-01'
 WHERE id = '[5,6)' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
 -- A PK update sliding the edge between two referenced rows:
@@ -4489,6 +4546,33 @@ SET valid_from = CASE WHEN valid_from = '2018-01-01' THEN '2018-01-01'
     valid_til =  CASE WHEN valid_from = '2018-01-01' THEN '2018-01-05'
                       WHEN valid_from = '2018-02-01' THEN '2018-03-01' END::date
 WHERE id = '[6,7)';
+-- a PK update shrinking the referenced range but still valid:
+-- There are two references: one fulfilled by the first pk row,
+-- the other fulfilled by both pk rows combined.
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
+  ('[1,2)', '2018-01-01', '2018-03-01'),
+  ('[1,2)', '2018-03-01', '2018-06-01');
+INSERT INTO temporal_fk_rng2per (id, valid_at, parent_id) VALUES
+  ('[1,2)', '[2018-01-15,2018-02-01)', '[1,2)'),
+  ('[2,3)', '[2018-01-15,2018-05-01)', '[1,2)');
+UPDATE temporal_per SET valid_from = '2018-01-15', valid_til = '2018-03-01'
+WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
+-- a PK update growing the referenced range is fine:
+UPDATE temporal_per SET valid_from = '2018-01-01', valid_til = '2018-03-01'
+WHERE id = '[1,2)' AND valid_at @> '2018-01-25'::date;
+-- a PK update shrinking the referenced range and changing the id invalidates the whole range:
+UPDATE temporal_per SET id = '[2,3)', valid_from = '2018-01-15', valid_til = '2018-03-01'
+WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
+-- a PK update changing only the id invalidates the whole range:
+UPDATE temporal_per SET id = '[2,3)'
+WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
+-- a PK update that loses time from both ends, but is still valid:
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
+  ('[2,3)', '2018-01-01', '2018-03-01');
+INSERT INTO temporal_fk_rng2per (id, valid_at, parent_id) VALUES
+  ('[5,6)', '[2018-01-15,2018-02-01)', '[2,3)');
+UPDATE temporal_per SET valid_from = '2018-01-15', valid_til = '2018-02-15'
+WHERE id = '[2,3)';
 -- a PK update that fails because both are referenced:
 UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01'
 WHERE id = '[5,6)' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
@@ -4541,7 +4625,8 @@ DELETE FROM temporal_per WHERE id = '[5,6)';
 INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
   ('[5,6)', '2018-01-01', '2018-02-01'),
   ('[5,6)', '2018-02-01', '2018-03-01');
-INSERT INTO temporal_fk_rng2per (id, valid_at, parent_id) VALUES ('[3,4)', '[2018-01-05,2018-01-10)', '[5,6)');
+INSERT INTO temporal_fk_rng2per (id, valid_at, parent_id) VALUES
+  ('[3,4)', '[2018-01-05,2018-01-10)', '[5,6)');
 UPDATE temporal_per SET valid_from = '2016-02-01', valid_til = '2016-03-01'
 WHERE id = '[5,6)' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
 -- A PK update sliding the edge between two referenced rows:
@@ -4556,6 +4641,33 @@ SET valid_from = CASE WHEN valid_from = '2018-01-01' THEN '2018-01-01'
     valid_til =  CASE WHEN valid_from = '2018-01-01' THEN '2018-01-05'
                       WHEN valid_from = '2018-02-01' THEN '2018-03-01' END::date
 WHERE id = '[6,7)';
+-- a PK update shrinking the referenced range but still valid:
+-- There are two references: one fulfilled by the first pk row,
+-- the other fulfilled by both pk rows combined.
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
+  ('[1,2)', '2018-01-01', '2018-03-01'),
+  ('[1,2)', '2018-03-01', '2018-06-01');
+INSERT INTO temporal_fk_rng2per (id, valid_at, parent_id) VALUES
+  ('[1,2)', '[2018-01-15,2018-02-01)', '[1,2)'),
+  ('[2,3)', '[2018-01-15,2018-05-01)', '[1,2)');
+UPDATE temporal_per SET valid_from = '2018-01-15', valid_til = '2018-03-01'
+WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
+-- a PK update growing the referenced range is fine:
+UPDATE temporal_per SET valid_from = '2018-01-01', valid_til = '2018-03-01'
+WHERE id = '[1,2)' AND valid_at @> '2018-01-25'::date;
+-- a PK update shrinking the referenced range and changing the id invalidates the whole range:
+UPDATE temporal_per SET id = '[2,3)', valid_from = '2018-01-15', valid_til = '2018-03-01'
+WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
+-- a PK update changing only the id invalidates the whole range:
+UPDATE temporal_per SET id = '[2,3)'
+WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
+-- a PK update that loses time from both ends, but is still valid:
+INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
+  ('[2,3)', '2018-01-01', '2018-03-01');
+INSERT INTO temporal_fk_rng2per (id, valid_at, parent_id) VALUES
+  ('[5,6)', '[2018-01-15,2018-02-01)', '[2,3)');
+UPDATE temporal_per SET valid_from = '2018-01-15', valid_til = '2018-02-15'
+WHERE id = '[2,3)';
 -- a PK update that fails because both are referenced (even before commit):
 BEGIN;
   ALTER TABLE temporal_fk_rng2per
@@ -5374,7 +5486,8 @@ DELETE FROM temporal_rng WHERE id = '[5,6)';
 INSERT INTO temporal_rng (id, valid_at) VALUES
   ('[5,6)', '[2018-01-01,2018-02-01)'),
   ('[5,6)', '[2018-02-01,2018-03-01)');
-INSERT INTO temporal_fk_per2rng (id, valid_from, valid_til, parent_id) VALUES ('[3,4)', '2018-01-05', '2018-01-10', '[5,6)');
+INSERT INTO temporal_fk_per2rng (id, valid_from, valid_til, parent_id) VALUES
+  ('[3,4)', '2018-01-05', '2018-01-10', '[5,6)');
 UPDATE temporal_rng SET valid_at = '[2016-02-01,2016-03-01)'
 WHERE id = '[5,6)' AND valid_at = '[2018-02-01,2018-03-01)';
 -- A PK update sliding the edge between two referenced rows:
@@ -5387,6 +5500,33 @@ UPDATE temporal_rng
 SET valid_at = CASE WHEN lower(valid_at) = '2018-01-01' THEN daterange('2018-01-01', '2018-01-05')
                     WHEN lower(valid_at) = '2018-02-01' THEN daterange('2018-01-05', '2018-03-01') END
 WHERE id = '[6,7)';
+-- a PK update shrinking the referenced range but still valid:
+-- There are two references: one fulfilled by the first pk row,
+-- the other fulfilled by both pk rows combined.
+INSERT INTO temporal_rng (id, valid_at) VALUES
+  ('[1,2)', '[2018-01-01,2018-03-01)'),
+  ('[1,2)', '[2018-03-01,2018-06-01)');
+INSERT INTO temporal_fk_per2rng (id, valid_from, valid_til, parent_id) VALUES
+  ('[1,2)', '2018-01-15', '2018-02-01', '[1,2)'),
+  ('[2,3)', '2018-01-15', '2018-05-01', '[1,2)');
+UPDATE temporal_rng SET valid_at = '[2018-01-15,2018-03-01)'
+WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
+-- a PK update growing the referenced range is fine:
+UPDATE temporal_rng SET valid_at = '[2018-01-01,2018-03-01)'
+WHERE id = '[1,2)' AND valid_at @> '2018-01-25'::date;
+-- a PK update shrinking the referenced range and changing the id invalidates the whole range:
+UPDATE temporal_rng SET id = '[2,3)', valid_at = '[2018-01-15,2018-03-01)'
+WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
+-- a PK update changing only the id invalidates the whole range:
+UPDATE temporal_rng SET id = '[2,3)'
+WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
+-- a PK update that loses time from both ends, but is still valid:
+INSERT INTO temporal_rng (id, valid_at) VALUES
+  ('[2,3)', '[2018-01-01,2018-03-01)');
+INSERT INTO temporal_fk_per2rng (id, valid_from, valid_til, parent_id) VALUES
+  ('[5,6)', '2018-01-15', '2018-02-01', '[2,3)');
+UPDATE temporal_rng SET valid_at = '[2018-01-15,2018-02-15)'
+WHERE id = '[2,3)';
 -- a PK update that fails because both are referenced:
 UPDATE temporal_rng SET valid_at = '[2016-01-01,2016-02-01)'
 WHERE id = '[5,6)' AND valid_at = '[2018-01-01,2018-02-01)';
@@ -5439,7 +5579,8 @@ DELETE FROM temporal_rng WHERE id = '[5,6)';
 INSERT INTO temporal_rng (id, valid_at) VALUES
   ('[5,6)', '[2018-01-01,2018-02-01)'),
   ('[5,6)', '[2018-02-01,2018-03-01)');
-INSERT INTO temporal_fk_per2rng (id, valid_from, valid_til, parent_id) VALUES ('[3,4)', '2018-01-05', '2018-01-10', '[5,6)');
+INSERT INTO temporal_fk_per2rng (id, valid_from, valid_til, parent_id) VALUES
+  ('[3,4)', '2018-01-05', '2018-01-10', '[5,6)');
 UPDATE temporal_rng SET valid_at = '[2016-02-01,2016-03-01)'
 WHERE id = '[5,6)' AND valid_at = '[2018-02-01,2018-03-01)';
 -- A PK update sliding the edge between two referenced rows:
@@ -5452,6 +5593,36 @@ UPDATE temporal_rng
 SET valid_at = CASE WHEN lower(valid_at) = '2018-01-01' THEN daterange('2018-01-01', '2018-01-05')
                     WHEN lower(valid_at) = '2018-02-01' THEN daterange('2018-01-05', '2018-03-01') END
 WHERE id = '[6,7)';
+-- a PK update shrinking the referenced range but still valid:
+-- There are two references: one fulfilled by the first pk row,
+-- the other fulfilled by both pk rows combined.
+INSERT INTO temporal_rng (id, valid_at) VALUES
+  ('[1,2)', '[2018-01-01,2018-03-01)'),
+  ('[1,2)', '[2018-03-01,2018-06-01)');
+INSERT INTO temporal_fk_per2rng (id, valid_from, valid_til, parent_id) VALUES
+  ('[1,2)', '2018-01-15', '2018-02-01', '[1,2)'),
+  ('[2,3)', '2018-01-15', '2018-05-01', '[1,2)');
+UPDATE temporal_rng SET valid_at = '[2018-01-15,2018-03-01)'
+WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
+-- a PK update growing the referenced range is fine:
+UPDATE temporal_rng SET valid_at = '[2018-01-01,2018-03-01)'
+WHERE id = '[1,2)' AND valid_at @> '2018-01-25'::date;
+-- a PK update shrinking the referenced range and changing the id invalidates the whole range:
+UPDATE temporal_rng SET id = '[2,3)', valid_at = '[2018-01-15,2018-03-01)'
+WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
+-- a PK update changing only the id invalidates the whole range:
+UPDATE temporal_rng SET id = '[2,3)'
+WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
+-- a PK update that loses time from both ends, but is still valid:
+INSERT INTO temporal_rng (id, valid_at) VALUES
+  ('[2,3)', '[2018-01-01,2018-03-01)');
+INSERT INTO temporal_fk_per2rng (id, valid_from, valid_til, parent_id) VALUES
+  ('[5,6)', '2018-01-15', '2018-02-01', '[2,3)');
+UPDATE temporal_rng SET valid_at = '[2018-01-15,2018-02-15)'
+WHERE id = '[2,3)';
+-- a PK update that fails because both are referenced:
+UPDATE temporal_rng SET valid_at = '[2016-01-01,2016-02-01)'
+WHERE id = '[5,6)' AND valid_at = '[2018-01-01,2018-02-01)';
 -- a PK update that fails because both are referenced (even before commit):
 BEGIN;
   ALTER TABLE temporal_fk_per2rng
