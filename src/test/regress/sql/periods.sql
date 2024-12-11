@@ -19,6 +19,9 @@ create table pt (id integer, ds date, de date, period for id (ds, de));
 /* Period name can't be given more than once */
 create table pt (id integer, ds date, de date, period for p (ds, de), period for p (ds, de));
 
+/* Period can't use the same colum for start and end*/
+create table pt (id integer, ds date, de date, period for p (ds, ds));
+
 /* Now make one that works */
 create table pt (id integer, ds date, de date, period for p (ds, de));
 
@@ -103,6 +106,11 @@ create table pt3 (id int, ds date, de date, period for p (ds, de) with (rangetyp
 
 /* Range type is the wrong type */
 create table pt3 (id int, ds date, de date, period for p (ds, de) with (rangetype = 'tstzrange'));
+drop table pt2;
+
+/* Period can't use the same colum for start and end*/
+create table pt2 (id integer, ds date, de date);
+alter table pt2 add period for p (ds, ds);
 drop table pt2;
 
 /* Skip creating GENERATED column: works */

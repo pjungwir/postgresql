@@ -8728,6 +8728,7 @@ ATExecAddPeriod(Relation rel, PeriodDef *period, AlterTableUtilityContext *conte
 	List		   *cmds = NIL;
 	AlterTableCmd  *cmd;
 
+	// TODO: share code with transformTablePeriod:
 	/*
 	 * PERIOD FOR SYSTEM_TIME is not yet implemented, but make sure no one uses
 	 * the name.
@@ -8736,6 +8737,10 @@ ATExecAddPeriod(Relation rel, PeriodDef *period, AlterTableUtilityContext *conte
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("PERIOD FOR SYSTEM_TIME is not supported")));
+
+	if (strcmp(period->startcolname, period->endcolname) == 0)
+		ereport(ERROR, (errmsg("column \"%s\" can't be the start and end column for period \"%s\"",
+						period->startcolname, period->periodname)));
 
 	/* Parse options */
 	transformPeriodOptions(period);

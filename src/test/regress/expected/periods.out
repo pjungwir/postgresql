@@ -25,6 +25,9 @@ ERROR:  period name "id" conflicts with a column name
 /* Period name can't be given more than once */
 create table pt (id integer, ds date, de date, period for p (ds, de), period for p (ds, de));
 ERROR:  period name "p" specified more than once
+/* Period can't use the same colum for start and end*/
+create table pt (id integer, ds date, de date, period for p (ds, ds));
+ERROR:  column "ds" can't be the start and end column for period "p"
 /* Now make one that works */
 create table pt (id integer, ds date, de date, period for p (ds, de));
 /* SELECT * excludes the PERIOD */
@@ -143,6 +146,11 @@ ERROR:  Range type notarange not found
 /* Range type is the wrong type */
 create table pt3 (id int, ds date, de date, period for p (ds, de) with (rangetype = 'tstzrange'));
 ERROR:  Range type tstzrange does not match column type date
+drop table pt2;
+/* Period can't use the same colum for start and end*/
+create table pt2 (id integer, ds date, de date);
+alter table pt2 add period for p (ds, ds);
+ERROR:  column "ds" can't be the start and end column for period "p"
 drop table pt2;
 /* Skip creating GENERATED column: works */
 create table pt2 (id integer, ds date, de date, p daterange not null generated always as (daterange(ds, de)) stored);
