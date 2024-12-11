@@ -3742,22 +3742,6 @@ transformAlterTableStmt(Oid relid, AlterTableStmt *stmt,
 						 (int) nodeTag(cmd->def));
 				break;
 
-			case AT_AddPeriod:
-				{
-					/*
-					 * We can't call transformTablePeriod here
-					 * because it looks at cxt->columns
-					 * and in an ALTER statement the column might already exist
-					 * (or not).
-					 */
-					// TODO: it doesn't look at cxt->columns any more.
-					// So should we call it here? To do what?
-					// Well it might be useful to know about it in cxt->periods at least.
-					transformTablePeriod(&cxt, castNode(PeriodDef, cmd->def));
-					newcmds = lappend(newcmds, cmd);
-					break;
-				}
-
 			case AT_AlterColumnType:
 				{
 					ColumnDef  *def = castNode(ColumnDef, cmd->def);
