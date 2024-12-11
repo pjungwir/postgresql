@@ -982,12 +982,27 @@ CREATE TABLE temporal3 (
   PERIOD FOR valid_at (valid_from, valid_til),
   CONSTRAINT temporal3_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
-
+\d temporal3
+SELECT attnotnull FROM pg_attribute WHERE attrelid = 'temporal3'::regclass AND attname = 'valid_at';
 ALTER TABLE temporal3 ALTER COLUMN valid_at DROP NOT NULL;
 ALTER TABLE temporal3 ALTER COLUMN valid_at TYPE tstzrange USING tstzrange(lower(valid_at), upper(valid_at));
 ALTER TABLE temporal3 DROP COLUMN valid_at;
 ALTER TABLE temporal3 DROP PERIOD FOR valid_at;
 \d temporal3
+DROP TABLE temporal3;
+
+-- Same results if we add the PERIOD and PK from ALTER TABLE:
+CREATE TABLE temporal3 (
+  id int4range,
+  valid_from date,
+  valid_til date
+);
+ALTER TABLE temporal3
+  ADD PERIOD FOR valid_at (valid_from, valid_til),
+  ADD CONSTRAINT temporal3_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
+\d temporal3
+SELECT attnotnull FROM pg_attribute WHERE attrelid = 'temporal3'::regclass AND attname = 'valid_at';
+ALTER TABLE temporal3 ALTER COLUMN valid_at DROP NOT NULL;
 DROP TABLE temporal3;
 
 --

@@ -1602,7 +1602,7 @@ make_range_column_for_period(PeriodDef *period)
 	col->compression = NULL;
 	col->inhcount = 0;
 	col->is_local = true;
-	col->is_not_null = true;
+	col->is_not_null = false;
 	col->is_from_type = false;
 	col->storage = 0;
 	col->storage_name = NULL;
@@ -8764,11 +8764,11 @@ ATExecAddPeriod(Relation rel, PeriodDef *period, AlterTableUtilityContext *conte
 		cmd->def = (Node *) rangecol;
 		cmd->name = period->periodname;
 		cmd->recurse = false; /* no, let the PERIOD recurse instead */
+
 		AlterTableInternal(RelationGetRelid(rel), list_make1(cmd), true, context);
 		period->rngattnum = get_attnum(RelationGetRelid(rel), period->periodname);
 		if (period->rngattnum == InvalidAttrNumber)
 			elog(ERROR, "missing attribute %s", period->periodname);
-
 	}
 
 	/* Save the Period */

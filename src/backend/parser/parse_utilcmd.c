@@ -2724,21 +2724,21 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 
 			if (found)
 			{
-				if (column)
+				/*
+				 * column is defined in the new table.  For CREATE TABLE with
+				 * a PRIMARY KEY, we can apply the not-null constraint cheaply
+				 * here.  If the not-null constraint already exists, we can
+				 * (albeit not so cheaply) verify that it's not a NO INHERIT
+				 * constraint.
+				 *
+				 * Note that ALTER TABLE never needs either check, because
+				 * those constraints have already been added by
+				 * ATPrepAddPrimaryKey.
+				 */
+				if (constraint->contype == CONSTR_PRIMARY &&
+					!cxt->isalter)
 				{
-					/*
-					 * column is defined in the new table.  For CREATE TABLE with
-					 * a PRIMARY KEY, we can apply the not-null constraint cheaply
-					 * here.  If the not-null constraint already exists, we can
-					 * (albeit not so cheaply) verify that it's not a NO INHERIT
-					 * constraint.
-					 *
-					 * Note that ALTER TABLE never needs either check, because
-					 * those constraints have already been added by
-					 * ATPrepAddPrimaryKey.
-					 */
-					if (constraint->contype == CONSTR_PRIMARY &&
-						!cxt->isalter)
+					if (column)
 					{
 						if (column->is_not_null)
 						{
@@ -2763,9 +2763,16 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 										makeNotNullConstraint(makeString(key)));
 						}
 					}
-					else if (constraint->contype == CONSTR_PRIMARY)
-						Assert(column->is_not_null);
+					else if (hasperiod)
+					{
+						/* If we're using a PERIOD, we better make sure it is NOT NULL */
+						cxt->nnconstraints =
+							lappend(cxt->nnconstraints,
+									makeNotNullConstraint(makeString(key)));
+					}
 				}
+				else if (constraint->contype == CONSTR_PRIMARY)
+					Assert(column->is_not_null);
 			}
 			else if (SystemAttributeByName(key) != NULL)
 			{
