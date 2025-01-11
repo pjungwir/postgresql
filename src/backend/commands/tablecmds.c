@@ -1577,6 +1577,7 @@ make_constraint_for_period(Relation rel, PeriodDef *period)
 												 0);
 	constr->cooked_expr = NULL;
 	constr->skip_validation = false;
+	constr->is_enforced = true;
 	constr->initially_valid = true;
 
 	return constr;
