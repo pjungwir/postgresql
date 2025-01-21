@@ -76,6 +76,10 @@ typedef struct SupportRequestSimplify
  * Normally only SQL functions can be inlined, but with this support function
  * the dynamic query can be inlined as well.
  *
+ * The planner's PlannerInfo "root" is typically not needed, but can be
+ * consulted if it's necessary to obtain info about Vars present in
+ * the given node tree.  Beware that root could be NULL in some usages.
+ *
  * "fcall" will be a FuncExpr invoking the support function's target
  * function.
  *
@@ -88,7 +92,9 @@ typedef struct SupportRequestInlineSRF
 {
 	NodeTag		type;
 
-	FuncExpr   *fcall;			/* Function call to be simplified */
+	struct PlannerInfo *root;	/* Planner's infrastructure */
+	RangeTblFunction   *rtfunc;	/* Function call to be simplified */
+	Form_pg_proc		proc;	/* Function definition */
 } SupportRequestInlineSRF;
 
 /*

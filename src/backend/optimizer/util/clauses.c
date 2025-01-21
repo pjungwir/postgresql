@@ -5096,10 +5096,6 @@ inline_set_returning_function(PlannerInfo *root, RangeTblEntry *rte)
 	 */
 	check_stack_depth();
 
-	/* Fail if the RTE has ORDINALITY - we don't implement that here. */
-	if (rte->funcordinality)
-		return NULL;
-
 	/* Fail if RTE isn't a single, simple FuncExpr */
 	if (list_length(rte->functions) != 1)
 		return NULL;
@@ -5140,6 +5136,10 @@ inline_set_returning_function(PlannerInfo *root, RangeTblEntry *rte)
 	if (FmgrHookIsNeeded(func_oid))
 		return NULL;
 
+	/* Fail if the RTE has ORDINALITY - we don't implement that here. */
+	if (rte->funcordinality)
+		return NULL;
+
 	/*
 	 * OK, let's take a look at the function's pg_proc entry.
 	 */
@@ -5147,6 +5147,42 @@ inline_set_returning_function(PlannerInfo *root, RangeTblEntry *rte)
 	if (!HeapTupleIsValid(func_tuple))
 		elog(ERROR, "cache lookup failed for function %u", func_oid);
 	funcform = (Form_pg_proc) GETSTRUCT(func_tuple);
+
+	/*
+	 * If the function has an attached SupportRequestInlineSRF function,
+	 * then attempt to inline with that.
+	 * Return the result if we get one.
+	 * Or if we get a NULL, then proceed.
+	 */
+	if (funcform->prosupport)
+	{
+		SupportRequestInlineSRF req;
+		Form_pg_proc *funcformcopy;
+
+		funcformcopy = palloc(sizeof(funcform));
+		memcpy(proccopy, &funcform, sizeof(funcform));
+
+		req.root = xxxx;
+		req.type = T_SupportRequestInlineSRF;
+		req.rtfunc = rtfunc;
+		req.proc = funcformcopy;
+
+		// TODO: wrap this in its own memory context, as the existing code does below?
+		newnode = (Node *)
+			DatumGetPointer(OidFunctionCall1(funcform->prosupport,
+											 PointerGetDatum(&req)));
+		if (!newnode)
+			goto fail;
+
+		if (!IsA(newnode, Query))
+			elog(ERROR,
+				 "Got unexpected node type %d from SupportRequestInlineSRF for function %s",
+				 newnode->type, NameStr(funcform->proname));
+
+		querytree = (Query *) newnode;
+		querytree_list = list_make1(querytree);
+		// TODO: is it correct to keep going here? Or can we just return right away?
+	}
 
 	/*
 	 * Forget it unless the function is SQL-language or provides a support function.
@@ -5159,7 +5195,7 @@ inline_set_returning_function(PlannerInfo *root, RangeTblEntry *rte)
 	 * of the function's last SELECT, which should not happen in that case.
 	 * (Rechecking prokind, proretset, and pronargs is just paranoia.)
 	 */
-	if ((funcform->prolang != SQLlanguageId && !funcform->prosupport) ||
+	if (funcform->prolang != SQLlanguageId ||
 		funcform->prokind != PROKIND_FUNCTION ||
 		funcform->proisstrict ||
 		funcform->provolatile == PROVOLATILE_VOLATILE ||
