@@ -5157,15 +5157,12 @@ inline_set_returning_function(PlannerInfo *root, RangeTblEntry *rte)
 	if (funcform->prosupport)
 	{
 		SupportRequestInlineSRF req;
-		Form_pg_proc *funcformcopy;
+		Node *newnode;
 
-		funcformcopy = palloc(sizeof(funcform));
-		memcpy(proccopy, &funcform, sizeof(funcform));
-
-		req.root = xxxx;
+		req.root = root;
 		req.type = T_SupportRequestInlineSRF;
 		req.rtfunc = rtfunc;
-		req.proc = funcformcopy;
+		memcpy(&req.proc, &funcform, sizeof(funcform));
 
 		// TODO: wrap this in its own memory context, as the existing code does below?
 		newnode = (Node *)
@@ -5182,6 +5179,7 @@ inline_set_returning_function(PlannerInfo *root, RangeTblEntry *rte)
 		querytree = (Query *) newnode;
 		querytree_list = list_make1(querytree);
 		// TODO: is it correct to keep going here? Or can we just return right away?
+		// We could try just returning, but I think I need to do the stuff below to get query params. Unless we expect support request authors to do that? But that creates a higher barrier to use.
 	}
 
 	/*
@@ -5217,64 +5215,6 @@ inline_set_returning_function(PlannerInfo *root, RangeTblEntry *rte)
 								  "inline_set_returning_function",
 								  ALLOCSET_DEFAULT_SIZES);
 	oldcxt = MemoryContextSwitchTo(mycxt);
-
-	/*
-	 * If the function has a SupportRequestInlineSRF support function,
-	 * see if it can produce a Query node we can inline.
-	 * This can be mutually-exclusive with SQL functions.
-	 * Those are inlineable already, so it doesn't make sense to
-	 * attach such a support request to them.
-	 */
-	if (funcform->prolang != SQLlanguageId && funcform->prosupport) {
-		SupportRequestInlineSRF req;
-		FuncExpr	dummy_fexpr;
-		Node	   *newnode;
-
-		/*
-		 * We don't need the whole sqlerrcontext,
-		 * but make sure we restore it correctly
-		 * if we goto fail.
-		 */
-		sqlerrcontext.previous = error_context_stack;
-
-		/*
-		 * Build a SupportRequestInlineSRF node to pass to the support
-		 * function, pointing to a dummy FuncExpr node containing the
-		 * simplified arg list.  We use this approach to present a uniform
-		 * interface to the support function regardless of how the target
-		 * function is actually being invoked.
-		 */
-
-		dummy_fexpr.xpr.type = T_FuncExpr;
-		dummy_fexpr.funcid = func_oid;
-		dummy_fexpr.funcresulttype = funcform->prorettype;
-		dummy_fexpr.funcretset = funcform->proretset;
-		dummy_fexpr.funcvariadic = OidIsValid(funcform->provariadic);
-		dummy_fexpr.funcformat = COERCE_EXPLICIT_CALL;
-		dummy_fexpr.funccollid = InvalidOid;
-		dummy_fexpr.inputcollid = InvalidOid;
-		dummy_fexpr.args = fexpr->args;
-		dummy_fexpr.location = -1;
-
-		req.type = T_SupportRequestInlineSRF;
-		req.fcall = &dummy_fexpr;
-
-		newnode = (Node *)
-			DatumGetPointer(OidFunctionCall1(funcform->prosupport,
-											 PointerGetDatum(&req)));
-
-		if (!newnode)
-			goto fail;
-
-		if (!IsA(newnode, Query))
-			elog(ERROR,
-				 "Got unexpected node type %d from SupportRequestInlineSRF for function %s",
-				 newnode->type, NameStr(funcform->proname));
-
-		querytree = (Query *) newnode;
-		querytree_list = list_make1(querytree);
-	}
-
 
 	if (!querytree)
 	{

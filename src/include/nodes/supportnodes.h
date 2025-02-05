@@ -33,6 +33,7 @@
 #ifndef SUPPORTNODES_H
 #define SUPPORTNODES_H
 
+#include "catalog/pg_proc.h"
 #include "nodes/plannodes.h"
 
 struct PlannerInfo;				/* avoid including pathnodes.h here */
