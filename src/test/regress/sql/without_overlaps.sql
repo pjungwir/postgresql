@@ -3468,93 +3468,12 @@ ALTER TABLE temporal_fk_per2per
   FOREIGN KEY (parent_id, PERIOD valid_at)
   REFERENCES temporal_per
   ON UPDATE RESTRICT;
--- a PK update that succeeds because the numeric id isn't referenced:
-INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[5,6)', '2018-01-01', '2018-02-01');
-UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01' WHERE id = '[5,6)';
--- a PK update that succeeds even though the numeric id is referenced because the range isn't:
-DELETE FROM temporal_per WHERE id = '[5,6)';
-INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
-  ('[5,6)', '2018-01-01', '2018-02-01'),
-  ('[5,6)', '2018-02-01', '2018-03-01');
-INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES
-  ('[3,4)', '2018-01-05', '2018-01-10', '[5,6)');
-UPDATE temporal_per SET valid_from = '2016-02-01', valid_til = '2016-03-01'
-WHERE id = '[5,6)' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
--- A PK update sliding the edge between two referenced rows:
-INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
-  ('[6,7)', '2018-01-01', '2018-02-01'),
-  ('[6,7)', '2018-02-01', '2018-03-01');
-INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES
-  ('[4,5)', '2018-01-15', '2018-02-15', '[6,7)');
-UPDATE temporal_per
-SET valid_from = CASE WHEN valid_from = '2018-01-01' THEN '2018-01-01'
-                      WHEN valid_from = '2018-02-01' THEN '2018-01-05' END::date,
-    valid_til =  CASE WHEN valid_from = '2018-01-01' THEN '2018-01-05'
-                      WHEN valid_from = '2018-02-01' THEN '2018-03-01' END::date
-WHERE id = '[6,7)';
--- a PK update shrinking the referenced range but still valid:
--- There are two references: one fulfilled by the first pk row,
--- the other fulfilled by both pk rows combined.
-INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
-  ('[1,2)', '2018-01-01', '2018-03-01'),
-  ('[1,2)', '2018-03-01', '2018-06-01');
-INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES
-  ('[1,2)', '2018-01-15', '2018-02-01', '[1,2)'),
-  ('[2,3)', '2018-01-15', '2018-05-01', '[1,2)');
-UPDATE temporal_per SET valid_from = '2018-01-15', valid_til = '2018-03-01'
-WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
--- a PK update growing the referenced range is fine:
-UPDATE temporal_per SET valid_from = '2018-01-01', valid_til = '2018-03-01'
-WHERE id = '[1,2)' AND valid_at @> '2018-01-25'::date;
--- a PK update shrinking the referenced range and changing the id invalidates the whole range:
-UPDATE temporal_per SET id = '[2,3)', valid_from = '2018-01-15', valid_til = '2018-03-01'
-WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
--- a PK update changing only the id invalidates the whole range:
-UPDATE temporal_per SET id = '[2,3)'
-WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
--- a PK update that loses time from both ends, but is still valid:
-INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
-  ('[2,3)', '2018-01-01', '2018-03-01');
-INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES
-  ('[5,6)', '2018-01-15', '2018-02-01', '[2,3)');
-UPDATE temporal_per SET valid_from = '2018-01-15', valid_til = '2018-02-15'
-WHERE id = '[2,3)';
--- a PK update that fails because both are referenced (even before commit):
-BEGIN;
-  ALTER TABLE temporal_fk_per2per
-    ALTER CONSTRAINT temporal_fk_per2per_fk
-    DEFERRABLE INITIALLY DEFERRED;
-
-  UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01'
-  WHERE id = '[5,6)' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
-ROLLBACK;
--- changing the scalar part fails:
-UPDATE temporal_per SET id = '[7,8)'
-WHERE id = '[5,6)' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
--- changing an unreferenced part is okay:
-UPDATE temporal_per
-FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
-SET id = '[7,8)'
-WHERE id = '[5,6)';
--- changing just a part fails:
-UPDATE temporal_per
-FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
-SET id = '[7,8)'
-WHERE id = '[5,6)';
-SELECT * FROM temporal_per WHERE id in ('[5,6)', '[7,8)') ORDER BY id, valid_at;
-SELECT * FROM temporal_fk_per2per WHERE id in ('[3,4)') ORDER BY id, valid_at;
--- then delete the objecting FK record and the same PK update succeeds:
-DELETE FROM temporal_fk_per2per WHERE id = '[3,4)';
-UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01'
-WHERE id = '[5,6)' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
 
 --
 -- test FK referenced deletes NO ACTION
 --
 
 TRUNCATE temporal_per, temporal_fk_per2per;
-ALTER TABLE temporal_fk_per2per
-  DROP CONSTRAINT temporal_fk_per2per_fk;
 ALTER TABLE temporal_fk_per2per
   ADD CONSTRAINT temporal_fk_per2per_fk
   FOREIGN KEY (parent_id, PERIOD valid_at)
@@ -3604,35 +3523,6 @@ ALTER TABLE temporal_fk_per2per
   FOREIGN KEY (parent_id, PERIOD valid_at)
   REFERENCES temporal_per
   ON DELETE RESTRICT;
-INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[5,6)', '2018-01-01', '2018-02-01');
-DELETE FROM temporal_per WHERE id = '[5,6)';
--- a PK delete that succeeds even though the numeric id is referenced because the range isn't:
-INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
-  ('[5,6)', '2018-01-01', '2018-02-01'),
-  ('[5,6)', '2018-02-01', '2018-03-01');
-INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[3,4)', '2018-01-05', '2018-01-10', '[5,6)');
-DELETE FROM temporal_per WHERE id = '[5,6)' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
--- a PK delete that fails because both are referenced (even before commit):
-BEGIN;
-  ALTER TABLE temporal_fk_per2per
-    ALTER CONSTRAINT temporal_fk_per2per_fk
-    DEFERRABLE INITIALLY DEFERRED;
-
-  DELETE FROM temporal_per WHERE id = '[5,6)' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
-ROLLBACK;
--- deleting an unreferenced part is okay:
-DELETE FROM temporal_per
-FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
-WHERE id = '[5,6)';
--- deleting just a part fails:
-DELETE FROM temporal_per
-FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
-WHERE id = '[5,6)';
-SELECT * FROM temporal_per WHERE id in ('[5,6)', '[7,8)') ORDER BY id, valid_at;
-SELECT * FROM temporal_fk_per2per WHERE id in ('[3,4)') ORDER BY id, valid_at;
--- then delete the objecting FK record and the same PK delete succeeds:
-DELETE FROM temporal_fk_per2per WHERE id = '[3,4)';
-DELETE FROM temporal_per WHERE id = '[5,6)' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
 
 --
 -- per2per test ON UPDATE/DELETE options
@@ -3661,7 +3551,6 @@ TRUNCATE temporal_per, temporal_fk_per2per;
 INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[6,7)', '2018-01-01', '2021-01-01');
 INSERT INTO temporal_fk_per2per (id, valid_from, valid_til, parent_id) VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,7)');
 ALTER TABLE temporal_fk_per2per
-  DROP CONSTRAINT temporal_fk_per2per_fk,
   ADD CONSTRAINT temporal_fk_per2per_fk
     FOREIGN KEY (parent_id, PERIOD valid_at)
     REFERENCES temporal_per
@@ -4394,93 +4283,12 @@ ALTER TABLE temporal_fk_rng2per
   FOREIGN KEY (parent_id, PERIOD valid_at)
   REFERENCES temporal_per
   ON UPDATE RESTRICT;
--- a PK update that succeeds because the numeric id isn't referenced:
-INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[5,6)', '2018-01-01', '2018-02-01');
-UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01' WHERE id = '[5,6)';
--- a PK update that succeeds even though the numeric id is referenced because the range isn't:
-DELETE FROM temporal_per WHERE id = '[5,6)';
-INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
-  ('[5,6)', '2018-01-01', '2018-02-01'),
-  ('[5,6)', '2018-02-01', '2018-03-01');
-INSERT INTO temporal_fk_rng2per (id, valid_at, parent_id) VALUES
-  ('[3,4)', '[2018-01-05,2018-01-10)', '[5,6)');
-UPDATE temporal_per SET valid_from = '2016-02-01', valid_til = '2016-03-01'
-WHERE id = '[5,6)' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
--- A PK update sliding the edge between two referenced rows:
-INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
-  ('[6,7)', '2018-01-01', '2018-02-01'),
-  ('[6,7)', '2018-02-01', '2018-03-01');
-INSERT INTO temporal_fk_rng2per (id, valid_at, parent_id) VALUES
-  ('[4,5)', '[2018-01-15,2018-02-15)', '[6,7)');
-UPDATE temporal_per
-SET valid_from = CASE WHEN valid_from = '2018-01-01' THEN '2018-01-01'
-                      WHEN valid_from = '2018-02-01' THEN '2018-01-05' END::date,
-    valid_til =  CASE WHEN valid_from = '2018-01-01' THEN '2018-01-05'
-                      WHEN valid_from = '2018-02-01' THEN '2018-03-01' END::date
-WHERE id = '[6,7)';
--- a PK update shrinking the referenced range but still valid:
--- There are two references: one fulfilled by the first pk row,
--- the other fulfilled by both pk rows combined.
-INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
-  ('[1,2)', '2018-01-01', '2018-03-01'),
-  ('[1,2)', '2018-03-01', '2018-06-01');
-INSERT INTO temporal_fk_rng2per (id, valid_at, parent_id) VALUES
-  ('[1,2)', '[2018-01-15,2018-02-01)', '[1,2)'),
-  ('[2,3)', '[2018-01-15,2018-05-01)', '[1,2)');
-UPDATE temporal_per SET valid_from = '2018-01-15', valid_til = '2018-03-01'
-WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
--- a PK update growing the referenced range is fine:
-UPDATE temporal_per SET valid_from = '2018-01-01', valid_til = '2018-03-01'
-WHERE id = '[1,2)' AND valid_at @> '2018-01-25'::date;
--- a PK update shrinking the referenced range and changing the id invalidates the whole range:
-UPDATE temporal_per SET id = '[2,3)', valid_from = '2018-01-15', valid_til = '2018-03-01'
-WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
--- a PK update changing only the id invalidates the whole range:
-UPDATE temporal_per SET id = '[2,3)'
-WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
--- a PK update that loses time from both ends, but is still valid:
-INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
-  ('[2,3)', '2018-01-01', '2018-03-01');
-INSERT INTO temporal_fk_rng2per (id, valid_at, parent_id) VALUES
-  ('[5,6)', '[2018-01-15,2018-02-01)', '[2,3)');
-UPDATE temporal_per SET valid_from = '2018-01-15', valid_til = '2018-02-15'
-WHERE id = '[2,3)';
--- a PK update that fails because both are referenced (even before commit):
-BEGIN;
-  ALTER TABLE temporal_fk_rng2per
-    ALTER CONSTRAINT temporal_fk_rng2per_fk
-    DEFERRABLE INITIALLY DEFERRED;
-
-  UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01'
-  WHERE id = '[5,6)' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
-ROLLBACK;
--- changing the scalar part fails:
-UPDATE temporal_per SET id = '[7,8)'
-WHERE id = '[5,6)' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
--- changing an unreferenced part is okay:
-UPDATE temporal_per
-FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
-SET id = '[7,8)'
-WHERE id = '[5,6)';
--- changing just a part fails:
-UPDATE temporal_per
-FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
-SET id = '[7,8)'
-WHERE id = '[5,6)';
-SELECT * FROM temporal_per WHERE id in ('[5,6)', '[7,8)') ORDER BY id, valid_at;
-SELECT * FROM temporal_fk_rng2per WHERE id in ('[3,4)') ORDER BY id, valid_at;
--- then delete the objecting FK record and the same PK update succeeds:
-DELETE FROM temporal_fk_rng2per WHERE id = '[3,4)';
-UPDATE temporal_per SET valid_from = '2016-01-01', valid_til = '2016-02-01'
-WHERE id = '[5,6)' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
 
 --
 -- test FK referenced deletes NO ACTION
 --
 
 TRUNCATE temporal_per, temporal_fk_rng2per;
-ALTER TABLE temporal_fk_rng2per
-  DROP CONSTRAINT temporal_fk_rng2per_fk;
 ALTER TABLE temporal_fk_rng2per
   ADD CONSTRAINT temporal_fk_rng2per_fk
   FOREIGN KEY (parent_id, PERIOD valid_at)
@@ -4530,35 +4338,6 @@ ALTER TABLE temporal_fk_rng2per
   FOREIGN KEY (parent_id, PERIOD valid_at)
   REFERENCES temporal_per
   ON DELETE RESTRICT;
-INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[5,6)', '2018-01-01', '2018-02-01');
-DELETE FROM temporal_per WHERE id = '[5,6)';
--- a PK delete that succeeds even though the numeric id is referenced because the range isn't:
-INSERT INTO temporal_per (id, valid_from, valid_til) VALUES
-  ('[5,6)', '2018-01-01', '2018-02-01'),
-  ('[5,6)', '2018-02-01', '2018-03-01');
-INSERT INTO temporal_fk_rng2per (id, valid_at, parent_id) VALUES ('[3,4)', '[2018-01-05,2018-01-10)', '[5,6)');
-DELETE FROM temporal_per WHERE id = '[5,6)' AND valid_from = '2018-02-01' AND valid_til = '2018-03-01';
--- a PK delete that fails because both are referenced (even before commit):
-BEGIN;
-  ALTER TABLE temporal_fk_rng2per
-    ALTER CONSTRAINT temporal_fk_rng2per_fk
-    DEFERRABLE INITIALLY DEFERRED;
-
-  DELETE FROM temporal_per WHERE id = '[5,6)' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
-ROLLBACK;
--- deleting an unreferenced part is okay:
-DELETE FROM temporal_per
-FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
-WHERE id = '[5,6)';
--- deleting just a part fails:
-DELETE FROM temporal_per
-FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
-WHERE id = '[5,6)';
-SELECT * FROM temporal_per WHERE id in ('[5,6)', '[7,8)') ORDER BY id, valid_at;
-SELECT * FROM temporal_fk_rng2per WHERE id in ('[3,4)') ORDER BY id, valid_at;
--- then delete the objecting FK record and the same PK delete succeeds:
-DELETE FROM temporal_fk_rng2per WHERE id = '[3,4)';
-DELETE FROM temporal_per WHERE id = '[5,6)' AND valid_from = '2018-01-01' AND valid_til = '2018-02-01';
 
 --
 -- rng2per test ON UPDATE/DELETE options
@@ -4587,7 +4366,6 @@ TRUNCATE temporal_per, temporal_fk_rng2per;
 INSERT INTO temporal_per (id, valid_from, valid_til) VALUES ('[6,7)', '2018-01-01', '2021-01-01');
 INSERT INTO temporal_fk_rng2per (id, valid_at, parent_id) VALUES ('[100,100]', '[2018-01-01,2021-01-01)', '[6,7)');
 ALTER TABLE temporal_fk_rng2per
-  DROP CONSTRAINT temporal_fk_rng2per_fk,
   ADD CONSTRAINT temporal_fk_rng2per_fk
     FOREIGN KEY (parent_id, PERIOD valid_at)
     REFERENCES temporal_per
@@ -5348,94 +5126,12 @@ ALTER TABLE temporal_fk_per2rng
   FOREIGN KEY (parent_id, PERIOD valid_at)
   REFERENCES temporal_rng
   ON UPDATE RESTRICT;
--- a PK update that succeeds because the numeric id isn't referenced:
-INSERT INTO temporal_rng (id, valid_at) VALUES ('[5,6)', '[2018-01-01,2018-02-01)');
-UPDATE temporal_rng SET valid_at = '[2016-01-01,2016-02-01)' WHERE id = '[5,6)';
--- a PK update that succeeds even though the numeric id is referenced because the range isn't:
-DELETE FROM temporal_rng WHERE id = '[5,6)';
-INSERT INTO temporal_rng (id, valid_at) VALUES
-  ('[5,6)', '[2018-01-01,2018-02-01)'),
-  ('[5,6)', '[2018-02-01,2018-03-01)');
-INSERT INTO temporal_fk_per2rng (id, valid_from, valid_til, parent_id) VALUES
-  ('[3,4)', '2018-01-05', '2018-01-10', '[5,6)');
-UPDATE temporal_rng SET valid_at = '[2016-02-01,2016-03-01)'
-WHERE id = '[5,6)' AND valid_at = '[2018-02-01,2018-03-01)';
--- A PK update sliding the edge between two referenced rows:
-INSERT INTO temporal_rng (id, valid_at) VALUES
-  ('[6,7)', '[2018-01-01,2018-02-01)'),
-  ('[6,7)', '[2018-02-01,2018-03-01)');
-INSERT INTO temporal_fk_per2rng (id, valid_from, valid_til, parent_id) VALUES
-  ('[4,5)', '2018-01-15', '2018-02-15', '[6,7)');
-UPDATE temporal_rng
-SET valid_at = CASE WHEN lower(valid_at) = '2018-01-01' THEN daterange('2018-01-01', '2018-01-05')
-                    WHEN lower(valid_at) = '2018-02-01' THEN daterange('2018-01-05', '2018-03-01') END
-WHERE id = '[6,7)';
--- a PK update shrinking the referenced range but still valid:
--- There are two references: one fulfilled by the first pk row,
--- the other fulfilled by both pk rows combined.
-INSERT INTO temporal_rng (id, valid_at) VALUES
-  ('[1,2)', '[2018-01-01,2018-03-01)'),
-  ('[1,2)', '[2018-03-01,2018-06-01)');
-INSERT INTO temporal_fk_per2rng (id, valid_from, valid_til, parent_id) VALUES
-  ('[1,2)', '2018-01-15', '2018-02-01', '[1,2)'),
-  ('[2,3)', '2018-01-15', '2018-05-01', '[1,2)');
-UPDATE temporal_rng SET valid_at = '[2018-01-15,2018-03-01)'
-WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
--- a PK update growing the referenced range is fine:
-UPDATE temporal_rng SET valid_at = '[2018-01-01,2018-03-01)'
-WHERE id = '[1,2)' AND valid_at @> '2018-01-25'::date;
--- a PK update shrinking the referenced range and changing the id invalidates the whole range:
-UPDATE temporal_rng SET id = '[2,3)', valid_at = '[2018-01-15,2018-03-01)'
-WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
--- a PK update changing only the id invalidates the whole range:
-UPDATE temporal_rng SET id = '[2,3)'
-WHERE id = '[1,2)' AND valid_at @> '2018-01-15'::date;
--- a PK update that loses time from both ends, but is still valid:
-INSERT INTO temporal_rng (id, valid_at) VALUES
-  ('[2,3)', '[2018-01-01,2018-03-01)');
-INSERT INTO temporal_fk_per2rng (id, valid_from, valid_til, parent_id) VALUES
-  ('[5,6)', '2018-01-15', '2018-02-01', '[2,3)');
-UPDATE temporal_rng SET valid_at = '[2018-01-15,2018-02-15)'
-WHERE id = '[2,3)';
--- a PK update that fails because both are referenced:
-UPDATE temporal_rng SET valid_at = '[2016-01-01,2016-02-01)'
-WHERE id = '[5,6)' AND valid_at = '[2018-01-01,2018-02-01)';
--- a PK update that fails because both are referenced (even before commit):
-BEGIN;
-  ALTER TABLE temporal_fk_per2rng
-    ALTER CONSTRAINT temporal_fk_per2rng_fk
-    DEFERRABLE INITIALLY DEFERRED;
-
-  UPDATE temporal_rng SET valid_at = '[2016-01-01,2016-02-01)'
-  WHERE id = '[5,6)' AND valid_at = '[2018-01-01,2018-02-01)';
-ROLLBACK;
--- changing the scalar part fails:
-UPDATE temporal_rng SET id = '[7,8)'
-WHERE id = '[5,6)' AND valid_at = '[2018-01-01,2018-02-01)';
--- changing an unreferenced part is okay:
-UPDATE temporal_rng
-FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
-SET id = '[7,8)'
-WHERE id = '[5,6)';
--- changing just a part fails:
-UPDATE temporal_rng
-FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
-SET id = '[7,8)'
-WHERE id = '[5,6)';
-SELECT * FROM temporal_rng WHERE id in ('[5,6)', '[7,8)') ORDER BY id, valid_at;
-SELECT * FROM temporal_fk_per2rng WHERE id in ('[3,4)') ORDER BY id, valid_at;
--- then delete the objecting FK record and the same PK update succeeds:
-DELETE FROM temporal_fk_per2rng WHERE id = '[3,4)';
-UPDATE temporal_rng SET valid_at = '[2016-01-01,2016-02-01)'
-WHERE id = '[5,6)' AND valid_at = '[2018-01-01,2018-02-01)';
 
 --
 -- test FK referenced deletes NO ACTION
 --
 
 TRUNCATE temporal_rng, temporal_fk_per2rng;
-ALTER TABLE temporal_fk_per2rng
-  DROP CONSTRAINT temporal_fk_per2rng_fk;
 ALTER TABLE temporal_fk_per2rng
   ADD CONSTRAINT temporal_fk_per2rng_fk
   FOREIGN KEY (parent_id, PERIOD valid_at)
@@ -5485,35 +5181,6 @@ ALTER TABLE temporal_fk_per2rng
   FOREIGN KEY (parent_id, PERIOD valid_at)
   REFERENCES temporal_rng
   ON DELETE RESTRICT;
-INSERT INTO temporal_rng (id, valid_at) VALUES ('[5,6)', '[2018-01-01,2018-02-01)');
-DELETE FROM temporal_rng WHERE id = '[5,6)';
--- a PK delete that succeeds even though the numeric id is referenced because the range isn't:
-INSERT INTO temporal_rng (id, valid_at) VALUES
-  ('[5,6)', '[2018-01-01,2018-02-01)'),
-  ('[5,6)', '[2018-02-01,2018-03-01)');
-INSERT INTO temporal_fk_per2rng (id, valid_from, valid_til, parent_id) VALUES ('[3,4)', '2018-01-05', '2018-01-10', '[5,6)');
-DELETE FROM temporal_rng WHERE id = '[5,6)' AND valid_at = '[2018-02-01,2018-03-01)';
--- a PK delete that fails because both are referenced (even before commit):
-BEGIN;
-  ALTER TABLE temporal_fk_per2rng
-    ALTER CONSTRAINT temporal_fk_per2rng_fk
-    DEFERRABLE INITIALLY DEFERRED;
-
-  DELETE FROM temporal_rng WHERE id = '[5,6)' AND valid_at = '[2018-01-01,2018-02-01)';
-ROLLBACK;
--- deleting an unreferenced part is okay:
-DELETE FROM temporal_rng
-FOR PORTION OF valid_at FROM '2018-01-02' TO '2018-01-03'
-WHERE id = '[5,6)';
--- deleting just a part fails:
-DELETE FROM temporal_rng
-FOR PORTION OF valid_at FROM '2018-01-05' TO '2018-01-10'
-WHERE id = '[5,6)';
-SELECT * FROM temporal_rng WHERE id in ('[5,6)', '[7,8)') ORDER BY id, valid_at;
-SELECT * FROM temporal_fk_per2rng WHERE id in ('[3,4)') ORDER BY id, valid_at;
--- then delete the objecting FK record and the same PK delete succeeds:
-DELETE FROM temporal_fk_per2rng WHERE id = '[3,4)';
-DELETE FROM temporal_rng WHERE id = '[5,6)' AND valid_at = '[2018-01-01,2018-02-01)';
 
 --
 -- per2rng test ON UPDATE/DELETE options
@@ -5542,7 +5209,6 @@ TRUNCATE temporal_rng, temporal_fk_per2rng;
 INSERT INTO temporal_rng (id, valid_at) VALUES ('[6,7)', '[2018-01-01,2021-01-01)');
 INSERT INTO temporal_fk_per2rng (id, valid_from, valid_til, parent_id) VALUES ('[100,100]', '2018-01-01', '2021-01-01', '[6,7)');
 ALTER TABLE temporal_fk_per2rng
-  DROP CONSTRAINT temporal_fk_per2rng_fk,
   ADD CONSTRAINT temporal_fk_per2rng_fk
     FOREIGN KEY (parent_id, PERIOD valid_at)
     REFERENCES temporal_rng
