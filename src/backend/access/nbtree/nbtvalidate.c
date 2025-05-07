@@ -107,7 +107,7 @@ btvalidate(Oid opclassoid)
 				ok = check_amoptsproc_signature(procform->amproc);
 				break;
 			case BTSKIPSUPPORT_PROC:
-				ok = check_amproc_signature(procform->amproc, VOIDOID, true,
+				ok = check_amproc_signature(procform->amproc, VOIDOID, false, true,
 											1, 1, INTERNALOID);
 				break;
 			default:
