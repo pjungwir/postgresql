@@ -1039,7 +1039,6 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId,
 					 * XXX: We should check the GENERATED expression also,
 					 * but that is hard to do for non-range/multirange PERIODs.
 					 */
-
 					if (!colDef->is_not_null && !IsBinaryUpgrade)
 						ereport(ERROR, (errmsg("Period %s uses a generated column that allows nulls", period->periodname)));
 
@@ -1646,7 +1645,7 @@ make_range_column_for_period(PeriodDef *period)
 	col->compression = NULL;
 	col->inhcount = 0;
 	col->is_local = true;
-	col->is_not_null = false;
+	col->is_not_null = true;
 	col->is_from_type = false;
 	col->storage = 0;
 	col->storage_name = NULL;

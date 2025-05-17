@@ -24,6 +24,8 @@ create table pt (id integer, ds date, de date, period for p (ds, ds));
 
 /* Now make one that works */
 create table pt (id integer, ds date, de date, period for p (ds, de));
+/* Its generated column looks good */
+select attname, atttypid::regtype, attnotnull, attgenerated from pg_attribute where attrelid = 'pt'::regclass and attname = 'p';
 
 /* SELECT * excludes the PERIOD */
 insert into pt values (1, '2000-01-01', '2001-01-01');
@@ -65,6 +67,8 @@ drop table pt2parent;
 alter table pt drop period for p;
 alter table pt add period for system_time (ds, de);
 alter table pt add period for p (ds, de);
+/* Its generated column looks good */
+select attname, atttypid::regtype, attnotnull, attgenerated from pg_attribute where attrelid = 'pt'::regclass and attname = 'p';
 
 /* Adding a second one */
 create table pt2 (id integer, ds date, de date, period for p1 (ds, de));
