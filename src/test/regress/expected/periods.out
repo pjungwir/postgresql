@@ -30,6 +30,13 @@ create table pt (id integer, ds date, de date, period for p (ds, ds));
 ERROR:  column "ds" can't be the start and end column for period "p"
 /* Now make one that works */
 create table pt (id integer, ds date, de date, period for p (ds, de));
+/* Its generated column looks good */
+select attname, atttypid::regtype, attnotnull, attgenerated from pg_attribute where attrelid = 'pt'::regclass and attname = 'p';
+ attname | atttypid  | attnotnull | attgenerated 
+---------+-----------+------------+--------------
+ p       | daterange | t          | s
+(1 row)
+
 /* SELECT * excludes the PERIOD */
 insert into pt values (1, '2000-01-01', '2001-01-01');
 select * from pt;
@@ -93,6 +100,13 @@ alter table pt drop period for p;
 alter table pt add period for system_time (ds, de);
 ERROR:  PERIOD FOR SYSTEM_TIME is not supported
 alter table pt add period for p (ds, de);
+/* Its generated column looks good */
+select attname, atttypid::regtype, attnotnull, attgenerated from pg_attribute where attrelid = 'pt'::regclass and attname = 'p';
+ attname | atttypid  | attnotnull | attgenerated 
+---------+-----------+------------+--------------
+ p       | daterange | t          | s
+(1 row)
+
 /* Adding a second one */
 create table pt2 (id integer, ds date, de date, period for p1 (ds, de));
 alter table pt2 add period for p2 (ds, de);
