@@ -1005,6 +1005,9 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId,
 	 * We allow this colexists option to support pg_upgrade,
 	 * so we have more control over the GENERATED column
 	 * (whose attnum must match the old value).
+	 *
+	 * Since the GENERATED column must be NOT NULL,
+	 * we add a constraint to nnconstraints.
 	 */
 	foreach(listptr, stmt->periods)
 	{
@@ -1058,7 +1061,10 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId,
 		else
 		{
 			ColumnDef *col = make_range_column_for_period(period);
+			Constraint *constr = makeNotNullConstraint(makeString(col->colname));
+
 			stmt->tableElts = lappend(stmt->tableElts, col);
+			stmt->nnconstraints = lappend(stmt->nnconstraints, constr);
 		}
 	}
 
@@ -5556,6 +5562,8 @@ ATPrepCmd(List **wqueue, Relation rel, AlterTableCmd *cmd,
 			break;
 		case AT_AddPeriod: /* ALTER TABLE ... ADD PERIOD FOR name (start, end) */
 			ATSimplePermissions(cmd->subtype, rel, ATT_TABLE);
+			ATPrepAddPeriod(wqueue, rel, cmd, lockmode, context);
+			/* No recursion: inheritance not supported with PERIODs */ // TODO: still true?
 			pass = AT_PASS_ADD_PERIOD;
 			break;
 		case AT_DropPeriod: /* ALTER TABLE ... DROP PERIOD FOR name */
@@ -8911,20 +8919,25 @@ ATExecCookedColumnDefault(Relation rel, AttrNumber attnum,
 }
 
 /*
- * ALTER TABLE ADD PERIOD
+ * Prepare to add a PERIOD to a table, by adding all its constituent objects.
  *
- * Return the address of the period.
+ * We need a CHECK constraint enforcing we start before we end.
+ *
+ * Usually we also create a GENERATED column with a NOT NULL constraint,
+ * unless the command indicates we have one already.
+ *
+ * PERIODs are not supported in inheritance hierarchies, so we don't need
+ * to worry about recursion.
+ *
+ * ATExecAddPeriod will need the oid of the CHECK constraint and the attnum
+ * of the range column (whether new or not) to record the dependency.
  */
-static ObjectAddress
-ATExecAddPeriod(Relation rel, PeriodDef *period, AlterTableUtilityContext *context)
+static void
+ATPrepAddPeriod(List **wqueue, Relation rel, AlterTableCmd *cmd,
+				LOCKMODE lockmode, AlterTableUtilityContext *context)
 {
-	Relation		attrelation;
-	ObjectAddress	address = InvalidObjectAddress;
-	Constraint	   *constr;
-	ColumnDef	   *rangecol;
-	Oid				conoid, periodoid;
-	List		   *cmds = NIL;
-	AlterTableCmd  *cmd;
+	PeriodDef *period = (PeriodDef *) cmd->def;
+	AlterTableCmd *newcmd;
 
 	/*
 	 * PERIOD FOR SYSTEM_TIME is not yet implemented, but make sure no one uses
@@ -8945,6 +8958,28 @@ ATExecAddPeriod(Relation rel, PeriodDef *period, AlterTableUtilityContext *conte
 	/* The period name must not already exist */
 	(void) check_for_period_name_collision(rel, period->periodname, period->colexists, false);
 
+	....
+
+	ATPrepCmd(wqueue, rel, newcmd, false, false, lockmode, context);
+
+}
+
+/*
+ * ALTER TABLE ADD PERIOD
+ *
+ * Return the address of the period.
+ */
+static ObjectAddress
+ATExecAddPeriod(Relation rel, PeriodDef *period, AlterTableUtilityContext *context)
+{
+	Relation		attrelation;
+	ObjectAddress	address = InvalidObjectAddress;
+	Constraint	   *constr;
+	ColumnDef	   *rangecol;
+	Oid				conoid, periodoid;
+	List		   *cmds = NIL;
+	AlterTableCmd  *cmd;
+
 	attrelation = table_open(AttributeRelationId, RowExclusiveLock);
 	ValidatePeriod(rel, period);
 
@@ -8959,6 +8994,8 @@ ATExecAddPeriod(Relation rel, PeriodDef *period, AlterTableUtilityContext *conte
 
 	if (!period->colexists)
 	{
+		List *cmds = NIL;
+
 		/* Make the range column */
 		rangecol = make_range_column_for_period(period);
 		cmd = makeNode(AlterTableCmd);
@@ -8966,8 +9003,19 @@ ATExecAddPeriod(Relation rel, PeriodDef *period, AlterTableUtilityContext *conte
 		cmd->def = (Node *) rangecol;
 		cmd->name = period->periodname;
 		cmd->recurse = false; /* no, let the PERIOD recurse instead */
+		cmds = lappend(cmds, cmd);
 
-		AlterTableInternal(RelationGetRelid(rel), list_make1(cmd), true, context);
+		/* The range column should be NOT NULL */
+		cmd = makeNode(AlterTableCmd);
+		cmd->subtype = AT_AddConstraint;
+		cmd->def = (Node *) makeNotNullConstraint(makeString(period->periodname));
+		cmd->recurse = false; /* no, let the PERIOD recurse instead */
+		cmds = lappend(cmds, cmd);
+
+		// TODO: Postgres doesn't like this. Maybe we need to make the sub-commands earlier at prep time. But then we have to retrieve the oids somehow and set up dependencies. Or do a lookup?
+		AlterTableInternal(RelationGetRelid(rel), cmds, true, context);
+
+		/* Look up the GENERATED attnum */
 		period->rngattnum = get_attnum(RelationGetRelid(rel), period->periodname);
 		if (period->rngattnum == InvalidAttrNumber)
 			elog(ERROR, "missing attribute %s", period->periodname);

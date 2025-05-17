@@ -7057,8 +7057,8 @@ getTables(Archive *fout, int *numTables)
 		appendPQExpBufferStr(query,
 							 "c.relhasoids, ");
 
-	/* In PG18 upwards we have PERIODs. */
-	if (fout->remoteVersion >= 180000)
+	/* In PG19 upwards we have PERIODs. */
+	if (fout->remoteVersion >= 190000)
 		appendPQExpBufferStr(query,
 							 "(SELECT count(*) FROM pg_period WHERE perrelid = c.oid) AS nperiods, ");
 	else
@@ -7751,7 +7751,7 @@ getIndexes(Archive *fout, TableInfo tblinfo[], int numTables)
 		appendPQExpBufferStr(query,
 							 "false AS indnullsnotdistinct, ");
 
-	if (fout->remoteVersion >= 180000)
+	if (fout->remoteVersion >= 190000)
 		appendPQExpBufferStr(query,
 							 "c.conperiod ");
 	else
@@ -9576,10 +9576,10 @@ getTableAttrs(Archive *fout, TableInfo *tblinfo, int numTables)
 		pg_log_info("finding table check constraints");
 
 		resetPQExpBuffer(q);
-		if (fout->remoteVersion >= 180000)
+		if (fout->remoteVersion >= 190000)
 		{
 			/*
-			 * PERIODs were added in v18 and we don't dump CHECK
+			 * PERIODs were added in v19 and we don't dump CHECK
 			 * constraints for them.
 			 */
 			appendPQExpBuffer(q,
@@ -9725,8 +9725,8 @@ getTableAttrs(Archive *fout, TableInfo *tblinfo, int numTables)
 			int			numPeriods;
 			int			j;
 
-			/* We shouldn't have any periods before v18 */
-			Assert(fout->remoteVersion >= 180000);
+			/* We shouldn't have any periods before v19 */
+			Assert(fout->remoteVersion >= 190000);
 
 			pg_log_info("finding periods for table \"%s.%s\"",
 						tbinfo->dobj.namespace->dobj.name,
