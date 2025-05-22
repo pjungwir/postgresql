@@ -1674,9 +1674,6 @@ make_range_column_for_period(PeriodDef *period)
  * make sure they exist, are not system columns,
  * and have the same type and collation.
  *
- * You must have a RowExclusiveLock on pg_attribute
- * before calling this function.
- *
  * Add our findings to these PeriodDef fields:
  *
  * coltypid - the type of PERIOD columns.
@@ -1692,9 +1689,11 @@ ValidatePeriod(Relation rel, PeriodDef *period)
 	HeapTuple endtuple;
 	Form_pg_attribute	atttuple;
 	Oid	attcollation;
+	Oid endtypid;
+	Oid endcollation;
 
 	/* Find the start column */
-	starttuple = SearchSysCacheCopyAttName(RelationGetRelid(rel), period->startcolname);
+	starttuple = SearchSysCacheAttName(RelationGetRelid(rel), period->startcolname);
 	if (!HeapTupleIsValid(starttuple))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_COLUMN),
@@ -1704,6 +1703,7 @@ ValidatePeriod(Relation rel, PeriodDef *period)
 	period->coltypid = atttuple->atttypid;
 	attcollation = atttuple->attcollation;
 	period->startattnum = atttuple->attnum;
+	ReleaseSysCache(starttuple);
 
 	/* Make sure it's not a system column */
 	if (period->startattnum <= 0)
@@ -1713,14 +1713,17 @@ ValidatePeriod(Relation rel, PeriodDef *period)
 						period->startcolname)));
 
 	/* Find the end column */
-	endtuple = SearchSysCacheCopyAttName(RelationGetRelid(rel), period->endcolname);
+	endtuple = SearchSysCacheAttName(RelationGetRelid(rel), period->endcolname);
 	if (!HeapTupleIsValid(endtuple))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_COLUMN),
 				 errmsg("column \"%s\" of relation \"%s\" does not exist",
 						period->endcolname, RelationGetRelationName(rel))));
 	atttuple = (Form_pg_attribute) GETSTRUCT(endtuple);
+	endtypid = atttuple->atttypid;
+	endcollation = atttuple->attcollation;
 	period->endattnum = atttuple->attnum;
+	ReleaseSysCache(endtuple);
 
 	/* Make sure it's not a system column */
 	if (period->endattnum <= 0)
@@ -1730,13 +1733,13 @@ ValidatePeriod(Relation rel, PeriodDef *period)
 						period->endcolname)));
 
 	/* Both columns must be of same type */
-	if (period->coltypid != atttuple->atttypid)
+	if (period->coltypid != endtypid)
 		ereport(ERROR,
 				(errcode(ERRCODE_DATATYPE_MISMATCH),
 				 errmsg("start and end columns of period must be of same type")));
 
 	/* Both columns must have the same collation */
-	if (attcollation != atttuple->attcollation)
+	if (attcollation != endcollation)
 		ereport(ERROR,
 				(errcode(ERRCODE_COLLATION_MISMATCH),
 				 errmsg("start and end columns of period must have same collation")));
@@ -1747,7 +1750,7 @@ ValidatePeriod(Relation rel, PeriodDef *period)
 	/* If the GENERATED columns should already exist, make sure it is sensible. */
 	if (period->colexists)
 	{
-		HeapTuple rngtuple = SearchSysCacheCopyAttName(RelationGetRelid(rel), period->periodname);
+		HeapTuple rngtuple = SearchSysCacheAttName(RelationGetRelid(rel), period->periodname);
 		if (!HeapTupleIsValid(rngtuple))
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_COLUMN),
@@ -1785,11 +1788,8 @@ ValidatePeriod(Relation rel, PeriodDef *period)
 
 		period->rngattnum = atttuple->attnum;
 
-		heap_freetuple(rngtuple);
+		ReleaseSysCache(rngtuple);
 	}
-
-	heap_freetuple(starttuple);
-	heap_freetuple(endtuple);
 }
 
 /*
