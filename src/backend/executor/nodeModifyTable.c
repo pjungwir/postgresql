@@ -191,6 +191,8 @@ static TupleTableSlot *ExecMergeNotMatched(ModifyTableContext *context,
 										   ResultRelInfo *resultRelInfo,
 										   bool canSetTag);
 static void ExecSetupTransitionCaptureState(ModifyTableState *mtstate, EState *estate);
+static void fireBSTriggers(ModifyTableState *node);
+static void fireASTriggers(ModifyTableState *node);
 
 
 /*
@@ -1533,8 +1535,14 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 		if (resultRelInfo->ri_RootResultRelInfo)
 			resultRelInfo = resultRelInfo->ri_RootResultRelInfo;
 
+		// TODO: fire before statement triggers
+		// We need to push a new trigger context onto the stack (or whatever)
 		ExecSetupTransitionCaptureState(mtstate, estate);
+		fireBSTriggers(mtstate);
 		ExecInsert(context, resultRelInfo, leftoverSlot, node->canSetTag, NULL, NULL);
+		// TODO: fire after ROW triggers
+		// TODO: fire after statement triggers
+		fireASTriggers(mtstate);
 	}
 
 	if (didInit)
