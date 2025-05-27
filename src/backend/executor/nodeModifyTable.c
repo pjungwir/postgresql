@@ -191,6 +191,8 @@ static TupleTableSlot *ExecMergeNotMatched(ModifyTableContext *context,
 										   ResultRelInfo *resultRelInfo,
 										   bool canSetTag);
 static void ExecSetupTransitionCaptureState(ModifyTableState *mtstate, EState *estate);
+static void fireBSTriggers(ModifyTableState *node);
+static void fireASTriggers(ModifyTableState *node);
 
 
 /*
@@ -1511,9 +1513,10 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 				ExecForceStoreHeapTuple(oldtuple, leftoverSlot, false);
 			}
 
-			/* Save some mtstate things so we can restore them below. */
-			// TODO: Do we need a more systematic way of doing this,
-			// e.g. a new mtstate or even a separate ForPortionOfLeftovers node?
+			/*
+			 * Save some mtstate things so we can restore them below.
+			 * XXX: Should we create our own ModifyTableState instead?
+			 */
 			oldOperation = mtstate->operation;
 			mtstate->operation = CMD_INSERT;
 			oldTcs = mtstate->mt_transition_capture;
@@ -1533,8 +1536,20 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 		if (resultRelInfo->ri_RootResultRelInfo)
 			resultRelInfo = resultRelInfo->ri_RootResultRelInfo;
 
+		/*
+		 * The standard says that each leftover should execute
+		 * its own insert statement, firing all statement and row triggers,
+		 * but skipping insert permission checks.
+		 * Therefore we give each leftover insert its own transition table.
+		 * If we just push & pop a new trigger level for each insert,
+		 * we get exactly what we need.
+		 */
+		AfterTriggerBeginQuery();
 		ExecSetupTransitionCaptureState(mtstate, estate);
+		fireBSTriggers(mtstate);
 		ExecInsert(context, resultRelInfo, leftoverSlot, node->canSetTag, NULL, NULL);
+		fireASTriggers(mtstate);
+		AfterTriggerEndQuery(estate);
 	}
 
 	if (didInit)
