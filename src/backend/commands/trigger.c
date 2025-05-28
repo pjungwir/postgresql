@@ -4513,7 +4513,9 @@ AfterTriggerExecute(EState *estate,
 	LocTriggerData.tg_relation = rel;
 	if (TRIGGER_FOR_UPDATE(LocTriggerData.tg_trigger->tgtype))
 		LocTriggerData.tg_updatedcols = evtshared->ats_modifiedcols;
-	LocTriggerData.tg_temporal = evtshared->for_portion_of;
+	if (TRIGGER_FOR_UPDATE(LocTriggerData.tg_trigger->tgtype) ||
+		TRIGGER_FOR_DELETE(LocTriggerData.tg_trigger->tgtype))
+		LocTriggerData.tg_temporal = evtshared->for_portion_of;
 
 	MemoryContextReset(per_tuple_context);
 
