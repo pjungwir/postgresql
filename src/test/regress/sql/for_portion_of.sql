@@ -395,51 +395,65 @@ CREATE FUNCTION dump_trigger()
 RETURNS TRIGGER LANGUAGE plpgsql AS
 $$
 BEGIN
-  IF TG_OP = 'INSERT' THEN
-    RAISE NOTICE '%: % %, NEW table = %',
-      TG_NAME, TG_OP, TG_LEVEL, (SELECT string_agg(new_table::text, ', ' ORDER BY id) FROM new_table);
-  ELSIF TG_OP = 'UPDATE' THEN
-    RAISE NOTICE '%: % %, OLD table = %, NEW table = %',
-      TG_NAME, TG_OP, TG_LEVEL,
-      (SELECT string_agg(old_table::text, ', ' ORDER BY id) FROM old_table),
-      (SELECT string_agg(new_table::text, ', ' ORDER BY id) FROM new_table);
-  ELSIF TG_OP = 'DELETE' THEN
-    RAISE NOTICE '%: % %, OLD table = %',
-      TG_NAME, TG_OP, TG_LEVEL, (SELECT string_agg(old_table::text, ', ' ORDER BY id) FROM old_table);
+  RAISE NOTICE '%: % % %:',
+    TG_NAME, TG_WHEN, TG_OP, TG_LEVEL;
+
+  IF TG_ARGV[0] THEN
+    RAISE NOTICE '  old: %', (SELECT string_agg(old_table::text, '\n       ') FROM old_table);
   END IF;
-  RETURN NULL;
+  IF TG_ARGV[1] THEN
+    RAISE NOTICE '  new: %', (SELECT string_agg(new_table::text, '\n       ') FROM new_table);
+  END IF;
+
+  IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE' THEN
+    RETURN NEW;
+  ELSIF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
 END;
 $$;
 
-CREATE TRIGGER for_portion_of_test_insert_trig
+-- statement triggers:
+
+CREATE TRIGGER fpo_before_stmt
+BEFORE INSERT OR UPDATE OR DELETE ON for_portion_of_test
+FOR EACH STATEMENT EXECUTE PROCEDURE dump_trigger(false, false);
+
+CREATE TRIGGER fpo_after_insert_stmt
 AFTER INSERT ON for_portion_of_test
 REFERENCING NEW TABLE AS new_table
-FOR EACH ROW EXECUTE PROCEDURE dump_trigger();
+FOR EACH STATEMENT EXECUTE PROCEDURE dump_trigger(false, true);
 
-CREATE TRIGGER for_portion_of_test_insert_trig_stmt
+CREATE TRIGGER fpo_after_update_stmt
+AFTER UPDATE ON for_portion_of_test
+REFERENCING NEW TABLE AS new_table OLD TABLE AS old_table
+FOR EACH STATEMENT EXECUTE PROCEDURE dump_trigger(true, true);
+
+CREATE TRIGGER fpo_after_delete_stmt
+AFTER DELETE ON for_portion_of_test
+REFERENCING OLD TABLE AS old_table
+FOR EACH STATEMENT EXECUTE PROCEDURE dump_trigger(true, false);
+
+-- row triggers:
+
+CREATE TRIGGER fpo_before_row
+BEFORE INSERT OR UPDATE OR DELETE ON for_portion_of_test
+FOR EACH ROW EXECUTE PROCEDURE dump_trigger(false, false);
+
+CREATE TRIGGER fpo_after_insert_row
 AFTER INSERT ON for_portion_of_test
 REFERENCING NEW TABLE AS new_table
-FOR EACH STATEMENT EXECUTE PROCEDURE dump_trigger();
+FOR EACH ROW EXECUTE PROCEDURE dump_trigger(false, true);
 
-CREATE TRIGGER for_portion_of_test_update_trig
+CREATE TRIGGER fpo_after_update_row
 AFTER UPDATE ON for_portion_of_test
 REFERENCING OLD TABLE AS old_table NEW TABLE AS new_table
-FOR EACH ROW EXECUTE PROCEDURE dump_trigger();
+FOR EACH ROW EXECUTE PROCEDURE dump_trigger(true, true);
 
-CREATE TRIGGER for_portion_of_test_update_trig_stmt
-AFTER UPDATE ON for_portion_of_test
-REFERENCING OLD TABLE AS old_table NEW TABLE AS new_table
-FOR EACH STATEMENT EXECUTE PROCEDURE dump_trigger();
-
-CREATE TRIGGER for_portion_of_test_delete_trig
+CREATE TRIGGER fpo_after_delete_row
 AFTER DELETE ON for_portion_of_test
 REFERENCING OLD TABLE AS old_table
-FOR EACH ROW EXECUTE PROCEDURE dump_trigger();
-
-CREATE TRIGGER for_portion_of_test_delete_trig_stmt
-AFTER DELETE ON for_portion_of_test
-REFERENCING OLD TABLE AS old_table
-FOR EACH STATEMENT EXECUTE PROCEDURE dump_trigger();
+FOR EACH ROW EXECUTE PROCEDURE dump_trigger(true, false);
 
 BEGIN;
 UPDATE for_portion_of_test
