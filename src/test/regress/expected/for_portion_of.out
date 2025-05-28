@@ -511,72 +511,114 @@ CREATE FUNCTION dump_trigger()
 RETURNS TRIGGER LANGUAGE plpgsql AS
 $$
 BEGIN
-  IF TG_OP = 'INSERT' THEN
-    RAISE NOTICE '%: % %, NEW table = %',
-      TG_NAME, TG_OP, TG_LEVEL, (SELECT string_agg(new_table::text, ', ' ORDER BY id) FROM new_table);
-  ELSIF TG_OP = 'UPDATE' THEN
-    RAISE NOTICE '%: % %, OLD table = %, NEW table = %',
-      TG_NAME, TG_OP, TG_LEVEL,
-      (SELECT string_agg(old_table::text, ', ' ORDER BY id) FROM old_table),
-      (SELECT string_agg(new_table::text, ', ' ORDER BY id) FROM new_table);
-  ELSIF TG_OP = 'DELETE' THEN
-    RAISE NOTICE '%: % %, OLD table = %',
-      TG_NAME, TG_OP, TG_LEVEL, (SELECT string_agg(old_table::text, ', ' ORDER BY id) FROM old_table);
+  RAISE NOTICE '%: % % %:',
+    TG_NAME, TG_WHEN, TG_OP, TG_LEVEL;
+
+  IF TG_ARGV[0] THEN
+    RAISE NOTICE '  old: %', (SELECT string_agg(old_table::text, '\n       ') FROM old_table);
   END IF;
-  RETURN NULL;
+  IF TG_ARGV[1] THEN
+    RAISE NOTICE '  new: %', (SELECT string_agg(new_table::text, '\n       ') FROM new_table);
+  END IF;
+
+  IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE' THEN
+    RETURN NEW;
+  ELSIF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
 END;
 $$;
-CREATE TRIGGER for_portion_of_test_insert_trig
+-- statement triggers:
+CREATE TRIGGER fpo_before_stmt
+BEFORE INSERT OR UPDATE OR DELETE ON for_portion_of_test
+FOR EACH STATEMENT EXECUTE PROCEDURE dump_trigger(false, false);
+CREATE TRIGGER fpo_after_insert_stmt
 AFTER INSERT ON for_portion_of_test
 REFERENCING NEW TABLE AS new_table
-FOR EACH ROW EXECUTE PROCEDURE dump_trigger();
-CREATE TRIGGER for_portion_of_test_insert_trig_stmt
+FOR EACH STATEMENT EXECUTE PROCEDURE dump_trigger(false, true);
+CREATE TRIGGER fpo_after_update_stmt
+AFTER UPDATE ON for_portion_of_test
+REFERENCING NEW TABLE AS new_table OLD TABLE AS old_table
+FOR EACH STATEMENT EXECUTE PROCEDURE dump_trigger(true, true);
+CREATE TRIGGER fpo_after_delete_stmt
+AFTER DELETE ON for_portion_of_test
+REFERENCING OLD TABLE AS old_table
+FOR EACH STATEMENT EXECUTE PROCEDURE dump_trigger(true, false);
+-- row triggers:
+CREATE TRIGGER fpo_before_row
+BEFORE INSERT OR UPDATE OR DELETE ON for_portion_of_test
+FOR EACH ROW EXECUTE PROCEDURE dump_trigger(false, false);
+CREATE TRIGGER fpo_after_insert_row
 AFTER INSERT ON for_portion_of_test
 REFERENCING NEW TABLE AS new_table
-FOR EACH STATEMENT EXECUTE PROCEDURE dump_trigger();
-CREATE TRIGGER for_portion_of_test_update_trig
+FOR EACH ROW EXECUTE PROCEDURE dump_trigger(false, true);
+CREATE TRIGGER fpo_after_update_row
 AFTER UPDATE ON for_portion_of_test
 REFERENCING OLD TABLE AS old_table NEW TABLE AS new_table
-FOR EACH ROW EXECUTE PROCEDURE dump_trigger();
-CREATE TRIGGER for_portion_of_test_update_trig_stmt
-AFTER UPDATE ON for_portion_of_test
-REFERENCING OLD TABLE AS old_table NEW TABLE AS new_table
-FOR EACH STATEMENT EXECUTE PROCEDURE dump_trigger();
-CREATE TRIGGER for_portion_of_test_delete_trig
+FOR EACH ROW EXECUTE PROCEDURE dump_trigger(true, true);
+CREATE TRIGGER fpo_after_delete_row
 AFTER DELETE ON for_portion_of_test
 REFERENCING OLD TABLE AS old_table
-FOR EACH ROW EXECUTE PROCEDURE dump_trigger();
-CREATE TRIGGER for_portion_of_test_delete_trig_stmt
-AFTER DELETE ON for_portion_of_test
-REFERENCING OLD TABLE AS old_table
-FOR EACH STATEMENT EXECUTE PROCEDURE dump_trigger();
+FOR EACH ROW EXECUTE PROCEDURE dump_trigger(true, false);
 BEGIN;
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-01-15' TO '2019-01-01'
   SET name = '2018-01-15_to_2019-01-01';
-NOTICE:  for_portion_of_test_insert_trig: INSERT ROW, NEW table = ("[1,2)","[2018-01-01,2018-01-15)",one)
-NOTICE:  for_portion_of_test_insert_trig_stmt: INSERT STATEMENT, NEW table = ("[1,2)","[2018-01-01,2018-01-15)",one)
-NOTICE:  for_portion_of_test_insert_trig: INSERT ROW, NEW table = ("[1,2)","[2019-01-01,2020-01-01)",one)
-NOTICE:  for_portion_of_test_insert_trig_stmt: INSERT STATEMENT, NEW table = ("[1,2)","[2019-01-01,2020-01-01)",one)
-NOTICE:  for_portion_of_test_update_trig: UPDATE ROW, OLD table = ("[1,2)","[2018-01-01,2020-01-01)",one), NEW table = ("[1,2)","[2018-01-15,2019-01-01)",2018-01-15_to_2019-01-01)
-NOTICE:  for_portion_of_test_update_trig_stmt: UPDATE STATEMENT, OLD table = ("[1,2)","[2018-01-01,2020-01-01)",one), NEW table = ("[1,2)","[2018-01-15,2019-01-01)",2018-01-15_to_2019-01-01)
+NOTICE:  fpo_before_stmt: BEFORE UPDATE STATEMENT:
+NOTICE:  fpo_before_row: BEFORE UPDATE ROW:
+NOTICE:  fpo_before_stmt: BEFORE INSERT STATEMENT:
+NOTICE:  fpo_before_row: BEFORE INSERT ROW:
+NOTICE:  fpo_after_insert_row: AFTER INSERT ROW:
+NOTICE:    new: ("[1,2)","[2018-01-01,2018-01-15)",one)
+NOTICE:  fpo_after_insert_stmt: AFTER INSERT STATEMENT:
+NOTICE:    new: ("[1,2)","[2018-01-01,2018-01-15)",one)
+NOTICE:  fpo_before_stmt: BEFORE INSERT STATEMENT:
+NOTICE:  fpo_before_row: BEFORE INSERT ROW:
+NOTICE:  fpo_after_insert_row: AFTER INSERT ROW:
+NOTICE:    new: ("[1,2)","[2019-01-01,2020-01-01)",one)
+NOTICE:  fpo_after_insert_stmt: AFTER INSERT STATEMENT:
+NOTICE:    new: ("[1,2)","[2019-01-01,2020-01-01)",one)
+NOTICE:  fpo_after_update_row: AFTER UPDATE ROW:
+NOTICE:    old: ("[1,2)","[2018-01-01,2020-01-01)",one)
+NOTICE:    new: ("[1,2)","[2018-01-15,2019-01-01)",2018-01-15_to_2019-01-01)
+NOTICE:  fpo_after_update_stmt: AFTER UPDATE STATEMENT:
+NOTICE:    old: ("[1,2)","[2018-01-01,2020-01-01)",one)
+NOTICE:    new: ("[1,2)","[2018-01-15,2019-01-01)",2018-01-15_to_2019-01-01)
 ROLLBACK;
 BEGIN;
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM NULL TO '2018-01-21';
-NOTICE:  for_portion_of_test_insert_trig: INSERT ROW, NEW table = ("[1,2)","[2018-01-21,2020-01-01)",one)
-NOTICE:  for_portion_of_test_insert_trig_stmt: INSERT STATEMENT, NEW table = ("[1,2)","[2018-01-21,2020-01-01)",one)
-NOTICE:  for_portion_of_test_delete_trig: DELETE ROW, OLD table = ("[1,2)","[2018-01-01,2020-01-01)",one)
-NOTICE:  for_portion_of_test_delete_trig_stmt: DELETE STATEMENT, OLD table = ("[1,2)","[2018-01-01,2020-01-01)",one)
+NOTICE:  fpo_before_stmt: BEFORE DELETE STATEMENT:
+NOTICE:  fpo_before_row: BEFORE DELETE ROW:
+NOTICE:  fpo_before_stmt: BEFORE INSERT STATEMENT:
+NOTICE:  fpo_before_row: BEFORE INSERT ROW:
+NOTICE:  fpo_after_insert_row: AFTER INSERT ROW:
+NOTICE:    new: ("[1,2)","[2018-01-21,2020-01-01)",one)
+NOTICE:  fpo_after_insert_stmt: AFTER INSERT STATEMENT:
+NOTICE:    new: ("[1,2)","[2018-01-21,2020-01-01)",one)
+NOTICE:  fpo_after_delete_row: AFTER DELETE ROW:
+NOTICE:    old: ("[1,2)","[2018-01-01,2020-01-01)",one)
+NOTICE:  fpo_after_delete_stmt: AFTER DELETE STATEMENT:
+NOTICE:    old: ("[1,2)","[2018-01-01,2020-01-01)",one)
 ROLLBACK;
 BEGIN;
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM NULL TO '2018-01-02'
   SET name = 'NULL_to_2018-01-01';
-NOTICE:  for_portion_of_test_insert_trig: INSERT ROW, NEW table = ("[1,2)","[2018-01-02,2020-01-01)",one)
-NOTICE:  for_portion_of_test_insert_trig_stmt: INSERT STATEMENT, NEW table = ("[1,2)","[2018-01-02,2020-01-01)",one)
-NOTICE:  for_portion_of_test_update_trig: UPDATE ROW, OLD table = ("[1,2)","[2018-01-01,2020-01-01)",one), NEW table = ("[1,2)","[2018-01-01,2018-01-02)",NULL_to_2018-01-01)
-NOTICE:  for_portion_of_test_update_trig_stmt: UPDATE STATEMENT, OLD table = ("[1,2)","[2018-01-01,2020-01-01)",one), NEW table = ("[1,2)","[2018-01-01,2018-01-02)",NULL_to_2018-01-01)
+NOTICE:  fpo_before_stmt: BEFORE UPDATE STATEMENT:
+NOTICE:  fpo_before_row: BEFORE UPDATE ROW:
+NOTICE:  fpo_before_stmt: BEFORE INSERT STATEMENT:
+NOTICE:  fpo_before_row: BEFORE INSERT ROW:
+NOTICE:  fpo_after_insert_row: AFTER INSERT ROW:
+NOTICE:    new: ("[1,2)","[2018-01-02,2020-01-01)",one)
+NOTICE:  fpo_after_insert_stmt: AFTER INSERT STATEMENT:
+NOTICE:    new: ("[1,2)","[2018-01-02,2020-01-01)",one)
+NOTICE:  fpo_after_update_row: AFTER UPDATE ROW:
+NOTICE:    old: ("[1,2)","[2018-01-01,2020-01-01)",one)
+NOTICE:    new: ("[1,2)","[2018-01-01,2018-01-02)",NULL_to_2018-01-01)
+NOTICE:  fpo_after_update_stmt: AFTER UPDATE STATEMENT:
+NOTICE:    old: ("[1,2)","[2018-01-01,2020-01-01)",one)
+NOTICE:    new: ("[1,2)","[2018-01-01,2018-01-02)",NULL_to_2018-01-01)
 ROLLBACK;
 -- Test with multiranges
 CREATE TABLE for_portion_of_test2 (
