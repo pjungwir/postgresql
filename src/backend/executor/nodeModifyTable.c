@@ -1409,13 +1409,13 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	/*
 	 * Get the range of the old pre-UPDATE/DELETE tuple,
 	 * so we can intersect it with the FOR PORTION OF target
-	 * and see if there are any "leftovers" to insert.
+	 * and see if there are any temporal leftovers to insert.
 	 *
 	 * We have already locked the tuple in ExecUpdate/ExecDelete
 	 * and it has passed EvalPlanQual.
 	 * Make sure we're looking at the most recent version.
 	 * Otherwise concurrent updates of the same tuple in READ COMMITTED
-	 * could insert conflicting "leftovers".
+	 * could insert conflicting temporal leftovers.
 	 *
 	 * TODO: This is happening in ExecUpdate now, so we might as well use what's there. (ExecDelete too?)
 	 */
@@ -1452,7 +1452,7 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 
 	/*
 	 * Get the ranges to the left/right of the targeted range.
-	 * We call a SETOF support function and insert as many leftovers
+	 * We call a SETOF support function and insert as many temporal leftovers
 	 * as it gives us. Although rangetypes have 0/1/2 leftovers,
 	 * multiranges have 0/1, and other types may have more.
 	 */
@@ -1498,7 +1498,7 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 			 * Make a copy of the pre-UPDATE row.
 			 * Then we'll overwrite the range column below.
 			 * Convert oldtuple to the base table's format if necessary.
-			 * We need to insert leftovers through the root partition
+			 * We need to insert temporal leftovers through the root partition
 			 * so they get routed correctly.
 			 */
 			if (map != NULL)
@@ -1537,10 +1537,10 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 			resultRelInfo = resultRelInfo->ri_RootResultRelInfo;
 
 		/*
-		 * The standard says that each leftover should execute
-		 * its own insert statement, firing all statement and row triggers,
+		 * The standard says that each temporal leftover should execute
+		 * its own INSERT statement, firing all statement and row triggers,
 		 * but skipping insert permission checks.
-		 * Therefore we give each leftover insert its own transition table.
+		 * Therefore we give each insert its own transition table.
 		 * If we just push & pop a new trigger level for each insert,
 		 * we get exactly what we need.
 		 */
@@ -1714,8 +1714,8 @@ ExecDeleteAct(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
  *
  * Closing steps of tuple deletion; this invokes AFTER FOR EACH ROW triggers,
  * including the UPDATE triggers if the deletion is being done as part of a
- * cross-partition tuple move. It also inserts leftovers from a FOR PORTION OF
- * delete.
+ * cross-partition tuple move. It also inserts temporal leftovers from a
+ * DELETE FOR PORTION OF.
  */
 static void
 ExecDeleteEpilogue(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
@@ -1748,7 +1748,7 @@ ExecDeleteEpilogue(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 		ar_delete_trig_tcs = NULL;
 	}
 
-	/* Compute leftovers in FOR PORTION OF */
+	/* Compute temporal leftovers in FOR PORTION OF */
 	if (((ModifyTable *) context->mtstate->ps.plan)->forPortionOf)
 		ExecForPortionOfLeftovers(context, estate, resultRelInfo, tupleid);
 
@@ -2529,7 +2529,8 @@ lreplace:
  * ExecUpdateEpilogue -- subroutine for ExecUpdate
  *
  * Closing steps of updating a tuple.  Must be called if ExecUpdateAct
- * returns indicating that the tuple was updated.
+ * returns indicating that the tuple was updated. It also inserts temporal
+ * leftovers from an UPDATE FOR PORTION OF.
  */
 static void
 ExecUpdateEpilogue(ModifyTableContext *context, UpdateContext *updateCxt,
@@ -2547,7 +2548,7 @@ ExecUpdateEpilogue(ModifyTableContext *context, UpdateContext *updateCxt,
 											   NULL, NIL,
 											   (updateCxt->updateIndexes == TU_Summarizing));
 
-	/* Compute leftovers in FOR PORTION OF */
+	/* Compute temporal leftovers in FOR PORTION OF */
 	if (((ModifyTable *) context->mtstate->ps.plan)->forPortionOf)
 		ExecForPortionOfLeftovers(context, context->estate, resultRelInfo, tupleid);
 
@@ -5202,7 +5203,7 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 			table_slot_create(rootResultRelInfo->ri_RelationDesc,
 							  &mtstate->ps.state->es_tupleTable);
 
-		/* Create the tuple slot for INSERTing the leftovers */
+		/* Create the tuple slot for INSERTing the temporal leftovers */
 
 		fpoState->fp_Leftover =
 			ExecInitExtraTupleSlot(mtstate->ps.state, tupDesc, &TTSOpsVirtual);
@@ -5240,7 +5241,7 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 				mtstate->mt_partition_tuple_routing == NULL)
 		{
 			/*
-			 * We will need tuple routing to insert leftovers.
+			 * We will need tuple routing to insert temporal leftovers.
 			 * Since we are initializing things before ExecCrossPartitionUpdate runs,
 			 * we must do everything it needs as well.
 			 */
