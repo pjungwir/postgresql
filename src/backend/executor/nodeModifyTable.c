@@ -139,7 +139,8 @@ typedef struct UpdateContext
 /*
  * FPO_QueryHashEntry
  */
-typedef struct FPO_QueryHashEntry {
+typedef struct FPO_QueryHashEntry
+{
 	Oid			key;
 	SPIPlanPtr	plan;
 } FPO_QueryHashEntry;
@@ -1391,38 +1392,38 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	ModifyTable *node = (ModifyTable *) mtstate->ps.plan;
 	ForPortionOfExpr *forPortionOf = (ForPortionOfExpr *) node->forPortionOf;
 	AttrNumber	rangeAttno;
-	Datum	oldRange;
+	Datum		oldRange;
 	TypeCacheEntry *typcache;
 	ForPortionOfState *fpoState = resultRelInfo->ri_forPortionOf;
 	TupleTableSlot *oldtupleSlot = fpoState->fp_Existing;
 	TupleTableSlot *leftoverSlot = fpoState->fp_Leftover;
 	TupleConversionMap *map = NULL;
-	HeapTuple oldtuple = NULL;
-	CmdType	oldOperation;
+	HeapTuple	oldtuple = NULL;
+	CmdType		oldOperation;
 	TransitionCaptureState *oldTcs;
-	FmgrInfo flinfo;
+	FmgrInfo	flinfo;
 	ReturnSetInfo rsi;
-	bool didInit = false;
-	bool shouldFree = false;
+	bool		didInit = false;
+	bool		shouldFree = false;
+
 	LOCAL_FCINFO(fcinfo, 2);
 
 	/*
-	 * Get the range of the old pre-UPDATE/DELETE tuple,
-	 * so we can intersect it with the FOR PORTION OF target
-	 * and see if there are any temporal leftovers to insert.
+	 * Get the range of the old pre-UPDATE/DELETE tuple, so we can intersect
+	 * it with the FOR PORTION OF target and see if there are any temporal
+	 * leftovers to insert.
 	 *
-	 * We have already locked the tuple in ExecUpdate/ExecDelete
-	 * and it has passed EvalPlanQual.
-	 * Make sure we're looking at the most recent version.
-	 * Otherwise concurrent updates of the same tuple in READ COMMITTED
-	 * could insert conflicting temporal leftovers.
+	 * We have already locked the tuple in ExecUpdate/ExecDelete and it has
+	 * passed EvalPlanQual. Make sure we're looking at the most recent
+	 * version. Otherwise concurrent updates of the same tuple in READ
+	 * COMMITTED could insert conflicting temporal leftovers.
 	 */
 	if (!table_tuple_fetch_row_version(resultRelInfo->ri_RelationDesc, tupleid, SnapshotAny, oldtupleSlot))
 		elog(ERROR, "failed to fetch tuple for FOR PORTION OF");
 
 	/*
-	 * Get the old range of the record being updated/deleted.
-	 * Must read with the attno of the leaf partition being updated.
+	 * Get the old range of the record being updated/deleted. Must read with
+	 * the attno of the leaf partition being updated.
 	 */
 
 	rangeAttno = forPortionOf->rangeVar->varattno;
@@ -1449,10 +1450,10 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	}
 
 	/*
-	 * Get the ranges to the left/right of the targeted range.
-	 * We call a SETOF support function and insert as many temporal leftovers
-	 * as it gives us. Although rangetypes have 0/1/2 leftovers,
-	 * multiranges have 0/1, and other types may have more.
+	 * Get the ranges to the left/right of the targeted range. We call a SETOF
+	 * support function and insert as many temporal leftovers as it gives us.
+	 * Although rangetypes have 0/1/2 leftovers, multiranges have 0/1, and
+	 * other types may have more.
 	 */
 
 	fmgr_info(forPortionOf->withoutPortionProc, &flinfo);
@@ -1471,17 +1472,20 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	fcinfo->args[1].isnull = false;
 
 	/*
-	 * If there are partitions, we must insert into the root table,
-	 * so we get tuple routing. We already set up leftoverSlot
-	 * with the root tuple descriptor.
+	 * If there are partitions, we must insert into the root table, so we get
+	 * tuple routing. We already set up leftoverSlot with the root tuple
+	 * descriptor.
 	 */
 	if (resultRelInfo->ri_RootResultRelInfo)
 		resultRelInfo = resultRelInfo->ri_RootResultRelInfo;
 
-	/* Insert a leftover for each value returned by the without_portion helper function */
+	/*
+	 * Insert a leftover for each value returned by the without_portion helper
+	 * function
+	 */
 	while (true)
 	{
-		Datum leftover = FunctionCallInvoke(fcinfo);
+		Datum		leftover = FunctionCallInvoke(fcinfo);
 
 		/* Are we done? */
 		if (rsi.isDone == ExprEndResult)
@@ -1493,11 +1497,10 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 		if (!didInit)
 		{
 			/*
-			 * Make a copy of the pre-UPDATE row.
-			 * Then we'll overwrite the range column below.
-			 * Convert oldtuple to the base table's format if necessary.
-			 * We need to insert temporal leftovers through the root partition
-			 * so they get routed correctly.
+			 * Make a copy of the pre-UPDATE row. Then we'll overwrite the
+			 * range column below. Convert oldtuple to the base table's format
+			 * if necessary. We need to insert temporal leftovers through the
+			 * root partition so they get routed correctly.
 			 */
 			if (map != NULL)
 			{
@@ -1512,8 +1515,8 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 			}
 
 			/*
-			 * Save some mtstate things so we can restore them below.
-			 * XXX: Should we create our own ModifyTableState instead?
+			 * Save some mtstate things so we can restore them below. XXX:
+			 * Should we create our own ModifyTableState instead?
 			 */
 			oldOperation = mtstate->operation;
 			mtstate->operation = CMD_INSERT;
@@ -1527,20 +1530,19 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 		ExecMaterializeSlot(leftoverSlot);
 
 		/*
-		 * If there are partitions, we must insert into the root table,
-		 * so we get tuple routing. We already set up leftoverSlot
-		 * with the root tuple descriptor.
+		 * If there are partitions, we must insert into the root table, so we
+		 * get tuple routing. We already set up leftoverSlot with the root
+		 * tuple descriptor.
 		 */
 		if (resultRelInfo->ri_RootResultRelInfo)
 			resultRelInfo = resultRelInfo->ri_RootResultRelInfo;
 
 		/*
-		 * The standard says that each temporal leftover should execute
-		 * its own INSERT statement, firing all statement and row triggers,
-		 * but skipping insert permission checks.
-		 * Therefore we give each insert its own transition table.
-		 * If we just push & pop a new trigger level for each insert,
-		 * we get exactly what we need.
+		 * The standard says that each temporal leftover should execute its
+		 * own INSERT statement, firing all statement and row triggers, but
+		 * skipping insert permission checks. Therefore we give each insert
+		 * its own transition table. If we just push & pop a new trigger level
+		 * for each insert, we get exactly what we need.
 		 */
 		AfterTriggerBeginQuery();
 		ExecSetupTransitionCaptureState(mtstate, estate);
@@ -2176,9 +2178,8 @@ ExecCrossPartitionUpdate(ModifyTableContext *context,
 		ExecPartitionCheckEmitError(resultRelInfo, slot, estate);
 
 	/*
-	 * Initialize tuple routing info if not already done.
-	 * Note whatever we do here must be done in ExecInitModifyTable
-	 * for FOR PORTION OF as well.
+	 * Initialize tuple routing info if not already done. Note whatever we do
+	 * here must be done in ExecInitModifyTable for FOR PORTION OF as well.
 	 */
 	if (mtstate->mt_partition_tuple_routing == NULL)
 	{
@@ -5162,12 +5163,12 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 	if (node->forPortionOf)
 	{
 		ResultRelInfo *rootResultRelInfo;
-		TupleDesc tupDesc;
+		TupleDesc	tupDesc;
 		ForPortionOfExpr *forPortionOf;
-		Datum	targetRange;
-		bool	isNull;
+		Datum		targetRange;
+		bool		isNull;
 		ExprContext *econtext;
-		ExprState *exprState;
+		ExprState  *exprState;
 		ForPortionOfState *fpoState;
 
 		rootResultRelInfo = mtstate->resultRelInfo;
@@ -5207,14 +5208,14 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 			ExecInitExtraTupleSlot(mtstate->ps.state, tupDesc, &TTSOpsVirtual);
 
 		/*
-		 * We must attach the ForPortionOfState to all result rels,
-		 * in case of a cross-partition update or triggers firing
-		 * on partitions.
-		 * XXX: Can we defer this to only the leafs we touch?
+		 * We must attach the ForPortionOfState to all result rels, in case of
+		 * a cross-partition update or triggers firing on partitions. XXX: Can
+		 * we defer this to only the leafs we touch?
 		 */
 		for (i = 0; i < nrels; i++)
 		{
-			ForPortionOfState	*leafState;
+			ForPortionOfState *leafState;
+
 			resultRelInfo = &mtstate->resultRelInfo[i];
 
 			leafState = makeNode(ForPortionOfState);
@@ -5236,12 +5237,12 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 			mtstate->rootResultRelInfo->ri_forPortionOf = fpoState;
 
 		if (rel->rd_rel->relkind == RELKIND_PARTITIONED_TABLE &&
-				mtstate->mt_partition_tuple_routing == NULL)
+			mtstate->mt_partition_tuple_routing == NULL)
 		{
 			/*
-			 * We will need tuple routing to insert temporal leftovers.
-			 * Since we are initializing things before ExecCrossPartitionUpdate runs,
-			 * we must do everything it needs as well.
+			 * We will need tuple routing to insert temporal leftovers. Since
+			 * we are initializing things before ExecCrossPartitionUpdate
+			 * runs, we must do everything it needs as well.
 			 */
 			if (mtstate->mt_partition_tuple_routing == NULL)
 			{
@@ -5255,9 +5256,9 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 					ExecSetupPartitionTupleRouting(estate, rootRel);
 
 				/*
-				 * Before a partition's tuple can be re-routed, it must first be
-				 * converted to the root's format, so we'll need a slot for storing
-				 * such tuples.
+				 * Before a partition's tuple can be re-routed, it must first
+				 * be converted to the root's format, so we'll need a slot for
+				 * storing such tuples.
 				 */
 				Assert(mtstate->mt_root_tuple_slot == NULL);
 				mtstate->mt_root_tuple_slot = table_slot_create(rootRel, NULL);
@@ -5266,7 +5267,10 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 			}
 		}
 
-		/* Don't free the ExprContext here because the result must last for the whole query */
+		/*
+		 * Don't free the ExprContext here because the result must last for
+		 * the whole query
+		 */
 	}
 
 	/*

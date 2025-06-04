@@ -6089,16 +6089,18 @@ static ForPortionOfState *
 CopyForPortionOfState(ForPortionOfState *src)
 {
 	ForPortionOfState *dst = NULL;
-	if (src) {
+
+	if (src)
+	{
 		MemoryContext oldctx;
-		RangeType *r;
+		RangeType  *r;
 		TypeCacheEntry *typcache;
 
 		/*
-		 * Need to lift the FOR PORTION OF details into a higher memory context
-		 * because cascading foreign key update/deletes can cause triggers to fire
-		 * triggers, and the AfterTriggerEvents will outlive the FPO
-		 * details of the original query.
+		 * Need to lift the FOR PORTION OF details into a higher memory
+		 * context because cascading foreign key update/deletes can cause
+		 * triggers to fire triggers, and the AfterTriggerEvents will outlive
+		 * the FPO details of the original query.
 		 */
 		oldctx = MemoryContextSwitchTo(TopTransactionContext);
 		dst = makeNode(ForPortionOfState);

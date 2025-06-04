@@ -1699,15 +1699,15 @@ FindFKPeriodOpersAndProcs(Oid opclass,
 							   &strat);
 
 	/*
-	 * Hardcode intersect operators for ranges and multiranges,
-	 * because we don't have a better way to look up operators
-	 * that aren't used in indexes.
+	 * Hardcode intersect operators for ranges and multiranges, because we
+	 * don't have a better way to look up operators that aren't used in
+	 * indexes.
 	 *
 	 * If you change this code, you must change the code in
 	 * transformForPortionOfClause.
 	 *
-	 * XXX: Find a more extensible way to look up the operator,
-	 * permitting user-defined types.
+	 * XXX: Find a more extensible way to look up the operator, permitting
+	 * user-defined types.
 	 */
 	switch (opcintype)
 	{
@@ -1722,10 +1722,10 @@ FindFKPeriodOpersAndProcs(Oid opclass,
 	}
 
 	/*
-	 * Look up the intersect proc. We use this for FOR PORTION OF
-	 * (both the operation itself and when checking foreign keys).
-	 * If this is missing we don't need to complain here,
-	 * because FOR PORTION OF will not be allowed.
+	 * Look up the intersect proc. We use this for FOR PORTION OF (both the
+	 * operation itself and when checking foreign keys). If this is missing we
+	 * don't need to complain here, because FOR PORTION OF will not be
+	 * allowed.
 	 */
 	*intersectprocoid = get_opcode(*intersectoperoid);
 }

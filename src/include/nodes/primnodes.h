@@ -2382,13 +2382,14 @@ typedef struct OnConflictExpr
 typedef struct ForPortionOfExpr
 {
 	NodeTag		type;
-	Var		   *rangeVar;			/* Range column */
-	char	   *range_name;			/* Range name */
-	Node	   *targetRange;		/* FOR PORTION OF bounds as a range */
-	Oid			rangeType;			/* type of targetRange */
-	Node	   *overlapsExpr;		/* range && targetRange */
-	List	   *rangeTargetList;	/* List of TargetEntrys to set the time column(s) */
-	Oid			withoutPortionProc;	/* proc for old_range @- target_range */
+	Var		   *rangeVar;		/* Range column */
+	char	   *range_name;		/* Range name */
+	Node	   *targetRange;	/* FOR PORTION OF bounds as a range */
+	Oid			rangeType;		/* type of targetRange */
+	Node	   *overlapsExpr;	/* range && targetRange */
+	List	   *rangeTargetList;	/* List of TargetEntrys to set the time
+									 * column(s) */
+	Oid			withoutPortionProc; /* SRF proc for old_range - target_range */
 } ForPortionOfExpr;
 
 #endif							/* PRIMNODES_H */

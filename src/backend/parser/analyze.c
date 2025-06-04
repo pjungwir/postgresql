@@ -1391,22 +1391,22 @@ transformForPortionOfClause(ParseState *pstate,
 							ForPortionOfClause *forPortionOf,
 							bool isUpdate)
 {
-	Relation targetrel = pstate->p_target_relation;
+	Relation	targetrel = pstate->p_target_relation;
 	RTEPermissionInfo *target_perminfo = pstate->p_target_nsitem->p_perminfo;
-	char *range_name = forPortionOf->range_name;
-	char *range_type_namespace = NULL;
-	char *range_type_name = NULL;
-	int range_attno = InvalidAttrNumber;
+	char	   *range_name = forPortionOf->range_name;
+	char	   *range_type_namespace = NULL;
+	char	   *range_type_name = NULL;
+	int			range_attno = InvalidAttrNumber;
 	Form_pg_attribute attr;
-	Oid	opclass;
-	Oid opfamily;
-	Oid opcintype;
-	Oid funcid = InvalidOid;
+	Oid			opclass;
+	Oid			opfamily;
+	Oid			opcintype;
+	Oid			funcid = InvalidOid;
 	StrategyNumber strat;
-	Oid	opid;
+	Oid			opid;
 	ForPortionOfExpr *result;
-	Var *rangeVar;
-	Node *targetExpr;
+	Var		   *rangeVar;
+	Node	   *targetExpr;
 
 	/* We don't support FOR PORTION OF FDW queries. */
 	if (targetrel->rd_rel->relkind == RELKIND_FOREIGN_TABLE)
@@ -1428,12 +1428,12 @@ transformForPortionOfClause(ParseState *pstate,
 	attr = TupleDescAttr(targetrel->rd_att, range_attno - 1);
 
 	rangeVar = makeVar(
-			rtindex,
-			range_attno,
-			attr->atttypid,
-			attr->atttypmod,
-			attr->attcollation,
-			0);
+					   rtindex,
+					   range_attno,
+					   attr->atttypid,
+					   attr->atttypmod,
+					   attr->attcollation,
+					   0);
 	rangeVar->location = forPortionOf->location;
 	result->rangeVar = rangeVar;
 	result->rangeType = attr->atttypid;
@@ -1442,9 +1442,10 @@ transformForPortionOfClause(ParseState *pstate,
 
 
 	if (forPortionOf->target)
+
 		/*
-		 * We were already given an expression for the target,
-		 * so we don't have to build anything.
+		 * We were already given an expression for the target, so we don't
+		 * have to build anything.
 		 */
 		targetExpr = forPortionOf->target;
 	else
@@ -1459,35 +1460,36 @@ transformForPortionOfClause(ParseState *pstate,
 					 parser_errposition(pstate, forPortionOf->location)));
 
 		/*
-		 * Build a range from the FROM ... TO .... bounds.
-		 * This should give a constant result, so we accept functions like NOW()
-		 * but not column references, subqueries, etc.
+		 * Build a range from the FROM ... TO .... bounds. This should give a
+		 * constant result, so we accept functions like NOW() but not column
+		 * references, subqueries, etc.
 		 */
 		targetExpr = (Node *) makeFuncCall(
-				list_make2(makeString(range_type_namespace), makeString(range_type_name)),
-				list_make2(forPortionOf->target_start, forPortionOf->target_end),
-				COERCE_EXPLICIT_CALL,
-				forPortionOf->location);
+										   list_make2(makeString(range_type_namespace), makeString(range_type_name)),
+										   list_make2(forPortionOf->target_start, forPortionOf->target_end),
+										   COERCE_EXPLICIT_CALL,
+										   forPortionOf->location);
 	}
 	result->targetRange = transformExpr(pstate, targetExpr, EXPR_KIND_UPDATE_PORTION);
 
 	/*
-	 * Build overlapsExpr to use in the whereClause.
-	 * This means we only hit rows matching the FROM & TO bounds.
-	 * We must look up the overlaps operator (usually "&&").
+	 * Build overlapsExpr to use in the whereClause. This means we only hit
+	 * rows matching the FROM & TO bounds. We must look up the overlaps
+	 * operator (usually "&&").
 	 */
 	opclass = GetDefaultOpClass(attr->atttypid, GIST_AM_OID);
 	strat = RTOverlapStrategyNumber;
 	GetOperatorFromCompareType(opclass, InvalidOid, COMPARE_OVERLAP, &opid, &strat);
 	result->overlapsExpr = (Node *) makeSimpleA_Expr(AEXPR_OP, get_opname(opid),
-			(Node *) copyObject(rangeVar), targetExpr,
-			forPortionOf->location);
+													 (Node *) copyObject(rangeVar), targetExpr,
+													 forPortionOf->location);
 
 	/*
-	 * Look up the without_portion func. This computes the bounds of temporal leftovers.
+	 * Look up the without_portion func. This computes the bounds of temporal
+	 * leftovers.
 	 *
-	 * XXX: Find a more extensible way to look up the function,
-	 * permitting user-defined types. An opclass support function doesn't make sense,
+	 * XXX: Find a more extensible way to look up the function, permitting
+	 * user-defined types. An opclass support function doesn't make sense,
 	 * since there is no index involved. Perhaps a type support function.
 	 */
 	if (get_opclass_opfamily_and_input_type(opclass, &opfamily, &opcintype))
@@ -1508,13 +1510,13 @@ transformForPortionOfClause(ParseState *pstate,
 	if (isUpdate)
 	{
 		/*
-		 * Now make sure we update the start/end time of the record.
-		 * For a range col (r) this is `r = r * targetRange`.
+		 * Now make sure we update the start/end time of the record. For a
+		 * range col (r) this is `r = r * targetRange`.
 		 */
-		Oid				intersectoperoid;
-		List		   *funcArgs = NIL;
-		FuncExpr	   *rangeTLEExpr;
-		TargetEntry	   *tle;
+		Oid			intersectoperoid;
+		List	   *funcArgs = NIL;
+		FuncExpr   *rangeTLEExpr;
+		TargetEntry *tle;
 
 		/*
 		 * Whatever operator is used for intersect by temporal foreign keys,
@@ -1522,7 +1524,8 @@ transformForPortionOfClause(ParseState *pstate,
 		 * For now foreign keys hardcode operators for range and multirange,
 		 * so this we just duplicate the logic from FindFKPeriodOpersAndProcs.
 		 */
-		switch (opcintype) {
+		switch (opcintype)
+		{
 			case ANYRANGEOID:
 				intersectoperoid = OID_RANGE_INTERSECT_RANGE_OP;
 				break;
@@ -1538,7 +1541,7 @@ transformForPortionOfClause(ParseState *pstate,
 					errcode(ERRCODE_UNDEFINED_OBJECT),
 					errmsg("could not identify an intersect support function for type %s", format_type_be(opcintype)),
 					errhint("Define an intersect support function for operator class \"%d\" for access method \"%s\".",
-						 opclass, "gist"));
+							opclass, "gist"));
 
 		targetExpr = transformExpr(pstate, targetExpr, EXPR_KIND_UPDATE_PORTION);
 		funcArgs = lappend(funcArgs, copyObject(rangeVar));
@@ -2892,9 +2895,8 @@ transformUpdateTargetList(ParseState *pstate, List *origTlist, ForPortionOfExpr 
 					 parser_errposition(pstate, origTarget->location)));
 
 		/*
-		 * If this is a FOR PORTION OF update,
-		 * forbid directly setting the range column,
-		 * since that would conflict with the implicit updates.
+		 * If this is a FOR PORTION OF update, forbid directly setting the
+		 * range column, since that would conflict with the implicit updates.
 		 */
 		if (forPortionOf != NULL)
 		{
