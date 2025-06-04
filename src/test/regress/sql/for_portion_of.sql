@@ -375,37 +375,68 @@ RETURNING *;
 
 -- test that we run triggers on the UPDATE/DELETEd row and the INSERTed rows
 
-CREATE FUNCTION for_portion_of_trigger()
-RETURNS trigger
-AS
+CREATE FUNCTION dump_trigger()
+RETURNS TRIGGER LANGUAGE plpgsql AS
 $$
 BEGIN
-  RAISE NOTICE '% % % % of %', TG_WHEN, TG_OP, TG_LEVEL, NEW.valid_at, OLD.valid_at;
-  IF TG_OP = 'DELETE' THEN
-    RETURN OLD;
+  RAISE NOTICE '%: % % %:',
+    TG_NAME, TG_WHEN, TG_OP, TG_LEVEL;
+
+  IF TG_ARGV[0] THEN
+    RAISE NOTICE '  old: %', (SELECT string_agg(old_table::text, '\n       ') FROM old_table);
   ELSE
+    RAISE NOTICE '  old: %', OLD.valid_at;
+  END IF;
+  IF TG_ARGV[1] THEN
+    RAISE NOTICE '  new: %', (SELECT string_agg(new_table::text, '\n       ') FROM new_table);
+  ELSE
+    RAISE NOTICE '  new: %', NEW.valid_at;
+  END IF;
+
+  IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE' THEN
     RETURN NEW;
+  ELSIF TG_OP = 'DELETE' THEN
+    RETURN OLD;
   END IF;
 END;
-$$
-LANGUAGE plpgsql;
+$$;
 
-CREATE TRIGGER trg_for_portion_of_before
-  BEFORE INSERT OR UPDATE OR DELETE ON for_portion_of_test
-  FOR EACH ROW
-  EXECUTE FUNCTION for_portion_of_trigger();
-CREATE TRIGGER trg_for_portion_of_after
-  AFTER INSERT OR UPDATE OR DELETE ON for_portion_of_test
-  FOR EACH ROW
-  EXECUTE FUNCTION for_portion_of_trigger();
-CREATE TRIGGER trg_for_portion_of_before_stmt
-  BEFORE INSERT OR UPDATE OR DELETE ON for_portion_of_test
-  FOR EACH STATEMENT
-  EXECUTE FUNCTION for_portion_of_trigger();
-CREATE TRIGGER trg_for_portion_of_after_stmt
-  AFTER INSERT OR UPDATE OR DELETE ON for_portion_of_test
-  FOR EACH STATEMENT
-  EXECUTE FUNCTION for_portion_of_trigger();
+-- statement triggers:
+
+CREATE TRIGGER fpo_before_stmt
+BEFORE INSERT OR UPDATE OR DELETE ON for_portion_of_test
+FOR EACH STATEMENT EXECUTE PROCEDURE dump_trigger(false, false);
+
+CREATE TRIGGER fpo_after_insert_stmt
+AFTER INSERT ON for_portion_of_test
+FOR EACH STATEMENT EXECUTE PROCEDURE dump_trigger(false, false);
+
+CREATE TRIGGER fpo_after_update_stmt
+AFTER UPDATE ON for_portion_of_test
+FOR EACH STATEMENT EXECUTE PROCEDURE dump_trigger(false, false);
+
+CREATE TRIGGER fpo_after_delete_stmt
+AFTER DELETE ON for_portion_of_test
+FOR EACH STATEMENT EXECUTE PROCEDURE dump_trigger(false, false);
+
+-- row triggers:
+
+CREATE TRIGGER fpo_before_row
+BEFORE INSERT OR UPDATE OR DELETE ON for_portion_of_test
+FOR EACH ROW EXECUTE PROCEDURE dump_trigger(false, false);
+
+CREATE TRIGGER fpo_after_insert_row
+AFTER INSERT ON for_portion_of_test
+FOR EACH ROW EXECUTE PROCEDURE dump_trigger(false, false);
+
+CREATE TRIGGER fpo_after_update_row
+AFTER UPDATE ON for_portion_of_test
+FOR EACH ROW EXECUTE PROCEDURE dump_trigger(false, false);
+
+CREATE TRIGGER fpo_after_delete_row
+AFTER DELETE ON for_portion_of_test
+FOR EACH ROW EXECUTE PROCEDURE dump_trigger(false, false);
+
 
 UPDATE for_portion_of_test
 FOR PORTION OF valid_at FROM '2021-01-01' TO '2022-01-01'
@@ -417,7 +448,6 @@ FOR PORTION OF valid_at FROM '2023-01-01' TO '2024-01-01'
 WHERE id = '[5,6)';
 
 SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
-DROP FUNCTION for_portion_of_trigger CASCADE;
 
 -- Triggers with a custom transition table name:
 
@@ -428,28 +458,6 @@ CREATE TABLE for_portion_of_test (
   name text
 );
 INSERT INTO for_portion_of_test VALUES ('[1,2)', '[2018-01-01,2020-01-01)', 'one');
-
-CREATE FUNCTION dump_trigger()
-RETURNS TRIGGER LANGUAGE plpgsql AS
-$$
-BEGIN
-  RAISE NOTICE '%: % % %:',
-    TG_NAME, TG_WHEN, TG_OP, TG_LEVEL;
-
-  IF TG_ARGV[0] THEN
-    RAISE NOTICE '  old: %', (SELECT string_agg(old_table::text, '\n       ') FROM old_table);
-  END IF;
-  IF TG_ARGV[1] THEN
-    RAISE NOTICE '  new: %', (SELECT string_agg(new_table::text, '\n       ') FROM new_table);
-  END IF;
-
-  IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE' THEN
-    RETURN NEW;
-  ELSIF TG_OP = 'DELETE' THEN
-    RETURN OLD;
-  END IF;
-END;
-$$;
 
 -- statement triggers:
 
