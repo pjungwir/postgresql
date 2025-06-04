@@ -518,6 +518,50 @@ UPDATE for_portion_of_test
   SET name = 'NULL_to_2018-01-01';
 ROLLBACK;
 
+-- Deferred triggers
+-- (must be CONSTRAINT triggers thus AFTER ROW with no transition tables)
+
+DROP TABLE for_portion_of_test;
+CREATE TABLE for_portion_of_test (
+  id int4range,
+  valid_at daterange,
+  name text
+);
+INSERT INTO for_portion_of_test VALUES ('[1,2)', '[2018-01-01,2020-01-01)', 'one');
+
+CREATE CONSTRAINT TRIGGER fpo_after_insert_row
+AFTER INSERT ON for_portion_of_test
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW EXECUTE PROCEDURE dump_trigger(false, false);
+
+CREATE CONSTRAINT TRIGGER fpo_after_update_row
+AFTER UPDATE ON for_portion_of_test
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW EXECUTE PROCEDURE dump_trigger(false, false);
+
+CREATE CONSTRAINT TRIGGER fpo_after_delete_row
+AFTER DELETE ON for_portion_of_test
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW EXECUTE PROCEDURE dump_trigger(false, false);
+
+BEGIN;
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM '2018-01-15' TO '2019-01-01'
+  SET name = '2018-01-15_to_2019-01-01';
+COMMIT;
+
+BEGIN;
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM NULL TO '2018-01-21';
+COMMIT;
+
+BEGIN;
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM NULL TO '2018-01-02'
+  SET name = 'NULL_to_2018-01-01';
+COMMIT;
+
+
 -- Test with multiranges
 
 CREATE TABLE for_portion_of_test2 (

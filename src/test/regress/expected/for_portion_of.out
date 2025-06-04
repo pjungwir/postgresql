@@ -754,6 +754,59 @@ NOTICE:  fpo_after_update_stmt: AFTER UPDATE STATEMENT:
 NOTICE:    old: ("[1,2)","[2018-01-01,2020-01-01)",one)
 NOTICE:    new: ("[1,2)","[2018-01-01,2018-01-02)",NULL_to_2018-01-01)
 ROLLBACK;
+-- Deferred triggers
+-- (must be CONSTRAINT triggers thus AFTER ROW with no transition tables)
+DROP TABLE for_portion_of_test;
+CREATE TABLE for_portion_of_test (
+  id int4range,
+  valid_at daterange,
+  name text
+);
+INSERT INTO for_portion_of_test VALUES ('[1,2)', '[2018-01-01,2020-01-01)', 'one');
+CREATE CONSTRAINT TRIGGER fpo_after_insert_row
+AFTER INSERT ON for_portion_of_test
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW EXECUTE PROCEDURE dump_trigger(false, false);
+CREATE CONSTRAINT TRIGGER fpo_after_update_row
+AFTER UPDATE ON for_portion_of_test
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW EXECUTE PROCEDURE dump_trigger(false, false);
+CREATE CONSTRAINT TRIGGER fpo_after_delete_row
+AFTER DELETE ON for_portion_of_test
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW EXECUTE PROCEDURE dump_trigger(false, false);
+BEGIN;
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM '2018-01-15' TO '2019-01-01'
+  SET name = '2018-01-15_to_2019-01-01';
+COMMIT;
+NOTICE:  fpo_after_insert_row: AFTER INSERT ROW:
+NOTICE:    old: <NULL>
+NOTICE:    new: [2018-01-01,2018-01-15)
+NOTICE:  fpo_after_insert_row: AFTER INSERT ROW:
+NOTICE:    old: <NULL>
+NOTICE:    new: [2019-01-01,2020-01-01)
+NOTICE:  fpo_after_update_row: AFTER UPDATE ROW:
+NOTICE:    old: [2018-01-01,2020-01-01)
+NOTICE:    new: [2018-01-15,2019-01-01)
+BEGIN;
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM NULL TO '2018-01-21';
+COMMIT;
+NOTICE:  fpo_after_insert_row: AFTER INSERT ROW:
+NOTICE:    old: <NULL>
+NOTICE:    new: [2018-01-21,2019-01-01)
+NOTICE:  fpo_after_delete_row: AFTER DELETE ROW:
+NOTICE:    old: [2018-01-15,2019-01-01)
+NOTICE:    new: <NULL>
+NOTICE:  fpo_after_delete_row: AFTER DELETE ROW:
+NOTICE:    old: [2018-01-01,2018-01-15)
+NOTICE:    new: <NULL>
+BEGIN;
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM NULL TO '2018-01-02'
+  SET name = 'NULL_to_2018-01-01';
+COMMIT;
 -- Test with multiranges
 CREATE TABLE for_portion_of_test2 (
   id int4range NOT NULL,
