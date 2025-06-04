@@ -165,7 +165,7 @@ UPDATE [ ONLY ] <replaceable class="parameter">table_name</replaceable> [ * ]
     <term><replaceable class="parameter">for_portion_of_target</replaceable></term>
     <listitem>
      <para>
-      The interval to update. If you are targeting a range column or <literal>PERIOD</literal>,
+      The interval to update. If you are targeting a range column,
       you may give this in the form <literal>FROM</literal>
       <replaceable class="parameter">start_time</replaceable> <literal>TO</literal>
       <replaceable class="parameter">end_time</replaceable>.
