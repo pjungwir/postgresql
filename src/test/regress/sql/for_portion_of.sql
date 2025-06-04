@@ -277,6 +277,44 @@ WHERE id = '[1,2)';
 SELECT * FROM for_portion_of_test2 ORDER BY id, valid_at;
 DROP TABLE for_portion_of_test2;
 
+-- UPDATE FOR PORTION OF in a CTE:
+
+-- Visible to SELECT:
+INSERT INTO for_portion_of_test (id, valid_at, name)
+  VALUES ('[10,11)', '[2018-01-01,2020-01-01)', 'ten');
+WITH update_apr AS (
+  UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM '2018-04-01' TO '2018-05-01'
+  SET name = 'Apr 2018'
+  WHERE id = '[10,11)'
+  RETURNING id, valid_at, name
+)
+SELECT *
+  FROM for_portion_of_test AS t, update_apr
+  WHERE t.id = update_apr.id;
+SELECT * FROM for_portion_of_test WHERE id = '[10,11)';
+
+-- Not visible to UPDATE:
+-- Tuples updated/inserted within the CTE are not visible to the main query yet,
+-- but neither are old tuples the CTE changed:
+INSERT INTO for_portion_of_test (id, valid_at, name)
+  VALUES ('[11,12)', '[2018-01-01,2020-01-01)', 'eleven');
+WITH update_apr AS (
+  UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM '2018-04-01' TO '2018-05-01'
+  SET name = 'Apr 2018'
+  WHERE id = '[11,12)'
+  RETURNING id, valid_at, name
+)
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM '2018-05-01' TO '2018-06-01'
+  AS t
+  SET name = 'May 2018'
+  FROM update_apr AS j
+  WHERE t.id = j.id;
+SELECT * FROM for_portion_of_test WHERE id = '[11,12)';
+DELETE FROM for_portion_of_test WHERE id IN ('[10,11)', '[11,12)');
+
 --
 -- DELETE tests
 --
