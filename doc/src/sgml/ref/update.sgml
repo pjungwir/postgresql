@@ -156,7 +156,7 @@ UPDATE [ ONLY ] <replaceable class="parameter">table_name</replaceable> [ * ]
     <term><replaceable class="parameter">range_name</replaceable></term>
     <listitem>
      <para>
-      The range column to use when performing a temporal update.
+      The range or multirange column to use when performing a temporal update.
      </para>
     </listitem>
    </varlistentry>
