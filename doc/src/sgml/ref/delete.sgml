@@ -23,7 +23,7 @@ PostgreSQL documentation
 <synopsis>
 [ WITH [ RECURSIVE ] <replaceable class="parameter">with_query</replaceable> [, ...] ]
 DELETE FROM [ ONLY ] <replaceable class="parameter">table_name</replaceable> [ * ]
-    [ FOR PORTION OF <replaceable class="parameter">range_name</replaceable> <replaceable class="parameter">for_portion_of_target</replaceable> ]
+    [ FOR PORTION OF <replaceable class="parameter">range_or_period_name</replaceable> <replaceable class="parameter">for_portion_of_target</replaceable> ]
     [ [ AS ] <replaceable class="parameter">alias</replaceable> ]
     [ USING <replaceable class="parameter">from_item</replaceable> [, ...] ]
     [ WHERE <replaceable class="parameter">condition</replaceable> | WHERE CURRENT OF <replaceable class="parameter">cursor_name</replaceable> ]
@@ -155,10 +155,10 @@ DELETE FROM [ ONLY ] <replaceable class="parameter">table_name</replaceable> [ *
    </varlistentry>
 
    <varlistentry>
-    <term><replaceable class="parameter">range_name</replaceable></term>
+    <term><replaceable class="parameter">range_or_period_name</replaceable></term>
     <listitem>
      <para>
-      The range or multirange column to use when performing a temporal delete.
+      The range or multirange column or period to use when performing a temporal delete.
      </para>
     </listitem>
    </varlistentry>
@@ -167,14 +167,14 @@ DELETE FROM [ ONLY ] <replaceable class="parameter">table_name</replaceable> [ *
     <term><replaceable class="parameter">for_portion_of_target</replaceable></term>
     <listitem>
      <para>
-      The interval to delete. If you are targeting a range column,
+      The interval to delete. If you are targeting a range column or <literal>PERIOD</literal>,
       you may give this in the form <literal>FROM</literal>
       <replaceable class="parameter">start_time</replaceable> <literal>TO</literal>
       <replaceable class="parameter">end_time</replaceable>.
       Otherwise you must use
       <literal>(</literal><replaceable class="parameter">expression</replaceable><literal>)</literal>
       where the expression yields a value for the same type as
-      <replaceable class="parameter">range_name</replaceable>.
+      <replaceable class="parameter">range_or_period_name</replaceable>.
      </para>
     </listitem>
    </varlistentry>
@@ -184,8 +184,8 @@ DELETE FROM [ ONLY ] <replaceable class="parameter">table_name</replaceable> [ *
     <listitem>
      <para>
       The earliest time (inclusive) to change in a temporal delete.
-      This must be a value matching the base type of the range from
-      <replaceable class="parameter">range_name</replaceable>. A
+      This must be a value matching the base type of the range or period from
+      <replaceable class="parameter">range_or_period_name</replaceable>. A
       <literal>NULL</literal> here indicates a delete whose beginning is
       unbounded (as with range types).
      </para>
@@ -197,8 +197,8 @@ DELETE FROM [ ONLY ] <replaceable class="parameter">table_name</replaceable> [ *
     <listitem>
      <para>
       The latest time (exclusive) to change in a temporal delete.
-      This must be a value matching the base type of the range from
-      <replaceable class="parameter">range_name</replaceable>. A
+      This must be a value matching the base type of the range or period from
+      <replaceable class="parameter">range_or_period_name</replaceable>. A
       <literal>NULL</literal> here indicates a delete whose end is unbounded
       (as with range types).
      </para>
