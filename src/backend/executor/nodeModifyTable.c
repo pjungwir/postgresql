@@ -1416,8 +1416,6 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	 * Make sure we're looking at the most recent version.
 	 * Otherwise concurrent updates of the same tuple in READ COMMITTED
 	 * could insert conflicting temporal leftovers.
-	 *
-	 * TODO: This is happening in ExecUpdate now, so we might as well use what's there. (ExecDelete too?)
 	 */
 	if (!table_tuple_fetch_row_version(resultRelInfo->ri_RelationDesc, tupleid, SnapshotAny, oldtupleSlot))
 		elog(ERROR, "failed to fetch tuple for FOR PORTION OF");
