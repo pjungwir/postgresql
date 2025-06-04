@@ -1224,10 +1224,11 @@ range_split_internal(TypeCacheEntry *typcache, const RangeType *r1, const RangeT
 Datum
 range_minus_multi(PG_FUNCTION_ARGS)
 {
-	typedef struct {
+	typedef struct
+	{
 		RangeType  *rs[2];
 		int			n;
-	} range_minus_multi_fctx;
+	}			range_minus_multi_fctx;
 
 	FuncCallContext *funcctx;
 	range_minus_multi_fctx *fctx;
@@ -1236,9 +1237,9 @@ range_minus_multi(PG_FUNCTION_ARGS)
 	/* stuff done only on the first call of the function */
 	if (SRF_IS_FIRSTCALL())
 	{
-		RangeType	   *r1;
-		RangeType	   *r2;
-		Oid				rngtypid;
+		RangeType  *r1;
+		RangeType  *r2;
+		Oid			rngtypid;
 		TypeCacheEntry *typcache;
 
 		/* create a function context for cross-call persistence */
@@ -1260,9 +1261,8 @@ range_minus_multi(PG_FUNCTION_ARGS)
 		fctx = (range_minus_multi_fctx *) palloc(sizeof(range_minus_multi_fctx));
 
 		/*
-		 * Initialize state.
-		 * We can't store the range typcache in fn_extra because the caller
-		 * uses that for the SRF state.
+		 * Initialize state. We can't store the range typcache in fn_extra
+		 * because the caller uses that for the SRF state.
 		 */
 		rngtypid = RangeTypeGetOid(r1);
 		typcache = lookup_type_cache(rngtypid, TYPECACHE_RANGE_INFO);
@@ -1281,10 +1281,11 @@ range_minus_multi(PG_FUNCTION_ARGS)
 	if (funcctx->call_cntr < fctx->n)
 	{
 		/*
-		 * We must keep these on separate lines
-		 * because SRF_RETURN_NEXT does call_cntr++:
+		 * We must keep these on separate lines because SRF_RETURN_NEXT does
+		 * call_cntr++:
 		 */
-		RangeType *ret = fctx->rs[funcctx->call_cntr];
+		RangeType  *ret = fctx->rs[funcctx->call_cntr];
+
 		SRF_RETURN_NEXT(funcctx, RangeTypePGetDatum(ret));
 	}
 	else
@@ -1301,7 +1302,7 @@ range_minus_multi(PG_FUNCTION_ARGS)
  */
 void
 range_minus_multi_internal(TypeCacheEntry *typcache, RangeType *r1,
-							   RangeType *r2, RangeType **outputs, int *outputn)
+						   RangeType *r2, RangeType **outputs, int *outputn)
 {
 	int			cmp_l1l2,
 				cmp_l1u2,
@@ -1332,8 +1333,7 @@ range_minus_multi_internal(TypeCacheEntry *typcache, RangeType *r1,
 	}
 
 	/*
-	 * Use the same logic as range_minus_internal,
-	 * but support the split case
+	 * Use the same logic as range_minus_internal, but support the split case
 	 */
 	cmp_l1l2 = range_cmp_bounds(typcache, &lower1, &lower2);
 	cmp_l1u2 = range_cmp_bounds(typcache, &lower1, &upper2);
