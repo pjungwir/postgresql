@@ -1728,19 +1728,6 @@ FindFKPeriodOpersAndProcs(Oid opclass,
 	 * because FOR PORTION OF will not be allowed.
 	 */
 	*intersectprocoid = get_opcode(*intersectoperoid);
-
-	/*
-	 * Look up the without_portion func. We need this for RESTRICT
-	 * foreign keys and also FOR PORTION OF.
-	 */
-	*withoutportionoid = InvalidOid;
-	*withoutportionoid = get_opfamily_proc(opfamily, opcintype, opcintype, GIST_WITHOUT_PORTION_PROC);
-	if (!OidIsValid(*withoutportionoid))
-		ereport(ERROR,
-				errcode(ERRCODE_UNDEFINED_OBJECT),
-				errmsg("could not identify a without_overlaps support function for type %s", format_type_be(opcintype)),
-				errhint("Define a without_overlaps support function for operator class \"%d\" for access method \"%s\".",
-						opclass, "gist"));
 }
 
 /*

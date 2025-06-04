@@ -55,6 +55,7 @@
 #include "parser/parsetree.h"
 #include "utils/backend_status.h"
 #include "utils/builtins.h"
+#include "utils/fmgroids.h"
 #include "utils/guc.h"
 #include "utils/lsyscache.h"
 #include "utils/rel.h"
@@ -1483,22 +1484,26 @@ transformForPortionOfClause(ParseState *pstate,
 			forPortionOf->location);
 
 	/*
-	 * Look up the withoutPortionOper so we can compute the leftovers.
-	 * Leftovers will be old_range @- target_range
-	 * (one per element of the result).
+	 * Look up the without_portion func. This computes the bounds of temporal leftovers.
+	 *
+	 * XXX: Find a more extensible way to look up the function,
+	 * permitting user-defined types. An opclass support function doesn't make sense,
+	 * since there is no index involved. Perhaps a type support function.
 	 */
-	funcid = InvalidOid;
 	if (get_opclass_opfamily_and_input_type(opclass, &opfamily, &opcintype))
-		funcid = get_opfamily_proc(opfamily, opcintype, opcintype, GIST_WITHOUT_PORTION_PROC);
-
-	if (!OidIsValid(funcid))
-		ereport(ERROR,
-				errcode(ERRCODE_UNDEFINED_OBJECT),
-				errmsg("could not identify a without_overlaps support function for type %s", format_type_be(opcintype)),
-				errhint("Define a without_overlaps support function for operator class \"%d\" for access method \"%s\".",
-					 opclass, "gist"));
-
-	result->withoutPortionProc = funcid;
+		switch (opcintype)
+		{
+			case ANYRANGEOID:
+				result->withoutPortionProc = F_RANGE_MINUS_MULTI;
+				break;
+			case ANYMULTIRANGEOID:
+				result->withoutPortionProc = F_MULTIRANGE_MINUS_MULTI;
+				break;
+			default:
+				elog(ERROR, "unexpected opcintype: %u", opcintype);
+		}
+	else
+		elog(ERROR, "unexpected opclass: %u", opclass);
 
 	if (isUpdate)
 	{
