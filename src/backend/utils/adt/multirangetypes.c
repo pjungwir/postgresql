@@ -1226,11 +1226,11 @@ multirange_minus_internal(Oid mltrngtypoid, TypeCacheEntry *rangetyp,
 }
 
 /*
- * multirange_without_portion - multirange minus but returning the result as a SRF,
+ * multirange_minus_multi - like multirange_minus but returning the result as a SRF,
  * with no rows if the result would be empty.
  */
 Datum
-multirange_without_portion(PG_FUNCTION_ARGS)
+multirange_minus_multi(PG_FUNCTION_ARGS)
 {
 	FuncCallContext *funcctx;
 	MemoryContext oldcontext;

@@ -515,7 +515,7 @@
    </table>
 
   <para>
-   GiST indexes have thirteen support functions, eight of which are optional,
+   GiST indexes have twelve support functions, seven of which are optional,
    as shown in <xref linkend="xindex-gist-support-table"/>.
    (For more information see <xref linkend="gist"/>.)
   </para>
@@ -602,12 +602,6 @@
        <entry>translate compare types to strategy numbers
         used by the operator class (optional)</entry>
        <entry>12</entry>
-      </row>
-      <row>
-       <entry><function>without_portion</function></entry>
-       <entry>computes remaining duration(s) after deleting
-       second parameter from first (optional)</entry>
-       <entry>13</entry>
       </row>
      </tbody>
     </tgroup>

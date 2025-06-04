@@ -1218,19 +1218,19 @@ range_split_internal(TypeCacheEntry *typcache, const RangeType *r1, const RangeT
 }
 
 /*
- * range_without_portion - subtraction but as a SRF to accommodate splits,
+ * range_minus_multi - like range_minus but as a SRF to accommodate splits,
  * with no result rows if the result would be empty.
  */
 Datum
-range_without_portion(PG_FUNCTION_ARGS)
+range_minus_multi(PG_FUNCTION_ARGS)
 {
 	typedef struct {
 		RangeType  *rs[2];
 		int			n;
-	} range_without_portion_fctx;
+	} range_minus_multi_fctx;
 
 	FuncCallContext *funcctx;
-	range_without_portion_fctx *fctx;
+	range_minus_multi_fctx *fctx;
 	MemoryContext oldcontext;
 
 	/* stuff done only on the first call of the function */
@@ -1257,7 +1257,7 @@ range_without_portion(PG_FUNCTION_ARGS)
 			elog(ERROR, "range types do not match");
 
 		/* allocate memory for user context */
-		fctx = (range_without_portion_fctx *) palloc(sizeof(range_without_portion_fctx));
+		fctx = (range_minus_multi_fctx *) palloc(sizeof(range_minus_multi_fctx));
 
 		/*
 		 * Initialize state.
@@ -1268,7 +1268,7 @@ range_without_portion(PG_FUNCTION_ARGS)
 		typcache = lookup_type_cache(rngtypid, TYPECACHE_RANGE_INFO);
 		if (typcache->rngelemtype == NULL)
 			elog(ERROR, "type %u is not a range type", rngtypid);
-		range_without_portion_internal(typcache, r1, r2, fctx->rs, &fctx->n);
+		range_minus_multi_internal(typcache, r1, r2, fctx->rs, &fctx->n);
 
 		funcctx->user_fctx = fctx;
 		MemoryContextSwitchTo(oldcontext);
@@ -1293,14 +1293,14 @@ range_without_portion(PG_FUNCTION_ARGS)
 }
 
 /*
- * range_without_portion_internal - Sets outputs and outputn to the ranges
+ * range_minus_multi_internal - Sets outputs and outputn to the ranges
  * remaining and their count (respectively) after subtracting r2 from r1.
  * The array should never contain empty ranges.
  * The outputs will be ordered. We expect that outputs is an array of
  * RangeType pointers, already allocated with two elements.
  */
 void
-range_without_portion_internal(TypeCacheEntry *typcache, RangeType *r1,
+range_minus_multi_internal(TypeCacheEntry *typcache, RangeType *r1,
 							   RangeType *r2, RangeType **outputs, int *outputn)
 {
 	int			cmp_l1l2,
@@ -1377,7 +1377,7 @@ range_without_portion_internal(TypeCacheEntry *typcache, RangeType *r1,
 	}
 	else
 	{
-		elog(ERROR, "unexpected case in range_without_portion");
+		elog(ERROR, "unexpected case in range_minus_multi");
 	}
 }
 

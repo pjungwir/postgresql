@@ -481,56 +481,56 @@ select range_minus(numrange(10.1,12.2,'[]'), numrange(0.0,120.2,'(]'));
  empty
 (1 row)
 
-select range_without_portion('empty'::numrange, numrange(2.0, 3.0));
- range_without_portion 
------------------------
+select range_minus_multi('empty'::numrange, numrange(2.0, 3.0));
+ range_minus_multi 
+-------------------
 (0 rows)
 
-select range_without_portion(numrange(1.1, 2.2), 'empty'::numrange);
- range_without_portion 
------------------------
+select range_minus_multi(numrange(1.1, 2.2), 'empty'::numrange);
+ range_minus_multi 
+-------------------
  [1.1,2.2)
 (1 row)
 
-select range_without_portion(numrange(1.1, 2.2), numrange(2.0, 3.0));
- range_without_portion 
------------------------
+select range_minus_multi(numrange(1.1, 2.2), numrange(2.0, 3.0));
+ range_minus_multi 
+-------------------
  [1.1,2.0)
 (1 row)
 
-select range_without_portion(numrange(1.1, 2.2), numrange(2.2, 3.0));
- range_without_portion 
------------------------
+select range_minus_multi(numrange(1.1, 2.2), numrange(2.2, 3.0));
+ range_minus_multi 
+-------------------
  [1.1,2.2)
 (1 row)
 
-select range_without_portion(numrange(1.1, 2.2,'[]'), numrange(2.0, 3.0));
- range_without_portion 
------------------------
+select range_minus_multi(numrange(1.1, 2.2,'[]'), numrange(2.0, 3.0));
+ range_minus_multi 
+-------------------
  [1.1,2.0)
 (1 row)
 
-select range_without_portion(numrange(1.0, 3.0), numrange(1.5, 2.0));
- range_without_portion 
------------------------
+select range_minus_multi(numrange(1.0, 3.0), numrange(1.5, 2.0));
+ range_minus_multi 
+-------------------
  [1.0,1.5)
  [2.0,3.0)
 (2 rows)
 
-select range_without_portion(numrange(10.1,12.2,'[]'), numrange(110.0,120.2,'(]'));
- range_without_portion 
------------------------
+select range_minus_multi(numrange(10.1,12.2,'[]'), numrange(110.0,120.2,'(]'));
+ range_minus_multi 
+-------------------
  [10.1,12.2]
 (1 row)
 
-select range_without_portion(numrange(10.1,12.2,'[]'), numrange(0.0,120.2,'(]'));
- range_without_portion 
------------------------
+select range_minus_multi(numrange(10.1,12.2,'[]'), numrange(0.0,120.2,'(]'));
+ range_minus_multi 
+-------------------
 (0 rows)
 
-select range_without_portion(numrange(1.0,3.0,'[]'), numrange(1.5,2.0,'(]'));
- range_without_portion 
------------------------
+select range_minus_multi(numrange(1.0,3.0,'[]'), numrange(1.5,2.0,'(]'));
+ range_minus_multi 
+-------------------
  [1.0,1.5]
  (2.0,3.0]
 (2 rows)

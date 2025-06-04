@@ -80,21 +80,21 @@ brinvalidate(Oid opclassoid)
 		switch (procform->amprocnum)
 		{
 			case BRIN_PROCNUM_OPCINFO:
-				ok = check_amproc_signature(procform->amproc, INTERNALOID, false, true,
+				ok = check_amproc_signature(procform->amproc, INTERNALOID, true,
 											1, 1, INTERNALOID);
 				break;
 			case BRIN_PROCNUM_ADDVALUE:
-				ok = check_amproc_signature(procform->amproc, BOOLOID, false, true,
+				ok = check_amproc_signature(procform->amproc, BOOLOID, true,
 											4, 4, INTERNALOID, INTERNALOID,
 											INTERNALOID, INTERNALOID);
 				break;
 			case BRIN_PROCNUM_CONSISTENT:
-				ok = check_amproc_signature(procform->amproc, BOOLOID, false, true,
+				ok = check_amproc_signature(procform->amproc, BOOLOID, true,
 											3, 4, INTERNALOID, INTERNALOID,
 											INTERNALOID, INT4OID);
 				break;
 			case BRIN_PROCNUM_UNION:
-				ok = check_amproc_signature(procform->amproc, BOOLOID, false, true,
+				ok = check_amproc_signature(procform->amproc, BOOLOID, true,
 											3, 3, INTERNALOID, INTERNALOID,
 											INTERNALOID);
 				break;
