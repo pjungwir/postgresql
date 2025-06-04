@@ -4091,18 +4091,21 @@ RewriteQuery(Query *parsetree, List *rewrite_events, int orig_rt_length)
 		else if (event == CMD_UPDATE)
 		{
 			Assert(parsetree->override == OVERRIDING_NOT_SET);
+
 			/*
-			 * Update FOR PORTION OF column(s) automatically. Don't
-			 * do this until we're done rewriting a view update, so
-			 * that we don't add the same update on the recursion.
+			 * Update FOR PORTION OF column(s) automatically. Don't do this
+			 * until we're done rewriting a view update, so that we don't add
+			 * the same update on the recursion.
 			 */
 			if (parsetree->forPortionOf &&
 				rt_entry_relation->rd_rel->relkind != RELKIND_VIEW)
 			{
-				ListCell *tl;
+				ListCell   *tl;
+
 				foreach(tl, parsetree->forPortionOf->rangeTargetList)
 				{
 					TargetEntry *tle = (TargetEntry *) lfirst(tl);
+
 					parsetree->targetList = lappend(parsetree->targetList, tle);
 				}
 			}

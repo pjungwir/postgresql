@@ -3887,7 +3887,7 @@ create_modifytable_path(PlannerInfo *root, RelOptInfo *rel,
 						List *withCheckOptionLists, List *returningLists,
 						List *rowMarks, OnConflictExpr *onconflict,
 						List *mergeActionLists, List *mergeJoinConditions,
-						ForPortionOfExpr *forPortionOf, int epqParam)
+						ForPortionOfExpr * forPortionOf, int epqParam)
 {
 	ModifyTablePath *pathnode = makeNode(ModifyTablePath);
 

@@ -313,7 +313,7 @@ static ModifyTable *make_modifytable(PlannerInfo *root, Plan *subplan,
 									 List *withCheckOptionLists, List *returningLists,
 									 List *rowMarks, OnConflictExpr *onconflict,
 									 List *mergeActionLists, List *mergeJoinConditions,
-									 ForPortionOfExpr *forPortionOf, int epqParam);
+									 ForPortionOfExpr * forPortionOf, int epqParam);
 static GatherMerge *create_gather_merge_plan(PlannerInfo *root,
 											 GatherMergePath *best_path);
 
@@ -7110,7 +7110,7 @@ make_modifytable(PlannerInfo *root, Plan *subplan,
 				 List *withCheckOptionLists, List *returningLists,
 				 List *rowMarks, OnConflictExpr *onconflict,
 				 List *mergeActionLists, List *mergeJoinConditions,
-				 ForPortionOfExpr *forPortionOf, int epqParam)
+				 ForPortionOfExpr * forPortionOf, int epqParam)
 {
 	ModifyTable *node = makeNode(ModifyTable);
 	bool		returning_old_or_new = false;

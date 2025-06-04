@@ -3928,7 +3928,7 @@ static SetConstraintState SetConstraintStateCreate(int numalloc);
 static SetConstraintState SetConstraintStateCopy(SetConstraintState origstate);
 static SetConstraintState SetConstraintStateAddItem(SetConstraintState state,
 													Oid tgoid, bool tgisdeferred);
-static ForPortionOfState *CopyForPortionOfState(ForPortionOfState *src);
+static ForPortionOfState * CopyForPortionOfState(ForPortionOfState * src);
 static void cancel_prior_stmt_triggers(Oid relid, CmdType cmdType, int tgevent);
 
 
@@ -6086,19 +6086,21 @@ AfterTriggerPendingOnRel(Oid relid)
  * Copys a ForPortionOfState into the current memory context.
  */
 static ForPortionOfState *
-CopyForPortionOfState(ForPortionOfState *src)
+CopyForPortionOfState(ForPortionOfState * src)
 {
 	ForPortionOfState *dst = NULL;
-	if (src) {
+
+	if (src)
+	{
 		MemoryContext oldctx;
-		RangeType *r;
+		RangeType  *r;
 		TypeCacheEntry *typcache;
 
 		/*
-		 * Need to lift the FOR PORTION OF details into a higher memory context
-		 * because cascading foreign key update/deletes can cause triggers to fire
-		 * triggers, and the AfterTriggerEvents will outlive the FPO
-		 * details of the original query.
+		 * Need to lift the FOR PORTION OF details into a higher memory
+		 * context because cascading foreign key update/deletes can cause
+		 * triggers to fire triggers, and the AfterTriggerEvents will outlive
+		 * the FPO details of the original query.
 		 */
 		oldctx = MemoryContextSwitchTo(TopTransactionContext);
 		dst = makeNode(ForPortionOfState);

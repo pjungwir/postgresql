@@ -1612,7 +1612,7 @@ typedef struct ForPortionOfClause
 	Node	   *target;
 	Node	   *target_start;
 	Node	   *target_end;
-} ForPortionOfClause;
+}			ForPortionOfClause;
 
 /*
  * WithClause -
