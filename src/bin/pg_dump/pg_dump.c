@@ -9041,7 +9041,7 @@ getTableAttrs(Archive *fout, TableInfo *tblinfo, int numTables)
 	{
 		TableInfo  *tbinfo = &tblinfo[i];
 		int			ndumpablechecks;	/* number of CHECK constraints that do
-										   not belong to a period */
+										 * not belong to a period */
 
 		/* Don't bother to collect info for sequences */
 		if (tbinfo->relkind == RELKIND_SEQUENCE)
@@ -9579,8 +9579,8 @@ getTableAttrs(Archive *fout, TableInfo *tblinfo, int numTables)
 		if (fout->remoteVersion >= 190000)
 		{
 			/*
-			 * PERIODs were added in v19 and we don't dump CHECK
-			 * constraints for them.
+			 * PERIODs were added in v19 and we don't dump CHECK constraints
+			 * for them.
 			 */
 			appendPQExpBuffer(q,
 							  "SELECT c.tableoid, c.oid, conrelid, conname, "
@@ -9734,25 +9734,25 @@ getTableAttrs(Archive *fout, TableInfo *tblinfo, int numTables)
 
 			resetPQExpBuffer(q);
 			appendPQExpBuffer(q,
-				"SELECT p.tableoid, p.oid, p.pername, "
-				"       sa.attname AS perstart, ea.attname AS perend, "
-				"       r.typname AS rngtype, "
-				"       c.conname AS conname "
-				"FROM pg_catalog.pg_period AS p "
-				"JOIN pg_catalog.pg_attribute AS sa ON (sa.attrelid, sa.attnum) = (p.perrelid, p.perstart) "
-				"JOIN pg_catalog.pg_attribute AS ea ON (ea.attrelid, ea.attnum) = (p.perrelid, p.perend) "
-				"JOIN pg_catalog.pg_attribute AS ra ON (ra.attrelid, ra.attnum) = (p.perrelid, p.perrange) "
-				"JOIN pg_catalog.pg_type AS r ON r.oid = ra.atttypid "
-				"JOIN pg_catalog.pg_constraint AS c ON c.oid = p.perconstraint "
-				"WHERE p.perrelid = '%u'::pg_catalog.oid "
-				"ORDER BY p.pername",
-				tbinfo->dobj.catId.oid);
+							  "SELECT p.tableoid, p.oid, p.pername, "
+							  "       sa.attname AS perstart, ea.attname AS perend, "
+							  "       r.typname AS rngtype, "
+							  "       c.conname AS conname "
+							  "FROM pg_catalog.pg_period AS p "
+							  "JOIN pg_catalog.pg_attribute AS sa ON (sa.attrelid, sa.attnum) = (p.perrelid, p.perstart) "
+							  "JOIN pg_catalog.pg_attribute AS ea ON (ea.attrelid, ea.attnum) = (p.perrelid, p.perend) "
+							  "JOIN pg_catalog.pg_attribute AS ra ON (ra.attrelid, ra.attnum) = (p.perrelid, p.perrange) "
+							  "JOIN pg_catalog.pg_type AS r ON r.oid = ra.atttypid "
+							  "JOIN pg_catalog.pg_constraint AS c ON c.oid = p.perconstraint "
+							  "WHERE p.perrelid = '%u'::pg_catalog.oid "
+							  "ORDER BY p.pername",
+							  tbinfo->dobj.catId.oid);
 
 			res = ExecuteSqlQuery(fout, q->data, PGRES_TUPLES_OK);
 
 			/*
-			 * If we didn't get the number of rows we thought we were going to,
-			 * then those JOINs didn't work.
+			 * If we didn't get the number of rows we thought we were going
+			 * to, then those JOINs didn't work.
 			 */
 			numPeriods = PQntuples(res);
 			if (numPeriods != tbinfo->nperiod)
@@ -17202,9 +17202,12 @@ dumpTableSchema(Archive *fout, const TableInfo *tbinfo)
 				else
 					appendPQExpBufferStr(q, ",\n    ");
 
-				/* Always say colexists so we can just print the GENERATED column */
+				/*
+				 * Always say colexists so we can just print the GENERATED
+				 * column
+				 */
 				appendPQExpBuffer(q, "PERIOD FOR %s (%s, %s) "
-						"WITH (rangetype = %s, check_constraint_name = %s, colexists = true)",
+								  "WITH (rangetype = %s, check_constraint_name = %s, colexists = true)",
 								  name, start, end,
 								  rngtype, conname);
 

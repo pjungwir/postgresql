@@ -99,10 +99,10 @@ get_relation_period_oid(Oid relid, const char *pername, bool missing_ok)
  *		Get the attno of the GENERATED rangetype column
  *		for all PERIODs in this table.
  */
-extern Bitmapset
-*get_period_attnos(Oid relid)
+extern Bitmapset *
+get_period_attnos(Oid relid)
 {
-	Bitmapset *attnos = NULL;
+	Bitmapset  *attnos = NULL;
 	Relation	pg_period;
 	HeapTuple	tuple;
 	SysScanDesc scan;

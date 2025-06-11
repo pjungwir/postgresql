@@ -2141,7 +2141,8 @@ StorePeriod(Relation rel, const char *periodname, AttrNumber startnum,
 	HeapTuple	tuple;
 	Oid			oid;
 	NameData	pername;
-	ObjectAddress	myself, referenced;
+	ObjectAddress myself,
+				referenced;
 
 	Assert(rangenum != InvalidAttrNumber);
 
@@ -2177,13 +2178,12 @@ StorePeriod(Relation rel, const char *periodname, AttrNumber startnum,
 	recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
 
 	/*
-	 * The range column is an implementation detail,
-	 * but we can't use DEPENDENCY_INTERNAL
-	 * because dropping the table will check for dependencies on all subobjects too
-	 * (in findDependentObjects).
-	 * But if we make an AUTO dependency one way we will auto-drop the column
-	 * when we drop the PERIOD,
-	 * and a NORMAL dependency the other way we will forbid dropping the column directly.
+	 * The range column is an implementation detail, but we can't use
+	 * DEPENDENCY_INTERNAL because dropping the table will check for
+	 * dependencies on all subobjects too (in findDependentObjects). But if we
+	 * make an AUTO dependency one way we will auto-drop the column when we
+	 * drop the PERIOD, and a NORMAL dependency the other way we will forbid
+	 * dropping the column directly.
 	 */
 	ObjectAddressSubSet(referenced, RelationRelationId, RelationGetRelid(rel), rangenum);
 	recordDependencyOn(&referenced, &myself, DEPENDENCY_INTERNAL);

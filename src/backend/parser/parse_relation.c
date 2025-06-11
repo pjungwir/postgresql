@@ -3330,7 +3330,7 @@ expandNSItemAttrs(ParseState *pstate, ParseNamespaceItem *nsitem,
 
 		/* If this column is from a PERIOD, skip it */
 		if (bms_is_member(varnode->varattno, periodatts))
-				continue;
+			continue;
 
 		te = makeTargetEntry((Expr *) varnode,
 							 (AttrNumber) pstate->p_next_resno++,

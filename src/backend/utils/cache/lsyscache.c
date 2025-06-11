@@ -1137,7 +1137,7 @@ get_period_oid(Oid relid, const char *periodname, bool missing_ok)
 	if (HeapTupleIsValid(tp))
 	{
 		Form_pg_period period_tup = (Form_pg_period) GETSTRUCT(tp);
-		Oid result;
+		Oid			result;
 
 		result = period_tup->oid;
 		ReleaseSysCache(tp);
@@ -3731,8 +3731,8 @@ get_multirange_range(Oid multirangeOid)
 Oid
 get_subtype_range(Oid subtypeOid)
 {
-	CatCList *catlist;
-	Oid	result = InvalidOid;
+	CatCList   *catlist;
+	Oid			result = InvalidOid;
 
 	catlist = SearchSysCacheList1(RANGESUBTYPE, ObjectIdGetDatum(subtypeOid));
 
@@ -3740,6 +3740,7 @@ get_subtype_range(Oid subtypeOid)
 	{
 		HeapTuple	tuple = &catlist->members[0]->tuple;
 		Form_pg_range rngtup = (Form_pg_range) GETSTRUCT(tuple);
+
 		result = rngtup->rngtypid;
 		ReleaseCatCacheList(catlist);
 	}

@@ -1403,8 +1403,8 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	CmdType		oldOperation;
 	TransitionCaptureState *oldTcs;
 	FmgrInfo	flinfo;
-	ReturnSetInfo	rsi;
-	Relation		rel;
+	ReturnSetInfo rsi;
+	Relation	rel;
 	bool		hasPeriod = false;
 	bool		didInit = false;
 	bool		shouldFree = false;

@@ -107,6 +107,6 @@ extern void RangeVarCallbackOwnsRelation(const RangeVar *relation,
 										 Oid relId, Oid oldRelId, void *arg);
 extern bool PartConstraintImpliedByRelConstraint(Relation scanrel,
 												 List *partConstraint);
-extern Oid choose_rangetype_for_period(PeriodDef *period);
+extern Oid	choose_rangetype_for_period(PeriodDef *period);
 
 #endif							/* TABLECMDS_H */

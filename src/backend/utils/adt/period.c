@@ -22,13 +22,15 @@
 #include "utils/period.h"
 #include "utils/rangetypes.h"
 
-Datum period_to_range(TupleTableSlot *slot, int startattno, int endattno, Oid rangetype)
+Datum
+period_to_range(TupleTableSlot *slot, int startattno, int endattno, Oid rangetype)
 {
-	Datum startvalue;
-	Datum endvalue;
-	Datum result;
-	bool	startisnull;
-	bool	endisnull;
+	Datum		startvalue;
+	Datum		endvalue;
+	Datum		result;
+	bool		startisnull;
+	bool		endisnull;
+
 	LOCAL_FCINFO(fcinfo, 2);
 	FmgrInfo	flinfo;
 	FuncExpr   *f;

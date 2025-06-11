@@ -1361,14 +1361,15 @@ transformForPortionOfClause(ParseState *pstate,
 		elog(ERROR, "cache lookup failed for type %u", attr->atttypid);
 
 	/*
-	 * If we are using a PERIOD, we need the start & end columns.
-	 * If the attribute it not a GENERATED column, we needn't query pg_period.
+	 * If we are using a PERIOD, we need the start & end columns. If the
+	 * attribute it not a GENERATED column, we needn't query pg_period.
 	 */
 	if (attr->attgenerated == ATTRIBUTE_GENERATED_STORED)
 	{
-		HeapTuple perTuple = SearchSysCache2(PERIODNAME,
-											 ObjectIdGetDatum(RelationGetRelid(targetrel)),
-											 PointerGetDatum(range_name));
+		HeapTuple	perTuple = SearchSysCache2(PERIODNAME,
+											   ObjectIdGetDatum(RelationGetRelid(targetrel)),
+											   PointerGetDatum(range_name));
+
 		if (HeapTupleIsValid(perTuple))
 		{
 			Form_pg_period per = (Form_pg_period) GETSTRUCT(perTuple);
@@ -1381,22 +1382,22 @@ transformForPortionOfClause(ParseState *pstate,
 			startcolname = NameStr(perattr->attname);
 
 			result->startVar = makeVar(
-					rtindex,
-					start_attno,
-					perattr->atttypid,
-					perattr->atttypmod,
-					perattr->attcollation,
-					0);
+									   rtindex,
+									   start_attno,
+									   perattr->atttypid,
+									   perattr->atttypmod,
+									   perattr->attcollation,
+									   0);
 
 			perattr = TupleDescAttr(targetrel->rd_att, end_attno - 1);
 			endcolname = NameStr(perattr->attname);
 			result->endVar = makeVar(
-					rtindex,
-					end_attno,
-					perattr->atttypid,
-					perattr->atttypmod,
-					perattr->attcollation,
-					0);
+									 rtindex,
+									 end_attno,
+									 perattr->atttypid,
+									 perattr->atttypmod,
+									 perattr->attcollation,
+									 0);
 
 			ReleaseSysCache(perTuple);
 		}
@@ -1478,9 +1479,9 @@ transformForPortionOfClause(ParseState *pstate,
 	{
 		/*
 		 * Now make sure we update the start/end time of the record. For a
-		 * range col (r) this is `r = r * targetRange`.
-		 * For a PERIOD with cols (s, e) this is `s = lower(tsrange(s, e) * targetRange)`
-		 * and `e = upper(tsrange(s, e) * targetRange` (of course not necessarily with
+		 * range col (r) this is `r = r * targetRange`. For a PERIOD with cols
+		 * (s, e) this is `s = lower(tsrange(s, e) * targetRange)` and `e =
+		 * upper(tsrange(s, e) * targetRange` (of course not necessarily with
 		 * tsrange, but with whatever range type is used there).
 		 */
 		Oid			intersectoperoid;
@@ -1524,15 +1525,15 @@ transformForPortionOfClause(ParseState *pstate,
 
 		if (result->startVar)
 		{
-			FuncExpr *boundTLEExpr;
-			Oid arg_types[1] = {ANYRANGEOID};
+			FuncExpr   *boundTLEExpr;
+			Oid			arg_types[1] = {ANYRANGEOID};
 			FuncDetailCode fdresult;
-			Oid rettype;
-			bool retset;
-			int nvargs;
-			Oid vatype;
-			Oid *declared_arg_types;
-			Oid elemtypid = get_range_subtype(attr->atttypid);
+			Oid			rettype;
+			bool		retset;
+			int			nvargs;
+			Oid			vatype;
+			Oid		   *declared_arg_types;
+			Oid			elemtypid = get_range_subtype(attr->atttypid);
 
 			/* set the start column */
 			fdresult = func_get_detail(SystemFuncName("lower"), NIL, NIL, 1,
@@ -1567,8 +1568,8 @@ transformForPortionOfClause(ParseState *pstate,
 			result->rangeTargetList = lappend(result->rangeTargetList, tle);
 
 			/*
-			 * Mark the start/end columns as requiring update permissions.
-			 * As usual, we don't check permissions for the GENERATED column.
+			 * Mark the start/end columns as requiring update permissions. As
+			 * usual, we don't check permissions for the GENERATED column.
 			 */
 			target_perminfo->updatedCols = bms_add_member(target_perminfo->updatedCols,
 														  start_attno - FirstLowInvalidHeapAttributeNumber);

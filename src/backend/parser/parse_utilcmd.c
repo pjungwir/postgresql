@@ -1041,9 +1041,9 @@ void
 transformPeriodOptions(PeriodDef *period)
 {
 	ListCell   *option;
-	DefElem	   *dconstraintname = NULL;
-	DefElem	   *drangetypename = NULL;
-	DefElem	   *dcolexists = NULL;
+	DefElem    *dconstraintname = NULL;
+	DefElem    *drangetypename = NULL;
+	DefElem    *dcolexists = NULL;
 
 	foreach(option, period->options)
 	{
@@ -1103,19 +1103,20 @@ static void
 transformTablePeriod(CreateStmtContext *cxt, PeriodDef *period)
 {
 	if (strcmp(period->periodname, "system_time") == 0)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("PERIOD FOR SYSTEM_TIME is not supported"),
-					 parser_errposition(cxt->pstate,
-										period->location)));
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("PERIOD FOR SYSTEM_TIME is not supported"),
+				 parser_errposition(cxt->pstate,
+									period->location)));
 
 	if (strcmp(period->startcolname, period->endcolname) == 0)
 		ereport(ERROR, (errmsg("column \"%s\" can't be the start and end column for period \"%s\"",
-						period->startcolname, period->periodname)));
+							   period->startcolname, period->periodname)));
 
 	/*
-	 * Determine the column info and range type so that transformIndexConstraints
-	 * knows how to create PRIMARY KEY/UNIQUE constraints using this PERIOD.
+	 * Determine the column info and range type so that
+	 * transformIndexConstraints knows how to create PRIMARY KEY/UNIQUE
+	 * constraints using this PERIOD.
 	 */
 	transformPeriodOptions(period);
 
@@ -1283,8 +1284,8 @@ transformTableLikeClause(CreateStmtContext *cxt, TableLikeClause *table_like_cla
 		ColumnDef  *def;
 
 		/*
-		 * If this column is from a PERIOD, skip it
-		 * (since LIKE never copies PERIODs).
+		 * If this column is from a PERIOD, skip it (since LIKE never copies
+		 * PERIODs).
 		 */
 		if (bms_is_member(parent_attno, periodatts))
 			continue;
@@ -2773,7 +2774,10 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 					}
 					else if (hasperiod)
 					{
-						/* If we're using a PERIOD, we better make sure it is NOT NULL */
+						/*
+						 * If we're using a PERIOD, we better make sure it is
+						 * NOT NULL
+						 */
 						cxt->nnconstraints =
 							lappend(cxt->nnconstraints,
 									makeNotNullConstraint(makeString(key)));
@@ -2900,10 +2904,11 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 						}
 					}
 				}
+
 				/*
-				 * In CREATE TABLE we don't know PERIODs' rangetype yet,
-				 * but we know it will be a range/multirange. So if we
-				 * have a PERIOD then we're safe.
+				 * In CREATE TABLE we don't know PERIODs' rangetype yet, but
+				 * we know it will be a range/multirange. So if we have a
+				 * PERIOD then we're safe.
 				 */
 				if (found && !hasperiod)
 				{

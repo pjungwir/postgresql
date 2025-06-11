@@ -2799,7 +2799,7 @@ typedef struct PeriodDef
 	AttrNumber	endattnum;		/* attnum of the end column */
 	AttrNumber	rngattnum;		/* attnum of the GENERATED range column */
 	List	   *options;		/* options from WITH clause */
-	char	   *constraintname;	/* name of the CHECK constraint */
+	char	   *constraintname; /* name of the CHECK constraint */
 	char	   *rangetypename;	/* name of the range type */
 	Oid			coltypid;		/* the start/end col type */
 	Oid			rngtypid;		/* the range type to use */
