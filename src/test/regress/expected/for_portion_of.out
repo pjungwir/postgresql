@@ -133,6 +133,9 @@ SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
 (5 rows)
 
 DROP TABLE for_portion_of_test;
+--
+-- UPDATE tests
+--
 CREATE TABLE for_portion_of_test (
   id int4range NOT NULL,
   valid_at daterange NOT NULL,
@@ -148,10 +151,7 @@ INSERT INTO for_portion_of_test (id, valid_at, name) VALUES
   ('[4,5)', '(,2018-04-01)', 'four'),
   ('[5,6)', '(,)', 'five')
   ;
---
--- UPDATE tests
---
--- Setting with a missing column fails
+-- Updating with a missing column fails
 UPDATE for_portion_of_test
   FOR PORTION OF invalid_at FROM '2018-06-01' TO NULL
   SET name = 'foo'
@@ -159,7 +159,7 @@ UPDATE for_portion_of_test
 ERROR:  column or period "invalid_at" of relation "for_portion_of_test" does not exist
 LINE 2:   FOR PORTION OF invalid_at FROM '2018-06-01' TO NULL
                          ^
--- Setting the range fails
+-- Updating the range fails
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-06-01' TO NULL
   SET valid_at = '[1990-01-01,1999-01-01)'
@@ -176,13 +176,13 @@ ERROR:  function pg_catalog.daterange(integer, integer) does not exist
 LINE 2:   FOR PORTION OF valid_at FROM 1 TO 4
                          ^
 HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
--- Setting with timestamps reversed fails
+-- Updating with timestamps reversed fails
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-06-01' TO '2018-01-01'
   SET name = 'three^1'
   WHERE id = '[3,4)';
 ERROR:  range lower bound must be less than or equal to range upper bound
--- Setting with a subquery fails
+-- Updating with a subquery fails
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM (SELECT '2018-01-01') TO '2018-06-01'
   SET name = 'nope'
@@ -190,7 +190,7 @@ UPDATE for_portion_of_test
 ERROR:  cannot use subquery in FOR PORTION OF expression
 LINE 2:   FOR PORTION OF valid_at FROM (SELECT '2018-01-01') TO '201...
                                        ^
--- Setting with a column fails
+-- Updating with a column fails
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM lower(valid_at) TO NULL
   SET name = 'nope'
@@ -198,7 +198,7 @@ UPDATE for_portion_of_test
 ERROR:  cannot use column reference in FOR PORTION OF expression
 LINE 2:   FOR PORTION OF valid_at FROM lower(valid_at) TO NULL
                                              ^
--- Setting with timestamps equal does nothing
+-- Updating with timestamps equal does nothing
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-04-01' TO '2018-04-01'
   SET name = 'three^0'
@@ -248,7 +248,7 @@ UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM NULL TO NULL
   SET name = 'one^2'
   WHERE id = '[1,2)';
--- With a direct target
+-- Updating with a direct target
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at (daterange('2018-03-10', '2018-03-17'))
   SET name = 'one^3'
@@ -413,10 +413,30 @@ SELECT * FROM for_portion_of_test WHERE id = '[10,11)';
  [10,11) | [2019-01-01,2020-01-01) | ten
 (2 rows)
 
-DELETE FROM for_portion_of_test WHERE id IN ('[10,11)');
+DROP TABLE for_portion_of_test;
 --
 -- DELETE tests
 --
+CREATE TABLE for_portion_of_test (
+  id int4range NOT NULL,
+  valid_at daterange NOT NULL,
+  name text NOT NULL,
+  CONSTRAINT for_portion_of_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+INSERT INTO for_portion_of_test (id, valid_at, name) VALUES
+  ('[1,2)', '[2018-01-02,2018-02-03)', 'one'),
+  ('[1,2)', '[2018-02-03,2018-03-03)', 'one'),
+  ('[1,2)', '[2018-03-03,2018-04-04)', 'one'),
+  ('[2,3)', '[2018-01-01,2018-01-05)', 'two'),
+  ('[3,4)', '[2018-01-01,)', 'three'),
+  ('[4,5)', '(,2018-04-01)', 'four'),
+  ('[5,6)', '(,)', 'five'),
+  ('[6,7)', '[2018-01-01,)', 'six'),
+  ('[7,8)', '(,2018-04-01)', 'seven'),
+  ('[8,9)', '[2018-01-02,2018-02-03)', 'eight'),
+  ('[8,9)', '[2018-02-03,2018-03-03)', 'eight'),
+  ('[8,9)', '[2018-03-03,2018-04-04)', 'eight')
+  ;
 -- Deleting with a missing column fails
 DELETE FROM for_portion_of_test
   FOR PORTION OF invalid_at FROM '2018-06-01' TO NULL
@@ -424,49 +444,92 @@ DELETE FROM for_portion_of_test
 ERROR:  column or period "invalid_at" of relation "for_portion_of_test" does not exist
 LINE 2:   FOR PORTION OF invalid_at FROM '2018-06-01' TO NULL
                          ^
+-- The wrong type fails
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM 1 TO 4
+  WHERE id = '[3,4)';
+ERROR:  function pg_catalog.daterange(integer, integer) does not exist
+LINE 2:   FOR PORTION OF valid_at FROM 1 TO 4
+                         ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
 -- Deleting with timestamps reversed fails
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-06-01' TO '2018-01-01'
   WHERE id = '[3,4)';
 ERROR:  range lower bound must be less than or equal to range upper bound
+-- Deleting with a subquery fails
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM (SELECT '2018-01-01') TO '2018-06-01'
+  WHERE id = '[3,4)';
+ERROR:  cannot use subquery in FOR PORTION OF expression
+LINE 2:   FOR PORTION OF valid_at FROM (SELECT '2018-01-01') TO '201...
+                                       ^
+-- Deleting with a column fails
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM lower(valid_at) TO NULL
+  WHERE id = '[3,4)';
+ERROR:  cannot use column reference in FOR PORTION OF expression
+LINE 2:   FOR PORTION OF valid_at FROM lower(valid_at) TO NULL
+                                             ^
 -- Deleting with timestamps equal does nothing
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-04-01' TO '2018-04-01'
   WHERE id = '[3,4)';
--- Deleting with a closed/closed target
+-- Deleting a finite/open portion with a finite/open target
 DELETE FROM for_portion_of_test
-  FOR PORTION OF valid_at FROM '2018-06-01' TO '2020-06-01'
-  WHERE id = '[5,6)';
--- Deleting with a closed/open target
-DELETE FROM for_portion_of_test
-  FOR PORTION OF valid_at FROM '2018-04-01' TO NULL
+  FOR PORTION OF valid_at FROM '2018-06-01' TO NULL
   WHERE id = '[3,4)';
--- Deleting with an open/closed target
+-- Deleting a finite/open portion with an open/finite target
 DELETE FROM for_portion_of_test
-  FOR PORTION OF valid_at FROM NULL TO '2018-02-08'
-  WHERE id = '[1,2)';
--- Deleting with an open/open target
+  FOR PORTION OF valid_at FROM NULL TO '2018-03-01'
+  WHERE id = '[6,7)';
+-- Deleting an open/finite portion with an open/finite target
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM NULL TO '2018-02-01'
+  WHERE id = '[4,5)';
+-- Deleting an open/finite portion with a finite/open target
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM '2017-01-01' TO NULL
+  WHERE id = '[7,8)';
+-- Deleting a finite/finite portion with an exact fit
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM '2018-02-01' TO '2018-04-01'
+  WHERE id = '[4,5)';
+-- Deleting an enclosed span
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM NULL TO NULL
-  WHERE id = '[6,7)';
+  WHERE id = '[2,3)';
+-- Deleting an open/open portion with a finite/finite target
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM '2018-01-01' TO '2019-01-01'
+  WHERE id = '[5,6)';
+-- Deleting an enclosed span with separate protruding spans
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM '2018-02-03' TO '2018-03-03'
+  WHERE id = '[1,2)';
+-- Deleting multiple enclosed spans
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM NULL TO NULL
+  WHERE id = '[8,9)';
+-- Deleting with a direct target
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at (daterange('2018-03-10', '2018-03-17'))
+  WHERE id = '[1,2)';
 -- DELETE with no WHERE clause
 DELETE FROM for_portion_of_test
-  FOR PORTION OF valid_at FROM '2025-01-01' TO NULL;
+  FOR PORTION OF valid_at FROM '2030-01-01' TO NULL;
 SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
-  id   |        valid_at         |  name   
--------+-------------------------+---------
- [1,2) | [2018-02-08,2018-02-15) | one^2
- [2,3) | [2018-01-01,2018-01-05) | two^2
- [3,4) | [2018-01-01,2018-03-01) | three^2
- [3,4) | [2018-03-01,2018-04-01) | three
- [4,5) | (,2017-01-01)           | four^1
- [4,5) | [2017-01-01,2018-02-01) | four^3
- [4,5) | [2018-02-01,2018-04-01) | four^2
- [5,6) | (,2017-01-01)           | five
- [5,6) | [2017-01-01,2018-01-01) | five^2
- [5,6) | [2018-01-01,2018-06-01) | five^2
- [5,6) | [2020-06-01,2025-01-01) | five
-(11 rows)
+  id   |        valid_at         | name  
+-------+-------------------------+-------
+ [1,2) | [2018-01-02,2018-02-03) | one
+ [1,2) | [2018-03-03,2018-03-10) | one
+ [1,2) | [2018-03-17,2018-04-04) | one
+ [3,4) | [2018-01-01,2018-06-01) | three
+ [5,6) | (,2018-01-01)           | five
+ [5,6) | [2019-01-01,2030-01-01) | five
+ [6,7) | [2018-03-01,2030-01-01) | six
+ [7,8) | (,2017-01-01)           | seven
+(8 rows)
 
 -- UPDATE ... RETURNING returns only the updated values (not the inserted side values)
 UPDATE for_portion_of_test
@@ -574,17 +637,17 @@ NOTICE:  fpo_before_stmt: BEFORE UPDATE STATEMENT:
 NOTICE:    old: <NULL>
 NOTICE:    new: <NULL>
 NOTICE:  fpo_before_row: BEFORE UPDATE ROW:
-NOTICE:    old: [2020-06-01,2025-01-01)
+NOTICE:    old: [2019-01-01,2030-01-01)
 NOTICE:    new: [2021-01-01,2022-01-01)
 NOTICE:  fpo_before_stmt: BEFORE INSERT STATEMENT:
 NOTICE:    old: <NULL>
 NOTICE:    new: <NULL>
 NOTICE:  fpo_before_row: BEFORE INSERT ROW:
 NOTICE:    old: <NULL>
-NOTICE:    new: [2020-06-01,2021-01-01)
+NOTICE:    new: [2019-01-01,2021-01-01)
 NOTICE:  fpo_after_insert_row: AFTER INSERT ROW:
 NOTICE:    old: <NULL>
-NOTICE:    new: [2020-06-01,2021-01-01)
+NOTICE:    new: [2019-01-01,2021-01-01)
 NOTICE:  fpo_after_insert_stmt: AFTER INSERT STATEMENT:
 NOTICE:    old: <NULL>
 NOTICE:    new: <NULL>
@@ -593,15 +656,15 @@ NOTICE:    old: <NULL>
 NOTICE:    new: <NULL>
 NOTICE:  fpo_before_row: BEFORE INSERT ROW:
 NOTICE:    old: <NULL>
-NOTICE:    new: [2022-01-01,2025-01-01)
+NOTICE:    new: [2022-01-01,2030-01-01)
 NOTICE:  fpo_after_insert_row: AFTER INSERT ROW:
 NOTICE:    old: <NULL>
-NOTICE:    new: [2022-01-01,2025-01-01)
+NOTICE:    new: [2022-01-01,2030-01-01)
 NOTICE:  fpo_after_insert_stmt: AFTER INSERT STATEMENT:
 NOTICE:    old: <NULL>
 NOTICE:    new: <NULL>
 NOTICE:  fpo_after_update_row: AFTER UPDATE ROW:
-NOTICE:    old: [2020-06-01,2025-01-01)
+NOTICE:    old: [2019-01-01,2030-01-01)
 NOTICE:    new: [2021-01-01,2022-01-01)
 NOTICE:  fpo_after_update_stmt: AFTER UPDATE STATEMENT:
 NOTICE:    old: <NULL>
@@ -613,7 +676,7 @@ NOTICE:  fpo_before_stmt: BEFORE DELETE STATEMENT:
 NOTICE:    old: <NULL>
 NOTICE:    new: <NULL>
 NOTICE:  fpo_before_row: BEFORE DELETE ROW:
-NOTICE:    old: [2022-01-01,2025-01-01)
+NOTICE:    old: [2022-01-01,2030-01-01)
 NOTICE:    new: <NULL>
 NOTICE:  fpo_before_stmt: BEFORE INSERT STATEMENT:
 NOTICE:    old: <NULL>
@@ -632,15 +695,15 @@ NOTICE:    old: <NULL>
 NOTICE:    new: <NULL>
 NOTICE:  fpo_before_row: BEFORE INSERT ROW:
 NOTICE:    old: <NULL>
-NOTICE:    new: [2024-01-01,2025-01-01)
+NOTICE:    new: [2024-01-01,2030-01-01)
 NOTICE:  fpo_after_insert_row: AFTER INSERT ROW:
 NOTICE:    old: <NULL>
-NOTICE:    new: [2024-01-01,2025-01-01)
+NOTICE:    new: [2024-01-01,2030-01-01)
 NOTICE:  fpo_after_insert_stmt: AFTER INSERT STATEMENT:
 NOTICE:    old: <NULL>
 NOTICE:    new: <NULL>
 NOTICE:  fpo_after_delete_row: AFTER DELETE ROW:
-NOTICE:    old: [2022-01-01,2025-01-01)
+NOTICE:    old: [2022-01-01,2030-01-01)
 NOTICE:    new: <NULL>
 NOTICE:  fpo_after_delete_stmt: AFTER DELETE STATEMENT:
 NOTICE:    old: <NULL>
@@ -648,24 +711,21 @@ NOTICE:    new: <NULL>
 SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
   id   |        valid_at         |  name   
 -------+-------------------------+---------
- [1,2) | [2018-02-08,2018-02-15) | one^2
- [2,3) | [2018-01-01,2018-01-05) | two^2
- [3,4) | [2018-01-01,2018-02-01) | three^2
+ [1,2) | [2018-01-02,2018-02-03) | one
+ [1,2) | [2018-03-03,2018-03-10) | one
+ [1,2) | [2018-03-17,2018-04-04) | one
+ [3,4) | [2018-01-01,2018-02-01) | three
  [3,4) | [2018-02-01,2018-02-02) | three^3
  [3,4) | [2018-02-03,2018-02-15) | three^3
- [3,4) | [2018-02-15,2018-03-01) | three^2
- [3,4) | [2018-03-01,2018-04-01) | three
- [4,5) | (,2017-01-01)           | four^1
- [4,5) | [2017-01-01,2018-02-01) | four^3
- [4,5) | [2018-02-01,2018-04-01) | four^2
- [5,6) | (,2017-01-01)           | five
- [5,6) | [2017-01-01,2018-01-01) | five^2
- [5,6) | [2018-01-01,2018-06-01) | five^2
- [5,6) | [2020-06-01,2021-01-01) | five
+ [3,4) | [2018-02-15,2018-06-01) | three
+ [5,6) | (,2018-01-01)           | five
+ [5,6) | [2019-01-01,2021-01-01) | five
  [5,6) | [2021-01-01,2022-01-01) | five^3
  [5,6) | [2022-01-01,2023-01-01) | five
- [5,6) | [2024-01-01,2025-01-01) | five
-(17 rows)
+ [5,6) | [2024-01-01,2030-01-01) | five
+ [6,7) | [2018-03-01,2030-01-01) | six
+ [7,8) | (,2017-01-01)           | seven
+(14 rows)
 
 -- Triggers with a custom transition table name:
 DROP TABLE for_portion_of_test;
@@ -859,6 +919,120 @@ UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM NULL TO '2018-01-02'
   SET name = 'NULL_to_2018-01-01';
 COMMIT;
+SELECT * FROM for_portion_of_test;
+  id   |        valid_at         |           name           
+-------+-------------------------+--------------------------
+ [1,2) | [2019-01-01,2020-01-01) | one
+ [1,2) | [2018-01-21,2019-01-01) | 2018-01-15_to_2019-01-01
+(2 rows)
+
+-- test FOR PORTION OF from triggers during FOR PORTION OF:
+DROP TABLE for_portion_of_test;
+CREATE TABLE for_portion_of_test (
+  id int4range,
+  valid_at daterange,
+  name text
+);
+INSERT INTO for_portion_of_test (id, valid_at, name) VALUES
+  ('[1,2)', '[2018-01-01,2020-01-01)', 'one'),
+  ('[2,3)', '[2018-01-01,2020-01-01)', 'two'),
+  ('[3,4)', '[2018-01-01,2020-01-01)', 'three'),
+  ('[4,5)', '[2018-01-01,2020-01-01)', 'four');
+CREATE FUNCTION trg_fpo_update()
+RETURNS TRIGGER LANGUAGE plpgsql AS
+$$
+BEGIN
+  IF pg_trigger_depth() = 1 THEN
+    UPDATE for_portion_of_test
+      FOR PORTION OF valid_at FROM '2018-02-01' TO '2018-03-01'
+      SET name = CONCAT(name, '^')
+      WHERE id = OLD.id;
+  END IF;
+  RETURN CASE WHEN 'TG_OP' = 'DELETE' THEN OLD ELSE NEW END;
+END;
+$$;
+CREATE FUNCTION trg_fpo_delete()
+RETURNS TRIGGER LANGUAGE plpgsql AS
+$$
+BEGIN
+  IF pg_trigger_depth() = 1 THEN
+    DELETE FROM for_portion_of_test
+      FOR PORTION OF valid_at FROM '2018-03-01' TO '2018-04-01'
+      WHERE id = OLD.id;
+  END IF;
+  RETURN CASE WHEN 'TG_OP' = 'DELETE' THEN OLD ELSE NEW END;
+END;
+$$;
+-- UPDATE FOR PORTION OF from a trigger fired by UPDATE FOR PORTION OF
+CREATE TRIGGER fpo_after_update_row
+AFTER UPDATE ON for_portion_of_test
+FOR EACH ROW EXECUTE PROCEDURE trg_fpo_update();
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM '2018-05-01' TO '2018-06-01'
+  SET name = CONCAT(name, '*')
+  WHERE id = '[1,2)';
+SELECT * FROM for_portion_of_test WHERE id = '[1,2)' ORDER BY id, valid_at;
+  id   |        valid_at         | name 
+-------+-------------------------+------
+ [1,2) | [2018-01-01,2018-02-01) | one
+ [1,2) | [2018-02-01,2018-03-01) | one^
+ [1,2) | [2018-03-01,2018-05-01) | one
+ [1,2) | [2018-05-01,2018-06-01) | one*
+ [1,2) | [2018-06-01,2020-01-01) | one
+(5 rows)
+
+DROP TRIGGER fpo_after_update_row ON for_portion_of_test;
+-- UPDATE FOR PORTION OF from a trigger fired by DELETE FOR PORTION OF
+CREATE TRIGGER fpo_after_delete_row
+AFTER DELETE ON for_portion_of_test
+FOR EACH ROW EXECUTE PROCEDURE trg_fpo_update();
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM '2018-05-01' TO '2018-06-01'
+  WHERE id = '[2,3)';
+SELECT * FROM for_portion_of_test WHERE id = '[2,3)' ORDER BY id, valid_at;
+  id   |        valid_at         | name 
+-------+-------------------------+------
+ [2,3) | [2018-01-01,2018-02-01) | two
+ [2,3) | [2018-02-01,2018-03-01) | two^
+ [2,3) | [2018-03-01,2018-05-01) | two
+ [2,3) | [2018-06-01,2020-01-01) | two
+(4 rows)
+
+DROP TRIGGER fpo_after_delete_row ON for_portion_of_test;
+-- DELETE FOR PORTION OF from a trigger fired by UPDATE FOR PORTION OF
+CREATE TRIGGER fpo_after_update_row
+AFTER UPDATE ON for_portion_of_test
+FOR EACH ROW EXECUTE PROCEDURE trg_fpo_delete();
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM '2018-05-01' TO '2018-06-01'
+  SET name = CONCAT(name, '*')
+  WHERE id = '[3,4)';
+SELECT * FROM for_portion_of_test WHERE id = '[3,4)' ORDER BY id, valid_at;
+  id   |        valid_at         |  name  
+-------+-------------------------+--------
+ [3,4) | [2018-01-01,2018-03-01) | three
+ [3,4) | [2018-04-01,2018-05-01) | three
+ [3,4) | [2018-05-01,2018-06-01) | three*
+ [3,4) | [2018-06-01,2020-01-01) | three
+(4 rows)
+
+DROP TRIGGER fpo_after_update_row ON for_portion_of_test;
+-- DELETE FOR PORTION OF from a trigger fired by DELETE FOR PORTION OF
+CREATE TRIGGER fpo_after_delete_row
+AFTER DELETE ON for_portion_of_test
+FOR EACH ROW EXECUTE PROCEDURE trg_fpo_delete();
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM '2018-05-01' TO '2018-06-01'
+  WHERE id = '[4,5)';
+SELECT * FROM for_portion_of_test WHERE id = '[4,5)' ORDER BY id, valid_at;
+  id   |        valid_at         | name 
+-------+-------------------------+------
+ [4,5) | [2018-01-01,2018-03-01) | four
+ [4,5) | [2018-04-01,2018-05-01) | four
+ [4,5) | [2018-06-01,2020-01-01) | four
+(3 rows)
+
+DROP TRIGGER fpo_after_delete_row ON for_portion_of_test;
 -- Test with multiranges
 CREATE TABLE for_portion_of_test2 (
   id int4range NOT NULL,

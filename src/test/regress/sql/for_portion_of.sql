@@ -103,6 +103,11 @@ UPDATE for_portion_of_test
 SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
 
 DROP TABLE for_portion_of_test;
+
+--
+-- UPDATE tests
+--
+
 CREATE TABLE for_portion_of_test (
   id int4range NOT NULL,
   valid_at daterange NOT NULL,
@@ -119,17 +124,13 @@ INSERT INTO for_portion_of_test (id, valid_at, name) VALUES
   ('[5,6)', '(,)', 'five')
   ;
 
---
--- UPDATE tests
---
-
--- Setting with a missing column fails
+-- Updating with a missing column fails
 UPDATE for_portion_of_test
   FOR PORTION OF invalid_at FROM '2018-06-01' TO NULL
   SET name = 'foo'
   WHERE id = '[5,6)';
 
--- Setting the range fails
+-- Updating the range fails
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-06-01' TO NULL
   SET valid_at = '[1990-01-01,1999-01-01)'
@@ -141,25 +142,25 @@ UPDATE for_portion_of_test
   SET name = 'nope'
   WHERE id = '[3,4)';
 
--- Setting with timestamps reversed fails
+-- Updating with timestamps reversed fails
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-06-01' TO '2018-01-01'
   SET name = 'three^1'
   WHERE id = '[3,4)';
 
--- Setting with a subquery fails
+-- Updating with a subquery fails
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM (SELECT '2018-01-01') TO '2018-06-01'
   SET name = 'nope'
   WHERE id = '[3,4)';
 
--- Setting with a column fails
+-- Updating with a column fails
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM lower(valid_at) TO NULL
   SET name = 'nope'
   WHERE id = '[3,4)';
 
--- Setting with timestamps equal does nothing
+-- Updating with timestamps equal does nothing
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-04-01' TO '2018-04-01'
   SET name = 'three^0'
@@ -219,7 +220,7 @@ UPDATE for_portion_of_test
   SET name = 'one^2'
   WHERE id = '[1,2)';
 
--- With a direct target
+-- Updating with a direct target
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at (daterange('2018-03-10', '2018-03-17'))
   SET name = 'one^3'
@@ -329,20 +330,57 @@ END;
 $$;
 SELECT fpo_update('[10,11)', '2015-01-01', '2019-01-01');
 SELECT * FROM for_portion_of_test WHERE id = '[10,11)';
-DELETE FROM for_portion_of_test WHERE id IN ('[10,11)');
+
+DROP TABLE for_portion_of_test;
 
 --
 -- DELETE tests
 --
+
+CREATE TABLE for_portion_of_test (
+  id int4range NOT NULL,
+  valid_at daterange NOT NULL,
+  name text NOT NULL,
+  CONSTRAINT for_portion_of_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+INSERT INTO for_portion_of_test (id, valid_at, name) VALUES
+  ('[1,2)', '[2018-01-02,2018-02-03)', 'one'),
+  ('[1,2)', '[2018-02-03,2018-03-03)', 'one'),
+  ('[1,2)', '[2018-03-03,2018-04-04)', 'one'),
+  ('[2,3)', '[2018-01-01,2018-01-05)', 'two'),
+  ('[3,4)', '[2018-01-01,)', 'three'),
+  ('[4,5)', '(,2018-04-01)', 'four'),
+  ('[5,6)', '(,)', 'five'),
+  ('[6,7)', '[2018-01-01,)', 'six'),
+  ('[7,8)', '(,2018-04-01)', 'seven'),
+  ('[8,9)', '[2018-01-02,2018-02-03)', 'eight'),
+  ('[8,9)', '[2018-02-03,2018-03-03)', 'eight'),
+  ('[8,9)', '[2018-03-03,2018-04-04)', 'eight')
+  ;
 
 -- Deleting with a missing column fails
 DELETE FROM for_portion_of_test
   FOR PORTION OF invalid_at FROM '2018-06-01' TO NULL
   WHERE id = '[5,6)';
 
+-- The wrong type fails
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM 1 TO 4
+  WHERE id = '[3,4)';
+
 -- Deleting with timestamps reversed fails
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-06-01' TO '2018-01-01'
+  WHERE id = '[3,4)';
+
+-- Deleting with a subquery fails
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM (SELECT '2018-01-01') TO '2018-06-01'
+  WHERE id = '[3,4)';
+
+-- Deleting with a column fails
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM lower(valid_at) TO NULL
   WHERE id = '[3,4)';
 
 -- Deleting with timestamps equal does nothing
@@ -350,29 +388,59 @@ DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-04-01' TO '2018-04-01'
   WHERE id = '[3,4)';
 
--- Deleting with a closed/closed target
+-- Deleting a finite/open portion with a finite/open target
 DELETE FROM for_portion_of_test
-  FOR PORTION OF valid_at FROM '2018-06-01' TO '2020-06-01'
-  WHERE id = '[5,6)';
-
--- Deleting with a closed/open target
-DELETE FROM for_portion_of_test
-  FOR PORTION OF valid_at FROM '2018-04-01' TO NULL
+  FOR PORTION OF valid_at FROM '2018-06-01' TO NULL
   WHERE id = '[3,4)';
 
--- Deleting with an open/closed target
+-- Deleting a finite/open portion with an open/finite target
 DELETE FROM for_portion_of_test
-  FOR PORTION OF valid_at FROM NULL TO '2018-02-08'
-  WHERE id = '[1,2)';
+  FOR PORTION OF valid_at FROM NULL TO '2018-03-01'
+  WHERE id = '[6,7)';
 
--- Deleting with an open/open target
+-- Deleting an open/finite portion with an open/finite target
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM NULL TO '2018-02-01'
+  WHERE id = '[4,5)';
+
+-- Deleting an open/finite portion with a finite/open target
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM '2017-01-01' TO NULL
+  WHERE id = '[7,8)';
+
+-- Deleting a finite/finite portion with an exact fit
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM '2018-02-01' TO '2018-04-01'
+  WHERE id = '[4,5)';
+
+-- Deleting an enclosed span
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM NULL TO NULL
-  WHERE id = '[6,7)';
+  WHERE id = '[2,3)';
+
+-- Deleting an open/open portion with a finite/finite target
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM '2018-01-01' TO '2019-01-01'
+  WHERE id = '[5,6)';
+
+-- Deleting an enclosed span with separate protruding spans
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM '2018-02-03' TO '2018-03-03'
+  WHERE id = '[1,2)';
+
+-- Deleting multiple enclosed spans
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM NULL TO NULL
+  WHERE id = '[8,9)';
+
+-- Deleting with a direct target
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at (daterange('2018-03-10', '2018-03-17'))
+  WHERE id = '[1,2)';
 
 -- DELETE with no WHERE clause
 DELETE FROM for_portion_of_test
-  FOR PORTION OF valid_at FROM '2025-01-01' TO NULL;
+  FOR PORTION OF valid_at FROM '2030-01-01' TO NULL;
 
 SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
 
@@ -595,6 +663,106 @@ UPDATE for_portion_of_test
   SET name = 'NULL_to_2018-01-01';
 COMMIT;
 
+SELECT * FROM for_portion_of_test;
+
+-- test FOR PORTION OF from triggers during FOR PORTION OF:
+
+DROP TABLE for_portion_of_test;
+CREATE TABLE for_portion_of_test (
+  id int4range,
+  valid_at daterange,
+  name text
+);
+INSERT INTO for_portion_of_test (id, valid_at, name) VALUES
+  ('[1,2)', '[2018-01-01,2020-01-01)', 'one'),
+  ('[2,3)', '[2018-01-01,2020-01-01)', 'two'),
+  ('[3,4)', '[2018-01-01,2020-01-01)', 'three'),
+  ('[4,5)', '[2018-01-01,2020-01-01)', 'four');
+
+CREATE FUNCTION trg_fpo_update()
+RETURNS TRIGGER LANGUAGE plpgsql AS
+$$
+BEGIN
+  IF pg_trigger_depth() = 1 THEN
+    UPDATE for_portion_of_test
+      FOR PORTION OF valid_at FROM '2018-02-01' TO '2018-03-01'
+      SET name = CONCAT(name, '^')
+      WHERE id = OLD.id;
+  END IF;
+  RETURN CASE WHEN 'TG_OP' = 'DELETE' THEN OLD ELSE NEW END;
+END;
+$$;
+
+CREATE FUNCTION trg_fpo_delete()
+RETURNS TRIGGER LANGUAGE plpgsql AS
+$$
+BEGIN
+  IF pg_trigger_depth() = 1 THEN
+    DELETE FROM for_portion_of_test
+      FOR PORTION OF valid_at FROM '2018-03-01' TO '2018-04-01'
+      WHERE id = OLD.id;
+  END IF;
+  RETURN CASE WHEN 'TG_OP' = 'DELETE' THEN OLD ELSE NEW END;
+END;
+$$;
+
+-- UPDATE FOR PORTION OF from a trigger fired by UPDATE FOR PORTION OF
+
+CREATE TRIGGER fpo_after_update_row
+AFTER UPDATE ON for_portion_of_test
+FOR EACH ROW EXECUTE PROCEDURE trg_fpo_update();
+
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM '2018-05-01' TO '2018-06-01'
+  SET name = CONCAT(name, '*')
+  WHERE id = '[1,2)';
+
+SELECT * FROM for_portion_of_test WHERE id = '[1,2)' ORDER BY id, valid_at;
+
+DROP TRIGGER fpo_after_update_row ON for_portion_of_test;
+
+-- UPDATE FOR PORTION OF from a trigger fired by DELETE FOR PORTION OF
+
+CREATE TRIGGER fpo_after_delete_row
+AFTER DELETE ON for_portion_of_test
+FOR EACH ROW EXECUTE PROCEDURE trg_fpo_update();
+
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM '2018-05-01' TO '2018-06-01'
+  WHERE id = '[2,3)';
+
+SELECT * FROM for_portion_of_test WHERE id = '[2,3)' ORDER BY id, valid_at;
+
+DROP TRIGGER fpo_after_delete_row ON for_portion_of_test;
+
+-- DELETE FOR PORTION OF from a trigger fired by UPDATE FOR PORTION OF
+
+CREATE TRIGGER fpo_after_update_row
+AFTER UPDATE ON for_portion_of_test
+FOR EACH ROW EXECUTE PROCEDURE trg_fpo_delete();
+
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM '2018-05-01' TO '2018-06-01'
+  SET name = CONCAT(name, '*')
+  WHERE id = '[3,4)';
+
+SELECT * FROM for_portion_of_test WHERE id = '[3,4)' ORDER BY id, valid_at;
+
+DROP TRIGGER fpo_after_update_row ON for_portion_of_test;
+
+-- DELETE FOR PORTION OF from a trigger fired by DELETE FOR PORTION OF
+
+CREATE TRIGGER fpo_after_delete_row
+AFTER DELETE ON for_portion_of_test
+FOR EACH ROW EXECUTE PROCEDURE trg_fpo_delete();
+
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM '2018-05-01' TO '2018-06-01'
+  WHERE id = '[4,5)';
+
+SELECT * FROM for_portion_of_test WHERE id = '[4,5)' ORDER BY id, valid_at;
+
+DROP TRIGGER fpo_after_delete_row ON for_portion_of_test;
 
 -- Test with multiranges
 
