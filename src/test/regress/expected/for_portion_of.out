@@ -151,6 +151,7 @@ INSERT INTO for_portion_of_test (id, valid_at, name) VALUES
   ('[4,5)', '(,2018-04-01)', 'four'),
   ('[5,6)', '(,)', 'five')
   ;
+\set QUIET false
 -- Updating with a missing column fails
 UPDATE for_portion_of_test
   FOR PORTION OF invalid_at FROM '2018-06-01' TO NULL
@@ -203,65 +204,78 @@ UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-04-01' TO '2018-04-01'
   SET name = 'three^0'
   WHERE id = '[3,4)';
+UPDATE 0
 -- Updating a finite/open portion with a finite/open target
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-06-01' TO NULL
   SET name = 'three^1'
   WHERE id = '[3,4)';
+UPDATE 2
 -- Updating a finite/open portion with an open/finite target
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM NULL TO '2018-03-01'
   SET name = 'three^2'
   WHERE id = '[3,4)';
+UPDATE 2
 -- Updating an open/finite portion with an open/finite target
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM NULL TO '2018-02-01'
   SET name = 'four^1'
   WHERE id = '[4,5)';
+UPDATE 2
 -- Updating an open/finite portion with a finite/open target
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2017-01-01' TO NULL
   SET name = 'four^2'
   WHERE id = '[4,5)';
+UPDATE 3
 -- Updating a finite/finite portion with an exact fit
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2017-01-01' TO '2018-02-01'
   SET name = 'four^3'
   WHERE id = '[4,5)';
+UPDATE 1
 -- Updating an enclosed span
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM NULL TO NULL
   SET name = 'two^2'
   WHERE id = '[2,3)';
+UPDATE 1
 -- Updating an open/open portion with a finite/finite target
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-01-01' TO '2019-01-01'
   SET name = 'five^1'
   WHERE id = '[5,6)';
+UPDATE 3
 -- Updating an enclosed span with separate protruding spans
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2017-01-01' TO '2020-01-01'
   SET name = 'five^2'
   WHERE id = '[5,6)';
+UPDATE 5
 -- Updating multiple enclosed spans
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM NULL TO NULL
   SET name = 'one^2'
   WHERE id = '[1,2)';
+UPDATE 3
 -- Updating with a direct target
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at (daterange('2018-03-10', '2018-03-17'))
   SET name = 'one^3'
   WHERE id = '[1,2)';
+UPDATE 3
 -- Updating the non-range part of the PK:
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-02-15' TO NULL
   SET id = '[6,7)'
   WHERE id = '[1,2)';
+UPDATE 5
 -- UPDATE with no WHERE clause
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2030-01-01' TO NULL
   SET name = name || '*';
+UPDATE 4
 SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
   id   |        valid_at         |   name   
 -------+-------------------------+----------
@@ -287,6 +301,7 @@ SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
  [6,7) | [2018-03-17,2018-04-04) | one^2
 (20 rows)
 
+\set QUIET true
 -- Updating with a shift/reduce conflict
 -- (requires a tsrange column)
 CREATE UNLOGGED TABLE for_portion_of_test2 (
@@ -437,6 +452,7 @@ INSERT INTO for_portion_of_test (id, valid_at, name) VALUES
   ('[8,9)', '[2018-02-03,2018-03-03)', 'eight'),
   ('[8,9)', '[2018-03-03,2018-04-04)', 'eight')
   ;
+\set QUIET false
 -- Deleting with a missing column fails
 DELETE FROM for_portion_of_test
   FOR PORTION OF invalid_at FROM '2018-06-01' TO NULL
@@ -475,49 +491,61 @@ LINE 2:   FOR PORTION OF valid_at FROM lower(valid_at) TO NULL
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-04-01' TO '2018-04-01'
   WHERE id = '[3,4)';
+DELETE 0
 -- Deleting a finite/open portion with a finite/open target
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-06-01' TO NULL
   WHERE id = '[3,4)';
+DELETE 2
 -- Deleting a finite/open portion with an open/finite target
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM NULL TO '2018-03-01'
   WHERE id = '[6,7)';
+DELETE 2
 -- Deleting an open/finite portion with an open/finite target
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM NULL TO '2018-02-01'
   WHERE id = '[4,5)';
+DELETE 2
 -- Deleting an open/finite portion with a finite/open target
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM '2017-01-01' TO NULL
   WHERE id = '[7,8)';
+DELETE 2
 -- Deleting a finite/finite portion with an exact fit
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-02-01' TO '2018-04-01'
   WHERE id = '[4,5)';
+DELETE 1
 -- Deleting an enclosed span
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM NULL TO NULL
   WHERE id = '[2,3)';
+DELETE 1
 -- Deleting an open/open portion with a finite/finite target
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-01-01' TO '2019-01-01'
   WHERE id = '[5,6)';
+DELETE 3
 -- Deleting an enclosed span with separate protruding spans
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-02-03' TO '2018-03-03'
   WHERE id = '[1,2)';
+DELETE 1
 -- Deleting multiple enclosed spans
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM NULL TO NULL
   WHERE id = '[8,9)';
+DELETE 3
 -- Deleting with a direct target
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at (daterange('2018-03-10', '2018-03-17'))
   WHERE id = '[1,2)';
+DELETE 3
 -- DELETE with no WHERE clause
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM '2030-01-01' TO NULL;
+DELETE 4
 SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
   id   |        valid_at         | name  
 -------+-------------------------+-------
@@ -531,6 +559,7 @@ SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
  [7,8) | (,2017-01-01)           | seven
 (8 rows)
 
+\set QUIET true
 -- UPDATE ... RETURNING returns only the updated values (not the inserted side values)
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-02-01' TO '2018-02-15'

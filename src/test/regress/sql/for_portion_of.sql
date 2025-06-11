@@ -123,6 +123,7 @@ INSERT INTO for_portion_of_test (id, valid_at, name) VALUES
   ('[4,5)', '(,2018-04-01)', 'four'),
   ('[5,6)', '(,)', 'five')
   ;
+\set QUIET false
 
 -- Updating with a missing column fails
 UPDATE for_portion_of_test
@@ -238,6 +239,7 @@ UPDATE for_portion_of_test
   SET name = name || '*';
 
 SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
+\set QUIET true
 
 -- Updating with a shift/reduce conflict
 -- (requires a tsrange column)
@@ -357,6 +359,7 @@ INSERT INTO for_portion_of_test (id, valid_at, name) VALUES
   ('[8,9)', '[2018-02-03,2018-03-03)', 'eight'),
   ('[8,9)', '[2018-03-03,2018-04-04)', 'eight')
   ;
+\set QUIET false
 
 -- Deleting with a missing column fails
 DELETE FROM for_portion_of_test
@@ -443,6 +446,7 @@ DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM '2030-01-01' TO NULL;
 
 SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
+\set QUIET true
 
 -- UPDATE ... RETURNING returns only the updated values (not the inserted side values)
 UPDATE for_portion_of_test
