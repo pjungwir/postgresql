@@ -76,8 +76,9 @@ UPDATE [ ONLY ] <replaceable class="parameter">table_name</replaceable> [ * ]
   </para>
 
   <para>
-   These secondary inserts fire <literal>INSERT</literal> triggers. First
-   <literal>BEFORE UPDATE</literal> triggers first, then
+   These secondary inserts fire <literal>INSERT</literal> triggers.
+   Both <literal>STATEMENT</literal> and <literal>ROW</literal> triggers are fired.
+   The <literal>BEFORE UPDATE</literal> triggers are fired first, then
    <literal>BEFORE INSERT</literal>, then <literal>AFTER INSERT</literal>,
    then <literal>AFTER UPDATE</literal>.
   </para>
@@ -370,6 +371,9 @@ UPDATE <replaceable class="parameter">count</replaceable>
    updates were suppressed by a <literal>BEFORE UPDATE</literal> trigger.  If
    <replaceable class="parameter">count</replaceable> is 0, no rows were
    updated by the query (this is not considered an error).
+   If <literal>FOR PORTION OF</literal> was used, the
+   <replaceable class="parameter">count</replaceable> also includes temporal
+   leftovers that were inserted.
   </para>
 
   <para>
