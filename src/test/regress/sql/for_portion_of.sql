@@ -8,48 +8,48 @@ CREATE TABLE for_portion_of_test (
   valid_at daterange,
   name text NOT NULL
 );
-INSERT INTO for_portion_of_test VALUES
-('[1,2)', '[2018-01-02,2020-01-01)', 'one');
+INSERT INTO for_portion_of_test (id, valid_at, name) VALUES
+  ('[1,2)', '[2018-01-02,2020-01-01)', 'one');
 
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-01-15' TO '2019-01-01'
-SET name = 'one^1';
+  FOR PORTION OF valid_at FROM '2018-01-15' TO '2019-01-01'
+  SET name = 'one^1';
 
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid_at FROM '2019-01-15' TO '2019-01-20';
+  FOR PORTION OF valid_at FROM '2019-01-15' TO '2019-01-20';
 
 -- With a table alias with AS
 
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2019-02-01' TO '2019-02-03' AS t
-SET name = 'one^2';
+  FOR PORTION OF valid_at FROM '2019-02-01' TO '2019-02-03' AS t
+  SET name = 'one^2';
 
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid_at FROM '2019-02-03' TO '2019-02-04' AS t;
+  FOR PORTION OF valid_at FROM '2019-02-03' TO '2019-02-04' AS t;
 
 -- With a table alias without AS
 
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2019-02-04' TO '2019-02-05' t
-SET name = 'one^3';
+  FOR PORTION OF valid_at FROM '2019-02-04' TO '2019-02-05' t
+  SET name = 'one^3';
 
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid_at FROM '2019-02-05' TO '2019-02-06' t;
+  FOR PORTION OF valid_at FROM '2019-02-05' TO '2019-02-06' t;
 
 -- UPDATE with FROM
 
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2019-03-01' to '2019-03-02'
-SET name = 'one^4'
-FROM (SELECT '[1,2)'::int4range) AS t2(id)
-WHERE for_portion_of_test.id = t2.id;
+  FOR PORTION OF valid_at FROM '2019-03-01' to '2019-03-02'
+  SET name = 'one^4'
+  FROM (SELECT '[1,2)'::int4range) AS t2(id)
+  WHERE for_portion_of_test.id = t2.id;
 
 -- DELETE with USING
 
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid_at FROM '2019-03-02' TO '2019-03-03'
-USING (SELECT '[1,2)'::int4range) AS t2(id)
-WHERE for_portion_of_test.id = t2.id;
+  FOR PORTION OF valid_at FROM '2019-03-02' TO '2019-03-03'
+  USING (SELECT '[1,2)'::int4range) AS t2(id)
+  WHERE for_portion_of_test.id = t2.id;
 
 SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
 
@@ -61,26 +61,26 @@ CREATE TABLE for_portion_of_test (
   valid2_at daterange,
   name text NOT NULL
 );
-INSERT INTO for_portion_of_test VALUES
-('[1,2)', '[2018-01-02,2018-02-03)', '[2015-01-01,2025-01-01)', 'one');
+INSERT INTO for_portion_of_test (id, valid1_at, valid2_at, name) VALUES
+  ('[1,2)', '[2018-01-02,2018-02-03)', '[2015-01-01,2025-01-01)', 'one');
 
 UPDATE for_portion_of_test
-FOR PORTION OF valid1_at FROM '2018-01-15' TO NULL
-SET name = 'foo';
-SELECT * FROM for_portion_of_test ORDER BY id, valid1_at, valid2_at;
+  FOR PORTION OF valid1_at FROM '2018-01-15' TO NULL
+  SET name = 'foo';
+  SELECT * FROM for_portion_of_test ORDER BY id, valid1_at, valid2_at;
 
 UPDATE for_portion_of_test
-FOR PORTION OF valid2_at FROM '2018-01-15' TO NULL
-SET name = 'bar';
-SELECT * FROM for_portion_of_test ORDER BY id, valid1_at, valid2_at;
+  FOR PORTION OF valid2_at FROM '2018-01-15' TO NULL
+  SET name = 'bar';
+  SELECT * FROM for_portion_of_test ORDER BY id, valid1_at, valid2_at;
 
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid1_at FROM '2018-01-20' TO NULL;
-SELECT * FROM for_portion_of_test ORDER BY id, valid1_at, valid2_at;
+  FOR PORTION OF valid1_at FROM '2018-01-20' TO NULL;
+  SELECT * FROM for_portion_of_test ORDER BY id, valid1_at, valid2_at;
 
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid2_at FROM '2018-01-20' TO NULL;
-SELECT * FROM for_portion_of_test ORDER BY id, valid1_at, valid2_at;
+  FOR PORTION OF valid2_at FROM '2018-01-20' TO NULL;
+  SELECT * FROM for_portion_of_test ORDER BY id, valid1_at, valid2_at;
 
 -- Test with NULLs in the scalar/range key columns.
 -- This won't happen if there is a PRIMARY KEY or UNIQUE constraint
@@ -91,7 +91,7 @@ CREATE UNLOGGED TABLE for_portion_of_test (
   valid_at daterange,
   name text
 );
-INSERT INTO for_portion_of_test VALUES
+INSERT INTO for_portion_of_test (id, valid_at, name) VALUES
   ('[1,2)', NULL, '1 null'),
   ('[1,2)', '(,)', '1 unbounded'),
   ('[1,2)', 'empty', '1 empty'),
@@ -109,16 +109,15 @@ CREATE TABLE for_portion_of_test (
   name text NOT NULL,
   CONSTRAINT for_portion_of_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
-INSERT INTO for_portion_of_test
-VALUES
-('[1,2)', '[2018-01-02,2018-02-03)', 'one'),
-('[1,2)', '[2018-02-03,2018-03-03)', 'one'),
-('[1,2)', '[2018-03-03,2018-04-04)', 'one'),
-('[2,3)', '[2018-01-01,2018-01-05)', 'two'),
-('[3,4)', '[2018-01-01,)', 'three'),
-('[4,5)', '(,2018-04-01)', 'four'),
-('[5,6)', '(,)', 'five')
-;
+INSERT INTO for_portion_of_test (id, valid_at, name) VALUES
+  ('[1,2)', '[2018-01-02,2018-02-03)', 'one'),
+  ('[1,2)', '[2018-02-03,2018-03-03)', 'one'),
+  ('[1,2)', '[2018-03-03,2018-04-04)', 'one'),
+  ('[2,3)', '[2018-01-01,2018-01-05)', 'two'),
+  ('[3,4)', '[2018-01-01,)', 'three'),
+  ('[4,5)', '(,2018-04-01)', 'four'),
+  ('[5,6)', '(,)', 'five')
+  ;
 
 --
 -- UPDATE tests
@@ -126,116 +125,116 @@ VALUES
 
 -- Setting with a missing column fails
 UPDATE for_portion_of_test
-FOR PORTION OF invalid_at FROM '2018-06-01' TO NULL
-SET name = 'foo'
-WHERE id = '[5,6)';
+  FOR PORTION OF invalid_at FROM '2018-06-01' TO NULL
+  SET name = 'foo'
+  WHERE id = '[5,6)';
 
 -- Setting the range fails
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-06-01' TO NULL
-SET valid_at = '[1990-01-01,1999-01-01)'
-WHERE id = '[5,6)';
+  FOR PORTION OF valid_at FROM '2018-06-01' TO NULL
+  SET valid_at = '[1990-01-01,1999-01-01)'
+  WHERE id = '[5,6)';
 
 -- The wrong type fails
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM 1 TO 4
-SET name = 'nope'
-WHERE id = '[3,4)';
+  FOR PORTION OF valid_at FROM 1 TO 4
+  SET name = 'nope'
+  WHERE id = '[3,4)';
 
 -- Setting with timestamps reversed fails
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-06-01' TO '2018-01-01'
-SET name = 'three^1'
-WHERE id = '[3,4)';
+  FOR PORTION OF valid_at FROM '2018-06-01' TO '2018-01-01'
+  SET name = 'three^1'
+  WHERE id = '[3,4)';
 
 -- Setting with a subquery fails
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM (SELECT '2018-01-01') TO '2018-06-01'
-SET name = 'nope'
-WHERE id = '[3,4)';
+  FOR PORTION OF valid_at FROM (SELECT '2018-01-01') TO '2018-06-01'
+  SET name = 'nope'
+  WHERE id = '[3,4)';
 
 -- Setting with a column fails
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM lower(valid_at) TO NULL
-SET name = 'nope'
-WHERE id = '[3,4)';
+  FOR PORTION OF valid_at FROM lower(valid_at) TO NULL
+  SET name = 'nope'
+  WHERE id = '[3,4)';
 
 -- Setting with timestamps equal does nothing
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-04-01' TO '2018-04-01'
-SET name = 'three^0'
-WHERE id = '[3,4)';
+  FOR PORTION OF valid_at FROM '2018-04-01' TO '2018-04-01'
+  SET name = 'three^0'
+  WHERE id = '[3,4)';
 
 -- Updating a finite/open portion with a finite/open target
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-06-01' TO NULL
-SET name = 'three^1'
-WHERE id = '[3,4)';
+  FOR PORTION OF valid_at FROM '2018-06-01' TO NULL
+  SET name = 'three^1'
+  WHERE id = '[3,4)';
 
 -- Updating a finite/open portion with an open/finite target
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM NULL TO '2018-03-01'
-SET name = 'three^2'
-WHERE id = '[3,4)';
+  FOR PORTION OF valid_at FROM NULL TO '2018-03-01'
+  SET name = 'three^2'
+  WHERE id = '[3,4)';
 
 -- Updating an open/finite portion with an open/finite target
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM NULL TO '2018-02-01'
-SET name = 'four^1'
-WHERE id = '[4,5)';
+  FOR PORTION OF valid_at FROM NULL TO '2018-02-01'
+  SET name = 'four^1'
+  WHERE id = '[4,5)';
 
 -- Updating an open/finite portion with a finite/open target
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2017-01-01' TO NULL
-SET name = 'four^2'
-WHERE id = '[4,5)';
+  FOR PORTION OF valid_at FROM '2017-01-01' TO NULL
+  SET name = 'four^2'
+  WHERE id = '[4,5)';
 
 -- Updating a finite/finite portion with an exact fit
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2017-01-01' TO '2018-02-01'
-SET name = 'four^3'
-WHERE id = '[4,5)';
+  FOR PORTION OF valid_at FROM '2017-01-01' TO '2018-02-01'
+  SET name = 'four^3'
+  WHERE id = '[4,5)';
 
 -- Updating an enclosed span
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM NULL TO NULL
-SET name = 'two^2'
-WHERE id = '[2,3)';
+  FOR PORTION OF valid_at FROM NULL TO NULL
+  SET name = 'two^2'
+  WHERE id = '[2,3)';
 
 -- Updating an open/open portion with a finite/finite target
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-01-01' TO '2019-01-01'
-SET name = 'five^1'
-WHERE id = '[5,6)';
+  FOR PORTION OF valid_at FROM '2018-01-01' TO '2019-01-01'
+  SET name = 'five^1'
+  WHERE id = '[5,6)';
 
 -- Updating an enclosed span with separate protruding spans
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2017-01-01' TO '2020-01-01'
-SET name = 'five^2'
-WHERE id = '[5,6)';
+  FOR PORTION OF valid_at FROM '2017-01-01' TO '2020-01-01'
+  SET name = 'five^2'
+  WHERE id = '[5,6)';
 
 -- Updating multiple enclosed spans
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM NULL TO NULL
-SET name = 'one^2'
-WHERE id = '[1,2)';
+  FOR PORTION OF valid_at FROM NULL TO NULL
+  SET name = 'one^2'
+  WHERE id = '[1,2)';
 
 -- With a direct target
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at (daterange('2018-03-10', '2018-03-17'))
-SET name = 'one^3'
-WHERE id = '[1,2)';
+  FOR PORTION OF valid_at (daterange('2018-03-10', '2018-03-17'))
+  SET name = 'one^3'
+  WHERE id = '[1,2)';
 
 -- Updating the non-range part of the PK:
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-02-15' TO NULL
-SET id = '[6,7)'
-WHERE id = '[1,2)';
+  FOR PORTION OF valid_at FROM '2018-02-15' TO NULL
+  SET id = '[6,7)'
+  WHERE id = '[1,2)';
 
 -- UPDATE with no WHERE clause
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2030-01-01' TO NULL
-SET name = name || '*';
+  FOR PORTION OF valid_at FROM '2030-01-01' TO NULL
+  SET name = name || '*';
 
 SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
 
@@ -246,33 +245,33 @@ CREATE UNLOGGED TABLE for_portion_of_test2 (
   valid_at tsrange,
   name text
 );
-INSERT INTO for_portion_of_test2 (id, valid_at, name)
-  VALUES ('[1,2)', '[2000-01-01,2020-01-01)', 'one');
+INSERT INTO for_portion_of_test2 (id, valid_at, name) VALUES
+  ('[1,2)', '[2000-01-01,2020-01-01)', 'one');
 -- updates [2011-03-01 01:02:00, 2012-01-01) (note 2 minutes)
 UPDATE for_portion_of_test2
-FOR PORTION OF valid_at
-  FROM '2011-03-01'::timestamp + INTERVAL '1:02:03' HOUR TO MINUTE
-  TO '2012-01-01'
-SET name = 'one^1'
-WHERE id = '[1,2)';
+  FOR PORTION OF valid_at
+    FROM '2011-03-01'::timestamp + INTERVAL '1:02:03' HOUR TO MINUTE
+    TO '2012-01-01'
+  SET name = 'one^1'
+  WHERE id = '[1,2)';
 
 -- TO is used for the bound but not the INTERVAL:
 -- syntax error
 UPDATE for_portion_of_test2
-FOR PORTION OF valid_at
-  FROM '2013-03-01'::timestamp + INTERVAL '1:02:03' HOUR
-  TO '2014-01-01'
-SET name = 'one^2'
-WHERE id = '[1,2)';
+  FOR PORTION OF valid_at
+    FROM '2013-03-01'::timestamp + INTERVAL '1:02:03' HOUR
+    TO '2014-01-01'
+  SET name = 'one^2'
+  WHERE id = '[1,2)';
 
 -- adding parens fixes it
 -- updates [2015-03-01 01:00:00, 2016-01-01) (no minutes)
 UPDATE for_portion_of_test2
-FOR PORTION OF valid_at
-  FROM ('2015-03-01'::timestamp + INTERVAL '1:02:03' HOUR)
-  TO '2016-01-01'
-SET name = 'one^3'
-WHERE id = '[1,2)';
+  FOR PORTION OF valid_at
+    FROM ('2015-03-01'::timestamp + INTERVAL '1:02:03' HOUR)
+    TO '2016-01-01'
+  SET name = 'one^3'
+  WHERE id = '[1,2)';
 
 SELECT * FROM for_portion_of_test2 ORDER BY id, valid_at;
 DROP TABLE for_portion_of_test2;
@@ -280,14 +279,14 @@ DROP TABLE for_portion_of_test2;
 -- UPDATE FOR PORTION OF in a CTE:
 
 -- Visible to SELECT:
-INSERT INTO for_portion_of_test (id, valid_at, name)
-  VALUES ('[10,11)', '[2018-01-01,2020-01-01)', 'ten');
+INSERT INTO for_portion_of_test (id, valid_at, name) VALUES
+  ('[10,11)', '[2018-01-01,2020-01-01)', 'ten');
 WITH update_apr AS (
   UPDATE for_portion_of_test
-  FOR PORTION OF valid_at FROM '2018-04-01' TO '2018-05-01'
-  SET name = 'Apr 2018'
-  WHERE id = '[10,11)'
-  RETURNING id, valid_at, name
+    FOR PORTION OF valid_at FROM '2018-04-01' TO '2018-05-01'
+    SET name = 'Apr 2018'
+    WHERE id = '[10,11)'
+    RETURNING id, valid_at, name
 )
 SELECT *
   FROM for_portion_of_test AS t, update_apr
@@ -297,14 +296,14 @@ SELECT * FROM for_portion_of_test WHERE id = '[10,11)';
 -- Not visible to UPDATE:
 -- Tuples updated/inserted within the CTE are not visible to the main query yet,
 -- but neither are old tuples the CTE changed:
-INSERT INTO for_portion_of_test (id, valid_at, name)
-  VALUES ('[11,12)', '[2018-01-01,2020-01-01)', 'eleven');
+INSERT INTO for_portion_of_test (id, valid_at, name) VALUES
+  ('[11,12)', '[2018-01-01,2020-01-01)', 'eleven');
 WITH update_apr AS (
   UPDATE for_portion_of_test
-  FOR PORTION OF valid_at FROM '2018-04-01' TO '2018-05-01'
-  SET name = 'Apr 2018'
-  WHERE id = '[11,12)'
-  RETURNING id, valid_at, name
+    FOR PORTION OF valid_at FROM '2018-04-01' TO '2018-05-01'
+    SET name = 'Apr 2018'
+    WHERE id = '[11,12)'
+    RETURNING id, valid_at, name
 )
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-05-01' TO '2018-06-01'
@@ -316,15 +315,16 @@ SELECT * FROM for_portion_of_test WHERE id = '[11,12)';
 DELETE FROM for_portion_of_test WHERE id IN ('[10,11)', '[11,12)');
 
 -- UPDATE FOR PORTION OF in a PL/pgSQL function
-INSERT INTO for_portion_of_test (id, valid_at, name)
-  VALUES ('[10,11)', '[2018-01-01,2020-01-01)', 'ten');
+INSERT INTO for_portion_of_test (id, valid_at, name) VALUES
+  ('[10,11)', '[2018-01-01,2020-01-01)', 'ten');
 CREATE FUNCTION fpo_update(_id int4range, _target_from date, _target_til date)
 RETURNS void LANGUAGE plpgsql AS
 $$
 BEGIN
-  UPDATE for_portion_of_test FOR PORTION OF valid_at FROM $2 TO $3
-  SET name = concat(_target_from::text, ' to ', _target_til::text)
-  WHERE id = $1;
+  UPDATE for_portion_of_test
+    FOR PORTION OF valid_at FROM $2 TO $3
+    SET name = concat(_target_from::text, ' to ', _target_til::text)
+    WHERE id = $1;
 END;
 $$;
 SELECT fpo_update('[10,11)', '2015-01-01', '2019-01-01');
@@ -337,67 +337,68 @@ DELETE FROM for_portion_of_test WHERE id IN ('[10,11)');
 
 -- Deleting with a missing column fails
 DELETE FROM for_portion_of_test
-FOR PORTION OF invalid_at FROM '2018-06-01' TO NULL
-WHERE id = '[5,6)';
+  FOR PORTION OF invalid_at FROM '2018-06-01' TO NULL
+  WHERE id = '[5,6)';
 
 -- Deleting with timestamps reversed fails
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-06-01' TO '2018-01-01'
-WHERE id = '[3,4)';
+  FOR PORTION OF valid_at FROM '2018-06-01' TO '2018-01-01'
+  WHERE id = '[3,4)';
 
 -- Deleting with timestamps equal does nothing
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-04-01' TO '2018-04-01'
-WHERE id = '[3,4)';
+  FOR PORTION OF valid_at FROM '2018-04-01' TO '2018-04-01'
+  WHERE id = '[3,4)';
 
 -- Deleting with a closed/closed target
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-06-01' TO '2020-06-01'
-WHERE id = '[5,6)';
+  FOR PORTION OF valid_at FROM '2018-06-01' TO '2020-06-01'
+  WHERE id = '[5,6)';
 
 -- Deleting with a closed/open target
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-04-01' TO NULL
-WHERE id = '[3,4)';
+  FOR PORTION OF valid_at FROM '2018-04-01' TO NULL
+  WHERE id = '[3,4)';
 
 -- Deleting with an open/closed target
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid_at FROM NULL TO '2018-02-08'
-WHERE id = '[1,2)';
+  FOR PORTION OF valid_at FROM NULL TO '2018-02-08'
+  WHERE id = '[1,2)';
 
 -- Deleting with an open/open target
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid_at FROM NULL TO NULL
-WHERE id = '[6,7)';
+  FOR PORTION OF valid_at FROM NULL TO NULL
+  WHERE id = '[6,7)';
 
 -- DELETE with no WHERE clause
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid_at FROM '2025-01-01' TO NULL;
+  FOR PORTION OF valid_at FROM '2025-01-01' TO NULL;
 
 SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
 
 -- UPDATE ... RETURNING returns only the updated values (not the inserted side values)
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-02-01' TO '2018-02-15'
-SET name = 'three^3'
-WHERE id = '[3,4)'
-RETURNING *;
+  FOR PORTION OF valid_at FROM '2018-02-01' TO '2018-02-15'
+  SET name = 'three^3'
+  WHERE id = '[3,4)'
+  RETURNING *;
 
 -- DELETE ... RETURNING returns the deleted values (regardless of bounds)
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid_at FROM '2018-02-02' TO '2018-02-03'
-WHERE id = '[3,4)'
-RETURNING *;
+  FOR PORTION OF valid_at FROM '2018-02-02' TO '2018-02-03'
+  WHERE id = '[3,4)'
+  RETURNING *;
 
 -- DELETE FOR PORTION OF in a PL/pgSQL function
-INSERT INTO for_portion_of_test (id, valid_at, name)
-  VALUES ('[10,11)', '[2018-01-01,2020-01-01)', 'ten');
+INSERT INTO for_portion_of_test (id, valid_at, name) VALUES
+  ('[10,11)', '[2018-01-01,2020-01-01)', 'ten');
 CREATE FUNCTION fpo_delete(_id int4range, _target_from date, _target_til date)
 RETURNS void LANGUAGE plpgsql AS
 $$
 BEGIN
-  DELETE FROM for_portion_of_test FOR PORTION OF valid_at FROM $2 TO $3
-  WHERE id = $1;
+  DELETE FROM for_portion_of_test
+    FOR PORTION OF valid_at FROM $2 TO $3
+    WHERE id = $1;
 END;
 $$;
 SELECT fpo_delete('[10,11)', '2015-01-01', '2019-01-01');
@@ -471,13 +472,13 @@ FOR EACH ROW EXECUTE PROCEDURE dump_trigger(false, false);
 
 
 UPDATE for_portion_of_test
-FOR PORTION OF valid_at FROM '2021-01-01' TO '2022-01-01'
-SET name = 'five^3'
-WHERE id = '[5,6)';
+  FOR PORTION OF valid_at FROM '2021-01-01' TO '2022-01-01'
+  SET name = 'five^3'
+  WHERE id = '[5,6)';
 
 DELETE FROM for_portion_of_test
-FOR PORTION OF valid_at FROM '2023-01-01' TO '2024-01-01'
-WHERE id = '[5,6)';
+  FOR PORTION OF valid_at FROM '2023-01-01' TO '2024-01-01'
+  WHERE id = '[5,6)';
 
 SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
 
@@ -559,7 +560,8 @@ CREATE TABLE for_portion_of_test (
   valid_at daterange,
   name text
 );
-INSERT INTO for_portion_of_test VALUES ('[1,2)', '[2018-01-01,2020-01-01)', 'one');
+INSERT INTO for_portion_of_test (id, valid_at, name) VALUES
+  ('[1,2)', '[2018-01-01,2020-01-01)', 'one');
 
 CREATE CONSTRAINT TRIGGER fpo_after_insert_row
 AFTER INSERT ON for_portion_of_test
@@ -602,22 +604,21 @@ CREATE TABLE for_portion_of_test2 (
   name text NOT NULL,
   CONSTRAINT for_portion_of_test2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
-INSERT INTO for_portion_of_test2
-VALUES
-('[1,2)', datemultirange(daterange('2018-01-02', '2018-02-03)'), daterange('2018-02-04', '2018-03-03')), 'one'),
-('[1,2)', datemultirange(daterange('2018-03-03', '2018-04-04)')), 'one'),
-('[2,3)', datemultirange(daterange('2018-01-01', '2018-05-01)')), 'two'),
-('[3,4)', datemultirange(daterange('2018-01-01', null)), 'three');
-;
+INSERT INTO for_portion_of_test2 (id, valid_at, name) VALUES
+  ('[1,2)', datemultirange(daterange('2018-01-02', '2018-02-03)'), daterange('2018-02-04', '2018-03-03')), 'one'),
+  ('[1,2)', datemultirange(daterange('2018-03-03', '2018-04-04)')), 'one'),
+  ('[2,3)', datemultirange(daterange('2018-01-01', '2018-05-01)')), 'two'),
+  ('[3,4)', datemultirange(daterange('2018-01-01', null)), 'three');
+  ;
 
 UPDATE for_portion_of_test2
-FOR PORTION OF valid_at (datemultirange(daterange('2018-01-10', '2018-02-10'), daterange('2018-03-05', '2018-05-01')))
-SET name = 'one^1'
-WHERE id = '[1,2)';
+  FOR PORTION OF valid_at (datemultirange(daterange('2018-01-10', '2018-02-10'), daterange('2018-03-05', '2018-05-01')))
+  SET name = 'one^1'
+  WHERE id = '[1,2)';
 
 DELETE FROM for_portion_of_test2
-FOR PORTION OF valid_at (datemultirange(daterange('2018-01-15', '2018-02-15'), daterange('2018-03-01', '2018-03-15')))
-WHERE id = '[2,3)';
+  FOR PORTION OF valid_at (datemultirange(daterange('2018-01-15', '2018-02-15'), daterange('2018-03-01', '2018-03-15')))
+  WHERE id = '[2,3)';
 
 SELECT * FROM for_portion_of_test2 ORDER BY id, valid_at;
 
@@ -633,23 +634,22 @@ CREATE TABLE for_portion_of_test2 (
   name text NOT NULL,
   CONSTRAINT for_portion_of_test2_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
 );
-INSERT INTO for_portion_of_test2
-VALUES
-('[1,2)', '[2018-01-02,2018-02-03)', 'one'),
-('[1,2)', '[2018-02-03,2018-03-03)', 'one'),
-('[1,2)', '[2018-03-03,2018-04-04)', 'one'),
-('[2,3)', '[2018-01-01,2018-05-01)', 'two'),
-('[3,4)', '[2018-01-01,)', 'three');
-;
+INSERT INTO for_portion_of_test2 (id, valid_at, name) VALUES
+  ('[1,2)', '[2018-01-02,2018-02-03)', 'one'),
+  ('[1,2)', '[2018-02-03,2018-03-03)', 'one'),
+  ('[1,2)', '[2018-03-03,2018-04-04)', 'one'),
+  ('[2,3)', '[2018-01-01,2018-05-01)', 'two'),
+  ('[3,4)', '[2018-01-01,)', 'three');
+  ;
 
 UPDATE for_portion_of_test2
-FOR PORTION OF valid_at FROM '2018-01-10' TO '2018-02-10'
-SET name = 'one^1'
-WHERE id = '[1,2)';
+  FOR PORTION OF valid_at FROM '2018-01-10' TO '2018-02-10'
+  SET name = 'one^1'
+  WHERE id = '[1,2)';
 
 DELETE FROM for_portion_of_test2
-FOR PORTION OF valid_at FROM '2018-01-15' TO '2018-02-15'
-WHERE id = '[2,3)';
+  FOR PORTION OF valid_at FROM '2018-01-15' TO '2018-02-15'
+  WHERE id = '[2,3)';
 
 SELECT * FROM for_portion_of_test2 ORDER BY id, valid_at;
 
@@ -681,7 +681,7 @@ ALTER TABLE temporal_partitioned_5 DROP COLUMN id, DROP COLUMN valid_at;
 ALTER TABLE temporal_partitioned_5 ADD COLUMN valid_at daterange NOT NULL, ADD COLUMN id int4range NOT NULL;
 ALTER TABLE temporal_partitioned ATTACH PARTITION temporal_partitioned_5 FOR VALUES IN ('[5,6)', '[6,7)');
 
-INSERT INTO temporal_partitioned VALUES
+INSERT INTO temporal_partitioned (id, valid_at, name) VALUES
   ('[1,2)', daterange('2000-01-01', '2010-01-01'), 'one'),
   ('[3,4)', daterange('2000-01-01', '2010-01-01'), 'three'),
   ('[5,6)', daterange('2000-01-01', '2010-01-01'), 'five');
