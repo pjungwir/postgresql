@@ -315,6 +315,22 @@ UPDATE for_portion_of_test
 SELECT * FROM for_portion_of_test WHERE id = '[11,12)';
 DELETE FROM for_portion_of_test WHERE id IN ('[10,11)', '[11,12)');
 
+-- UPDATE FOR PORTION OF in a PL/pgSQL function
+INSERT INTO for_portion_of_test (id, valid_at, name)
+  VALUES ('[10,11)', '[2018-01-01,2020-01-01)', 'ten');
+CREATE FUNCTION fpo_update(_id int4range, _target_from date, _target_til date)
+RETURNS void LANGUAGE plpgsql AS
+$$
+BEGIN
+  UPDATE for_portion_of_test FOR PORTION OF valid_at FROM $2 TO $3
+  SET name = concat(_target_from::text, ' to ', _target_til::text)
+  WHERE id = $1;
+END;
+$$;
+SELECT fpo_update('[10,11)', '2015-01-01', '2019-01-01');
+SELECT * FROM for_portion_of_test WHERE id = '[10,11)';
+DELETE FROM for_portion_of_test WHERE id IN ('[10,11)');
+
 --
 -- DELETE tests
 --
@@ -372,6 +388,22 @@ DELETE FROM for_portion_of_test
 FOR PORTION OF valid_at FROM '2018-02-02' TO '2018-02-03'
 WHERE id = '[3,4)'
 RETURNING *;
+
+-- DELETE FOR PORTION OF in a PL/pgSQL function
+INSERT INTO for_portion_of_test (id, valid_at, name)
+  VALUES ('[10,11)', '[2018-01-01,2020-01-01)', 'ten');
+CREATE FUNCTION fpo_delete(_id int4range, _target_from date, _target_til date)
+RETURNS void LANGUAGE plpgsql AS
+$$
+BEGIN
+  DELETE FROM for_portion_of_test FOR PORTION OF valid_at FROM $2 TO $3
+  WHERE id = $1;
+END;
+$$;
+SELECT fpo_delete('[10,11)', '2015-01-01', '2019-01-01');
+SELECT * FROM for_portion_of_test WHERE id = '[10,11)';
+DELETE FROM for_portion_of_test WHERE id IN ('[10,11)');
+
 
 -- test that we run triggers on the UPDATE/DELETEd row and the INSERTed rows
 
