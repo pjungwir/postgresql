@@ -128,7 +128,8 @@ typedef struct RI_ConstraintInfo
 	Oid			ff_eq_oprs[RI_MAX_NUMKEYS]; /* equality operators (FK = FK) */
 	Oid			period_contained_by_oper;	/* anyrange <@ anyrange */
 	Oid			agged_period_contained_by_oper; /* fkattr <@ range_agg(pkattr) */
-	Oid			period_intersect_oper;	/* anyrange * anyrange */
+	Oid			period_intersect_oper;	/* anyrange * anyrange (or multirange) */
+	Oid			period_intersect_proc;	/* anyrange * anyrange (or multirange) */
 	dlist_node	valid_link;		/* Link in list of valid entries */
 } RI_ConstraintInfo;
 
@@ -2337,10 +2338,11 @@ ri_LoadConstraintInfo(Oid constraintOid)
 	{
 		Oid			opclass = get_index_column_opclass(conForm->conindid, riinfo->nkeys);
 
-		FindFKPeriodOpers(opclass,
-						  &riinfo->period_contained_by_oper,
-						  &riinfo->agged_period_contained_by_oper,
-						  &riinfo->period_intersect_oper);
+		FindFKPeriodOpersAndProcs(opclass,
+								  &riinfo->period_contained_by_oper,
+								  &riinfo->agged_period_contained_by_oper,
+								  &riinfo->period_intersect_oper,
+								  &riinfo->period_intersect_proc);
 	}
 
 	ReleaseSysCache(tup);

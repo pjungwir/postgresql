@@ -1635,7 +1635,7 @@ DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
 }
 
 /*
- * FindFKPeriodOpers -
+ * FindFKPeriodOpersAndProcs -
  *
  * Looks up the operator oids used for the PERIOD part of a temporal foreign key.
  * The opclass should be the opclass of that PERIOD element.
@@ -1646,12 +1646,15 @@ DeconstructFkConstraintRow(HeapTuple tuple, int *numfks,
  * That way foreign keys can compare fkattr <@ range_agg(pkattr).
  * intersectoperoid is used by NO ACTION constraints to trim the range being considered
  * to just what was updated/deleted.
+ * intersectprocoid is used to limit the effect of CASCADE/SET NULL/SET DEFAULT
+ * when the PK record is changed with FOR PORTION OF.
  */
 void
-FindFKPeriodOpers(Oid opclass,
-				  Oid *containedbyoperoid,
-				  Oid *aggedcontainedbyoperoid,
-				  Oid *intersectoperoid)
+FindFKPeriodOpersAndProcs(Oid opclass,
+						  Oid *containedbyoperoid,
+						  Oid *aggedcontainedbyoperoid,
+						  Oid *intersectoperoid,
+						  Oid *intersectprocoid)
 {
 	Oid			opfamily = InvalidOid;
 	Oid			opcintype = InvalidOid;
@@ -1693,6 +1696,17 @@ FindFKPeriodOpers(Oid opclass,
 							   aggedcontainedbyoperoid,
 							   &strat);
 
+	/*
+	 * Hardcode intersect operators for ranges and multiranges, because we
+	 * don't have a better way to look up operators that aren't used in
+	 * indexes.
+	 *
+	 * If you change this code, you must change the code in
+	 * transformForPortionOfClause.
+	 *
+	 * XXX: Find a more extensible way to look up the operator, permitting
+	 * user-defined types.
+	 */
 	switch (opcintype)
 	{
 		case ANYRANGEOID:
@@ -1704,6 +1718,14 @@ FindFKPeriodOpers(Oid opclass,
 		default:
 			elog(ERROR, "unexpected opcintype: %u", opcintype);
 	}
+
+	/*
+	 * Look up the intersect proc. We use this in temporal foreign keys with
+	 * CASCADE/SET NULL/SET DEFAULT to build the FOR PORTION OF bounds. If
+	 * this is missing we don't need to complain here, because FOR PORTION OF
+	 * will not be allowed.
+	 */
+	*intersectprocoid = get_opcode(*intersectoperoid);
 }
 
 /*
