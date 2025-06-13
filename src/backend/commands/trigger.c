@@ -47,12 +47,14 @@
 #include "storage/lmgr.h"
 #include "utils/acl.h"
 #include "utils/builtins.h"
+#include "utils/datum.h"
 #include "utils/fmgroids.h"
 #include "utils/guc_hooks.h"
 #include "utils/inval.h"
 #include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/plancache.h"
+#include "utils/rangetypes.h"
 #include "utils/rel.h"
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
@@ -2649,6 +2651,7 @@ ExecBSDeleteTriggers(EState *estate, ResultRelInfo *relinfo)
 	LocTriggerData.tg_event = TRIGGER_EVENT_DELETE |
 		TRIGGER_EVENT_BEFORE;
 	LocTriggerData.tg_relation = relinfo->ri_RelationDesc;
+	LocTriggerData.tg_temporal = relinfo->ri_forPortionOf;
 	for (i = 0; i < trigdesc->numtriggers; i++)
 	{
 		Trigger    *trigger = &trigdesc->triggers[i];
@@ -2757,6 +2760,7 @@ ExecBRDeleteTriggers(EState *estate, EPQState *epqstate,
 		TRIGGER_EVENT_ROW |
 		TRIGGER_EVENT_BEFORE;
 	LocTriggerData.tg_relation = relinfo->ri_RelationDesc;
+	LocTriggerData.tg_temporal = relinfo->ri_forPortionOf;
 	for (i = 0; i < trigdesc->numtriggers; i++)
 	{
 		HeapTuple	newtuple;
@@ -2858,6 +2862,7 @@ ExecIRDeleteTriggers(EState *estate, ResultRelInfo *relinfo,
 		TRIGGER_EVENT_ROW |
 		TRIGGER_EVENT_INSTEAD;
 	LocTriggerData.tg_relation = relinfo->ri_RelationDesc;
+	LocTriggerData.tg_temporal = relinfo->ri_forPortionOf;
 
 	ExecForceStoreHeapTuple(trigtuple, slot, false);
 
@@ -2921,6 +2926,7 @@ ExecBSUpdateTriggers(EState *estate, ResultRelInfo *relinfo)
 		TRIGGER_EVENT_BEFORE;
 	LocTriggerData.tg_relation = relinfo->ri_RelationDesc;
 	LocTriggerData.tg_updatedcols = updatedCols;
+	LocTriggerData.tg_temporal = relinfo->ri_forPortionOf;
 	for (i = 0; i < trigdesc->numtriggers; i++)
 	{
 		Trigger    *trigger = &trigdesc->triggers[i];
@@ -3064,6 +3070,7 @@ ExecBRUpdateTriggers(EState *estate, EPQState *epqstate,
 		TRIGGER_EVENT_ROW |
 		TRIGGER_EVENT_BEFORE;
 	LocTriggerData.tg_relation = relinfo->ri_RelationDesc;
+	LocTriggerData.tg_temporal = relinfo->ri_forPortionOf;
 	updatedCols = ExecGetAllUpdatedCols(relinfo, estate);
 	LocTriggerData.tg_updatedcols = updatedCols;
 	for (i = 0; i < trigdesc->numtriggers; i++)
@@ -3226,6 +3233,7 @@ ExecIRUpdateTriggers(EState *estate, ResultRelInfo *relinfo,
 		TRIGGER_EVENT_ROW |
 		TRIGGER_EVENT_INSTEAD;
 	LocTriggerData.tg_relation = relinfo->ri_RelationDesc;
+	LocTriggerData.tg_temporal = relinfo->ri_forPortionOf;
 
 	ExecForceStoreHeapTuple(trigtuple, oldslot, false);
 
@@ -3697,6 +3705,7 @@ typedef struct AfterTriggerSharedData
 	Oid			ats_relid;		/* the relation it's on */
 	Oid			ats_rolid;		/* role to execute the trigger */
 	CommandId	ats_firing_id;	/* ID for firing cycle */
+	ForPortionOfState *for_portion_of;	/* the FOR PORTION OF clause */
 	struct AfterTriggersTableData *ats_table;	/* transition table access */
 	Bitmapset  *ats_modifiedcols;	/* modified columns */
 } AfterTriggerSharedData;
@@ -3970,6 +3979,7 @@ static SetConstraintState SetConstraintStateCreate(int numalloc);
 static SetConstraintState SetConstraintStateCopy(SetConstraintState origstate);
 static SetConstraintState SetConstraintStateAddItem(SetConstraintState state,
 													Oid tgoid, bool tgisdeferred);
+static ForPortionOfState *CopyForPortionOfState(ForPortionOfState *src);
 static void cancel_prior_stmt_triggers(Oid relid, CmdType cmdType, int tgevent);
 
 
@@ -4177,6 +4187,7 @@ afterTriggerAddEvent(AfterTriggerEventList *events,
 			newshared->ats_event == evtshared->ats_event &&
 			newshared->ats_firing_id == 0 &&
 			newshared->ats_table == evtshared->ats_table &&
+			newshared->for_portion_of == evtshared->for_portion_of &&
 			newshared->ats_relid == evtshared->ats_relid &&
 			newshared->ats_rolid == evtshared->ats_rolid &&
 			bms_equal(newshared->ats_modifiedcols,
@@ -4553,6 +4564,9 @@ AfterTriggerExecute(EState *estate,
 	LocTriggerData.tg_relation = rel;
 	if (TRIGGER_FOR_UPDATE(LocTriggerData.tg_trigger->tgtype))
 		LocTriggerData.tg_updatedcols = evtshared->ats_modifiedcols;
+	if (TRIGGER_FOR_UPDATE(LocTriggerData.tg_trigger->tgtype) ||
+		TRIGGER_FOR_DELETE(LocTriggerData.tg_trigger->tgtype))
+		LocTriggerData.tg_temporal = evtshared->for_portion_of;
 
 	MemoryContextReset(per_tuple_context);
 
@@ -6103,6 +6117,42 @@ AfterTriggerPendingOnRel(Oid relid)
 }
 
 /* ----------
+ * ForPortionOfState()
+ *
+ * Copys a ForPortionOfState into the current memory context.
+ */
+static ForPortionOfState *
+CopyForPortionOfState(ForPortionOfState *src)
+{
+	ForPortionOfState *dst = NULL;
+
+	if (src)
+	{
+		MemoryContext oldctx;
+		RangeType  *r;
+		TypeCacheEntry *typcache;
+
+		/*
+		 * Need to lift the FOR PORTION OF details into a higher memory
+		 * context because cascading foreign key update/deletes can cause
+		 * triggers to fire triggers, and the AfterTriggerEvents will outlive
+		 * the FPO details of the original query.
+		 */
+		oldctx = MemoryContextSwitchTo(TopTransactionContext);
+		dst = makeNode(ForPortionOfState);
+		dst->fp_rangeName = pstrdup(src->fp_rangeName);
+		dst->fp_rangeType = src->fp_rangeType;
+		dst->fp_rangeAttno = src->fp_rangeAttno;
+
+		r = DatumGetRangeTypeP(src->fp_targetRange);
+		typcache = lookup_type_cache(RangeTypeGetOid(r), TYPECACHE_RANGE_INFO);
+		dst->fp_targetRange = datumCopy(src->fp_targetRange, typcache->typbyval, typcache->typlen);
+		MemoryContextSwitchTo(oldctx);
+	}
+	return dst;
+}
+
+/* ----------
  * AfterTriggerSaveEvent()
  *
  *	Called by ExecA[RS]...Triggers() to queue up the triggers that should
@@ -6518,6 +6568,7 @@ AfterTriggerSaveEvent(EState *estate, ResultRelInfo *relinfo,
 		else
 			new_shared.ats_table = NULL;
 		new_shared.ats_modifiedcols = modifiedCols;
+		new_shared.for_portion_of = CopyForPortionOfState(relinfo->ri_forPortionOf);
 
 		afterTriggerAddEvent(&afterTriggers.query_stack[afterTriggers.query_depth].events,
 							 &new_event, &new_shared);
