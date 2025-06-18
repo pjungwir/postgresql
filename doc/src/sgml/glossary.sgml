@@ -1913,6 +1913,27 @@
    </glossdef>
   </glossentry>
 
+  <glossentry id="glossary-temporal-leftovers">
+   <glossterm>Temporal leftovers</glossterm>
+   <glossdef>
+    <para>
+     <glossterm linkend="glossary-table">Tables</glossterm> that exist either
+     for the lifetime of a
+     <glossterm linkend="glossary-session">session</glossterm> or a
+     <glossterm linkend="glossary-transaction">transaction</glossterm>, as
+     specified at the time of creation.
+     The data in them is not visible to other sessions, and is not
+     <glossterm linkend="glossary-logged">logged</glossterm>.
+     Temporary tables are often used to store intermediate data for a
+     multi-step operation.
+    </para>
+    <para>
+     For more information, see
+     <xref linkend="sql-createtable"/>.
+    </para>
+   </glossdef>
+  </glossentry>
+
   <glossentry id="glossary-temporal-table">
    <glossterm>Temporal table</glossterm>
    <glossdef>
