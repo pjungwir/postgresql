@@ -112,6 +112,7 @@ break is not needed in a wider output rendering.
   &textsearch;
   &mvcc;
   &perform;
+  &temporal;
   &parallel;
 
  </part>
