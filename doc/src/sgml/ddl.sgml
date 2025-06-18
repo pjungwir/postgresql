@@ -1758,6 +1758,103 @@ ALTER TABLE products
      that they also forbid an empty application time.
     </para>
    </sect3>
+
+   <sect3 id="ddl-application-time-foreign-keys">
+    <title>Temporal Foreign Keys</title>
+
+    <para>
+     A temporal foreign key is a reference from one application-time
+     table to another application-time table. Just as a non-temporal
+     reference requires a referenced key to exist, so a temporal reference
+     requires a referenced key to exist, but during whatever history the
+     reference exists (at least). So if the <literal>products</literal> table is
+     referenced by a <literal>variants</literal> table, and a variant of
+     product 5 has an application-time of
+     <literal>[2020-01-01,2026-01-01)</literal>, then product 5 must exist
+     throughout that period.
+    </para>
+
+    <para>
+     We can create the <literal>variants</literal> table with the following
+     schema (without a foreign key yet to enforce referential integrity):
+
+<programlisting>
+CREATE TABLE variants (
+  id         integer   NOT NULL,
+  product_id integer   NOT NULL,
+  name       text      NOT NULL,
+  valid_at   daterange NOT NULL,
+  CONSTRAINT variants_pkey
+    PRIMARY KEY (id, valid_at WITHOUT OVERLAPS),
+);
+</programlisting>
+
+     We have included a temporal primary key as a best practice, but it is not
+     strictly required by foreign keys.
+    </para>
+
+    <para>
+     <xref linkend="temporal-references-figure"/> plots product 5 (in
+     green) and two variants referencing it (in yellow) on the same
+     timeline. Variant 8 (Medium) was introduced first, then variant 9 (XXL).
+     Both satisfy the foreign key constraint, because the referenced product
+     exists throughout their entire history.
+    </para>
+
+    <figure id="temporal-references-figure">
+     <title>Temporal Foreign Key Example</title>
+     <mediaobject>
+      <imageobject>
+       <imagedata fileref="images/temporal-references.svg" format="SVG" width="100%"/>
+      </imageobject>
+     </mediaobject>
+    </figure>
+
+    <para>
+
+     In a table, these records would be:
+<programlisting>
+ id | product_id |  name  |        valid_at
+----+------------+--------+-------------------------
+  8 |          5 | Medium | [2021-01-01,2023-06-01)
+  9 |          5 | XXL    | [2022-03-01,2024-06-01)
+</programlisting>
+    </para>
+
+    <para>
+     Note that a temporal reference need not be fulfilled by a single
+     row in the referenced table. Product 5 had a price change in the middle
+     of variant 8's history, but the reference is still valid. The
+     combination of all matching rows is used to test whether the referenced
+     history contains the referencing row.
+    </para>
+
+    <para>
+     The syntax to add a temporal foreign key to our table is:
+
+<programlisting>
+ALTER TABLE variants
+  ADD CONSTRAINT variants_id_valid_at_fkey
+    FOREIGN KEY (product_id, PERIOD valid_at)
+    REFERENCES products (id, PERIOD valid_at);
+</programlisting>
+
+     Note that the keyword <literal>PERIOD</literal> must be used for the
+     application-time column in both the referencing and referenced table.
+    </para>
+
+    <para>
+     A temporal primary key or unique constraint matching the referenced columns
+     must exist on the referenced table.
+    </para>
+
+    <para>
+     <productname>PostgreSQL</productname> supports <literal>NO ACTION</literal>
+     temporal foreign keys, but not <literal>RESTRICT</literal>,
+     <literal>CASCADE</literal>, <literal>SET NULL</literal>, or
+     <literal>SET DEFAULT</literal>.
+    </para>
+   </sect3>
   </sect2>
 
   <sect2 id="ddl-system-time">
@@ -1781,6 +1878,7 @@ ALTER TABLE products
     Temporal wiki page</ulink> for possibilities.
    </para>
   </sect2>
+
  </sect1>
 
  <sect1 id="ddl-alter">
