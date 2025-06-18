@@ -812,9 +812,14 @@ AdjustNotNullInheritance(Oid relid, AttrNumber attnum,
  * This is seldom needed, so we just scan pg_constraint each time.
  *
  * 'include_noinh' determines whether to include NO INHERIT constraints or not.
+ *
+ * 'excludes' contains a list of attnos whose constraints we should exclude,
+ * for example constraints on PERIODs' hidden GENERATED columns (since those
+ * aren't exposed to users).
  */
 List *
-RelationGetNotNullConstraints(Oid relid, bool cooked, bool include_noinh)
+RelationGetNotNullConstraints(Oid relid, bool cooked, bool include_noinh,
+							  Bitmapset *excludes)
 {
 	List	   *notnulls = NIL;
 	Relation	constrRel;
@@ -841,6 +846,9 @@ RelationGetNotNullConstraints(Oid relid, bool cooked, bool include_noinh)
 			continue;
 
 		colnum = extractNotNullColumn(htup);
+
+		if (bms_is_member(colnum, excludes))
+			continue;
 
 		if (cooked)
 		{

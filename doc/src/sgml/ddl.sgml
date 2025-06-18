@@ -1601,6 +1601,52 @@ CREATE TABLE circles (
    to express and manage such histories in temporal tables.
   </para>
 
+  <sect2 id="ddl-periods">
+   <title>Periods</title>
+
+   <indexterm zone="ddl-periods">
+    <primary>periods</primary>
+   </indexterm>
+
+   <para>
+    A <firstterm>period</firstterm> is metadata attached to a table
+    uniting two columns, a start time and end time, into one range-like
+    construct. Periods are used to represent <link
+    linkend="ddl-system-time">system time</link> and <link
+    linkend="ddl-application-time">application time</link>. A system-time
+    period must be named <literal>system_time</literal>, and an
+    application-time period can be named anything else. Their names must
+    not conflict with column names from the same table.
+   </para>
+
+   <para>
+    Application-time periods are referenced in several temporal operations described in
+    this chapter: temporal primary keys, unique constraints, foreign keys,
+    update commands, and delete commands.
+    In all cases, <productname>PostgreSQL</productname> supports either periods
+    or regular columns with a <link linkend="rangetypes-builtin">rangetype or
+    multirangetype</link>.
+   </para>
+
+   <para>
+    Application periods are defined on a table using the following syntax:
+   </para>
+
+<programlisting>
+CREATE TABLE billing_addresses (
+  customer_id integer,
+  address_id  integer,
+  valid_from  date,
+  valid_til   date,
+  <emphasis>PERIOD FOR valid_at (valid_from, valid_til)</emphasis>
+);
+</programlisting>
+
+   <para>
+    Periods for <literal>SYSTEM_TIME</literal> are currently not implemented.
+   </para>
+  </sect2>
+
   <sect2 id="ddl-application-time">
    <title>Application Time</title>
 

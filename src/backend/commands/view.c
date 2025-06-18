@@ -162,7 +162,7 @@ DefineVirtualRelation(RangeVar *relation, List *tlist, bool replace,
 			}
 
 			/* EventTriggerAlterTableStart called by ProcessUtilitySlow */
-			AlterTableInternal(viewOid, atcmds, true);
+			AlterTableInternal(viewOid, atcmds, true, NULL);
 
 			/* Make the new view columns visible */
 			CommandCounterIncrement();
@@ -194,7 +194,7 @@ DefineVirtualRelation(RangeVar *relation, List *tlist, bool replace,
 		atcmds = list_make1(atcmd);
 
 		/* EventTriggerAlterTableStart called by ProcessUtilitySlow */
-		AlterTableInternal(viewOid, atcmds, true);
+		AlterTableInternal(viewOid, atcmds, true, NULL);
 
 		/*
 		 * There is very little to do here to update the view's dependencies.
