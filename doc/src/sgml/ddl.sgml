@@ -1601,6 +1601,35 @@ CREATE TABLE circles (
    tables.
   </para>
 
+  <sect2 id="periods">
+   <title>Periods</title>
+
+   <indexterm zone="periods">
+    <primary>periods</primary>
+   </indexterm>
+
+   <para>
+    A <firstterm>period</firstterm> is metadata attached to a table
+    uniting two columns, a start time and end time, into one range-like
+    construct. Periods are used to represent <link
+    linkend="system-time">system time</link> and <link
+    linkend="application-time">application time</link>. A system-time
+    period must be named <literal>system_time</literal>, and an
+    application-time period can be named anything else. Their names must
+    not conflict with column names from the same table.
+   </para>
+
+   <para>
+    Application-time periods are referenced in several temporal operations described in
+    this chapter: temporal primary keys, unique constraints, foreign keys,
+    update commands, and delete commands.
+    <productname>PostgreSQL</productname> does not yet support periods.
+    Commands that accept periods instead accept columns with a
+    <link linkend="rangetypes-builtin">rangetype or multirangetype</link>.
+    Support for periods is planned for the future.
+   </para>
+  </sect2>
+
   <sect2 id="application-time">
    <title>Application Time</title>
 
