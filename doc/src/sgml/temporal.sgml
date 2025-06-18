@@ -14,6 +14,32 @@
    This chapter describes how to express and manage such histories in temporal tables.
   </para>
 
+ <sect1 id="periods">
+  <title>Periods</title>
+
+  <indexterm zone="periods">
+   <primary>periods</primary>
+  </indexterm>
+
+  <para>
+   A <firstterm>period</firstterm> is metadata attached to a table
+   uniting two columns, a start time and end time, into one range-like construct.
+   Periods are used to represent
+   <xref linkend="system-time"/> and <xref linkend="application-time"/>.
+   A system-time period must be named <literal>system_time</literal>,
+   and an application-time period can be named anything else.
+   Their names must not conflict with column names from the same table.
+  </para>
+
+  <para>
+   Periods are referenced in several temporal operations described in this chapter:
+   temporal primary keys, unique constraints, foreign keys, update commands, and delete commands.
+   <productname>PostgreSQL</productname> does not yet support periods.
+   Commands that accept periods instead accept columns with a rangetype or multirangetype.
+   Support for periods is planned for the future.
+  </para>
+ </sect1>
+
  <sect1 id="application-time">
   <title>Application Time</title>
 
