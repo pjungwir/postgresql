@@ -448,8 +448,11 @@ WITH ( MODULUS <replaceable class="parameter">numeric_literal</replaceable>, REM
      </para>
 
      <para>
-      Partitioned tables do not support <literal>EXCLUDE</literal> constraints;
-      however, you can define these constraints on individual partitions.
+      Partitioned tables support <literal>EXCLUDE</literal> constraints
+      if the constraint includes all the partition key columns
+      and it compares all those columns for equality. It may include additional
+      columns and compare them however it likes (e.g. with <literal>&amp;&amp;</literal>).
+      This ensures that any rows that might conflict will fall in the same partition.
      </para>
 
      <para>
