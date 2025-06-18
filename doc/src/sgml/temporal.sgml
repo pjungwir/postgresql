@@ -138,6 +138,46 @@ ALTER TABLE products
    </para>
   </sect2>
 
+  <sect2 id="application-time-foreign-keys">
+   <title>Temporal foreign keys</title>
+
+   <para>
+    A temporal foreign key is a reference from one application-time table to another application-time table. Just as a non-temporal reference requires a referenced key to exist,
+    so a temporal reference requires a referenced key to exist, but during whatever history the reference exists. So if the <literal>products</literal> table is referenced by a <literal>variants</literal> table, and a variant of product 5 has an application-time of <literal>[2020-01-01,2026-01-01)</literal>, then product 5 must exist throughout that period.
+   </para>
+
+   <para>
+    A temporal reference need not be fulfilled by a single row in the referenced table.
+    If product 5 has been updated at various times, its history will be spread across several rows.
+    But a reference is still valid if the combination of those rows contains the referencing row's application time.
+   </para>
+
+   <para>
+    The syntax to declare a temporal foreign key is:
+
+<programlisting>
+ALTER TABLE variants
+  ADD CONSTRAINT variants_id_valid_at_fkey
+  FOREIGN KEY (id, PERIOD valid_at)
+  REFERENCES products (id, PERIOD valid_at);
+</programlisting>
+
+    Note that the keyword <literal>PERIOD</literal> must be used for application-time column
+    in both the referencing and referenced table.
+   </para>
+
+   <para>
+    A temporal primary key or unique constraint matching the referenced columns
+    must exist on the referenced table.
+   </para>
+
+   <para>
+    <productname>PostgreSQL</productname> supports <literal>NO ACTION</literal> temporal foreign keys,
+    but not <literal>RESTRICT</literal>, <literal>CASCADE</literal>, <literal>SET NULL</literal>,
+    or <literal>SET DEFAULT</literal>.
+   </para>
+  </sect2>
+
   <sect2 id="application-time-update-delete">
    <title>Temporal update and delete</title>
 
