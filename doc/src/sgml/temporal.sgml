@@ -208,7 +208,93 @@ ALTER TABLE variants
    <title>Temporal update and delete</title>
 
    <para>
-    <productname>PostgreSQL</productname> does not yet support special syntax to update and delete portions of history in temporal tables.
+    Special syntax is available to update and delete from temporal tables.
+    (No extra syntax is required to insert into them: the user just provides the application time like any other attribute.)
+    When updating or deleting, the user can target a specific portion of history.
+    Only rows overlapping that history are affected,
+    and within those rows only the targeted history is changed.
+    If a row contains more history beyond what is targeted,
+    its application time is reduced to fit within the targeted interval,
+    and new rows are inserted to preserve the history that was not targeted.
+   </para>
+
+   <para>
+    The syntax for a temporal update is:
+
+<programlisting>
+UPDATE products
+  FOR PORTION OF valid_at FROM '2025-01-01' TO '2026-01-01'
+  AS p
+  SET price = 12
+  WHERE id = 5;
+</programlisting>
+
+    Using the example table introduced already, this command will
+    update the record for product 5 that overlaps time in 2025.
+    It will set the price to 12 and the application time to
+    <literal>[2025-01-01,2026-01-01)</literal>.
+    Then, since the row's application time was originally <literal>[2023-01-01,)</literal>,
+    the command must insert two <glossterm linkend="glossary-temporal-leftovers">temporal leftovers</glossterm>:
+    one for history before January 1, 2025, and another for history since January 1, 2026.
+    After the update, the table has three rows for product 5:
+
+<programlisting>
+ id | price |        valid_at
+----+-------+-------------------------
+  5 |     5 | [2020-01-01,2023-01-01)
+  5 |     8 | [2023-01-01,2025-01-01)
+  5 |    12 | [2025-01-01,2026-01-01)
+  5 |     8 | [2026-01-01,)
+</programlisting>
+   </para>
+
+   <para>
+    Similarly, a specific portion of history may be targeted when deleting rows from a table.
+    In that case, the original rows are removed, but new <glossterm linkend="glossary-temporal-leftovers">temporal leftovers</glossterm> are inserted to preserve the untouched history.
+    The syntax for a temporal delete is:
+
+<programlisting>
+DELETE FROM products
+  FOR PORTION OF valid_at FROM '2028-01-01' TO NULL
+  AS p
+WHERE id = 5;
+</programlisting>
+
+    Continuing the example, this command would produce one temporal leftover
+    (for history before the targeted range, but not after),
+    and the rows for product 5 would now be:
+
+<programlisting>
+ id | price |        valid_at
+----+-------+-------------------------
+  5 |     5 | [2020-01-01,2023-01-01)
+  5 |     8 | [2023-01-01,2025-01-01)
+  5 |    12 | [2025-01-01,2026-01-01)
+  5 |     8 | [2026-01-01,2028-01-01)
+</programlisting>
+   </para>
+
+   <para>
+    Instead of using the <literal>FROM ... TO ...</literal> syntax,
+    temporal update/delete commands can also give the targeted range/multirange directly,
+    inside parentheses. For example: <literal>DELETE FROM products FOR PORTION OF valid_at ('[2028-01-01,)') ...</literal>. This syntax is required when application time is stored in a multirange column.
+   </para>
+
+   <para>
+    When application time is stored in a rangetype column, zero, one or two temporal leftovers are produced by each row that is updated/deleted.
+    With a multirange column, only zero or one temporal leftover is produced.
+    The leftover bounds are computed using <literal>range_minus_multi</literal>
+    and <literal>multirange_minus_multi</literal> (see <xref linkend="functions-range"/>).
+   </para>
+
+   <para>
+    The bounds given to <literal>FOR PORTION OF</literal> must be constant.
+    Functions like <literal>NOW()</literal> are allowed, but column references are not.
+   </para>
+
+   <para>
+    When temporal leftovers are inserted, all <literal>INSERT</literal> triggers are fired,
+    but permission checks for inserting rows are skipped.
    </para>
   </sect2>
   </sect1>
