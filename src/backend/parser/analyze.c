@@ -24,11 +24,13 @@
 
 #include "postgres.h"
 
+#include "access/htup_details.h"
 #include "access/stratnum.h"
 #include "access/sysattr.h"
 #include "catalog/dependency.h"
 #include "catalog/pg_am.h"
 #include "catalog/pg_operator.h"
+#include "catalog/pg_period.h"
 #include "catalog/pg_proc.h"
 #include "catalog/pg_type.h"
 #include "commands/defrem.h"
@@ -51,6 +53,7 @@
 #include "parser/parse_relation.h"
 #include "parser/parse_target.h"
 #include "parser/parse_type.h"
+#include "parser/parser.h"
 #include "parser/parsetree.h"
 #include "utils/backend_status.h"
 #include "utils/builtins.h"
@@ -1304,8 +1307,13 @@ transformForPortionOfClause(ParseState *pstate,
 							bool isUpdate)
 {
 	Relation	targetrel = pstate->p_target_relation;
+	RTEPermissionInfo *target_perminfo = pstate->p_target_nsitem->p_perminfo;
 	char	   *range_name = forPortionOf->range_name;
 	int			range_attno = InvalidAttrNumber;
+	AttrNumber	start_attno = InvalidAttrNumber;
+	AttrNumber	end_attno = InvalidAttrNumber;
+	char	   *startcolname = NULL;
+	char	   *endcolname = NULL;
 	Form_pg_attribute attr;
 	Oid			attbasetype;
 	Oid			opclass;
@@ -1349,15 +1357,67 @@ transformForPortionOfClause(ParseState *pstate,
 	rangeVar->location = forPortionOf->location;
 	result->rangeVar = rangeVar;
 
-	/* Require SELECT privilege on the application-time column. */
-	markVarForSelectPriv(pstate, rangeVar);
-
 	/*
 	 * Use the basetype for the target, which shouldn't be required to follow
 	 * domain rules. The table's column type is in the Var if we need it.
 	 */
 	result->rangeType = attbasetype;
 	result->isDomain = attbasetype != attr->atttypid;
+
+	/*
+	 * If we are using a PERIOD, we need the start & end columns. If the
+	 * attribute is not a GENERATED column, we needn't query pg_period.
+	 */
+	if (attr->attgenerated == ATTRIBUTE_GENERATED_STORED)
+	{
+		HeapTuple	perTuple = SearchSysCache2(PERIODNAME,
+											   ObjectIdGetDatum(RelationGetRelid(targetrel)),
+											   PointerGetDatum(range_name));
+
+		if (HeapTupleIsValid(perTuple))
+		{
+			Form_pg_period per = (Form_pg_period) GETSTRUCT(perTuple);
+			Form_pg_attribute perattr;
+
+			start_attno = per->perstart;
+			end_attno = per->perend;
+
+			perattr = TupleDescAttr(targetrel->rd_att, start_attno - 1);
+			startcolname = NameStr(perattr->attname);
+
+			result->startVar = makeVar(
+									   rtindex,
+									   start_attno,
+									   perattr->atttypid,
+									   perattr->atttypmod,
+									   perattr->attcollation,
+									   0);
+
+			perattr = TupleDescAttr(targetrel->rd_att, end_attno - 1);
+			endcolname = NameStr(perattr->attname);
+			result->endVar = makeVar(
+									 rtindex,
+									 end_attno,
+									 perattr->atttypid,
+									 perattr->atttypmod,
+									 perattr->attcollation,
+									 0);
+
+			/*
+			 * Require SELECT privilege on the start/end columns. We don't
+			 * check permissions on GENERATED columns.
+			 */
+			markVarForSelectPriv(pstate, result->startVar);
+			markVarForSelectPriv(pstate, result->endVar);
+
+			ReleaseSysCache(perTuple);
+		}
+	}
+	else
+	{
+		/* Require SELECT privilege on the application-time column. */
+		markVarForSelectPriv(pstate, rangeVar);
+	}
 
 	if (forPortionOf->target)
 	{
@@ -1529,7 +1589,10 @@ transformForPortionOfClause(ParseState *pstate,
 		/*
 		 * Now make sure we update the start/end time of the record. For a
 		 * range col (r) this is `r = r * targetRange` (where * is the
-		 * intersect operator).
+		 * intersect operator). For a PERIOD with cols (s, e) this is `s =
+		 * lower(tsrange(s, e) * targetRange)` and `e = upper(tsrange(s, e) *
+		 * targetRange)` (of course not necessarily with tsrange, but with
+		 * whatever range type is used there).
 		 */
 		Oid			intersectoperoid;
 		List	   *funcArgs;
@@ -1578,15 +1641,82 @@ transformForPortionOfClause(ParseState *pstate,
 								   COERCE_IMPLICIT_CAST,
 								   exprLocation(forPortionOf->target));
 
-		/* Make a TLE to set the range column */
+		/* Make a TLE to set the range column or start/end columns */
 		result->rangeTargetList = NIL;
-		tle = makeTargetEntry((Expr *) rangeTLEExpr, range_attno, range_name,
-							  false);
-		result->rangeTargetList = lappend(result->rangeTargetList, tle);
+
+		if (result->startVar)
+		{
+			FuncExpr   *boundTLEExpr;
+			Oid			arg_types[1] = {ANYRANGEOID};
+			FuncDetailCode fdresult;
+			int			fgc_flags;
+			Oid			rettype;
+			bool		retset;
+			int			nvargs;
+			Oid			vatype;
+			Oid		   *declared_arg_types;
+			Oid			elemtypid = get_range_subtype(attr->atttypid);
+
+			/* set the start column */
+			fdresult = func_get_detail(SystemFuncName("lower"), NIL, NIL, 1,
+									   arg_types,
+									   false, false, false, &fgc_flags,
+									   &funcid, &rettype, &retset,
+									   &nvargs, &vatype,
+									   &declared_arg_types, NULL);
+			if (fdresult != FUNCDETAIL_NORMAL)
+				elog(ERROR, "failed to find lower(anyrange) function");
+			boundTLEExpr = makeFuncExpr(funcid,
+										elemtypid,
+										list_make1(rangeTLEExpr),
+										InvalidOid, InvalidOid,
+										COERCE_EXPLICIT_CALL);
+			tle = makeTargetEntry((Expr *) boundTLEExpr, start_attno,
+								  startcolname, false);
+			result->rangeTargetList = lappend(result->rangeTargetList, tle);
+
+			/* set the end column */
+			fdresult = func_get_detail(SystemFuncName("upper"), NIL, NIL, 1,
+									   arg_types,
+									   false, false, false, &fgc_flags,
+									   &funcid, &rettype, &retset,
+									   &nvargs, &vatype,
+									   &declared_arg_types, NULL);
+			if (fdresult != FUNCDETAIL_NORMAL)
+				elog(ERROR, "failed to find upper(anyrange) function");
+			boundTLEExpr = makeFuncExpr(funcid,
+										elemtypid,
+										list_make1(rangeTLEExpr),
+										InvalidOid, InvalidOid,
+										COERCE_EXPLICIT_CALL);
+			tle = makeTargetEntry((Expr *) boundTLEExpr, end_attno, endcolname, false);
+			result->rangeTargetList = lappend(result->rangeTargetList, tle);
+
+			/*
+			 * Mark the start/end columns as requiring update permissions. As
+			 * usual, we don't check permissions for the GENERATED column.
+			 * TODO: Peter says we don't need update permission for the
+			 * application-time column, so we should remove these lines. But
+			 * then ExecInitGenerated thinks it doesn't need to update the
+			 * GENERATED column, because ExecGetUpdatedCols relies on
+			 * perminfo->updatedCols to decide which columns are being
+			 * updated.
+			 */
+			target_perminfo->updatedCols = bms_add_member(target_perminfo->updatedCols,
+														  start_attno - FirstLowInvalidHeapAttributeNumber);
+			target_perminfo->updatedCols = bms_add_member(target_perminfo->updatedCols,
+														  end_attno - FirstLowInvalidHeapAttributeNumber);
+		}
+		else
+		{
+			tle = makeTargetEntry((Expr *) rangeTLEExpr, range_attno,
+								  range_name, false);
+			result->rangeTargetList = lappend(result->rangeTargetList, tle);
+		}
 
 		/*
-		 * The range column will change, but you don't need UPDATE permission
-		 * on it, so we don't add to updatedCols here.
+		 * The range/start/end column(s) will change, but you don't need
+		 * UPDATE permission on them, so we don't add to updatedCols here.
 		 */
 	}
 	else

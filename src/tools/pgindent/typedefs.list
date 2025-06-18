@@ -891,6 +891,7 @@ FormData_pg_opclass
 FormData_pg_operator
 FormData_pg_opfamily
 FormData_pg_partitioned_table
+FormData_pg_period
 FormData_pg_policy
 FormData_pg_proc
 FormData_pg_publication
@@ -2171,6 +2172,8 @@ PendingUnlinkEntry
 PendingWrite
 PendingWriteback
 PerLockTagEntry
+PeriodDef
+PeriodInfo
 PerlInterpreter
 Perl_ppaddr_t
 Permutation

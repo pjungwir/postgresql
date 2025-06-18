@@ -2406,6 +2406,8 @@ typedef struct ForPortionOfExpr
 {
 	NodeTag		type;
 	Var		   *rangeVar;		/* Range column */
+	Var		   *startVar;		/* Start column if PERIOD */
+	Var		   *endVar;			/* End column if PERIOD */
 	char	   *range_name;		/* Range name */
 	Node	   *targetFrom;		/* FOR PORTION OF FROM bound, if given */
 	Node	   *targetTo;		/* FOR PORTION OF TO bound, if given */
