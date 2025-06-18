@@ -27,6 +27,7 @@
 <!ENTITY rangetypes SYSTEM "rangetypes.sgml">
 <!ENTITY rowtypes   SYSTEM "rowtypes.sgml">
 <!ENTITY syntax     SYSTEM "syntax.sgml">
+<!ENTITY temporal   SYSTEM "temporal.sgml">
 <!ENTITY textsearch SYSTEM "textsearch.sgml">
 <!ENTITY typeconv   SYSTEM "typeconv.sgml">
 

@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 830 252" width="830" height="252" shape-rendering="geometricPrecision" version="1.0">
+  <defs>
+    <filter id="f2" x="0" y="0" width="200%" height="200%">
+      <feOffset result="offOut" in="SourceGraphic" dx="5" dy="5"/>
+      <feGaussianBlur result="blurOut" in="offOut" stdDeviation="3"/>
+      <feBlend in="SourceGraphic" in2="blurOut" mode="normal"/>
+    </filter>
+  </defs>
+  <g stroke-width="1" stroke-linecap="square" stroke-linejoin="round">
+    <rect x="0" y="0" width="830" height="252" style="fill: #ffffff"/>
+    <path stroke="#000000" stroke-width="1.000000" stroke-linecap="round" stroke-linejoin="round" fill="#ffff33" d="M745.0 119.0 L745.0 175.0 L205.0 175.0 L205.0 119.0 z"/>
+    <path stroke="#000000" stroke-width="1.000000" stroke-linecap="round" stroke-linejoin="round" fill="#99dd99" d="M385.0 119.0 L795.0 119.0 L795.0 63.0 L385.0 63.0 z"/>
+    <path stroke="#000000" stroke-width="1.000000" stroke-linecap="round" stroke-linejoin="round" fill="#99dd99" d="M385.0 63.0 L385.0 119.0 L25.0 119.0 L25.0 63.0 z"/>
+    <path stroke="#000000" stroke-width="1.000000" stroke-linecap="round" stroke-linejoin="round" fill="none" d="M205.0 196.0 L205.0 209.0 "/>
+    <path stroke="#000000" stroke-width="1.000000" stroke-linecap="round" stroke-linejoin="round" fill="none" d="M25.0 196.0 L25.0 209.0 "/>
+    <path stroke="#000000" stroke-width="1.000000" stroke-linecap="round" stroke-linejoin="round" fill="none" d="M385.0 196.0 L385.0 209.0 "/>
+    <path stroke="#000000" stroke-width="1.000000" stroke-linecap="round" stroke-linejoin="round" fill="none" d="M565.0 196.0 L565.0 209.0 "/>
+    <path stroke="#000000" stroke-width="1.000000" stroke-linecap="round" stroke-linejoin="round" fill="none" d="M745.0 196.0 L745.0 209.0 "/>
+    <text x="82" y="96" font-family="Courier" font-size="15" stroke="none" fill="#000000">(5, $5, [1 Jan 2020, 1 Jan 2023))</text>
+    <text x="20" y="222" font-family="Courier" font-size="15" stroke="none" fill="#000000">2020</text>
+    <text x="259" y="152" font-family="Courier" font-size="15" stroke="none" fill="#000000">(6, $9, [1 Jan 2021,1 Jan 2024))</text>
+    <text x="200" y="222" font-family="Courier" font-size="15" stroke="none" fill="#000000">2021</text>
+    <text x="380" y="222" font-family="Courier" font-size="15" stroke="none" fill="#000000">2022</text>
+    <text x="432" y="96" font-family="Courier" font-size="15" stroke="none" fill="#000000">(5, $8, [1 Jan 2023,))</text>
+    <text x="560" y="222" font-family="Courier" font-size="15" stroke="none" fill="#000000">2023</text>
+    <text x="740" y="222" font-family="Courier" font-size="15" stroke="none" fill="#000000">2024</text>
+  </g>
+</svg>
