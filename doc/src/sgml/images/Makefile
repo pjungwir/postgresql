@@ -6,7 +6,10 @@ ALL_IMAGES = \
 	genetic-algorithm.svg \
 	gin.svg \
 	pagelayout.svg \
-	temporal-entities.svg
+	temporal-entities.svg \
+	temporal-references.svg \
+	temporal-update.svg \
+	temporal-delete.svg
 
 DITAA = ditaa
 DOT = dot
