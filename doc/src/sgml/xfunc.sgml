@@ -4167,6 +4167,29 @@ supportfn(internal) returns internal
    </para>
 
    <para>
+    Similarly, a <link linkend="queries-tablefunction">set-returning function</link>
+    can implement <literal>SupportRequestInlineSRF</literal> to return a
+    <literal>Query</literal> node, which the planner will try to inline into
+    the outer query, just as <productname>PostgreSQL</productname> inlines
+    SQL functions.  Normallly only SQL functions can be inlined, but this support
+    request allows a function in <link linkend="plpgsql">PL/pgSQL</link>
+    or another language to build a dynamic SQL query and have it inlined too.
+    The <literal>Query</literal> node must be a <literal>SELECT</literal> query
+    that has gone through parse analysis and rewriting.
+    It is the responsibility of the support function to return
+    a node that matches the parent function's implementation. One way to do this is
+    to build a SQL string then parse it with <literal>pg_parse_query</literal>.
+    We make no guarantee that <productname>PostgreSQL</productname> will
+    never call the target function in cases that the support function could
+    simplify.  Functions called in <literal>SELECT</literal> are not simplified.
+    Or if the <literal>RangeTblEntry</literal> has more than one
+    <literal>RangeTblFunction</literal> (such as when using
+    <literal>ROWS FROM</literal>), the function will not be simplified.
+    Ensure rigorous equivalence between the simplified expression and an actual
+    execution of the target function.
+   </para>
+
+   <para>
     For target functions that return <type>boolean</type>, it is often useful to estimate
     the fraction of rows that will be selected by a <literal>WHERE</literal> clause using that
     function.  This can be done by a support function that implements
