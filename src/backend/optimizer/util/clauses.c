@@ -5049,6 +5049,50 @@ evaluate_expr(Expr *expr, Oid result_type, int32 result_typmod,
 
 
 /*
+ * inline_set_returning_function_with_support
+ *
+ * This implements inline_set_returning_function for functions with
+ * a support function that can handle SupportRequestInlineSRF.
+ * We let the support function make its own decisions about what it can
+ * handle.  For instance we don't forbid a VOLATILE function or volatile
+ * arguments.
+ */
+static Query *
+inline_set_returning_function_with_support(PlannerInfo *root, RangeTblEntry *rte,
+										   RangeTblFunction *rtfunc,
+										   FuncExpr *fexpr, Form_pg_proc funcform)
+{
+	SupportRequestInlineSRF req;
+	Node	   *newnode;
+
+	/* It must have a support function. */
+	Assert(funcform->prosupport);
+
+	req.root = root;
+	req.type = T_SupportRequestInlineSRF;
+	req.rtfunc = rtfunc;
+	req.proc = funcform;
+
+	/*
+	 * XXX: wrap this in its own memory context, as
+	 * inline_sql_set_returning_function does below?
+	 */
+	newnode = (Node *)
+		DatumGetPointer(OidFunctionCall1(funcform->prosupport,
+										 PointerGetDatum(&req)));
+
+	if (!newnode)
+		return NULL;
+
+	if (!IsA(newnode, Query))
+		elog(ERROR,
+			 "Got unexpected node type %d from %s for function %s",
+			 newnode->type, "SupportRequestInlineSRF", NameStr(funcform->proname));
+
+	return (Query *) newnode;
+}
+
+/*
  * inline_sql_set_returning_function
  *
  * This implements inline_set_returning_function for sql-language functions.
@@ -5263,10 +5307,10 @@ fail:
 
 /*
  * inline_set_returning_function
- *		Attempt to "inline" an SQL set-returning function in the FROM clause.
+ *		Attempt to "inline" a set-returning function in the FROM clause.
  *
  * "rte" is an RTE_FUNCTION rangetable entry.  If it represents a call of a
- * set-returning SQL function that can safely be inlined, expand the function
+ * set-returning function that can safely be inlined, expand the function
  * and return the substitute Query structure.  Otherwise, return NULL.
  *
  * We assume that the RTE's expression has already been put through
@@ -5285,7 +5329,7 @@ inline_set_returning_function(PlannerInfo *root, RangeTblEntry *rte)
 	Oid			func_oid;
 	HeapTuple	func_tuple;
 	Form_pg_proc funcform;
-	Query	   *funcquery;
+	Query	   *funcquery = NULL;
 
 	Assert(rte->rtekind == RTE_FUNCTION);
 
@@ -5336,8 +5380,19 @@ inline_set_returning_function(PlannerInfo *root, RangeTblEntry *rte)
 		elog(ERROR, "cache lookup failed for function %u", func_oid);
 	funcform = (Form_pg_proc) GETSTRUCT(func_tuple);
 
-	funcquery = inline_sql_set_returning_function(root, rte, rtfunc, fexpr,
-												  func_oid, func_tuple, funcform);
+	/*
+	 * If the function has an attached support function that can handle
+	 * SupportRequestInlineSRF, then attempt to inline with that. Return the
+	 * result if we get one, otherwise proceed.
+	 */
+	if (funcform->prosupport)
+		funcquery = inline_set_returning_function_with_support(root, rte, rtfunc, fexpr,
+															   funcform);
+
+	/* Try to inline automatically */
+	if (!funcquery)
+		funcquery = inline_sql_set_returning_function(root, rte, rtfunc, fexpr,
+													  func_oid, func_tuple, funcform);
 
 	if (!funcquery)
 		goto fail;
