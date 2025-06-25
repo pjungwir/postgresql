@@ -5049,29 +5049,21 @@ evaluate_expr(Expr *expr, Oid result_type, int32 result_typmod,
 
 
 /*
- * inline_set_returning_function
- *		Attempt to "inline" a set-returning function in the FROM clause.
+ * inline_sql_set_returning_function
  *
- * "rte" is an RTE_FUNCTION rangetable entry.  If it represents a call of a
- * set-returning SQL function that can safely be inlined, expand the function
- * and return the substitute Query structure.  Otherwise, return NULL.
+ * This implements inline_set_returning_function for sql-language functions.
+ * It parses the body (or uses the pre-parsed body if available).
+ * It allocates its own temporary MemoryContext for the parsing, then copies
+ * the result into the caller's context.
  *
- * We assume that the RTE's expression has already been put through
- * eval_const_expressions(), which among other things will take care of
- * default arguments and named-argument notation.
- *
- * This has a good deal of similarity to inline_function(), but that's
- * for the non-set-returning case, and there are enough differences to
- * justify separate functions.
+ * Returns NULL if the function couldn't be inlined.
  */
-Query *
-inline_set_returning_function(PlannerInfo *root, RangeTblEntry *rte)
+static Query *
+inline_sql_set_returning_function(PlannerInfo *root, RangeTblEntry *rte,
+								  RangeTblFunction *rtfunc,
+								  FuncExpr *fexpr, Oid func_oid, HeapTuple func_tuple,
+								  Form_pg_proc funcform)
 {
-	RangeTblFunction *rtfunc;
-	FuncExpr   *fexpr;
-	Oid			func_oid;
-	HeapTuple	func_tuple;
-	Form_pg_proc funcform;
 	char	   *src;
 	Datum		tmp;
 	bool		isNull;
@@ -5089,37 +5081,6 @@ inline_set_returning_function(PlannerInfo *root, RangeTblEntry *rte)
 	Assert(rte->rtekind == RTE_FUNCTION);
 
 	/*
-	 * It doesn't make a lot of sense for a SQL SRF to refer to itself in its
-	 * own FROM clause, since that must cause infinite recursion at runtime.
-	 * It will cause this code to recurse too, so check for stack overflow.
-	 * (There's no need to do more.)
-	 */
-	check_stack_depth();
-
-	/* Fail if the RTE has ORDINALITY - we don't implement that here. */
-	if (rte->funcordinality)
-		return NULL;
-
-	/* Fail if RTE isn't a single, simple FuncExpr */
-	if (list_length(rte->functions) != 1)
-		return NULL;
-	rtfunc = (RangeTblFunction *) linitial(rte->functions);
-
-	if (!IsA(rtfunc->funcexpr, FuncExpr))
-		return NULL;
-	fexpr = (FuncExpr *) rtfunc->funcexpr;
-
-	func_oid = fexpr->funcid;
-
-	/*
-	 * The function must be declared to return a set, else inlining would
-	 * change the results if the contained SELECT didn't return exactly one
-	 * row.
-	 */
-	if (!fexpr->funcretset)
-		return NULL;
-
-	/*
 	 * Refuse to inline if the arguments contain any volatile functions or
 	 * sub-selects.  Volatile functions are rejected because inlining may
 	 * result in the arguments being evaluated multiple times, risking a
@@ -5131,22 +5092,6 @@ inline_set_returning_function(PlannerInfo *root, RangeTblEntry *rte)
 	if (contain_volatile_functions((Node *) fexpr->args) ||
 		contain_subplans((Node *) fexpr->args))
 		return NULL;
-
-	/* Check permission to call function (fail later, if not) */
-	if (object_aclcheck(ProcedureRelationId, func_oid, GetUserId(), ACL_EXECUTE) != ACLCHECK_OK)
-		return NULL;
-
-	/* Check whether a plugin wants to hook function entry/exit */
-	if (FmgrHookIsNeeded(func_oid))
-		return NULL;
-
-	/*
-	 * OK, let's take a look at the function's pg_proc entry.
-	 */
-	func_tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(func_oid));
-	if (!HeapTupleIsValid(func_tuple))
-		elog(ERROR, "cache lookup failed for function %u", func_oid);
-	funcform = (Form_pg_proc) GETSTRUCT(func_tuple);
 
 	/*
 	 * Forget it if the function is not SQL-language or has other showstopper
@@ -5168,7 +5113,6 @@ inline_set_returning_function(PlannerInfo *root, RangeTblEntry *rte)
 		list_length(fexpr->args) != funcform->pronargs ||
 		!heap_attisnull(func_tuple, Anum_pg_proc_proconfig, NULL))
 	{
-		ReleaseSysCache(func_tuple);
 		return NULL;
 	}
 
@@ -5177,7 +5121,7 @@ inline_set_returning_function(PlannerInfo *root, RangeTblEntry *rte)
 	 * that parsing might create.
 	 */
 	mycxt = AllocSetContextCreate(CurrentMemoryContext,
-								  "inline_set_returning_function",
+								  "inline_sql_set_returning_function",
 								  ALLOCSET_DEFAULT_SIZES);
 	oldcxt = MemoryContextSwitchTo(mycxt);
 
@@ -5303,13 +5247,6 @@ inline_set_returning_function(PlannerInfo *root, RangeTblEntry *rte)
 	querytree = linitial_node(Query, querytree_list);
 
 	/*
-	 * Looks good --- substitute parameters into the query.
-	 */
-	querytree = substitute_actual_srf_parameters(querytree,
-												 funcform->pronargs,
-												 fexpr->args);
-
-	/*
 	 * Copy the modified query out of the temporary memory context, and clean
 	 * up.
 	 */
@@ -5319,7 +5256,112 @@ inline_set_returning_function(PlannerInfo *root, RangeTblEntry *rte)
 
 	MemoryContextDelete(mycxt);
 	error_context_stack = sqlerrcontext.previous;
-	ReleaseSysCache(func_tuple);
+
+	return querytree;
+
+	/* Here if func is not inlinable: release temp memory and return NULL */
+fail:
+	MemoryContextSwitchTo(oldcxt);
+	MemoryContextDelete(mycxt);
+	error_context_stack = sqlerrcontext.previous;
+
+	return NULL;
+}
+
+/*
+ * inline_set_returning_function
+ *		Attempt to "inline" an SQL set-returning function in the FROM clause.
+ *
+ * "rte" is an RTE_FUNCTION rangetable entry.  If it represents a call of a
+ * set-returning SQL function that can safely be inlined, expand the function
+ * and return the substitute Query structure.  Otherwise, return NULL.
+ *
+ * We assume that the RTE's expression has already been put through
+ * eval_const_expressions(), which among other things will take care of
+ * default arguments and named-argument notation.
+ *
+ * This has a good deal of similarity to inline_function(), but that's
+ * for the non-set-returning case, and there are enough differences to
+ * justify separate functions.
+ */
+Query *
+inline_set_returning_function(PlannerInfo *root, RangeTblEntry *rte)
+{
+	RangeTblFunction *rtfunc;
+	FuncExpr   *fexpr;
+	Oid			func_oid;
+	HeapTuple	func_tuple;
+	Form_pg_proc	funcform;
+	Query	   *funcquery;
+
+	Assert(rte->rtekind == RTE_FUNCTION);
+
+	/*
+	 * It doesn't make a lot of sense for a SRF to refer to itself in its
+	 * own FROM clause, since that must cause infinite recursion at runtime.
+	 * It will cause this code to recurse too, so check for stack overflow.
+	 * (There's no need to do more.)
+	 */
+	check_stack_depth();
+
+	/* Fail if the RTE has ORDINALITY - we don't implement that here. */
+	if (rte->funcordinality)
+		return NULL;
+
+	/* Fail if RTE isn't a single, simple FuncExpr */
+	if (list_length(rte->functions) != 1)
+		return NULL;
+	rtfunc = (RangeTblFunction *) linitial(rte->functions);
+
+	if (!IsA(rtfunc->funcexpr, FuncExpr))
+		return NULL;
+	fexpr = (FuncExpr *) rtfunc->funcexpr;
+
+	func_oid = fexpr->funcid;
+
+	/*
+	 * The function must be declared to return a set, else inlining would
+	 * change the results if the contained SELECT didn't return exactly one
+	 * row.
+	 */
+	if (!fexpr->funcretset)
+		return NULL;
+
+	/* Check permission to call function (fail later, if not) */
+	if (object_aclcheck(ProcedureRelationId, func_oid, GetUserId(), ACL_EXECUTE) != ACLCHECK_OK)
+		return NULL;
+
+	/* Check whether a plugin wants to hook function entry/exit */
+	if (FmgrHookIsNeeded(func_oid))
+		return NULL;
+
+	/*
+	 * OK, let's take a look at the function's pg_proc entry.
+	 */
+	func_tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(func_oid));
+	if (!HeapTupleIsValid(func_tuple))
+		elog(ERROR, "cache lookup failed for function %u", func_oid);
+	funcform = (Form_pg_proc) GETSTRUCT(func_tuple);
+
+	funcquery = inline_sql_set_returning_function(root, rte, rtfunc, fexpr,
+			func_oid, func_tuple, funcform);
+
+	if (!funcquery)
+		goto fail;
+
+	/*
+	 * The single command must be a plain SELECT.
+	 */
+	if (!IsA(funcquery, Query) ||
+		funcquery->commandType != CMD_SELECT)
+		goto fail;
+
+	/*
+	 * Looks good --- substitute parameters into the query.
+	 */
+	funcquery = substitute_actual_srf_parameters(funcquery,
+												 funcform->pronargs,
+												 fexpr->args);
 
 	/*
 	 * We don't have to fix collations here because the upper query is already
@@ -5336,18 +5378,15 @@ inline_set_returning_function(PlannerInfo *root, RangeTblEntry *rte)
 	 * We must also notice if the inserted query adds a dependency on the
 	 * calling role due to RLS quals.
 	 */
-	if (querytree->hasRowSecurity)
+	if (funcquery->hasRowSecurity)
 		root->glob->dependsOnRole = true;
 
-	return querytree;
-
-	/* Here if func is not inlinable: release temp memory and return NULL */
-fail:
-	MemoryContextSwitchTo(oldcxt);
-	MemoryContextDelete(mycxt);
-	error_context_stack = sqlerrcontext.previous;
 	ReleaseSysCache(func_tuple);
 
+	return funcquery;
+
+fail:
+	ReleaseSysCache(func_tuple);
 	return NULL;
 }
 
