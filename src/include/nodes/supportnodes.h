@@ -33,6 +33,7 @@
 #ifndef SUPPORTNODES_H
 #define SUPPORTNODES_H
 
+#include "catalog/pg_proc.h"
 #include "nodes/plannodes.h"
 
 struct PlannerInfo;				/* avoid including pathnodes.h here */
@@ -68,6 +69,39 @@ typedef struct SupportRequestSimplify
 	struct PlannerInfo *root;	/* Planner's infrastructure */
 	FuncExpr   *fcall;			/* Function call to be simplified */
 } SupportRequestSimplify;
+
+/*
+ * The InlineSRF request allows the support function to perform plan-time
+ * simplification of a call to its target set-returning function. For
+ * example a PL/pgSQL function could build a dynamic SQL query and execute it.
+ * Normally only SQL functions can be inlined, but with this support function
+ * the dynamic query can be inlined as well.
+ *
+ * The planner's PlannerInfo "root" is typically not needed, but can be
+ * consulted if it's necessary to obtain info about Vars present in
+ * the given node tree.  Beware that root could be NULL in some usages.
+ *
+ * "rtfunc" will be a RangeTblFunction node for the function being replaced.
+ * The support function is only called if rtfunc->functions contains a
+ * single FuncExpr node. (ROWS FROM is one way to get more than one.)
+ *
+ * "proc" will be the HeapTuple for the pg_proc record of the function being
+ * replaced.
+ *
+ * The result should be a semantically-equivalent transformed node tree,
+ * or NULL if no simplification could be performed.  It should be allocated
+ * in the CurrentMemoryContext. Do *not* return or modify the FuncExpr node
+ * tree, as it isn't really a separately allocated Node.  But it's okay to
+ * use its args, or parts of it, in the result tree.
+ */
+typedef struct SupportRequestInlineSRF
+{
+	NodeTag		type;
+
+	struct PlannerInfo *root;	/* Planner's infrastructure */
+	RangeTblFunction *rtfunc;	/* Function call to be simplified */
+	HeapTuple	proc;			/* Function definition from pg_proc */
+} SupportRequestInlineSRF;
 
 /*
  * The Selectivity request allows the support function to provide a

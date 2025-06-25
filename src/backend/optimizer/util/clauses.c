@@ -5146,6 +5146,47 @@ evaluate_expr(Expr *expr, Oid result_type, int32 result_typmod,
 
 
 /*
+ * inline_set_returning_function_with_support
+ *
+ * This implements inline_set_returning_function for functions with
+ * a support function that can handle SupportRequestInlineSRF.
+ * We check fewer things than inline_sql_set_returning_function,
+ * so that support functions can make their own decisions about what
+ * to handle.  For instance we don't forbid a VOLATILE function.
+ */
+static Query *
+inline_set_returning_function_with_support(PlannerInfo *root, RangeTblEntry *rte,
+										   RangeTblFunction *rtfunc,
+										   FuncExpr *fexpr, HeapTuple func_tuple,
+										   Form_pg_proc funcform)
+{
+	SupportRequestInlineSRF req;
+	Node	   *newnode;
+
+	/* It must have a support function. */
+	Assert(funcform->prosupport);
+
+	req.root = root;
+	req.type = T_SupportRequestInlineSRF;
+	req.rtfunc = rtfunc;
+	req.proc = func_tuple;
+
+	newnode = (Node *)
+		DatumGetPointer(OidFunctionCall1(funcform->prosupport,
+										 PointerGetDatum(&req)));
+
+	if (!newnode)
+		return NULL;
+
+	if (!IsA(newnode, Query))
+		elog(ERROR,
+			 "Got unexpected node type %d from %s for function %s",
+			 newnode->type, "SupportRequestInlineSRF", NameStr(funcform->proname));
+
+	return (Query *) newnode;
+}
+
+/*
  * inline_sql_set_returning_function
  *
  * This implements inline_set_returning_function for sql-language functions.
@@ -5310,10 +5351,10 @@ inline_sql_set_returning_function(PlannerInfo *root, RangeTblEntry *rte,
 
 /*
  * inline_set_returning_function
- *		Attempt to "inline" an SQL set-returning function in the FROM clause.
+ *		Attempt to "inline" a set-returning function in the FROM clause.
  *
  * "rte" is an RTE_FUNCTION rangetable entry.  If it represents a call of a
- * set-returning SQL function that can safely be inlined, expand the function
+ * set-returning function that can safely be inlined, expand the function
  * and return the substitute Query structure.  Otherwise, return NULL.
  *
  * We assume that the RTE's expression has already been put through
@@ -5341,7 +5382,7 @@ inline_set_returning_function(PlannerInfo *root, RangeTblEntry *rte)
 	ErrorContextCallback sqlerrcontext;
 	MemoryContext oldcxt;
 	MemoryContext mycxt;
-	Query	   *querytree;
+	Query	   *querytree = NULL;
 
 	Assert(rte->rtekind == RTE_FUNCTION);
 
@@ -5429,9 +5470,19 @@ inline_set_returning_function(PlannerInfo *root, RangeTblEntry *rte)
 	if (!heap_attisnull(func_tuple, Anum_pg_proc_proconfig, NULL))
 		goto fail;
 
-	querytree = inline_sql_set_returning_function(root, rte, rtfunc, fexpr,
-												  func_oid, func_tuple, funcform,
-												  src);
+	/*
+	 * If the function has an attached support function that can handle
+	 * SupportRequestInlineSRF, then attempt to inline with that. Return the
+	 * result if we get one, otherwise proceed.
+	 */
+	if (funcform->prosupport)
+		querytree = inline_set_returning_function_with_support(root, rte, rtfunc, fexpr,
+															   func_tuple, funcform);
+
+	/* Try to inline automatically */
+	if (!querytree)
+		querytree = inline_sql_set_returning_function(root, rte, rtfunc, fexpr,
+													  func_oid, func_tuple, funcform, src);
 
 	if (!querytree)
 		goto fail;
