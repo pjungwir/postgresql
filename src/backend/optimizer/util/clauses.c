@@ -5388,7 +5388,7 @@ inline_set_returning_function(PlannerInfo *root, RangeTblEntry *rte)
 	 */
 	if (funcform->prosupport)
 		funcquery = inline_set_returning_function_with_support(root, rte, rtfunc, fexpr,
-				func_oid, func_tuple, funcform);
+															   func_oid, func_tuple, funcform);
 
 	/* Try to inline automatically */
 	if (!funcquery)
