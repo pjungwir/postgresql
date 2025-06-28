@@ -5383,8 +5383,8 @@ inline_set_returning_function(PlannerInfo *root, RangeTblEntry *rte)
 
 	/*
 	 * If the function has an attached support function that can handle
-	 * SupportRequestInlineSRF, then attempt to inline with that.
-	 * Return the result if we get one, otherwise proceed.
+	 * SupportRequestInlineSRF, then attempt to inline with that. Return the
+	 * result if we get one, otherwise proceed.
 	 */
 	if (funcform->prosupport)
 		funcquery = inline_set_returning_function_with_support(root, rte, rtfunc, fexpr,
