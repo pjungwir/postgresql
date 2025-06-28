@@ -822,12 +822,12 @@ test_inline_srf_support_func(PG_FUNCTION_ARGS)
 		SupportRequestInlineSRF *req = (SupportRequestInlineSRF *) rawreq;
 		StringInfoData sql;
 		RangeTblFunction *rtfunc = req->rtfunc;
-		FuncExpr *expr = (FuncExpr *) rtfunc->funcexpr;
-		Node *node;
-		Const *c;
-		char *colname;
-		char *tablename;
-		HeapTuple func_tuple;
+		FuncExpr   *expr = (FuncExpr *) rtfunc->funcexpr;
+		Node	   *node;
+		Const	   *c;
+		char	   *colname;
+		char	   *tablename;
+		HeapTuple	func_tuple;
 		SQLFunctionParseInfoPtr pinfo;
 		List *raw_parsetree_list;
 		List *querytree_list;
