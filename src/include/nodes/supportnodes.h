@@ -95,7 +95,7 @@ typedef struct SupportRequestSimplify
  */
 typedef struct SupportRequestInlineSRF
 {
-	NodeTag				type;
+	NodeTag		type;
 
 	struct PlannerInfo *root;   /* Planner's infrastructure */
 	RangeTblFunction   *rtfunc; /* Function call to be simplified */
