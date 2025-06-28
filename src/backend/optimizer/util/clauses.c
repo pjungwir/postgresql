@@ -5080,7 +5080,7 @@ inline_set_returning_function_with_support(PlannerInfo *root, RangeTblEntry *rte
 	 */
 	newnode = (Node *)
 		DatumGetPointer(OidFunctionCall1(funcform->prosupport,
-					PointerGetDatum(&req)));
+										 PointerGetDatum(&req)));
 
 	if (!newnode)
 		return NULL;
