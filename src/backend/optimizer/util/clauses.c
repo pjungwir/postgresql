@@ -5059,9 +5059,9 @@ evaluate_expr(Expr *expr, Oid result_type, int32 result_typmod,
  */
 static Query *
 inline_set_returning_function_with_support(PlannerInfo *root, RangeTblEntry *rte,
-								  RangeTblFunction *rtfunc,
-								  FuncExpr *fexpr, Oid func_oid, HeapTuple func_tuple,
-								  Form_pg_proc funcform)
+										   RangeTblFunction *rtfunc,
+										   FuncExpr *fexpr, Oid func_oid, HeapTuple func_tuple,
+										   Form_pg_proc funcform)
 {
 	SupportRequestInlineSRF	req;
 	Node *newnode;
