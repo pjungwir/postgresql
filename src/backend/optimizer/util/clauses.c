@@ -5329,7 +5329,7 @@ inline_set_returning_function(PlannerInfo *root, RangeTblEntry *rte)
 	FuncExpr   *fexpr;
 	Oid			func_oid;
 	HeapTuple	func_tuple;
-	Form_pg_proc	funcform;
+	Form_pg_proc funcform;
 	Query	   *funcquery = NULL;
 
 	Assert(rte->rtekind == RTE_FUNCTION);
