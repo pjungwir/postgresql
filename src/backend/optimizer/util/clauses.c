@@ -5393,7 +5393,7 @@ inline_set_returning_function(PlannerInfo *root, RangeTblEntry *rte)
 	/* Try to inline automatically */
 	if (!funcquery)
 		funcquery = inline_sql_set_returning_function(root, rte, rtfunc, fexpr,
-				func_oid, func_tuple, funcform);
+													  func_oid, func_tuple, funcform);
 
 	if (!funcquery)
 		goto fail;
