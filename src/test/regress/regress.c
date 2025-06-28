@@ -829,8 +829,8 @@ test_inline_srf_support_func(PG_FUNCTION_ARGS)
 		char	   *tablename;
 		HeapTuple	func_tuple;
 		SQLFunctionParseInfoPtr pinfo;
-		List *raw_parsetree_list;
-		List *querytree_list;
+		List	   *raw_parsetree_list;
+		List	   *querytree_list;
 
 		if (list_length(expr->args) != 3)
 		{
