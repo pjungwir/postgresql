@@ -811,7 +811,7 @@ Datum
 test_inline_srf_support_func(PG_FUNCTION_ARGS)
 {
 	Node	   *rawreq = (Node *) PG_GETARG_POINTER(0);
-	Query *querytree = NULL;
+	Query	   *querytree = NULL;
 
 	if (IsA(rawreq, SupportRequestInlineSRF))
 	{
