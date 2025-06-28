@@ -5063,8 +5063,8 @@ inline_set_returning_function_with_support(PlannerInfo *root, RangeTblEntry *rte
 										   FuncExpr *fexpr, Oid func_oid, HeapTuple func_tuple,
 										   Form_pg_proc funcform)
 {
-	SupportRequestInlineSRF	req;
-	Node *newnode;
+	SupportRequestInlineSRF req;
+	Node	   *newnode;
 
 	/* It must have a support function. */
 	Assert(funcform->prosupport);
