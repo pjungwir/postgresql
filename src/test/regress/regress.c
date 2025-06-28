@@ -904,10 +904,10 @@ test_inline_srf_support_func(PG_FUNCTION_ARGS)
 
 		/* Analyze the parse tree as if it were a SQL-language body. */
 		querytree_list = pg_analyze_and_rewrite_withcb(
-				linitial(raw_parsetree_list),
-				sql.data,
-				(ParserSetupHook) sql_fn_parser_setup,
-				pinfo, NULL);
+													   linitial(raw_parsetree_list),
+													   sql.data,
+													   (ParserSetupHook) sql_fn_parser_setup,
+													   pinfo, NULL);
 		if (list_length(querytree_list) != 1)
 		{
 			ereport(WARNING, (errmsg("test_inline_srf_support_func rewrote to more than one node")));
