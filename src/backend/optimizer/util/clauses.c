@@ -5338,6 +5338,7 @@ inline_set_returning_function(PlannerInfo *root, RangeTblEntry *rte)
 	 * It doesn't make a lot of sense for a SRF to refer to itself in its own
 	 * FROM clause, since that must cause infinite recursion at runtime. It
 	 * will cause this code to recurse too, so check for stack overflow.
+	 * (There's no need to do more.)
 	 */
 	check_stack_depth();
 
