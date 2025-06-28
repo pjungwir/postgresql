@@ -816,8 +816,8 @@ test_inline_srf_support_func(PG_FUNCTION_ARGS)
 	if (IsA(rawreq, SupportRequestInlineSRF))
 	{
 		/*
-		 * Assume that the target is foo_from_bar; that's safe as long
-		 * as we don't attach this to any other set-returning function.
+		 * Assume that the target is foo_from_bar; that's safe as long as we
+		 * don't attach this to any other set-returning function.
 		 */
 		SupportRequestInlineSRF *req = (SupportRequestInlineSRF *) rawreq;
 		StringInfoData sql;
