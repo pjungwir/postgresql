@@ -5087,8 +5087,8 @@ inline_set_returning_function_with_support(PlannerInfo *root, RangeTblEntry *rte
 
 	if (!IsA(newnode, Query))
 		elog(ERROR,
-				"Got unexpected node type %d from %s for function %s",
-				newnode->type, "SupportRequestInlineSRF", NameStr(funcform->proname));
+			 "Got unexpected node type %d from %s for function %s",
+			 newnode->type, "SupportRequestInlineSRF", NameStr(funcform->proname));
 
 	return (Query *) newnode;
 }
