@@ -918,7 +918,7 @@ test_inline_srf_support_func(PG_FUNCTION_ARGS)
 		if (!IsA(querytree, Query))
 		{
 			ereport(WARNING, (errmsg("test_inline_srf_support_func didn't parse to a Query"),
-						errdetail("Got this instead: %s", nodeToString(querytree))));
+							  errdetail("Got this instead: %s", nodeToString(querytree))));
 			PG_RETURN_POINTER(NULL);
 		}
 	}
