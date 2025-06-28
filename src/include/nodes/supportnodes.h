@@ -97,10 +97,10 @@ typedef struct SupportRequestInlineSRF
 {
 	NodeTag		type;
 
-	struct PlannerInfo *root;   /* Planner's infrastructure */
-	RangeTblFunction   *rtfunc; /* Function call to be simplified */
-	Form_pg_proc		proc;   /* Function definition */
-} SupportRequestInlineSRF;
+	struct PlannerInfo *root;	/* Planner's infrastructure */
+	RangeTblFunction *rtfunc;	/* Function call to be simplified */
+	Form_pg_proc proc;			/* Function definition */
+}			SupportRequestInlineSRF;
 
 /*
  * The Selectivity request allows the support function to provide a
