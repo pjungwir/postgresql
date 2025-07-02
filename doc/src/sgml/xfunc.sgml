@@ -4097,6 +4097,56 @@ extern PgStat_Kind pgstat_register_kind(PgStat_Kind kind,
     knowledge that helps the planner optimize function calls.
    </para>
 
+   <sect2 id="xfunc-inlining">
+    <title>Function Inlining</title>
+    <indexterm>
+     <primary>function</primary>
+     <secondary>inlining</secondary>
+    </indexterm>
+
+    <para>
+     Even with no extra information, the planner may be able to inline the function
+     into the calling query.  The rules vary depending on whether the function returns
+     a single result or is a <link linkend="queries-tablefunctions">set-returning function</link>.
+     But in all cases the function must be implemented in SQL (not PL/pgSQL).
+     It must not be <literal>SECURITY DEFINER</literal>.
+     And if an extension has hooked function entry/exit,
+     then inlining must be skipped.
+    </para>
+
+    <para>
+     For single-result functions, the function body must be a single
+     <literal>SELECT <replaceable>expression</replaceable></literal> statement
+     returning a single column.
+     It must not return a <literal>RECORD</literal>.
+     It must return a type that matches the function declaration.
+     It cannot recurse.  It must not include CTEs, a <literal>FROM</literal> clause,
+     references to tables or table-like objects, <literal>DISTINCT</literal>,
+     <literal>GROUP BY</literal>, <literal>HAVING</literal>,
+     aggregate functions, window functions,
+     <literal>ORDER BY</literal>, <literal>LIMIT</literal>, <literal>OFFSET</literal>,
+     <literal>UNION</literal>, <literal>INTERSECT</literal>, or <literal>EXCEPT</literal>.
+     Its arguments, if used more than once in its body, cannot include <literal>VOLATILE</literal> functions.
+     The hypothetical inlined expression must be no more volatile than the original function
+     (so an <literal>IMMUTABLE</literal> function must inline to an <literal>IMMUTABLE</literal>
+     expression, and a <literal>STABLE</literal> function must inline to <literal>STABLE</literal> or <literal>IMMUTABLE</literal>).
+     If the original function was <literal>STRICT</literal>, then any called functions must be <literal>STRICT</literal>.
+     For more control, see <link linkend="xfunc-support-request-simplify"><literal>SupportRequestSimplify</literal></link>.
+    </para>
+
+    <para>
+     For set-returning functions, inlining lets the planner merge the query into the
+     outer query, enabling optimizations like qual pushdown, constant folding, etc.
+     The function body must be a single <literal>SELECT</literal> statement.
+     It must be declared <literal>STABLE</literal> or <literal>IMMUTABLE</literal>.
+     It must not be <literal>STRICT</literal>.
+     In addition its arguments may not include volatile function calls or
+     sub-queries. The function must be called from the <literal>FROM</literal> clause,
+     not the <literal>SELECT</literal> clause, nor with <literal>ORDINALITY</literal> or
+     <literal>ROWS FROM</literal>.
+    </para>
+   </sect2>
+
    <sect2 id="xfunc-annotations">
     <title>Function Annotations</title>
     <indexterm>
@@ -4158,7 +4208,7 @@ supportfn(internal) returns internal
      so more things might be possible in future versions.
     </para>
 
-    <para>
+    <para id="xfunc-support-request-simplify">
      Some function calls can be simplified during planning based on
      properties specific to the function.  For example,
      <literal>int4mul(n, 1)</literal> could be simplified to
