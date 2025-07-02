@@ -1015,6 +1015,75 @@ SET LOCAL search_path TO @extschema@, pg_temp;
     </para>
    </sect2>
 
+   <sect2 id="extend-extensions-config-variables">
+    <title>Extension Configuration Variables</title>
+
+    <indexterm>
+     <primary>configuration</primary>
+     <secondary sortas="extensions">of extensions</secondary>
+    </indexterm>
+
+    <para>
+     Extensions can define their own configuration variables,
+     which behave just like other <acronym>GUC</acronym>s.
+     Users can set these variables to control the behavior of the extension.
+    </para>
+
+    <para>
+     All extension variables have the format
+     <literal><replaceable>extension_name</replaceable>.<replaceable>variable_name</replaceable></literal>.
+     Thus every extension has its own namespace to define variables,
+     and other code cannot interfere.
+    </para>
+
+    <para>
+     Users may set these variables in <literal>postgresql.conf</literal>,
+     via <literal>ALTER DATABASE</literal>, or through other normal means.
+     If they are set before the extension is loaded, <productname>PostgreSQL</productname>
+     remembers the value in a "placeholder" until the extension defines a matching variable name.
+    </para>
+
+    <para>
+     The extension should define these variables in <literal>_PG_init</literal>
+     using one of the following functions:
+     <itemizedlist>
+      <listitem>
+       <para><literal>DefineCustomBoolVariable</literal></para>
+      </listitem>
+      <listitem>
+       <para><literal>DefineCustomIntVariable</literal></para>
+      </listitem>
+      <listitem>
+       <para><literal>DefineCustomRealVariable</literal></para>
+      </listitem>
+      <listitem>
+       <para><literal>DefineCustomStringVariable</literal></para>
+      </listitem>
+      <listitem>
+       <para><literal>DefineCustomEnumVariable</literal></para>
+      </listitem>
+     </itemizedlist>
+     When these are called, a matching placeholder (if any) is converted to a real value.
+    </para>
+
+    <para>
+     The above functions accept a name, a short and long description, and a default value.
+     The caller also passes a pointer that will receive the value,
+     both immediately from a placeholder and later whenever the variable is changed.
+     Another parameter indicates when the value can be set: at postmaster startup,
+     with a <literal>SIGHUP</literal>, by a <literal>SET</literal> command, etc.
+     Various flags are accepted as well: see <literal>guc.h</literal>.
+     Finally, hook functions may optionally be supplied, which are called to validate a new value,
+     to notify that a new value has been assigned, and to override the default display of a value.
+    </para>
+
+    <para>
+     After defining all their variable names, extensions should call <literal>MarkGUCPrefixReserved</literal>.
+     This deletes any remaining placeholders (with a warning) and prevents new ones from being set.
+     This helps catch misspellings by users.
+    </para>
+   </sect2>
+
    <sect2 id="extend-extensions-config-tables">
     <title>Extension Configuration Tables</title>
 
