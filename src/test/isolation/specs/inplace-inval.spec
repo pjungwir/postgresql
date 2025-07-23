@@ -21,6 +21,9 @@ step read1	{
 
 session s2
 step cic2	{ CREATE INDEX i2 ON newly_indexed (c); }
+step read2	{
+	SELECT relhasindex FROM pg_class WHERE oid = 'newly_indexed'::regclass;
+}
 
 session s3
 step cachefill3	{ TABLE newly_indexed; }
@@ -36,3 +39,5 @@ permutation
 
 # without cachefill3, no bug
 permutation cir1 cic2 ddl3 read1
+
+permutation cir1 read1 read2
