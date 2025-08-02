@@ -524,6 +524,8 @@ static ObjectAddress ATExecColumnDefault(Relation rel, const char *colName,
 										 Node *newDefault, LOCKMODE lockmode);
 static ObjectAddress ATExecCookedColumnDefault(Relation rel, AttrNumber attnum,
 											   Node *newDefault);
+static void ATPrepAddPeriod(List **wqueue, Relation rel, AlterTableCmd *cmd,
+							LOCKMODE lockmode, AlterTableUtilityContext *context);
 static ObjectAddress ATExecAddPeriod(Relation rel, PeriodDef *period,
 									 AlterTableUtilityContext *context);
 static void ATExecDropPeriod(Relation rel, const char *periodName,
@@ -8941,7 +8943,7 @@ ATPrepAddPeriod(List **wqueue, Relation rel, AlterTableCmd *cmd,
 				LOCKMODE lockmode, AlterTableUtilityContext *context)
 {
 	PeriodDef  *period = (PeriodDef *) cmd->def;
-	AlterTableCmd *newcmd;
+	// AlterTableCmd *newcmd;
 
 	/*
 	 * PERIOD FOR SYSTEM_TIME is not yet implemented, but make sure no one
@@ -8962,10 +8964,9 @@ ATPrepAddPeriod(List **wqueue, Relation rel, AlterTableCmd *cmd,
 	/* The period name must not already exist */
 	(void) check_for_period_name_collision(rel, period->periodname, period->colexists, false);
 
-	....
-
-		ATPrepCmd(wqueue, rel, newcmd, false, false, lockmode, context);
-
+	// TODO: more validation/prep
+	// ....
+	// ATPrepCmd(wqueue, rel, newcmd, false, false, lockmode, context);
 }
 
 /*
@@ -8997,9 +8998,10 @@ ATExecAddPeriod(Relation rel, PeriodDef *period, AlterTableUtilityContext *conte
 	AlterTableInternal(RelationGetRelid(rel), cmds, true, context);
 	conoid = get_relation_constraint_oid(RelationGetRelid(rel), period->constraintname, false);
 
+
 	if (!period->colexists)
 	{
-		List	   *cmds = NIL;
+		cmds = NIL;
 
 		/* Make the range column */
 		rangecol = make_range_column_for_period(period);

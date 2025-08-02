@@ -1404,7 +1404,6 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	TransitionCaptureState *oldTcs;
 	FmgrInfo	flinfo;
 	ReturnSetInfo rsi;
-	Relation	rel;
 	bool		hasPeriod = false;
 	bool		didInit = false;
 	bool		shouldFree = false;
@@ -1546,19 +1545,19 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 			endAttno = forPortionOf->endVar->varattno;
 
 			if (leftoverLower.infinite)
-				leftoverSlot->tts_nulls[startAttno - 1] = true;
+				leftoverSlot->tts_isnull[startAttno - 1] = true;
 			else
 			{
-				leftoverSlot->tts_nulls[startAttno - 1] = false;
-				leftoverSlot->tts_values[startAttno - 1] = leftoverLower.val;
+				leftoverSlot->tts_isnull[startAttno - 1] = false;
+				leftoverSlot->tts_isnull[startAttno - 1] = leftoverLower.val;
 			}
 
 			if (leftoverUpper.infinite)
-				leftoverSlot->tts_nulls[endAttno - 1] = true;
+				leftoverSlot->tts_isnull[endAttno - 1] = true;
 			else
 			{
-				leftoverSlot->tts_nulls[endAttno - 1] = false;
-				leftoverSlot->tts_values[endAttno - 1] = leftoverUpper.val;
+				leftoverSlot->tts_isnull[endAttno - 1] = false;
+				leftoverSlot->tts_isnull[endAttno - 1] = leftoverUpper.val;
 			}
 		}
 		else
