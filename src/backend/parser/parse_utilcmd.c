@@ -114,6 +114,7 @@ static void transformColumnDefinition(CreateStmtContext *cxt,
 									  ColumnDef *column);
 static void transformTablePeriod(CreateStmtContext *cxt,
 								 PeriodDef *period);
+static void ValidatePeriod(Relation rel, PeriodDef *period);
 static void transformTableConstraint(CreateStmtContext *cxt,
 									 Constraint *constraint);
 static void transformTableLikeClause(CreateStmtContext *cxt,
@@ -1121,6 +1122,132 @@ transformTablePeriod(CreateStmtContext *cxt, PeriodDef *period)
 	transformPeriodOptions(period);
 
 	cxt->periods = lappend(cxt->periods, period);
+}
+
+/*
+ * ValidatePeriod
+ *
+ * Look up the attributes used by the PERIOD,
+ * make sure they exist, are not system columns,
+ * and have the same type and collation.
+ *
+ * Add our findings to these PeriodDef fields:
+ *
+ * coltypid - the type of PERIOD columns.
+ * startattnum - the attnum of the start column.
+ * endattnum - the attnum of the end column.
+ * rngtypid - the range type to use.
+ * rngattnum - the attnum of a pre-existing range column, or Invalid.
+ */
+static void
+ValidatePeriod(Relation rel, PeriodDef *period)
+{
+	HeapTuple	starttuple;
+	HeapTuple	endtuple;
+	Form_pg_attribute atttuple;
+	Oid			attcollation;
+	Oid			endtypid;
+	Oid			endcollation;
+
+	/* Find the start column */
+	starttuple = SearchSysCacheAttName(RelationGetRelid(rel), period->startcolname);
+	if (!HeapTupleIsValid(starttuple))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_COLUMN),
+				 errmsg("column \"%s\" of relation \"%s\" does not exist",
+						period->startcolname, RelationGetRelationName(rel))));
+	atttuple = (Form_pg_attribute) GETSTRUCT(starttuple);
+	period->coltypid = atttuple->atttypid;
+	attcollation = atttuple->attcollation;
+	period->startattnum = atttuple->attnum;
+	ReleaseSysCache(starttuple);
+
+	/* Make sure it's not a system column */
+	if (period->startattnum <= 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
+				 errmsg("cannot use system column \"%s\" in period",
+						period->startcolname)));
+
+	/* Find the end column */
+	endtuple = SearchSysCacheAttName(RelationGetRelid(rel), period->endcolname);
+	if (!HeapTupleIsValid(endtuple))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_COLUMN),
+				 errmsg("column \"%s\" of relation \"%s\" does not exist",
+						period->endcolname, RelationGetRelationName(rel))));
+	atttuple = (Form_pg_attribute) GETSTRUCT(endtuple);
+	endtypid = atttuple->atttypid;
+	endcollation = atttuple->attcollation;
+	period->endattnum = atttuple->attnum;
+	ReleaseSysCache(endtuple);
+
+	/* Make sure it's not a system column */
+	if (period->endattnum <= 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
+				 errmsg("cannot use system column \"%s\" in period",
+						period->endcolname)));
+
+	/* Both columns must be of same type */
+	if (period->coltypid != endtypid)
+		ereport(ERROR,
+				(errcode(ERRCODE_DATATYPE_MISMATCH),
+				 errmsg("start and end columns of period must be of same type")));
+
+	/* Both columns must have the same collation */
+	if (attcollation != endcollation)
+		ereport(ERROR,
+				(errcode(ERRCODE_COLLATION_MISMATCH),
+				 errmsg("start and end columns of period must have same collation")));
+
+	/* Get the range type based on the start/end cols or the user's choice */
+	period->rngtypid = choose_rangetype_for_period(period);
+
+	/*
+	 * If the GENERATED columns should already exist, make sure it is
+	 * sensible.
+	 */
+	if (period->colexists)
+	{
+		HeapTuple	rngtuple = SearchSysCacheAttName(RelationGetRelid(rel), period->periodname);
+
+		if (!HeapTupleIsValid(rngtuple))
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_COLUMN),
+					 errmsg("column \"%s\" of relation \"%s\" does not exist",
+							period->periodname, RelationGetRelationName(rel))));
+		atttuple = (Form_pg_attribute) GETSTRUCT(rngtuple);
+
+		/*
+		 * Lots to check here: It must be GENERATED ALWAYS, it must have the
+		 * right expression, it must be the right type, it must be NOT NULL,
+		 * it must not be inherited.
+		 */
+		if (atttuple->attgenerated == '\0')
+			ereport(ERROR, (errmsg("Period %s uses a non-generated column", period->periodname)));
+
+		if (atttuple->attgenerated != ATTRIBUTE_GENERATED_STORED)
+			ereport(ERROR, (errmsg("Period %s uses a generated column that is not STORED", period->periodname)));
+
+		/*
+		 * XXX: We should check the GENERATED expression also, but that is
+		 * hard to do for non-range/multirange PERIODs.
+		 */
+
+		if (!atttuple->attnotnull && !IsBinaryUpgrade)
+			ereport(ERROR, (errmsg("Period %s uses a generated column that allows nulls", period->periodname)));
+
+		if (period->rngtypid != atttuple->atttypid)
+			ereport(ERROR, (errmsg("Period %s uses a generated column with the wrong type", period->periodname)));
+
+		if (!atttuple->attislocal)
+			ereport(ERROR, (errmsg("Period %s uses a generated column that is inherited", period->periodname)));
+
+		period->rngattnum = atttuple->attnum;
+
+		ReleaseSysCache(rngtuple);
+	}
 }
 
 /*
@@ -3757,6 +3884,45 @@ transformAlterTableStmt(Oid relid, AlterTableStmt *stmt,
 				else
 					elog(ERROR, "unrecognized node type: %d",
 						 (int) nodeTag(cmd->def));
+				break;
+
+			case AT_AddPeriod:
+				{
+					PeriodDef  *period = castNode(PeriodDef, cmd->def);
+					ColumnDef  *rangecol;
+					AlterTableCmd *newcmd;
+					AlterTableStmt *newstmt;
+
+					ValidatePeriod(rel, period);
+
+					if (!period->colexists)
+					{
+						// TODO: do the work here!
+						// - Add the GENERATED range column to cxt.blist
+						// - Add the CHECK constraint to newcmds.
+						newstmt = makeNode(AlterTableStmt);
+						newstmt->relation = cxt.relation;
+						newstmt->cmds = NIL;
+						newstmt->objtype = stmt->objtype;
+
+						/*
+						 * Make the range column.
+						 * This has to come after the other columns,
+						 * since its GENERATED expression refers to them.
+						 * Also it needs to know period->rngtypid,
+						 * so it has to come after ValidatePeriod.
+						 */
+						rangecol = make_range_column_for_period(period);
+						newcmd = makeNode(AlterTableCmd);
+						newcmd->subtype = AT_AddColumn;
+						newcmd->def = (Node *) rangecol;
+						newcmd->name = period->periodname;
+						newcmd->recurse = false;	/* no, let the PERIOD recurse instead */
+						newstmt->cmds = lappend(newstmt->cmds, newcmd);
+						cxt.blist = lappend(cxt.blist, newstmt);
+					}
+				}
+
 				break;
 
 			case AT_AlterColumnType:

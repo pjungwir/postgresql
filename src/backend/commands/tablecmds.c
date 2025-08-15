@@ -759,9 +759,8 @@ static void ATDetachCheckNoForeignKeyRefs(Relation partition);
 static char GetAttributeCompression(Oid atttypid, const char *compression);
 static char GetAttributeStorage(Oid atttypid, const char *storagemode);
 static void AddRelationNewPeriod(Relation rel, PeriodDef *period);
-static void ValidatePeriod(Relation rel, PeriodDef *period);
 static Constraint *make_constraint_for_period(Relation rel, PeriodDef *period);
-static ColumnDef *make_range_column_for_period(PeriodDef *period);
+ColumnDef *make_range_column_for_period(PeriodDef *period);
 
 
 /* ----------------------------------------------------------------
@@ -1666,132 +1665,6 @@ make_range_column_for_period(PeriodDef *period)
 	col->location = period->location;
 
 	return col;
-}
-
-/*
- * ValidatePeriod
- *
- * Look up the attributes used by the PERIOD,
- * make sure they exist, are not system columns,
- * and have the same type and collation.
- *
- * Add our findings to these PeriodDef fields:
- *
- * coltypid - the type of PERIOD columns.
- * startattnum - the attnum of the start column.
- * endattnum - the attnum of the end column.
- * rngtypid - the range type to use.
- * rngattnum - the attnum of a pre-existing range column, or Invalid.
- */
-static void
-ValidatePeriod(Relation rel, PeriodDef *period)
-{
-	HeapTuple	starttuple;
-	HeapTuple	endtuple;
-	Form_pg_attribute atttuple;
-	Oid			attcollation;
-	Oid			endtypid;
-	Oid			endcollation;
-
-	/* Find the start column */
-	starttuple = SearchSysCacheAttName(RelationGetRelid(rel), period->startcolname);
-	if (!HeapTupleIsValid(starttuple))
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_COLUMN),
-				 errmsg("column \"%s\" of relation \"%s\" does not exist",
-						period->startcolname, RelationGetRelationName(rel))));
-	atttuple = (Form_pg_attribute) GETSTRUCT(starttuple);
-	period->coltypid = atttuple->atttypid;
-	attcollation = atttuple->attcollation;
-	period->startattnum = atttuple->attnum;
-	ReleaseSysCache(starttuple);
-
-	/* Make sure it's not a system column */
-	if (period->startattnum <= 0)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
-				 errmsg("cannot use system column \"%s\" in period",
-						period->startcolname)));
-
-	/* Find the end column */
-	endtuple = SearchSysCacheAttName(RelationGetRelid(rel), period->endcolname);
-	if (!HeapTupleIsValid(endtuple))
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_COLUMN),
-				 errmsg("column \"%s\" of relation \"%s\" does not exist",
-						period->endcolname, RelationGetRelationName(rel))));
-	atttuple = (Form_pg_attribute) GETSTRUCT(endtuple);
-	endtypid = atttuple->atttypid;
-	endcollation = atttuple->attcollation;
-	period->endattnum = atttuple->attnum;
-	ReleaseSysCache(endtuple);
-
-	/* Make sure it's not a system column */
-	if (period->endattnum <= 0)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
-				 errmsg("cannot use system column \"%s\" in period",
-						period->endcolname)));
-
-	/* Both columns must be of same type */
-	if (period->coltypid != endtypid)
-		ereport(ERROR,
-				(errcode(ERRCODE_DATATYPE_MISMATCH),
-				 errmsg("start and end columns of period must be of same type")));
-
-	/* Both columns must have the same collation */
-	if (attcollation != endcollation)
-		ereport(ERROR,
-				(errcode(ERRCODE_COLLATION_MISMATCH),
-				 errmsg("start and end columns of period must have same collation")));
-
-	/* Get the range type based on the start/end cols or the user's choice */
-	period->rngtypid = choose_rangetype_for_period(period);
-
-	/*
-	 * If the GENERATED columns should already exist, make sure it is
-	 * sensible.
-	 */
-	if (period->colexists)
-	{
-		HeapTuple	rngtuple = SearchSysCacheAttName(RelationGetRelid(rel), period->periodname);
-
-		if (!HeapTupleIsValid(rngtuple))
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_COLUMN),
-					 errmsg("column \"%s\" of relation \"%s\" does not exist",
-							period->periodname, RelationGetRelationName(rel))));
-		atttuple = (Form_pg_attribute) GETSTRUCT(rngtuple);
-
-		/*
-		 * Lots to check here: It must be GENERATED ALWAYS, it must have the
-		 * right expression, it must be the right type, it must be NOT NULL,
-		 * it must not be inherited.
-		 */
-		if (atttuple->attgenerated == '\0')
-			ereport(ERROR, (errmsg("Period %s uses a non-generated column", period->periodname)));
-
-		if (atttuple->attgenerated != ATTRIBUTE_GENERATED_STORED)
-			ereport(ERROR, (errmsg("Period %s uses a generated column that is not STORED", period->periodname)));
-
-		/*
-		 * XXX: We should check the GENERATED expression also, but that is
-		 * hard to do for non-range/multirange PERIODs.
-		 */
-
-		if (!atttuple->attnotnull && !IsBinaryUpgrade)
-			ereport(ERROR, (errmsg("Period %s uses a generated column that allows nulls", period->periodname)));
-
-		if (period->rngtypid != atttuple->atttypid)
-			ereport(ERROR, (errmsg("Period %s uses a generated column with the wrong type", period->periodname)));
-
-		if (!atttuple->attislocal)
-			ereport(ERROR, (errmsg("Period %s uses a generated column that is inherited", period->periodname)));
-
-		period->rngattnum = atttuple->attnum;
-
-		ReleaseSysCache(rngtuple);
-	}
 }
 
 /*
@@ -5567,8 +5440,8 @@ ATPrepCmd(List **wqueue, Relation rel, AlterTableCmd *cmd,
 								 * end) */
 			ATSimplePermissions(cmd->subtype, rel, ATT_TABLE);
 			ATPrepAddPeriod(wqueue, rel, cmd, lockmode, context);
-	 /* No recursion: inheritance not supported with PERIODs */ //TODO:still true ?
-				pass = AT_PASS_ADD_PERIOD;
+			/* No recursion: inheritance not supported with PERIODs */ //TODO:still true ?
+			pass = AT_PASS_ADD_PERIOD;
 			break;
 		case AT_DropPeriod:		/* ALTER TABLE ... DROP PERIOD FOR name */
 			ATSimplePermissions(cmd->subtype, rel, ATT_TABLE);
@@ -5988,6 +5861,9 @@ ATExecCmd(List **wqueue, AlteredTableInfo *tab,
 			address = ATExecCookedColumnDefault(rel, cmd->num, cmd->def);
 			break;
 		case AT_AddPeriod:
+			cmd = ATParseTransformCmd(wqueue, tab, rel, cmd, false, lockmode,
+									  cur_pass, context);
+			Assert(cmd != NULL);
 			address = ATExecAddPeriod(rel, (PeriodDef *) cmd->def, context);
 			break;
 		case AT_DropPeriod:
@@ -8943,7 +8819,6 @@ ATPrepAddPeriod(List **wqueue, Relation rel, AlterTableCmd *cmd,
 				LOCKMODE lockmode, AlterTableUtilityContext *context)
 {
 	PeriodDef  *period = (PeriodDef *) cmd->def;
-	// AlterTableCmd *newcmd;
 
 	/*
 	 * PERIOD FOR SYSTEM_TIME is not yet implemented, but make sure no one
@@ -8962,10 +8837,14 @@ ATPrepAddPeriod(List **wqueue, Relation rel, AlterTableCmd *cmd,
 	transformPeriodOptions(period);
 
 	/* The period name must not already exist */
+	// TODO: shouldn't this happen in ATExec, in case you create the same
+	// period name twice in one ALTER TABLE command? Anyway let's make sure I
+	// have a test for that.
 	(void) check_for_period_name_collision(rel, period->periodname, period->colexists, false);
 
 	// TODO: more validation/prep
 	// ....
+
 	// ATPrepCmd(wqueue, rel, newcmd, false, false, lockmode, context);
 }
 
@@ -8980,16 +8859,20 @@ ATExecAddPeriod(Relation rel, PeriodDef *period, AlterTableUtilityContext *conte
 	Relation	attrelation;
 	ObjectAddress address = InvalidObjectAddress;
 	Constraint *constr;
-	ColumnDef  *rangecol;
 	Oid			conoid,
 				periodoid;
 	List	   *cmds = NIL;
 	AlterTableCmd *cmd;
 
 	attrelation = table_open(AttributeRelationId, RowExclusiveLock);
-	ValidatePeriod(rel, period);
+	// ValidatePeriod(rel, period);
 
-	/* Make the CHECK constraint */
+	/*
+	 * Make the CHECK constraint.
+	 * We can't do this until after columns are added,
+	 * because we need to know period->coltypid,
+	 * which is determined in ValidatePeriod.
+	 */
 	constr = make_constraint_for_period(rel, period);
 	cmd = makeNode(AlterTableCmd);
 	cmd->subtype = AT_AddConstraint;
@@ -8998,33 +8881,40 @@ ATExecAddPeriod(Relation rel, PeriodDef *period, AlterTableUtilityContext *conte
 	AlterTableInternal(RelationGetRelid(rel), cmds, true, context);
 	conoid = get_relation_constraint_oid(RelationGetRelid(rel), period->constraintname, false);
 
-
 	if (!period->colexists)
 	{
-		cmds = NIL;
+		// ColumnDef  *rangecol;
+		// cmds = NIL;
 
-		/* Make the range column */
-		rangecol = make_range_column_for_period(period);
-		cmd = makeNode(AlterTableCmd);
-		cmd->subtype = AT_AddColumn;
-		cmd->def = (Node *) rangecol;
-		cmd->name = period->periodname;
-		cmd->recurse = false;	/* no, let the PERIOD recurse instead */
-		cmds = lappend(cmds, cmd);
+		/*
+		 * Make the range column.
+		 * This has to come after the other columns,
+		 * since its GENERATED expression refers to them.
+		 * Also it needs to know period->rngtypid,
+		 * so it has to come after ValidatePeriod.
+		 */
+		// rangecol = make_range_column_for_period(period);
+		// cmd = makeNode(AlterTableCmd);
+		// cmd->subtype = AT_AddColumn;
+		// cmd->def = (Node *) rangecol;
+		// cmd->name = period->periodname;
+		// cmd->recurse = false;	/* no, let the PERIOD recurse instead */
+		// cmds = lappend(cmds, cmd);
 
 		/* The range column should be NOT NULL */
-		cmd = makeNode(AlterTableCmd);
-		cmd->subtype = AT_AddConstraint;
-		cmd->def = (Node *) makeNotNullConstraint(makeString(period->periodname));
-		cmd->recurse = false;	/* no, let the PERIOD recurse instead */
-		cmds = lappend(cmds, cmd);
+		// cmd = makeNode(AlterTableCmd);
+		// cmd->subtype = AT_AddConstraint;
+		// cmd->def = (Node *) makeNotNullConstraint(makeString(period->periodname));
+		// cmd->recurse = false;	/* no, let the PERIOD recurse instead */
+		// cmds = lappend(cmds, cmd);
+
 
 		/*
 		 * TODO: Postgres doesn't like this. Maybe we need to make the
 		 * sub-commands earlier at prep time. But then we have to retrieve the
 		 * oids somehow and set up dependencies. Or do a lookup?
 		 */
-		AlterTableInternal(RelationGetRelid(rel), cmds, true, context);
+		// AlterTableInternal(RelationGetRelid(rel), cmds, true, context);
 
 		/* Look up the GENERATED attnum */
 		period->rngattnum = get_attnum(RelationGetRelid(rel), period->periodname);
