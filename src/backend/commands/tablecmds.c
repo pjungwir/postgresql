@@ -763,6 +763,8 @@ static void AddRelationNewPeriod(Relation rel, PeriodDef *period);
 static void ValidatePeriod(Relation rel, PeriodDef *period);
 static Constraint *make_constraint_for_period(Relation rel, PeriodDef *period);
 static ColumnDef *make_range_column_for_period(PeriodDef *period);
+static Node *make_generated_expr_for_period(PeriodDef *period,
+											List **range_type_name);
 
 
 /* ----------------------------------------------------------------
@@ -1025,6 +1027,7 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId,
 			foreach(cell, stmt->tableElts)
 			{
 				ColumnDef  *colDef = lfirst(cell);
+				Node	   *period_expr;
 
 				if (strcmp(period->periodname, colDef->colname) == 0)
 				{
@@ -1060,16 +1063,31 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId,
 						ereport(ERROR, (errmsg("Period %s uses a generated column that is inherited",
 										period->periodname)));
 					/*
-					 * XXX: We should check the GENERATED expression also, but
-					 * that is hard to do because one is cooked and one is raw.
+					 * The GENERATED column must have the same expression as
+					 * what we need. We can't compare cooked expressions here,
+					 * because they aren't parsed yet (and the columns they
+					 * mention don't exist).
+					 *
+					 * XXX: If the expression in colDef calls an unqualified
+					 * range constructor, this comparison will fail.  That's a
+					 * bit annoying and might confuse some users. (Really this
+					 * feature is only meant for pg_dump though.) It's tempting
+					 * to resolve it before we compare, but that seems like it
+					 * could some day turn into a parser mismatch vulnerability,
+					 * if we don't stay in sync with the expression parsing code.
 					 */
+					period_expr = make_generated_expr_for_period(period, NULL);
+					if (!equal(colDef->raw_default, period_expr))
+						ereport(ERROR, (errmsg("Period %s uses an incompatible generated expression",
+										period->periodname)));
 
 					found = true;
 				}
 			}
 
 			if (!found)
-				ereport(ERROR, (errmsg("No column found with name %s", period->periodname)));
+				ereport(ERROR, (errmsg("No column found with name %s",
+								period->periodname)));
 		}
 		else
 		{
@@ -1641,29 +1659,14 @@ make_constraint_for_period(Relation rel, PeriodDef *period)
 ColumnDef *
 make_range_column_for_period(PeriodDef *period)
 {
-	char	   *range_type_namespace;
-	char	   *range_type_name;
 	ColumnDef  *col = makeNode(ColumnDef);
-	ColumnRef  *startvar,
-			   *endvar;
-	Expr	   *rangeConstructor;
+	List	   *range_type_name;
+	Node	   *range_constructor;
 
-	if (!get_typname_and_namespace(period->rngtypid, &range_type_name,
-								   &range_type_namespace))
-		elog(ERROR, "missing range type %d", period->rngtypid);
-
-	startvar = makeNode(ColumnRef);
-	startvar->fields = list_make1(makeString(pstrdup(period->startcolname)));
-	endvar = makeNode(ColumnRef);
-	endvar->fields = list_make1(makeString(pstrdup(period->endcolname)));
-	rangeConstructor = (Expr *) makeFuncCall(
-											 list_make2(makeString(range_type_namespace), makeString(range_type_name)),
-											 list_make2(startvar, endvar),
-											 COERCE_EXPLICIT_CALL,
-											 period->location);
-
+	range_constructor = make_generated_expr_for_period(period,
+													   &range_type_name);
 	col->colname = pstrdup(period->periodname);
-	col->typeName = makeTypeName(range_type_name);
+	col->typeName = makeTypeNameFromNameList(range_type_name);
 	col->compression = NULL;
 	col->inhcount = 0;
 	col->is_local = true;
@@ -1671,7 +1674,7 @@ make_range_column_for_period(PeriodDef *period)
 	col->is_from_type = false;
 	col->storage = 0;
 	col->storage_name = NULL;
-	col->raw_default = (Node *) rangeConstructor;
+	col->raw_default = range_constructor;
 	col->cooked_default = NULL;
 	col->identity = 0;
 	col->generated = ATTRIBUTE_GENERATED_STORED;
@@ -1681,6 +1684,52 @@ make_range_column_for_period(PeriodDef *period)
 	col->location = period->location;
 
 	return col;
+}
+
+/*
+ * make_generated_expr_for_period
+ *
+ * Make a raw FuncCall expr to build the PERIOD's GENERATED column from its
+ * start/end columns.
+ *
+ * Since looking up the rangetype's qualified name is needed by one of our
+ * callers, we return that in range_type_qualified_name to avoid duplicate work
+ * (if not NULL).
+ *
+ * Normally this is used to add the GENERATED column to the table, but if the
+ * PERIOD is created with colexists, we use it to validate that the existing
+ * column has a GENERATED expression that matches what we need. When doing
+ * that comparison, a cooked expr would work for ALTER TABLE (since that's what
+ * the existing column has), but it would not work for CREATE TABLE.
+ * In the case the "existing" column has a raw expr, and it's too early to cook
+ * it, since the start/end columns don't exist yet.
+ */
+Node *make_generated_expr_for_period(PeriodDef *period,
+									 List **range_type_qualified_name) {
+	char	   *range_type_name;
+	char	   *range_type_namespace;
+	List	   *tmp_range_type_name;
+	ColumnRef  *startvar,
+			   *endvar;
+
+	if (!get_typname_and_namespace(period->rngtypid,
+								   &range_type_name,
+								   &range_type_namespace))
+		elog(ERROR, "missing range type %d", period->rngtypid);
+
+	tmp_range_type_name = list_make2(makeString(range_type_namespace),
+									 makeString(range_type_name));
+	if (range_type_qualified_name)
+		*range_type_qualified_name = tmp_range_type_name;
+
+	startvar = makeNode(ColumnRef);
+	startvar->fields = list_make1(makeString(pstrdup(period->startcolname)));
+	endvar = makeNode(ColumnRef);
+	endvar->fields = list_make1(makeString(pstrdup(period->endcolname)));
+	return  (Node *) makeFuncCall(tmp_range_type_name,
+								  list_make2(startvar, endvar),
+								  COERCE_EXPLICIT_CALL,
+								  period->location);
 }
 
 /*
@@ -1769,6 +1818,11 @@ ValidatePeriod(Relation rel, PeriodDef *period)
 	 */
 	if (period->colexists)
 	{
+		TupleDesc	tupleDesc;
+		ParseState *pstate;
+		ParseNamespaceItem *nsitem;
+		Node	   *old_expr;
+		Node	   *new_expr;
 		HeapTuple	rngtuple = SearchSysCacheAttName(RelationGetRelid(rel),
 													 period->periodname);
 
@@ -1811,9 +1865,32 @@ ValidatePeriod(Relation rel, PeriodDef *period)
 							period->periodname)));
 
 		/*
-		 * XXX: We should check the GENERATED expression also, but that is
-		 * hard to do because one is cooked and one is raw.
+		 * Check that the GENERATED expression matches what we need.
+		 *
+		 * Since the existing column's expression is cooked, we build and parse
+		 * the expression we want and then compare.
 		 */
+		tupleDesc = RelationGetDescr(rel);
+		old_expr = TupleDescGetDefault(tupleDesc, atttuple->attnum);
+		if (!old_expr)
+			ereport(ERROR, (errmsg("Period %s uses a generated column with no expression",
+							period->periodname)));
+
+		new_expr = make_generated_expr_for_period(period, NULL);
+		pstate = make_parsestate(NULL);
+		nsitem = addRangeTableEntryForRelation(pstate, rel, RowExclusiveLock,
+											   NULL, false, true);
+		addNSItemToQuery(pstate, nsitem, true, true, true);
+		new_expr = cookDefault(pstate, new_expr,
+							   period->rngtypid, -1, period->periodname,
+							   ATTRIBUTE_GENERATED_STORED);
+
+		if (!equal(old_expr, new_expr))
+			ereport(ERROR, (errmsg("Period %s uses an incompatible generated expression",
+							period->periodname)));
+		free_parsestate(pstate);
+
+		/* Everything looks good. Point the PERIOD at the existing column. */
 
 		period->rngattnum = atttuple->attnum;
 

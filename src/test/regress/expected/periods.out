@@ -78,7 +78,7 @@ select obj_description((select oid from pg_period where perrelid = 'pt'::regclas
 create table pt2 (id integer, ds date, de date, period for p1 (ds, de), period for p2 (ds, de));
 drop table pt2;
 /* Skip creating GENERATED column: works */
-create table pt2 (id integer, ds date, de date, p daterange not null generated always as (daterange(ds, de)) stored, period for p (ds, de) with (colexists = true));
+create table pt2 (id integer, ds date, de date, p daterange not null generated always as (pg_catalog.daterange(ds, de)) stored, period for p (ds, de) with (colexists = true));
 \d pt2
                 Table "public.pt2"
  Column |  Type   | Collation | Nullable | Default 
@@ -99,14 +99,17 @@ ERROR:  No column found with name p
 create table pt2 (id integer, ds date, de date, period for p (ds, de) with (colexists = 'whatever'));
 ERROR:  colexists requires a Boolean value
 /* Skip creating GENERATED column: fails because the column is not NOT NULL */
-create table pt2 (id integer, ds date, de date, p daterange generated always as (daterange(ds, de)) stored, period for p (ds, de) with (colexists = true));
+create table pt2 (id integer, ds date, de date, p daterange generated always as (pg_catalog.daterange(ds, de)) stored, period for p (ds, de) with (colexists = true));
 ERROR:  Period p uses a generated column that allows nulls
 /* Skip creating GENERATED column: fails because the column is not GENERATED */
-create table pt2 (id integer, ds date, de date, p daterange not null, period for p (ds, de) with (colexists = true));
+create table pt2 (id integer, ds date, de date, p pg_catalog.daterange not null, period for p (ds, de) with (colexists = true));
 ERROR:  Period p uses a non-generated column
 /* Skip creating GENERATED column: fails because the column is GENERATED but with the wrong expression */
--- TODO:
--- create table pt2 (id integer, ds date, de date, p daterange not null generated always as (daterange(de, ds)) stored, period for p (ds, de) with (colexists = true));
+create table pt2 (id integer, ds date, de date, p daterange not null generated always as (pg_catalog.daterange(de, ds)) stored, period for p (ds, de) with (colexists = true));
+ERROR:  Period p uses an incompatible generated expression
+/* Skip creating GENERATED column: fails because the column is GENERATED but with an unqualified constructor */
+create table pt2 (id integer, ds date, de date, p daterange not null generated always as (daterange(ds, de)) stored, period for p (ds, de) with (colexists = true));
+ERROR:  Period p uses an incompatible generated expression
 /* Skip creating GENERATED column: fails because the column is the wrong type */
 create table pt2 (id integer, ds date, de date, p tsrange not null generated always as (tsrange(ds, de)) stored, period for p (ds, de) with (colexists = true));
 ERROR:  Period p uses a generated column with the wrong type
@@ -232,9 +235,16 @@ alter table pt2 add period for p (ds, de) with (colexists = true);
 ERROR:  Period p uses a non-generated column
 drop table pt2;
 /* Skip creating GENERATED column: fails because the column is GENERATED but with the wrong expression */
--- TODO:
--- create table pt2 (id integer, ds date, de date, p daterange not null generated always as (daterange(de, ds)) stored);
--- alter table pt2 add period for p (ds, de) with (colexists = true);
+create table pt2 (id integer, ds date, de date, p daterange not null generated always as (daterange(de, ds)) stored);
+alter table pt2 add period for p (ds, de) with (colexists = true);
+ERROR:  Period p uses an incompatible generated expression
+drop table pt2;
+/* Skip creating GENERATED column: fails because the column is GENERATED but with the wrong expression, added in the same comamnd */
+create table pt2 (id integer, ds date, de date);
+alter table pt2 add column p daterange not null generated always as (pg_catalog.daterange(de, ds)) stored,
+                add period for p (ds, de) with (colexists = true);
+ERROR:  Period p uses an incompatible generated expression
+drop table pt2;
 /* Skip creating GENERATED column: fails because the column is the wrong type */
 create table pt2 (id integer, ds date, de date, p tsrange not null generated always as (tsrange(ds, de)) stored);
 alter table pt2 add period for p (ds, de) with (colexists = true);
