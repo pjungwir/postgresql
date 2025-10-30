@@ -1027,6 +1027,7 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId,
 			foreach(cell, stmt->tableElts)
 			{
 				ColumnDef  *colDef = lfirst(cell);
+				Node	   *col_expr;
 				Node	   *period_expr;
 
 				if (strcmp(period->periodname, colDef->colname) == 0)
@@ -1068,15 +1069,29 @@ DefineRelation(CreateStmt *stmt, char relkind, Oid ownerId,
 					 * because they aren't parsed yet (and the columns they
 					 * mention don't exist).
 					 *
-					 * XXX: If the expression in colDef calls an unqualified
-					 * range constructor, this comparison will fail.  That's a
-					 * bit annoying and might confuse some users. (Really this
-					 * feature is only meant for pg_dump though.) It's tempting
-					 * to resolve it before we compare, but that seems like it
-					 * could some day turn into a parser mismatch vulnerability,
-					 * if we don't stay in sync with the expression parsing code.
+					 * If the existing column's expression calls range
+					 * constructors (or other functions) without schema-
+					 * qualifying them (as happens in pg_dump output), then look
+					 * them up with the same logic we'll use to cook the
+					 * expression later. If we get this wrong then we have a
+					 * parser mismatch vulnerability, where we think it's one
+					 * function here (say pg_catalog.daterange) but actually
+					 * it's something else.
 					 */
 					period_expr = make_generated_expr_for_period(period, NULL);
+					col_expr = colDef->raw_default;
+
+					if (IsA(col_expr, FuncCall)) {
+						Oid	funcid;
+						FuncCall *func = (FuncCall *) col_expr;
+						FuncDetailCode fdresult = func_get_detail(func->funcname,
+																  func->args,
+																  NIL,
+																  2,
+
+																  &funcid,
+					}
+
 					if (!equal(colDef->raw_default, period_expr))
 						ereport(ERROR, (errmsg("Period %s uses an incompatible generated expression",
 										period->periodname)));
