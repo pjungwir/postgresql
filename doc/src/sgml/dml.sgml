@@ -394,6 +394,22 @@ WHERE product_no = 5;
   </para>
 
   <para>
+   In <literal>READ COMMITTED</literal> mode, temporal updates and deletes can
+   yield unexpected results when they concurrently touch the same row. It is
+   possible to lose all or part of the second update or delete. That's because
+   after the first update changes the start/end times of the original
+   record, it may no longer fit within the second query's <literal>FOR PORTION
+   OF</literal> bounds, so it becomes disqualified from the query. On the other
+   hand the just-inserted temporal leftovers may be overlooked by the second query,
+   which has already scanned the table to find rows to modify. To solve these
+   problems, precede every temporal update/delete with a <literal>SELECT FOR
+   UPDATE</literal> matching the same criteria (including the targeted portion of
+   application time). That way the actual update/delete doesn't begin until the
+   lock is held, and all concurrent leftovers will be visible. In other
+   transaction isolation levels, this lock is not required.
+  </para>
+
+  <para>
    When temporal leftovers are inserted, all <literal>INSERT</literal>
    triggers are fired, but permission checks for inserting rows are
    skipped.
