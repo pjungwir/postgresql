@@ -8390,7 +8390,7 @@ index_params:	index_elem							{ $$ = list_make1($1); }
 
 
 index_elem_options:
-	opt_collate opt_qualified_name opt_asc_desc opt_nulls_order
+	opt_collate opt_qualified_name opt_asc_desc opt_nulls_order opt_without_overlaps
 		{
 			$$ = makeNode(IndexElem);
 			$$->name = NULL;
@@ -8402,7 +8402,7 @@ index_elem_options:
 			$$->ordering = $3;
 			$$->nulls_ordering = $4;
 		}
-	| opt_collate any_name reloptions opt_asc_desc opt_nulls_order
+	| opt_collate any_name reloptions opt_asc_desc opt_nulls_order opt_without_overlaps
 		{
 			$$ = makeNode(IndexElem);
 			$$->name = NULL;
