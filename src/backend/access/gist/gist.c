@@ -161,6 +161,7 @@ gistbuildempty(Relation index)
  *
  *	  This is the public interface routine for tuple insertion in GiSTs.
  *	  It doesn't do any work; just locks the relation and passes the buck.
+ *	  TODO: I don't see where it locks the relation?
  */
 bool
 gistinsert(Relation r, Datum *values, bool *isnull,
@@ -172,6 +173,7 @@ gistinsert(Relation r, Datum *values, bool *isnull,
 	GISTSTATE  *giststate = (GISTSTATE *) indexInfo->ii_AmCache;
 	IndexTuple	itup;
 	MemoryContext oldCxt;
+	bool		known_unique;
 
 	/* Initialize GISTSTATE cache if first call in this statement */
 	if (giststate == NULL)
@@ -188,13 +190,13 @@ gistinsert(Relation r, Datum *values, bool *isnull,
 	itup = gistFormTuple(giststate, r, values, isnull, true);
 	itup->t_tid = *ht_ctid;
 
-	gistdoinsert(r, itup, 0, giststate, heapRel, false);
+	known_unique = gistdoinsert(r, itup, checkUnique, 0, giststate, heapRel, false);
 
 	/* cleanup */
 	MemoryContextSwitchTo(oldCxt);
 	MemoryContextReset(giststate->tempCxt);
 
-	return false;
+	return known_unique;
 }
 
 
@@ -630,14 +632,28 @@ gistplacetopage(Relation rel, Size freespace, GISTSTATE *giststate,
 	return is_split;
 }
 
+static TransactionId
+gist_check_unique(Relation r, GISTSTATE *giststate, Relation heapRel,
+				  IndexUniqueCheck checkUnique, bool *is_unique)
+{
+	*is_unique = true;
+	return 0;
+}
+
 /*
  * Workhorse routine for doing insertion into a GiST index. Note that
  * this routine assumes it is invoked in a short-lived memory context,
  * so it does not bother releasing palloc'd allocations.
+ *
+ * The result value is only significant for UNIQUE_CHECK_PARTIAL:
+ * it must be true if the entry is known unique, else false.
+ * (In the current implementation we'll also return true after a
+ * successful UNIQUE_CHECK_YES or UNIQUE_CHECK_EXISTING call, but
+ * that's just a coding artifact.)
  */
-void
-gistdoinsert(Relation r, IndexTuple itup, Size freespace,
-			 GISTSTATE *giststate, Relation heapRel, bool is_build)
+bool
+gistdoinsert(Relation r, IndexTuple itup, IndexUniqueCheck checkUnique,
+			 Size freespace, GISTSTATE *giststate, Relation heapRel, bool is_build)
 {
 	ItemId		iid;
 	IndexTuple	idxtuple;
@@ -645,6 +661,10 @@ gistdoinsert(Relation r, IndexTuple itup, Size freespace,
 	GISTInsertStack *stack;
 	GISTInsertState state;
 	bool		xlocked = false;
+	bool		checkingunique = (checkUnique != UNIQUE_CHECK_NO);
+	bool		is_unique = false;
+
+search:
 
 	memset(&state, 0, sizeof(GISTInsertState));
 	state.freespace = freespace;
@@ -887,18 +907,45 @@ gistdoinsert(Relation r, IndexTuple itup, Size freespace,
 				}
 			}
 
+			// TODO: now that we have the lock,
+			// we can check for uniqueness and raise an error if needed.
+			if (checkingunique)
+			{
+				TransactionId xwait;
+				// If there are null values, it can't be unique
+				// TODO: but what about NULLS NOT DISTINCT? I don't see that in
+				// nbtree _bt_doinsert.
+
+				xwait = gist_check_unique(r, giststate, heapRel, checkUnique,
+										  &is_unique);
+				if (unlikely(TransactionIdIsValid(xwait)))
+				{
+					// TODO: more here
+					goto search;
+				}
+			}
+
 			/* now state.stack->(page, buffer and blkno) points to leaf page */
 
-			gistinserttuple(&state, stack, giststate, itup,
-							InvalidOffsetNumber);
+			if (checkUnique != UNIQUE_CHECK_EXISTING)
+			{
+				// TODO: need SERIALIZABLE check like nbtree?
+
+				gistinserttuple(&state, stack, giststate, itup,
+								InvalidOffsetNumber);
+			}
+
 			LockBuffer(stack->buffer, GIST_UNLOCK);
 
 			/* Release any pins we might still hold before exiting */
 			for (; stack; stack = stack->parent)
 				ReleaseBuffer(stack->buffer);
+
 			break;
 		}
 	}
+
+	return is_unique;
 }
 
 /*
@@ -1638,6 +1685,9 @@ initGISTstate(Relation index)
 			giststate->supportCollation[i] = index->rd_indcollation[i];
 		else
 			giststate->supportCollation[i] = DEFAULT_COLLATION_OID;
+
+		// TODO: If this is a UNIQUE index, set the operator (or rather its
+		// function) for the equality CompareType (or fail) for each attribute.
 	}
 
 	/* No opclass information for INCLUDE attributes */

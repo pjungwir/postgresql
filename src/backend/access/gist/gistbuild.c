@@ -108,6 +108,8 @@ typedef struct
 	BlockNumber pages_allocated;
 
 	BulkWriteState *bulkstate;
+
+	bool		isunique;
 } GISTBuildState;
 
 #define GIST_SORTED_BUILD_PAGE_NUM 4
@@ -198,6 +200,7 @@ gistbuild(Relation heap, Relation index, IndexInfo *indexInfo)
 	buildstate.heaprel = heap;
 	buildstate.sortstate = NULL;
 	buildstate.giststate = initGISTstate(index);
+	buildstate.isunique = indexInfo->ii_Unique;
 
 	/*
 	 * Create a temporary memory context that is reset once for each tuple
@@ -862,8 +865,25 @@ gistBuildCallback(Relation index,
 		 * There's no buffers (yet). Since we already have the index relation
 		 * locked, we call gistdoinsert directly.
 		 */
-		gistdoinsert(index, itup, buildstate->freespace,
-					 buildstate->giststate, buildstate->heaprel, true);
+		bool known_unique = gistdoinsert(index, itup, buildstate->freespace,
+										 buildstate->isunique,
+										 buildstate->giststate,
+										 buildstate->heaprel, true);
+		/*
+		 * There are no other users of the index yet, so if we aren't sure it's
+		 * unique, there must be duplicates.
+		 * TODO: right??
+		 */
+		// TODO: say which keys are duplicated if possible (as in
+		// utils/sort/tuplesortvariants.c)
+		if (buildstate->isunique && !known_unique)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNIQUE_VIOLATION),
+					 errmsg("could not create unique index \"%s\"",
+							RelationGetRelationName(buildstate->indexrel)),
+					 errdetail("Duplicate keys exist."),
+					 errtableconstraint(buildstate->heaprel,
+										RelationGetRelationName(buildstate->indexrel))));
 	}
 
 	MemoryContextSwitchTo(oldCtx);
