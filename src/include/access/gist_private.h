@@ -408,8 +408,9 @@ extern bool gistinsert(Relation r, Datum *values, bool *isnull,
 extern MemoryContext createTempGistContext(void);
 extern GISTSTATE *initGISTstate(Relation index);
 extern void freeGISTstate(GISTSTATE *giststate);
-extern void gistdoinsert(Relation r,
+extern bool gistdoinsert(Relation r,
 						 IndexTuple itup,
+						 IndexUniqueCheck checkUnique,
 						 Size freespace,
 						 GISTSTATE *giststate,
 						 Relation heapRel,
