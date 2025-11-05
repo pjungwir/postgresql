@@ -390,6 +390,25 @@ ERROR:  lossy distance functions are not supported in index-only scans
 -- Force an index build using buffering.
 create index gist_tbl_box_index_forcing_buffering on gist_tbl using gist (p)
   with (buffering=on, fillfactor=50);
+-- create unique indexes
+create table gist_rngtbl (id int4range);
+insert into gist_rngtbl values ('[1,2)'), ('[2,3)'); -- okay
+create unique index uq_gist_rngtbl on gist_rngtbl using gist (id);
+insert into gist_rngtbl values ('[3,4)'), ('[4,5)'); -- okay
+\d gist_rngtbl
+             Table "public.gist_rngtbl"
+ Column |   Type    | Collation | Nullable | Default 
+--------+-----------+-----------+----------+---------
+ id     | int4range |           |          | 
+Indexes:
+    "uq_gist_rngtbl" UNIQUE, gist (id)
+
+select pg_get_indexdef('uq_gist_rngtbl'::regclass);
+                             pg_get_indexdef                              
+--------------------------------------------------------------------------
+ CREATE UNIQUE INDEX uq_gist_rngtbl ON public.gist_rngtbl USING gist (id)
+(1 row)
+
 -- Clean up
 reset enable_seqscan;
 reset enable_bitmapscan;

@@ -173,6 +173,14 @@ select p from gist_tbl order by circle(p,1) <-> point(0,0) limit 1;
 create index gist_tbl_box_index_forcing_buffering on gist_tbl using gist (p)
   with (buffering=on, fillfactor=50);
 
+-- create unique indexes
+create table gist_rngtbl (id int4range);
+insert into gist_rngtbl values ('[1,2)'), ('[2,3)'); -- okay
+create unique index uq_gist_rngtbl on gist_rngtbl using gist (id);
+insert into gist_rngtbl values ('[3,4)'), ('[4,5)'); -- okay
+\d gist_rngtbl
+select pg_get_indexdef('uq_gist_rngtbl'::regclass);
+
 -- Clean up
 reset enable_seqscan;
 reset enable_bitmapscan;
