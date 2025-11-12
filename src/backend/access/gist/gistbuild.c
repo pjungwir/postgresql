@@ -200,6 +200,8 @@ gistbuild(Relation heap, Relation index, IndexInfo *indexInfo)
 	buildstate.heaprel = heap;
 	buildstate.sortstate = NULL;
 	buildstate.giststate = initGISTstate(index);
+	if (indexInfo->ii_Unique)
+		initGISTstateExclude(buildstate.giststate, index);
 	buildstate.isunique = indexInfo->ii_Unique;
 
 	/*

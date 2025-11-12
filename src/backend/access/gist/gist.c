@@ -17,13 +17,16 @@
 #include "access/gist_private.h"
 #include "access/gistscan.h"
 #include "access/xloginsert.h"
+#include "catalog/pg_am.h"
 #include "catalog/pg_collation.h"
+#include "commands/defrem.h"
 #include "commands/vacuum.h"
 #include "miscadmin.h"
 #include "nodes/execnodes.h"
 #include "storage/predicate.h"
 #include "utils/fmgrprotos.h"
 #include "utils/index_selfuncs.h"
+#include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
 
@@ -180,6 +183,8 @@ gistinsert(Relation r, Datum *values, bool *isnull,
 	{
 		oldCxt = MemoryContextSwitchTo(indexInfo->ii_Context);
 		giststate = initGISTstate(r);
+		if (checkUnique != UNIQUE_CHECK_NO)
+			initGISTstateExclude(giststate, r);
 		giststate->tempCxt = createTempGistContext();
 		indexInfo->ii_AmCache = giststate;
 		MemoryContextSwitchTo(oldCxt);
@@ -1671,6 +1676,15 @@ initGISTstate(Relation index)
 			giststate->fetchFn[i].fn_oid = InvalidOid;
 
 		/*
+		 * We only need excludeFn for UNIQUE indexes.
+		 * XXX: We could use this to enforce exclusion constraints
+		 * from the index instead of the constraint (which is how
+		 * unique constraints work at any rate). Or we could at least
+		 * enforce WITHOUT OVERLAPS semantics.
+		 */
+		giststate->excludeFn[i].fn_oid = InvalidOid;
+
+		/*
 		 * If the index column has a specified collation, we should honor that
 		 * while doing comparisons.  However, we may have a collatable storage
 		 * type for a noncollatable indexed data type.  If there's no index
@@ -1685,9 +1699,6 @@ initGISTstate(Relation index)
 			giststate->supportCollation[i] = index->rd_indcollation[i];
 		else
 			giststate->supportCollation[i] = DEFAULT_COLLATION_OID;
-
-		// TODO: If this is a UNIQUE index, set the operator (or rather its
-		// function) for the equality CompareType (or fail) for each attribute.
 	}
 
 	/* No opclass information for INCLUDE attributes */
@@ -1702,12 +1713,62 @@ initGISTstate(Relation index)
 		giststate->equalFn[i].fn_oid = InvalidOid;
 		giststate->distanceFn[i].fn_oid = InvalidOid;
 		giststate->fetchFn[i].fn_oid = InvalidOid;
+		giststate->excludeFn[i].fn_oid = InvalidOid;
 		giststate->supportCollation[i] = InvalidOid;
 	}
 
 	MemoryContextSwitchTo(oldCxt);
 
 	return giststate;
+}
+
+/*
+ * Initialize excludeFn (assumes this is a UNIQUE index).
+ */
+void
+initGISTstateExclude(GISTSTATE *giststate, Relation index)
+{
+	int			i;
+	for (i = 0; i < IndexRelationGetNumberOfKeyAttributes(index); i++)
+	{
+		/*
+		 * Set the operator (or rather its function) for the equality CompareType
+		 * (or fail).
+		 *
+		 * Even the GiST AM doesn't know the strategy numbers chosen by GiST
+		 * opfamilies. For example btree_gist uses BT*StrategyNumber even though
+		 * built-in opclasses uses RT*StrategyNumber. So we use the CompareType
+		 * infrastructure to find an operator that implements equality.
+		 *
+		 * XXX: We assume that all opclasses within an opfamily use the same
+		 * strategy numbers. This is probably a fair assumption, but it
+		 * means we disregard the index attributes' opclasses when getting
+		 * stratnums.
+		 *
+		 * XXX: Support other CompareTypes, e.g. COMPARE_OVERLAP
+		 */
+		RegProcedure proc;
+		CompareType cmptype = COMPARE_EQ;
+		Oid opfamily = index->rd_opfamily[i];
+		StrategyNumber strat = IndexAmTranslateCompareType(cmptype,
+														   GIST_AM_OID,
+														   opfamily,
+														   false);
+		Oid	opid = get_opfamily_member(index->rd_opfamily[i],
+									   index->rd_opcintype[i],
+									   index->rd_opcintype[i], strat);
+		if (!OidIsValid(opid))
+			ereport(ERROR,
+					errmsg("could not identify equality operator for unique constraint"),
+					errdetail("Could not translate compare type %d for operator family \"%s\" of access method \"%s\".",
+							  cmptype, get_opfamily_name(opfamily, false), get_am_name(GIST_AM_OID)));
+
+		proc = get_opcode(opid);
+		if (!OidIsValid(proc))
+			elog(ERROR, "cache lookup failed for operator %u", opid);
+
+		giststate->excludeFn[i].fn_oid = proc;
+	}
 }
 
 void
