@@ -637,10 +637,24 @@ gistplacetopage(Relation rel, Size freespace, GISTSTATE *giststate,
 	return is_split;
 }
 
+/*
+ * Sets is_unique if there is no conflicting entry already.
+ *
+ * Returns the TransactionId that must be waited on if there is a possible
+ * conflict from a not-yet-committed session.
+ *
+ * The giststate must already point to a leaf page.
+ */
 static TransactionId
 gist_check_unique(Relation r, GISTSTATE *giststate, Relation heapRel,
 				  IndexUniqueCheck checkUnique, bool *is_unique)
 {
+	Assert(OidIsValid(giststate->excludeFn));
+	// Use giststate->excludeFn to check.
+	// Is there any tuple on the page that returns true
+	// when compared with new tuple?
+	// TODO: So don't we need itup from the caller (i.e. the new tuple)?
+	// Does the btree version of check_unique take a parameter like that?
 	*is_unique = true;
 	return 0;
 }
@@ -861,6 +875,12 @@ search:
 			 * Leaf page. Insert the new key. We've already updated all the
 			 * parents on the way down, but we might have to split the page if
 			 * it doesn't fit. gistinserttuple() will take care of that.
+			 * TODO: If the parents are already updated,
+			 * isn't that a problem if the uniqueness check fails??
+			 * Do we need to descend twice and keep the locks longer for unique
+			 * indexes?
+			 * If guess if the new entry *is* non-unique, the parents didn't
+			 * actually change, right?
 			 */
 
 			/*
@@ -912,6 +932,8 @@ search:
 				}
 			}
 
+			/* now state.stack->(page, buffer and blkno) points to leaf page */
+
 			// TODO: now that we have the lock,
 			// we can check for uniqueness and raise an error if needed.
 			if (checkingunique)
@@ -920,6 +942,9 @@ search:
 				// If there are null values, it can't be unique
 				// TODO: but what about NULLS NOT DISTINCT? I don't see that in
 				// nbtree _bt_doinsert.
+				// For btree this seems to be handled in utils/sort/tuplesortvariants.c
+				// (which of course is outside of access/nbtree, but has btree
+				// in many function names).
 
 				xwait = gist_check_unique(r, giststate, heapRel, checkUnique,
 										  &is_unique);
@@ -929,8 +954,6 @@ search:
 					goto search;
 				}
 			}
-
-			/* now state.stack->(page, buffer and blkno) points to leaf page */
 
 			if (checkUnique != UNIQUE_CHECK_EXISTING)
 			{
