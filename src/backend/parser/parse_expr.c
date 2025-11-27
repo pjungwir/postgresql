@@ -3180,8 +3180,6 @@ ParseExprKindName(ParseExprKind exprKind)
 			return "UPDATE";
 		case EXPR_KIND_MERGE_WHEN:
 			return "MERGE WHEN";
-		case EXPR_KIND_FOR_PORTION:
-			return "FOR PORTION OF";
 		case EXPR_KIND_GROUP_BY:
 			return "GROUP BY";
 		case EXPR_KIND_ORDER_BY:
@@ -3228,6 +3226,8 @@ ParseExprKindName(ParseExprKind exprKind)
 			return "GENERATED AS";
 		case EXPR_KIND_CYCLE_MARK:
 			return "CYCLE";
+		case EXPR_KIND_FOR_PORTION:
+			return "FOR PORTION OF";
 
 			/*
 			 * There is intentionally no default: case here, so that the
