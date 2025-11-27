@@ -1410,7 +1410,7 @@ transformForPortionOfClause(ParseState *pstate,
 										   COERCE_EXPLICIT_CALL,
 										   forPortionOf->location);
 	}
-	result->targetRange = transformExpr(pstate, targetExpr, EXPR_KIND_UPDATE_PORTION);
+	result->targetRange = transformExpr(pstate, targetExpr, EXPR_KIND_FOR_PORTION);
 
 	/*
 	 * Build overlapsExpr to use in the whereClause. This means we only hit
@@ -1480,7 +1480,7 @@ transformForPortionOfClause(ParseState *pstate,
 					errcode(ERRCODE_UNDEFINED_OBJECT),
 					errmsg("could not identify an intersect function for type %s", format_type_be(opcintype)));
 
-		targetExpr = transformExpr(pstate, targetExpr, EXPR_KIND_UPDATE_PORTION);
+		targetExpr = transformExpr(pstate, targetExpr, EXPR_KIND_FOR_PORTION);
 		funcArgs = lappend(funcArgs, copyObject(rangeVar));
 		funcArgs = lappend(funcArgs, targetExpr);
 		rangeTLEExpr = makeFuncExpr(funcid, attr->atttypid, funcArgs,

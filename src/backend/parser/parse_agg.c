@@ -583,7 +583,7 @@ check_agglevels_and_constraints(ParseState *pstate, Node *expr)
 		case EXPR_KIND_CYCLE_MARK:
 			errkind = true;
 			break;
-		case EXPR_KIND_UPDATE_PORTION:
+		case EXPR_KIND_FOR_PORTION:
 			if (isAgg)
 				err = _("aggregate functions are not allowed in FOR PORTION OF expressions");
 			else
@@ -1030,7 +1030,7 @@ transformWindowFuncCall(ParseState *pstate, WindowFunc *wfunc,
 		case EXPR_KIND_CYCLE_MARK:
 			errkind = true;
 			break;
-		case EXPR_KIND_UPDATE_PORTION:
+		case EXPR_KIND_FOR_PORTION:
 			err = _("window functions are not allowed in FOR PORTION OF expressions");
 			break;
 
