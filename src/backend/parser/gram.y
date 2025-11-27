@@ -250,7 +250,6 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 	RangeVar   *range;
 	IntoClause *into;
 	WithClause *with;
-	ForPortionOfClause *forportionof;
 	InferClause	*infer;
 	OnConflictClause *onconflict;
 	A_Indices  *aind;
@@ -557,7 +556,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 %type <range>	extended_relation_expr
 %type <range>	relation_expr_opt_alias
 %type <alias>	opt_alias
-%type <forportionof> for_portion_of_clause
+%type <node>	for_portion_of_clause
 %type <node>	tablesample_clause opt_repeatable_clause
 %type <target>	target_el set_target insert_column_item
 
@@ -12562,7 +12561,7 @@ DeleteStmt: opt_with_clause DELETE_P FROM relation_expr_opt_alias
 					DeleteStmt *n = makeNode(DeleteStmt);
 
 					n->relation = $4;
-					n->forPortionOf = $5;
+					n->forPortionOf = (ForPortionOfClause *) $5;
 					n->relation->alias = $6;
 					n->usingClause = $7;
 					n->whereClause = $8;
@@ -12654,7 +12653,7 @@ UpdateStmt: opt_with_clause UPDATE relation_expr_opt_alias
 					UpdateStmt *n = makeNode(UpdateStmt);
 
 					n->relation = $3;
-					n->forPortionOf = $4;
+					n->forPortionOf = (ForPortionOfClause *) $4;
 					n->relation->alias = $5;
 					n->targetList = $7;
 					n->fromClause = $8;
@@ -14185,7 +14184,7 @@ for_portion_of_clause:
 					n->range_name = $4;
 					n->location = @4;
 					n->target = $6;
-					$$ = n;
+					$$ = (Node *) n;
 				}
 			| FOR PORTION OF ColId FROM a_expr TO a_expr
 				{
@@ -14194,7 +14193,7 @@ for_portion_of_clause:
 					n->location = @4;
 					n->target_start = $6;
 					n->target_end = $8;
-					$$ = n;
+					$$ = (Node *) n;
 				}
 		;
 
