@@ -398,7 +398,12 @@ UPDATE <replaceable class="parameter">count</replaceable>
    clause, the result will be similar to that of a <command>SELECT</command>
    statement containing the columns and values defined in the
    <literal>RETURNING</literal> list, computed over the row(s) updated by the
-   command.
+   command. If <literal>FOR PORTION OF</literal> was used, the
+   <literal>RETURNING</literal> clause gives one result for each updated row,
+   but does not include inserted
+   <glossterm linkend="glossary-temporal-leftovers">temporal leftovers</glossterm>.
+   The value of the application-time column matches the new value of the updated
+   row(s).
   </para>
  </refsect1>
 
