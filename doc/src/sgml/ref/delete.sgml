@@ -60,7 +60,7 @@ DELETE FROM [ ONLY ] <replaceable class="parameter">table_name</replaceable> [ *
   <para>
    If the table has a range or multirange column,
    you may supply a <literal>FOR PORTION OF</literal> clause, and the delete will
-   only affect rows that overlap the given interval. Furthermore, if a row's history
+   only affect rows that overlap the given portion. Furthermore, if a row's history
    extends outside the <literal>FOR PORTION OF</literal> bounds, then the delete
    will only change the history within those bounds. In effect you are deleting any
    moment targeted by <literal>FOR PORTION OF</literal> and no moments outside.
@@ -174,7 +174,7 @@ DELETE FROM [ ONLY ] <replaceable class="parameter">table_name</replaceable> [ *
     <term><replaceable class="parameter">for_portion_of_target</replaceable></term>
     <listitem>
      <para>
-      The interval to delete. If you are targeting a range column,
+      The portion to delete. If you are targeting a range column,
       you may give this in the form <literal>FROM</literal>
       <replaceable class="parameter">start_time</replaceable> <literal>TO</literal>
       <replaceable class="parameter">end_time</replaceable>.
