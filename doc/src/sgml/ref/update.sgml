@@ -33,6 +33,11 @@ UPDATE [ ONLY ] <replaceable class="parameter">table_name</replaceable> [ * ]
     [ WHERE <replaceable class="parameter">condition</replaceable> | WHERE CURRENT OF <replaceable class="parameter">cursor_name</replaceable> ]
     [ RETURNING [ WITH ( { OLD | NEW } AS <replaceable class="parameter">output_alias</replaceable> [, ...] ) ]
                 { * | <replaceable class="parameter">output_expression</replaceable> [ [ AS ] <replaceable class="parameter">output_name</replaceable> ] } [, ...] ]
+
+<phrase>where <replaceable class="parameter">for_portion_of_target</replaceable> is:</phrase>
+
+{ FROM <replaceable class="parameter">start_time</replaceable> TO <replaceable class="parameter">end_time</replaceable> |
+  ( <replaceable class="parameter">portion</replaceable> ) }
 </synopsis>
  </refsynopsisdiv>
 
@@ -181,8 +186,9 @@ UPDATE [ ONLY ] <replaceable class="parameter">table_name</replaceable> [ * ]
       <replaceable class="parameter">start_time</replaceable> <literal>TO</literal>
       <replaceable class="parameter">end_time</replaceable>.
       Otherwise you must use
-      <literal>(</literal><replaceable class="parameter">expression</replaceable><literal>)</literal>
-      where the expression yields a value of the same type as
+      <literal>(</literal><replaceable class="parameter">portion</replaceable><literal>)</literal>
+      where <replaceable class="parameter">portion</replaceable> is an expression
+      that yields a value of the same type as
       <replaceable class="parameter">range_column_name</replaceable>.
      </para>
     </listitem>
