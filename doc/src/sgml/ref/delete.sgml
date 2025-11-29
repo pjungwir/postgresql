@@ -60,26 +60,27 @@ DELETE FROM [ ONLY ] <replaceable class="parameter">table_name</replaceable> [ *
   <para>
    If the table has a range or multirange column,
    you may supply a <literal>FOR PORTION OF</literal> clause, and the delete will
-   only affect rows that overlap the given portion. Furthermore, if a row's history
-   extends outside the <literal>FOR PORTION OF</literal> bounds, then the delete
-   will only change the history within those bounds. In effect you are deleting any
-   moment targeted by <literal>FOR PORTION OF</literal> and no moments outside.
+   only affect rows that overlap the given portion. Furthermore, if a row's
+   application time extends outside the <literal>FOR PORTION OF</literal> bounds,
+   then the delete will only change the application time within those bounds.
+   In effect you are deleting the history targeted by <literal>FOR PORTION OF</literal>
+   and no moments outside.
   </para>
 
   <para>
    Specifically, after <productname>PostgreSQL</productname> deletes a row,
    it will <literal>INSERT</literal>
    new <glossterm linkend="glossary-temporal-leftovers">temporal leftovers</glossterm>:
-   rows whose range or multirange receives the remaining history outside
+   rows whose range or multirange receives the remaining application time outside
    the targeted <literal>FROM</literal>/<literal>TO</literal> bounds, with the
    original values in their other columns. For range columns, there will be zero
-   to two inserted records, depending on whether the original history was
+   to two inserted records, depending on whether the original application time was
    completely deleted, extended before/after the change, or both. For
    instance given an original range of <literal>[2,6)</literal>, a delete of
    <literal>[1,7)</literal> yields no leftovers, a delete of
    <literal>[2,5)</literal> yields one, and a delete of
    <literal>[3,5)</literal> yields two. Multiranges never require two temporal
-   leftovers, because one value can always contain whatever history remains.
+   leftovers, because one value can always contain whatever application time remains.
   </para>
 
   <para>
