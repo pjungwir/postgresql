@@ -57,28 +57,29 @@ UPDATE [ ONLY ] <replaceable class="parameter">table_name</replaceable> [ * ]
   <para>
    If the table has a range or multirange column,
    you may supply a <literal>FOR PORTION OF</literal> clause, and the update will
-   only affect rows that overlap the given portion. Furthermore, if a row's history
-   extends outside the <literal>FOR PORTION OF</literal> bounds, then the update
-   will only change the history within those bounds. In effect you are updating any
-   moment targeted by <literal>FOR PORTION OF</literal> and no moments outside.
+   only affect rows that overlap the given portion. Furthermore, if a row's
+   application time extends outside the <literal>FOR PORTION OF</literal> bounds,
+   then the update will only change the application time within those bounds.
+   In effect you are updating the history targeted by <literal>FOR PORTION OF</literal>
+   and no moments outside.
   </para>
 
   <para>
    Specifically, when <productname>PostgreSQL</productname> updates a row,
-   it will also change the range or multirange so that its application time
+   it will first shrink the range or multirange so that its application time
    no longer extends beyond the targeted <literal>FOR PORTION OF</literal> bounds.
    Then <productname>PostgreSQL</productname> will <literal>INSERT</literal>
    new <glossterm linkend="glossary-temporal-leftovers">temporal leftovers</glossterm>:
-   rows whose range or multirange receives the remaining history outside
+   rows whose range or multirange receives the remaining application time outside
    the targeted <literal>FROM</literal>/<literal>TO</literal> bounds, with the
    original values in their other columns. For range columns, there will be zero
-   to two inserted records, depending on whether the original history was
+   to two inserted records, depending on whether the original application time was
    completely updated, extended before/after the change, or both. For
    instance given an original range of <literal>[2,6)</literal>, an update of
    <literal>[1,7)</literal> yields no leftovers, an update of
    <literal>[2,5)</literal> yields one, and an update of
    <literal>[3,5)</literal> yields two. Multiranges never require two temporal
-   leftovers, because one value can always contain whatever history remains.
+   leftovers, because one value can always contain whatever application time remains.
   </para>
 
   <para>
