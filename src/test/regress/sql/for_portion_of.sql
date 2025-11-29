@@ -67,20 +67,20 @@ INSERT INTO for_portion_of_test (id, valid1_at, valid2_at, name) VALUES
 UPDATE for_portion_of_test
   FOR PORTION OF valid1_at FROM '2018-01-15' TO NULL
   SET name = 'foo';
-  SELECT * FROM for_portion_of_test ORDER BY id, valid1_at, valid2_at;
+SELECT * FROM for_portion_of_test ORDER BY id, valid1_at, valid2_at;
 
 UPDATE for_portion_of_test
   FOR PORTION OF valid2_at FROM '2018-01-15' TO NULL
   SET name = 'bar';
-  SELECT * FROM for_portion_of_test ORDER BY id, valid1_at, valid2_at;
+SELECT * FROM for_portion_of_test ORDER BY id, valid1_at, valid2_at;
 
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid1_at FROM '2018-01-20' TO NULL;
-  SELECT * FROM for_portion_of_test ORDER BY id, valid1_at, valid2_at;
+SELECT * FROM for_portion_of_test ORDER BY id, valid1_at, valid2_at;
 
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid2_at FROM '2018-01-20' TO NULL;
-  SELECT * FROM for_portion_of_test ORDER BY id, valid1_at, valid2_at;
+SELECT * FROM for_portion_of_test ORDER BY id, valid1_at, valid2_at;
 
 -- Test with NULLs in the scalar/range key columns.
 -- This won't happen if there is a PRIMARY KEY or UNIQUE constraint

@@ -63,7 +63,7 @@ INSERT INTO for_portion_of_test (id, valid1_at, valid2_at, name) VALUES
 UPDATE for_portion_of_test
   FOR PORTION OF valid1_at FROM '2018-01-15' TO NULL
   SET name = 'foo';
-  SELECT * FROM for_portion_of_test ORDER BY id, valid1_at, valid2_at;
+SELECT * FROM for_portion_of_test ORDER BY id, valid1_at, valid2_at;
   id   |        valid1_at        |        valid2_at        | name 
 -------+-------------------------+-------------------------+------
  [1,2) | [2018-01-02,2018-01-15) | [2015-01-01,2025-01-01) | one
@@ -73,7 +73,7 @@ UPDATE for_portion_of_test
 UPDATE for_portion_of_test
   FOR PORTION OF valid2_at FROM '2018-01-15' TO NULL
   SET name = 'bar';
-  SELECT * FROM for_portion_of_test ORDER BY id, valid1_at, valid2_at;
+SELECT * FROM for_portion_of_test ORDER BY id, valid1_at, valid2_at;
   id   |        valid1_at        |        valid2_at        | name 
 -------+-------------------------+-------------------------+------
  [1,2) | [2018-01-02,2018-01-15) | [2015-01-01,2018-01-15) | one
@@ -84,7 +84,7 @@ UPDATE for_portion_of_test
 
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid1_at FROM '2018-01-20' TO NULL;
-  SELECT * FROM for_portion_of_test ORDER BY id, valid1_at, valid2_at;
+SELECT * FROM for_portion_of_test ORDER BY id, valid1_at, valid2_at;
   id   |        valid1_at        |        valid2_at        | name 
 -------+-------------------------+-------------------------+------
  [1,2) | [2018-01-02,2018-01-15) | [2015-01-01,2018-01-15) | one
@@ -95,7 +95,7 @@ DELETE FROM for_portion_of_test
 
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid2_at FROM '2018-01-20' TO NULL;
-  SELECT * FROM for_portion_of_test ORDER BY id, valid1_at, valid2_at;
+SELECT * FROM for_portion_of_test ORDER BY id, valid1_at, valid2_at;
   id   |        valid1_at        |        valid2_at        | name 
 -------+-------------------------+-------------------------+------
  [1,2) | [2018-01-02,2018-01-15) | [2015-01-01,2018-01-15) | one
