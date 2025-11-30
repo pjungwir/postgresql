@@ -408,51 +408,61 @@ DELETE FROM for_portion_of_test
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-06-01' TO NULL
   WHERE id = '[3,4)';
+SELECT * FROM for_portion_of_test WHERE id = '[3,4)' ORDER BY id, valid_at;
 
 -- Deleting a finite/open portion with an open/finite target
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM NULL TO '2018-03-01'
   WHERE id = '[6,7)';
+SELECT * FROM for_portion_of_test WHERE id = '[6,7)' ORDER BY id, valid_at;
 
 -- Deleting an open/finite portion with an open/finite target
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM NULL TO '2018-02-01'
   WHERE id = '[4,5)';
+SELECT * FROM for_portion_of_test WHERE id = '[4,5)' ORDER BY id, valid_at;
 
 -- Deleting an open/finite portion with a finite/open target
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM '2017-01-01' TO NULL
   WHERE id = '[7,8)';
+SELECT * FROM for_portion_of_test WHERE id = '[7,8)' ORDER BY id, valid_at;
 
 -- Deleting a finite/finite portion with an exact fit
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-02-01' TO '2018-04-01'
   WHERE id = '[4,5)';
+SELECT * FROM for_portion_of_test WHERE id = '[4,5)' ORDER BY id, valid_at;
 
 -- Deleting an enclosed span
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM NULL TO NULL
   WHERE id = '[2,3)';
+SELECT * FROM for_portion_of_test WHERE id = '[2,3)' ORDER BY id, valid_at;
 
 -- Deleting an open/open portion with a finite/finite target
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-01-01' TO '2019-01-01'
   WHERE id = '[5,6)';
+SELECT * FROM for_portion_of_test WHERE id = '[5,6)' ORDER BY id, valid_at;
 
 -- Deleting an enclosed span with separate protruding spans
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-02-03' TO '2018-03-03'
   WHERE id = '[1,2)';
+SELECT * FROM for_portion_of_test WHERE id = '[1,2)' ORDER BY id, valid_at;
 
 -- Deleting multiple enclosed spans
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM NULL TO NULL
   WHERE id = '[8,9)';
+SELECT * FROM for_portion_of_test WHERE id = '[8,9)' ORDER BY id, valid_at;
 
 -- Deleting with a direct target
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at (daterange('2018-03-10', '2018-03-17'))
   WHERE id = '[1,2)';
+SELECT * FROM for_portion_of_test WHERE id = '[1,2)' ORDER BY id, valid_at;
 
 -- DELETE with no WHERE clause
 DELETE FROM for_portion_of_test
