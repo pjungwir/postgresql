@@ -14,9 +14,11 @@ INSERT INTO for_portion_of_test (id, valid_at, name) VALUES
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-01-15' TO '2019-01-01'
   SET name = 'one^1';
+SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
 
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM '2019-01-15' TO '2019-01-20';
+SELECT * FROM for_portion_of_test ORDER BY id, valid_at;
 
 -- With a table alias with AS
 
@@ -172,66 +174,77 @@ UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-06-01' TO NULL
   SET name = 'three^1'
   WHERE id = '[3,4)';
+SELECT * FROM for_portion_of_test WHERE id = '[3,4)' ORDER BY id, valid_at;
 
 -- Updating a finite/open portion with an open/finite target
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM NULL TO '2018-03-01'
   SET name = 'three^2'
   WHERE id = '[3,4)';
+SELECT * FROM for_portion_of_test WHERE id = '[3,4)' ORDER BY id, valid_at;
 
 -- Updating an open/finite portion with an open/finite target
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM NULL TO '2018-02-01'
   SET name = 'four^1'
   WHERE id = '[4,5)';
+SELECT * FROM for_portion_of_test WHERE id = '[4,5)' ORDER BY id, valid_at;
 
 -- Updating an open/finite portion with a finite/open target
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2017-01-01' TO NULL
   SET name = 'four^2'
   WHERE id = '[4,5)';
+SELECT * FROM for_portion_of_test WHERE id = '[4,5)' ORDER BY id, valid_at;
 
 -- Updating a finite/finite portion with an exact fit
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2017-01-01' TO '2018-02-01'
   SET name = 'four^3'
   WHERE id = '[4,5)';
+SELECT * FROM for_portion_of_test WHERE id = '[4,5)' ORDER BY id, valid_at;
 
 -- Updating an enclosed span
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM NULL TO NULL
   SET name = 'two^2'
   WHERE id = '[2,3)';
+SELECT * FROM for_portion_of_test WHERE id = '[2,3)' ORDER BY id, valid_at;
 
 -- Updating an open/open portion with a finite/finite target
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-01-01' TO '2019-01-01'
   SET name = 'five^1'
   WHERE id = '[5,6)';
+SELECT * FROM for_portion_of_test WHERE id = '[5,6)' ORDER BY id, valid_at;
 
 -- Updating an enclosed span with separate protruding spans
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2017-01-01' TO '2020-01-01'
   SET name = 'five^2'
   WHERE id = '[5,6)';
+SELECT * FROM for_portion_of_test WHERE id = '[5,6)' ORDER BY id, valid_at;
 
 -- Updating multiple enclosed spans
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM NULL TO NULL
   SET name = 'one^2'
   WHERE id = '[1,2)';
+SELECT * FROM for_portion_of_test WHERE id = '[1,2)' ORDER BY id, valid_at;
 
 -- Updating with a direct target
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at (daterange('2018-03-10', '2018-03-17'))
   SET name = 'one^3'
   WHERE id = '[1,2)';
+SELECT * FROM for_portion_of_test WHERE id = '[1,2)' ORDER BY id, valid_at;
 
 -- Updating the non-range part of the PK:
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-02-15' TO NULL
   SET id = '[6,7)'
   WHERE id = '[1,2)';
+SELECT * FROM for_portion_of_test WHERE id = '[1,2)' ORDER BY id, valid_at;
 
 -- UPDATE with no WHERE clause
 UPDATE for_portion_of_test
