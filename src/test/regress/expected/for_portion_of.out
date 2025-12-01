@@ -480,6 +480,37 @@ SELECT * FROM for_portion_of_test WHERE id = '[10,11)';
  [10,11) | [2018-05-01,2020-01-01) | ten
 (3 rows)
 
+-- UPDATE FOR PORTION OF with current_date
+-- (We take care not to make the expectation depend on the timestamp.)
+INSERT INTO for_portion_of_test (id, valid_at, name) VALUES
+  ('[99,100)', '[2000-01-01,)', 'foo');
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM current_date TO null
+  SET name = 'bar'
+  WHERE id = '[99,100)';
+SELECT name, lower(valid_at) FROM for_portion_of_test
+  WHERE id = '[99,100)' AND valid_at @> current_date - 1;
+ name |   lower    
+------+------------
+ foo  | 2000-01-01
+(1 row)
+
+SELECT name, upper(valid_at) FROM for_portion_of_test
+  WHERE id = '[99,100)' AND valid_at @> current_date + 1;
+ name | upper 
+------+-------
+ bar  | 
+(1 row)
+
+-- UPDATE FOR PORTION OF with clock_timestamp()
+-- fails because the function is volatile:
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM clock_timestamp()::date TO null
+  SET name = 'baz'
+  WHERE id = '[99,100)';
+ERROR:  FOR PORTION OF bounds cannot contain volatile functions
+-- clean up:
+DELETE FROM for_portion_of_test WHERE id = '[99,100)';
 -- Not visible to UPDATE:
 -- Tuples updated/inserted within the CTE are not visible to the main query yet,
 -- but neither are old tuples the CTE changed:
@@ -738,6 +769,34 @@ UPDATE for_portion_of_test
  [3,4) | [2018-02-01,2018-02-15) | three^3
 (1 row)
 
+-- DELETE FOR PORTION OF with current_date
+-- (We take care not to make the expectation depend on the timestamp.)
+INSERT INTO for_portion_of_test (id, valid_at, name) VALUES
+  ('[99,100)', '[2000-01-01,)', 'foo');
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM current_date TO null
+  WHERE id = '[99,100)';
+SELECT name, lower(valid_at) FROM for_portion_of_test
+  WHERE id = '[99,100)' AND valid_at @> current_date - 1;
+ name |   lower    
+------+------------
+ foo  | 2000-01-01
+(1 row)
+
+SELECT name, upper(valid_at) FROM for_portion_of_test
+  WHERE id = '[99,100)' AND valid_at @> current_date + 1;
+ name | upper 
+------+-------
+(0 rows)
+
+-- DELETE FOR PORTION OF with clock_timestamp()
+-- fails because the function is volatile:
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM clock_timestamp()::date TO null
+  WHERE id = '[99,100)';
+ERROR:  FOR PORTION OF bounds cannot contain volatile functions
+-- clean up:
+DELETE FROM for_portion_of_test WHERE id = '[99,100)';
 -- DELETE ... RETURNING returns the deleted values (regardless of bounds)
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-02-02' TO '2018-02-03'

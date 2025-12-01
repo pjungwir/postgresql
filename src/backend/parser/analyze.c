@@ -1411,6 +1411,9 @@ transformForPortionOfClause(ParseState *pstate,
 										   forPortionOf->location);
 	}
 	result->targetRange = transformExpr(pstate, targetExpr, EXPR_KIND_FOR_PORTION);
+	if (contain_volatile_functions_after_planning((Expr *) result->targetRange))
+		ereport(ERROR,
+				(errmsg("FOR PORTION OF bounds cannot contain volatile functions")));
 
 	/*
 	 * Build overlapsExpr to use in the whereClause. This means we only hit
