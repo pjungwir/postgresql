@@ -309,6 +309,29 @@ SELECT *
   WHERE t.id = update_apr.id;
 SELECT * FROM for_portion_of_test WHERE id = '[10,11)';
 
+-- UPDATE FOR PORTION OF with current_date
+-- (We take care not to make the expectation depend on the timestamp.)
+INSERT INTO for_portion_of_test (id, valid_at, name) VALUES
+  ('[99,100)', '[2000-01-01,)', 'foo');
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM current_date TO null
+  SET name = 'bar'
+  WHERE id = '[99,100)';
+SELECT name, lower(valid_at) FROM for_portion_of_test
+  WHERE id = '[99,100)' AND valid_at @> current_date - 1;
+SELECT name, upper(valid_at) FROM for_portion_of_test
+  WHERE id = '[99,100)' AND valid_at @> current_date + 1;
+
+-- UPDATE FOR PORTION OF with clock_timestamp()
+-- fails because the function is volatile:
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM clock_timestamp()::date TO null
+  SET name = 'baz'
+  WHERE id = '[99,100)';
+
+-- clean up:
+DELETE FROM for_portion_of_test WHERE id = '[99,100)';
+
 -- Not visible to UPDATE:
 -- Tuples updated/inserted within the CTE are not visible to the main query yet,
 -- but neither are old tuples the CTE changed:
@@ -477,6 +500,27 @@ UPDATE for_portion_of_test
   SET name = 'three^3'
   WHERE id = '[3,4)'
   RETURNING *;
+
+-- DELETE FOR PORTION OF with current_date
+-- (We take care not to make the expectation depend on the timestamp.)
+INSERT INTO for_portion_of_test (id, valid_at, name) VALUES
+  ('[99,100)', '[2000-01-01,)', 'foo');
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM current_date TO null
+  WHERE id = '[99,100)';
+SELECT name, lower(valid_at) FROM for_portion_of_test
+  WHERE id = '[99,100)' AND valid_at @> current_date - 1;
+SELECT name, upper(valid_at) FROM for_portion_of_test
+  WHERE id = '[99,100)' AND valid_at @> current_date + 1;
+
+-- DELETE FOR PORTION OF with clock_timestamp()
+-- fails because the function is volatile:
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM clock_timestamp()::date TO null
+  WHERE id = '[99,100)';
+
+-- clean up:
+DELETE FROM for_portion_of_test WHERE id = '[99,100)';
 
 -- DELETE ... RETURNING returns the deleted values (regardless of bounds)
 DELETE FROM for_portion_of_test
