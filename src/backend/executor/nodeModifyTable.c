@@ -1531,11 +1531,14 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 		 * skipping insert permission checks. Therefore we give each insert
 		 * its own transition table. If we just push & pop a new trigger level
 		 * for each insert, we get exactly what we need.
+		 *
+		 * We have to make sure that the inserts don't add to the ROW_COUNT
+		 * diagnostic or the command tag, so we pass false for canSetTag.
 		 */
 		AfterTriggerBeginQuery();
 		ExecSetupTransitionCaptureState(mtstate, estate);
 		fireBSTriggers(mtstate);
-		ExecInsert(context, resultRelInfo, leftoverSlot, node->canSetTag, NULL, NULL);
+		ExecInsert(context, resultRelInfo, leftoverSlot, false, NULL, NULL);
 		fireASTriggers(mtstate);
 		AfterTriggerEndQuery(estate);
 	}

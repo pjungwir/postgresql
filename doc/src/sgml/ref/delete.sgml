@@ -341,7 +341,7 @@ DELETE <replaceable class="parameter">count</replaceable>
    class="parameter">count</replaceable> is 0, no rows were deleted by
    the query (this is not considered an error).
    If <literal>FOR PORTION OF</literal> was used, the
-   <replaceable class="parameter">count</replaceable> also includes
+   <replaceable class="parameter">count</replaceable> does not include
    <glossterm linkend="glossary-temporal-leftovers">temporal leftovers</glossterm>
    that were inserted.
   </para>
