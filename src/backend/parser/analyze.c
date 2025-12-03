@@ -57,6 +57,7 @@
 #include "utils/fmgroids.h"
 #include "utils/guc.h"
 #include "utils/lsyscache.h"
+#include "utils/rangetypes.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
 
@@ -1315,7 +1316,6 @@ transformForPortionOfClause(ParseState *pstate,
 	OpExpr	   *op;
 	ForPortionOfExpr *result;
 	Var		   *rangeVar;
-	Node	   *targetExpr;
 
 	/* We don't support FOR PORTION OF FDW queries. */
 	if (targetrel->rd_rel->relkind == RELKIND_FOREIGN_TABLE)
@@ -1351,12 +1351,13 @@ transformForPortionOfClause(ParseState *pstate,
 
 
 	if (forPortionOf->target)
-
+	{
 		/*
 		 * We were already given an expression for the target, so we don't
 		 * have to build anything.
 		 */
-		targetExpr = forPortionOf->target;
+		result->targetRange = transformExpr(pstate, forPortionOf->target, EXPR_KIND_FOR_PORTION);
+	}
 	else
 	{
 		/* Make sure it's a range column */
@@ -1373,13 +1374,20 @@ transformForPortionOfClause(ParseState *pstate,
 		 * constant result, so we accept functions like NOW() but not column
 		 * references, subqueries, etc.
 		 */
-		targetExpr = (Node *) makeFuncCall(
-										   list_make2(makeString(range_type_namespace), makeString(range_type_name)),
-										   list_make2(forPortionOf->target_start, forPortionOf->target_end),
-										   COERCE_EXPLICIT_CALL,
-										   forPortionOf->location);
+		result->targetFrom = transformExpr(pstate, forPortionOf->target_start, EXPR_KIND_FOR_PORTION);
+		result->targetTo = transformExpr(pstate, forPortionOf->target_end, EXPR_KIND_FOR_PORTION);
+		result->targetRange = (Node *) makeFuncExpr(
+				range_get_constructor2(attr->atttypid),
+				attr->atttypid,
+				list_make2(copyObject(result->targetFrom), copyObject(result->targetTo)),
+				InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
+		// TODO: seems like an impossible qual is getting added, because we wind
+		// up not uipdating anything.
+		// Maybe break here and see what we're making
+		// (especially compared to before),
+		// or break in the rewriting and see what adding a qual does
+		// (again, we could compare to what we had before).
 	}
-	result->targetRange = transformExpr(pstate, targetExpr, EXPR_KIND_FOR_PORTION);
 	if (contain_volatile_functions_after_planning((Expr *) result->targetRange))
 		ereport(ERROR,
 				(errmsg("FOR PORTION OF bounds cannot contain volatile functions")));
@@ -1455,9 +1463,8 @@ transformForPortionOfClause(ParseState *pstate,
 					errcode(ERRCODE_UNDEFINED_OBJECT),
 					errmsg("could not identify an intersect function for type %s", format_type_be(opcintype)));
 
-		targetExpr = transformExpr(pstate, targetExpr, EXPR_KIND_FOR_PORTION);
 		funcArgs = lappend(funcArgs, copyObject(rangeVar));
-		funcArgs = lappend(funcArgs, targetExpr);
+		funcArgs = lappend(funcArgs, result->targetRange);
 		rangeTLEExpr = makeFuncExpr(funcid, attr->atttypid, funcArgs,
 									InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
 

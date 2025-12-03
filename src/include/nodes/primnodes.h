@@ -2394,6 +2394,9 @@ typedef struct OnConflictExpr
  * Then we set up an overlaps expression between that and the range column,
  * so that we can find the rows we need to update/delete.
  *
+ * If the user used the FROM ... TO ... syntax, we save the individual
+ * expressions so that we can deparse them.
+ *
  * In the executor we'll also build an intersect expression between the
  * targeted range and the range column, so that we can update the start/end
  * bounds of the UPDATE'd record.
@@ -2404,6 +2407,8 @@ typedef struct ForPortionOfExpr
 	NodeTag		type;
 	Var		   *rangeVar;		/* Range column */
 	char	   *range_name;		/* Range name */
+	Node	   *targetFrom;		/* FOR PORTION OF FROM bound, if given */
+	Node	   *targetTo;		/* FOR PORTION OF TO bound, if given */
 	Node	   *targetRange;	/* FOR PORTION OF bounds as a range/multirange */
 	Oid			rangeType;		/* type of targetRange */
 	Node	   *overlapsExpr;	/* range && targetRange */

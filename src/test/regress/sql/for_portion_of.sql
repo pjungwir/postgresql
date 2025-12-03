@@ -379,6 +379,15 @@ BEGIN ATOMIC
     RETURNING name;
 END;
 \sf+ fpo_update()
+CREATE OR REPLACE function fpo_update()
+RETURNS text
+BEGIN ATOMIC
+  UPDATE for_portion_of_test
+    FOR PORTION OF valid_at (daterange('2018-01-15', '2020-01-01') * daterange('2019-01-01', '2022-01-01'))
+    SET name = 'one^1'
+    RETURNING name;
+END;
+\sf+ fpo_update()
 DROP FUNCTION fpo_update();
 
 DROP TABLE for_portion_of_test;
@@ -562,6 +571,14 @@ RETURNS text
 BEGIN ATOMIC
   DELETE FROM for_portion_of_test
     FOR PORTION OF valid_at FROM '2018-01-15' TO '2019-01-01'
+    RETURNING name;
+END;
+\sf+ fpo_delete()
+CREATE OR REPLACE function fpo_delete()
+RETURNS text
+BEGIN ATOMIC
+  DELETE FROM for_portion_of_test
+    FOR PORTION OF valid_at (daterange('2018-01-15', '2020-01-01') * daterange('2019-01-01', '2022-01-01'))
     RETURNING name;
 END;
 \sf+ fpo_delete()
