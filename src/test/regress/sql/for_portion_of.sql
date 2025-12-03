@@ -369,6 +369,18 @@ $$;
 SELECT fpo_update('[10,11)', '2015-01-01', '2019-01-01');
 SELECT * FROM for_portion_of_test WHERE id = '[10,11)';
 
+-- UPDATE FOR PORTION OF in a compiled SQL function
+CREATE FUNCTION fpo_update()
+RETURNS text
+BEGIN ATOMIC
+  UPDATE for_portion_of_test
+    FOR PORTION OF valid_at FROM '2018-01-15' TO '2019-01-01'
+    SET name = 'one^1'
+    RETURNING name;
+END;
+\sf+ fpo_update()
+DROP FUNCTION fpo_update();
+
 DROP TABLE for_portion_of_test;
 
 --
