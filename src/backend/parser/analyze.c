@@ -73,8 +73,6 @@ typedef struct SelectStmtPassthrough
 post_parse_analyze_hook_type post_parse_analyze_hook = NULL;
 
 static Query *transformOptionalSelectInto(ParseState *pstate, Node *parseTree);
-static Node *addForPortionOfWhereConditions(Query *qry, ForPortionOfClause *forPortionOf,
-											Node *whereClause);
 static Query *transformDeleteStmt(ParseState *pstate, DeleteStmt *stmt);
 static Query *transformInsertStmt(ParseState *pstate, InsertStmt *stmt);
 static OnConflictExpr *transformOnConflictClause(ParseState *pstate,
@@ -506,35 +504,6 @@ stmt_requires_parse_analysis(RawStmt *parseTree)
 }
 
 /*
- * addForPortionOfWhereConditions
- *		Adds a qual to restrict the query to rows matching the FOR PORTION OF
- *		FROM ... TO bounds.
- *
- *	If forPortionOf is set, qry->forPortionOf must be too.
- */
-static Node *
-addForPortionOfWhereConditions(Query *qry, ForPortionOfClause *forPortionOf,
-							   Node *whereClause)
-{
-	if (forPortionOf)
-	{
-		Node *overlapsExpr;
-		Assert(qry->forPortionOf);
-
-		overlapsExpr = qry->forPortionOf->overlapsExpr;
-
-		if (whereClause)
-			return (Node *) makeBoolExpr(AND_EXPR,
-										 list_make2(whereClause, overlapsExpr),
-										 -1);
-		else
-			return overlapsExpr;
-	}
-	else
-		return whereClause;
-}
-
-/*
  * analyze_requires_snapshot
  *		Returns true if a snapshot must be set before doing parse analysis
  *		on the given raw parse tree.
@@ -606,7 +575,6 @@ transformDeleteStmt(ParseState *pstate, DeleteStmt *stmt)
 {
 	Query	   *qry = makeNode(Query);
 	ParseNamespaceItem *nsitem;
-	Node	   *whereClause;
 	Node	   *qual;
 
 	qry->commandType = CMD_DELETE;
@@ -648,8 +616,7 @@ transformDeleteStmt(ParseState *pstate, DeleteStmt *stmt)
 	if (stmt->forPortionOf)
 		qry->forPortionOf = transformForPortionOfClause(pstate, qry->resultRelation, stmt->forPortionOf, false);
 
-	whereClause = addForPortionOfWhereConditions(qry, stmt->forPortionOf, stmt->whereClause);
-	qual = transformWhereClause(pstate, whereClause,
+	qual = transformWhereClause(pstate, stmt->whereClause,
 								EXPR_KIND_WHERE, "WHERE");
 
 	transformReturningClause(pstate, qry, stmt->returningClause,
@@ -1321,7 +1288,8 @@ transformOnConflictClause(ParseState *pstate,
  *
  *	  - Look up the range/period requested.
  *	  - Build a compatible range value from the FROM and TO expressions.
- *	  - Build an "overlaps" expression for filtering.
+ *	  - Build an "overlaps" expression for filtering, used later by the
+ *		rewriter.
  *	  - For UPDATEs, build an "intersects" expression the rewriter can add
  *		to the targetList to change the temporal bounds.
  */
@@ -1426,6 +1394,8 @@ transformForPortionOfClause(ParseState *pstate,
 	result->overlapsExpr = (Node *) makeSimpleA_Expr(AEXPR_OP, get_opname(opid),
 													 (Node *) copyObject(rangeVar), targetExpr,
 													 forPortionOf->location);
+	result->overlapsExpr = transformWhereClause(pstate, result->overlapsExpr,
+								EXPR_KIND_WHERE, "WHERE");
 
 	/*
 	 * Look up the without_portion func. This computes the bounds of temporal
@@ -2728,7 +2698,6 @@ transformUpdateStmt(ParseState *pstate, UpdateStmt *stmt)
 {
 	Query	   *qry = makeNode(Query);
 	ParseNamespaceItem *nsitem;
-	Node	   *whereClause;
 	Node	   *qual;
 
 	qry->commandType = CMD_UPDATE;
@@ -2766,8 +2735,7 @@ transformUpdateStmt(ParseState *pstate, UpdateStmt *stmt)
 	nsitem->p_lateral_only = false;
 	nsitem->p_lateral_ok = true;
 
-	whereClause = addForPortionOfWhereConditions(qry, stmt->forPortionOf, stmt->whereClause);
-	qual = transformWhereClause(pstate, whereClause,
+	qual = transformWhereClause(pstate, stmt->whereClause,
 								EXPR_KIND_WHERE, "WHERE");
 
 	transformReturningClause(pstate, qry, stmt->returningClause,

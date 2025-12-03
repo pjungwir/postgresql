@@ -4113,21 +4113,28 @@ RewriteQuery(Query *parsetree, List *rewrite_events, int orig_rt_length,
 		{
 			Assert(parsetree->override == OVERRIDING_NOT_SET);
 
-			/*
-			 * Update FOR PORTION OF column(s) automatically. Don't do this
-			 * until we're done rewriting a view update, so that we don't add
-			 * the same update on the recursion.
-			 */
-			if (parsetree->forPortionOf &&
-				rt_entry_relation->rd_rel->relkind != RELKIND_VIEW)
-			{
-				ListCell   *tl;
+			if (parsetree->forPortionOf) {
+				/*
+				 * UPDATE FOR PORTION OF should be limited to rows
+				 * that overlap the target range.
+				 */
+				AddQual(parsetree, parsetree->forPortionOf->overlapsExpr);
 
-				foreach(tl, parsetree->forPortionOf->rangeTargetList)
+				/*
+				 * Update FOR PORTION OF column(s) automatically. Don't do this
+				 * until we're done rewriting a view update, so that we don't add
+				 * the same update on the recursion.
+				 */
+				if (rt_entry_relation->rd_rel->relkind != RELKIND_VIEW)
 				{
-					TargetEntry *tle = (TargetEntry *) lfirst(tl);
+					ListCell   *tl;
 
-					parsetree->targetList = lappend(parsetree->targetList, tle);
+					foreach(tl, parsetree->forPortionOf->rangeTargetList)
+					{
+						TargetEntry *tle = (TargetEntry *) lfirst(tl);
+
+						parsetree->targetList = lappend(parsetree->targetList, tle);
+					}
 				}
 			}
 
@@ -4176,7 +4183,13 @@ RewriteQuery(Query *parsetree, List *rewrite_events, int orig_rt_length,
 		}
 		else if (event == CMD_DELETE)
 		{
-			/* Nothing to do here */
+			if (parsetree->forPortionOf) {
+				/*
+				 * DELETE FOR PORTION OF should be limited to rows
+				 * that overlap the target range.
+				 */
+				AddQual(parsetree, parsetree->forPortionOf->overlapsExpr);
+			}
 		}
 		else
 			elog(ERROR, "unrecognized commandType: %d", (int) event);
