@@ -166,5 +166,6 @@ extern bool range_split_internal(TypeCacheEntry *typcache, const RangeType *r1,
 								 RangeType **output2);
 extern void range_minus_multi_internal(TypeCacheEntry *typcache, RangeType *r1,
 									   RangeType *r2, RangeType **outputs, int *outputn);
+extern Oid range_get_constructor2(Oid rngtypid);
 
 #endif							/* RANGETYPES_H */

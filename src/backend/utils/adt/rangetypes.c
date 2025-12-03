@@ -30,6 +30,9 @@
  */
 #include "postgres.h"
 
+#include "access/htup_details.h"
+#include "catalog/pg_proc.h"
+#include "catalog/pg_type.h"
 #include "common/hashfn.h"
 #include "funcapi.h"
 #include "libpq/pqformat.h"
@@ -45,6 +48,7 @@
 #include "utils/lsyscache.h"
 #include "utils/rangetypes.h"
 #include "utils/sortsupport.h"
+#include "utils/syscache.h"
 #include "utils/timestamp.h"
 #include "varatt.h"
 
@@ -440,6 +444,66 @@ range_constructor3(PG_FUNCTION_ARGS)
 	range = make_range(typcache, &lower, &upper, false, NULL);
 
 	PG_RETURN_RANGE_P(range);
+}
+
+
+/*
+ * get the 2-arg constructor for the given rangetype
+ *
+ * It should be the function whose name and namespace match the rangetype,
+ * has 2 args matching the subtype, and returns the rangetype. To be extra sure,
+ * we make sure that prosrc is 'range_constructor2' and probin IS NULL.
+ *
+ * We can't use pg_depend, because built-in rangetypes don't have entries there.
+ */
+Oid
+range_get_constructor2(Oid rngtypid)
+{
+	Oid	range_typelem = get_range_subtype(rngtypid);
+	char	*rngname;
+	Oid		rngnamespace;
+	Oid		argoids[2];
+	oidvector  *argtypes;
+	HeapTuple	tp;
+
+	/* Get the range's name and namespace */
+	tp = SearchSysCache1(TYPEOID, ObjectIdGetDatum(rngtypid));
+	if (HeapTupleIsValid(tp))
+	{
+		Form_pg_type typtup = (Form_pg_type) GETSTRUCT(tp);
+
+		rngname = pstrdup(NameStr(typtup->typname));
+		rngnamespace = typtup->typnamespace;
+		ReleaseSysCache(tp);
+	}
+	else
+		elog(ERROR, "cache lookup failed for type %u", rngtypid);
+
+	/* Find the constructor */
+	argoids[0] = range_typelem;
+	argoids[1] = range_typelem;
+	argtypes = buildoidvector(argoids, 2);
+	tp = SearchSysCache3(PROCNAMEARGSNSP,
+						 PointerGetDatum(rngname),
+						 PointerGetDatum(argtypes),
+						 ObjectIdGetDatum(rngnamespace));
+	if (HeapTupleIsValid(tp))
+	{
+		Form_pg_proc proctup = (Form_pg_proc) GETSTRUCT(tp);
+		Oid			result;
+		Datum		prosrc = SysCacheGetAttrNotNull(PROCNAMEARGSNSP, tp, Anum_pg_proc_prosrc);
+
+		/* Sanity-checking */
+		if (proctup->prorettype == rngtypid &&
+			strcmp(TextDatumGetCString(prosrc), "range_constructor2") == 0 &&
+			heap_attisnull(tp, Anum_pg_proc_probin, NULL))
+		{
+			result = proctup->oid;
+			ReleaseSysCache(tp);
+			return result;
+		}
+	}
+	elog(ERROR, "cache lookup failed for procedure %s", rngname);
 }
 
 
