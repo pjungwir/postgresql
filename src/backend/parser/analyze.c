@@ -1312,6 +1312,7 @@ transformForPortionOfClause(ParseState *pstate,
 	Oid			funcid = InvalidOid;
 	StrategyNumber strat;
 	Oid			opid;
+	OpExpr	   *op;
 	ForPortionOfExpr *result;
 	Var		   *rangeVar;
 	Node	   *targetExpr;
@@ -1384,18 +1385,19 @@ transformForPortionOfClause(ParseState *pstate,
 				(errmsg("FOR PORTION OF bounds cannot contain volatile functions")));
 
 	/*
-	 * Build overlapsExpr to use in the whereClause. This means we only hit
+	 * Build overlapsExpr to use as an extra qual. This means we only hit
 	 * rows matching the FROM & TO bounds. We must look up the overlaps
 	 * operator (usually "&&").
 	 */
 	opclass = GetDefaultOpClass(attr->atttypid, GIST_AM_OID);
 	strat = RTOverlapStrategyNumber;
 	GetOperatorFromCompareType(opclass, InvalidOid, COMPARE_OVERLAP, &opid, &strat);
-	result->overlapsExpr = (Node *) makeSimpleA_Expr(AEXPR_OP, get_opname(opid),
-													 (Node *) copyObject(rangeVar), targetExpr,
-													 forPortionOf->location);
-	result->overlapsExpr = transformWhereClause(pstate, result->overlapsExpr,
-								EXPR_KIND_WHERE, "WHERE");
+	op = makeNode(OpExpr);
+	op->opno = opid;
+	op->opfuncid = get_opcode(opid);
+	op->opresulttype = BOOLOID;
+	op->args = list_make2(copyObject(rangeVar), copyObject(result->targetRange));
+	result->overlapsExpr = (Node *) op;
 
 	/*
 	 * Look up the without_portion func. This computes the bounds of temporal
