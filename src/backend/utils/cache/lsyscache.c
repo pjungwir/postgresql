@@ -3614,6 +3614,74 @@ get_range_collation(Oid rangeOid)
 }
 
 /*
+ * get_range_constructor2
+ *		Gets the 2-arg constructor for the given rangetype.
+ *
+ * It should be the function whose name and namespace match the rangetype,
+ * has 2 args matching the subtype, and returns the rangetype. To be extra sure,
+ * we make sure that prosrc is 'range_constructor2' and probin IS NULL.
+ *
+ * We can't use pg_depend, because built-in rangetypes don't have entries there.
+ *
+ * Domains on rangetypes don't define their own constructors,
+ * so caller should pass the basetype oid.
+ */
+Oid
+get_range_constructor2(Oid rngtypid)
+{
+	Oid			range_typelem = get_range_subtype(rngtypid);
+	char	   *rngname;
+	Oid			rngnamespace;
+	Oid			argoids[2];
+	oidvector  *argtypes;
+	HeapTuple	tp;
+
+	/* Is it really a rangetype? */
+	if (!OidIsValid(range_typelem))
+		elog(ERROR, "cache lookup failed for range %u", rngtypid);
+
+	/* Get the range's name and namespace */
+	tp = SearchSysCache1(TYPEOID, ObjectIdGetDatum(rngtypid));
+	if (HeapTupleIsValid(tp))
+	{
+		Form_pg_type typtup = (Form_pg_type) GETSTRUCT(tp);
+
+		rngname = pstrdup(NameStr(typtup->typname));
+		rngnamespace = typtup->typnamespace;
+		ReleaseSysCache(tp);
+	}
+	else
+		elog(ERROR, "cache lookup failed for type %u", rngtypid);
+
+	/* Find the constructor */
+	argoids[0] = range_typelem;
+	argoids[1] = range_typelem;
+	argtypes = buildoidvector(argoids, 2);
+	tp = SearchSysCache3(PROCNAMEARGSNSP,
+						 PointerGetDatum(rngname),
+						 PointerGetDatum(argtypes),
+						 ObjectIdGetDatum(rngnamespace));
+	if (HeapTupleIsValid(tp))
+	{
+		Form_pg_proc proctup = (Form_pg_proc) GETSTRUCT(tp);
+		Oid			result;
+		Datum		prosrc = SysCacheGetAttrNotNull(PROCNAMEARGSNSP, tp,
+													Anum_pg_proc_prosrc);
+
+		/* Sanity-checking */
+		if (proctup->prorettype == rngtypid &&
+			strcmp(TextDatumGetCString(prosrc), "range_constructor2") == 0 &&
+			heap_attisnull(tp, Anum_pg_proc_probin, NULL))
+		{
+			result = proctup->oid;
+			ReleaseSysCache(tp);
+			return result;
+		}
+	}
+	elog(ERROR, "cache lookup failed for procedure %s", rngname);
+}
+
+/*
  * get_range_multirange
  *		Returns the multirange type of a given range type
  *
