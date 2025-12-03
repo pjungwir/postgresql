@@ -556,6 +556,17 @@ SELECT fpo_delete('[10,11)', '2015-01-01', '2019-01-01');
 SELECT * FROM for_portion_of_test WHERE id = '[10,11)';
 DELETE FROM for_portion_of_test WHERE id IN ('[10,11)');
 
+-- DELETE FOR PORTION OF in a compiled SQL function
+CREATE FUNCTION fpo_delete()
+RETURNS text
+BEGIN ATOMIC
+  DELETE FROM for_portion_of_test
+    FOR PORTION OF valid_at FROM '2018-01-15' TO '2019-01-01'
+    RETURNING name;
+END;
+\sf+ fpo_delete()
+DROP FUNCTION fpo_delete();
+
 
 -- test that we run triggers on the UPDATE/DELETEd row and the INSERTed rows
 
