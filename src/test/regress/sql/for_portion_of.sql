@@ -240,7 +240,14 @@ SELECT * FROM for_portion_of_test WHERE id = '[1,2)' ORDER BY id, valid_at;
 
 -- Updating with a direct target
 UPDATE for_portion_of_test
-  FOR PORTION OF valid_at (daterange('2018-03-10', '2018-03-17'))
+  FOR PORTION OF valid_at (daterange('2018-03-10', '2018-03-15'))
+  SET name = 'one^3'
+  WHERE id = '[1,2)';
+SELECT * FROM for_portion_of_test WHERE id = '[1,2)' ORDER BY id, valid_at;
+
+-- Updating with a direct target, coerced from a string
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at ('[2018-03-15,2018-03-17)')
   SET name = 'one^3'
   WHERE id = '[1,2)';
 SELECT * FROM for_portion_of_test WHERE id = '[1,2)' ORDER BY id, valid_at;
@@ -540,7 +547,13 @@ SELECT * FROM for_portion_of_test WHERE id = '[8,9)' ORDER BY id, valid_at;
 
 -- Deleting with a direct target
 DELETE FROM for_portion_of_test
-  FOR PORTION OF valid_at (daterange('2018-03-10', '2018-03-17'))
+  FOR PORTION OF valid_at (daterange('2018-03-10', '2018-03-15'))
+  WHERE id = '[1,2)';
+SELECT * FROM for_portion_of_test WHERE id = '[1,2)' ORDER BY id, valid_at;
+
+-- Deleting with a direct target, coerced from a string
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at ('[2018-03-15,2018-03-17)')
   WHERE id = '[1,2)';
 SELECT * FROM for_portion_of_test WHERE id = '[1,2)' ORDER BY id, valid_at;
 
