@@ -1357,6 +1357,7 @@ transformForPortionOfClause(ParseState *pstate,
 		 * have to build anything.
 		 */
 		result->targetRange = transformExpr(pstate, forPortionOf->target, EXPR_KIND_FOR_PORTION);
+		// TODO: what if the type is wrong here? test needed!
 	}
 	else
 	{
@@ -1385,8 +1386,25 @@ transformForPortionOfClause(ParseState *pstate,
 		actual_arg_types[0] = exprType(result->targetFrom);
 		actual_arg_types[1] = exprType(result->targetTo);
 		args = list_make2(copyObject(result->targetFrom), copyObject(result->targetTo));
-		// TODO: better error message, with position.
-		// Calling can_coerce_type doesn't help, because our inputs are probably UNKNOWN.
+
+		/* Check the bound types separately, for better error message and location */
+		if (!can_coerce_type(1, actual_arg_types, declared_arg_types, COERCION_IMPLICIT))
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("could not coerce FOR PORTION OF %s bound from %s to %s",
+					 "FROM",
+					 format_type_be(actual_arg_types[0]),
+					 format_type_be(declared_arg_types[0])),
+					 parser_errposition(pstate, exprLocation(forPortionOf->target_start))));
+		if (!can_coerce_type(1, &actual_arg_types[1], &declared_arg_types[1], COERCION_IMPLICIT))
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("could not coerce FOR PORTION OF %s bound from %s to %s",
+					 "TO",
+					 format_type_be(actual_arg_types[1]),
+					 format_type_be(declared_arg_types[1])),
+					 parser_errposition(pstate, exprLocation(forPortionOf->target_end))));
+
 		make_fn_arguments(pstate, args, actual_arg_types, declared_arg_types);
 		result->targetRange = (Node *) makeFuncExpr(
 				range_get_constructor2(attr->atttypid),

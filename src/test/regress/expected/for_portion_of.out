@@ -185,16 +185,22 @@ UPDATE for_portion_of_test
 ERROR:  can't directly assign to "valid_at" in a FOR PORTION OF update
 LINE 3:   SET valid_at = '[1990-01-01,1999-01-01)'
               ^
--- The wrong type fails
+-- The wrong start type fails
 UPDATE for_portion_of_test
-  FOR PORTION OF valid_at FROM 1 TO 4
+  FOR PORTION OF valid_at FROM 1 TO '2020-01-01'
   SET name = 'nope'
   WHERE id = '[3,4)';
-ERROR:  function pg_catalog.daterange(integer, integer) does not exist
-LINE 2:   FOR PORTION OF valid_at FROM 1 TO 4
-                         ^
-DETAIL:  No function of that name accepts the given argument types.
-HINT:  You might need to add explicit type casts.
+ERROR:  could not coerce FOR PORTION OF FROM bound from integer to date
+LINE 2:   FOR PORTION OF valid_at FROM 1 TO '2020-01-01'
+                                       ^
+-- The wrong end type fails
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM '2000-01-01' TO 4
+  SET name = 'nope'
+  WHERE id = '[3,4)';
+ERROR:  could not coerce FOR PORTION OF TO bound from integer to date
+LINE 2:   FOR PORTION OF valid_at FROM '2000-01-01' TO 4
+                                                       ^
 -- Updating with timestamps reversed fails
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-06-01' TO '2018-01-01'
@@ -630,15 +636,20 @@ DELETE FROM for_portion_of_test
 ERROR:  column or period "invalid_at" of relation "for_portion_of_test" does not exist
 LINE 2:   FOR PORTION OF invalid_at FROM '2018-06-01' TO NULL
                          ^
--- The wrong type fails
+-- The wrong start type fails
 DELETE FROM for_portion_of_test
-  FOR PORTION OF valid_at FROM 1 TO 4
+  FOR PORTION OF valid_at FROM 1 TO '2020-01-01'
   WHERE id = '[3,4)';
-ERROR:  function pg_catalog.daterange(integer, integer) does not exist
-LINE 2:   FOR PORTION OF valid_at FROM 1 TO 4
-                         ^
-DETAIL:  No function of that name accepts the given argument types.
-HINT:  You might need to add explicit type casts.
+ERROR:  could not coerce FOR PORTION OF FROM bound from integer to date
+LINE 2:   FOR PORTION OF valid_at FROM 1 TO '2020-01-01'
+                                       ^
+-- The wrong end type fails
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM '2000-01-01' TO 4
+  WHERE id = '[3,4)';
+ERROR:  could not coerce FOR PORTION OF TO bound from integer to date
+LINE 2:   FOR PORTION OF valid_at FROM '2000-01-01' TO 4
+                                                       ^
 -- Deleting with timestamps reversed fails
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-06-01' TO '2018-01-01'

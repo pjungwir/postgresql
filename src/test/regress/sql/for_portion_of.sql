@@ -139,9 +139,15 @@ UPDATE for_portion_of_test
   SET valid_at = '[1990-01-01,1999-01-01)'
   WHERE id = '[5,6)';
 
--- The wrong type fails
+-- The wrong start type fails
 UPDATE for_portion_of_test
-  FOR PORTION OF valid_at FROM 1 TO 4
+  FOR PORTION OF valid_at FROM 1 TO '2020-01-01'
+  SET name = 'nope'
+  WHERE id = '[3,4)';
+
+-- The wrong end type fails
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at FROM '2000-01-01' TO 4
   SET name = 'nope'
   WHERE id = '[3,4)';
 
@@ -423,9 +429,14 @@ DELETE FROM for_portion_of_test
   FOR PORTION OF invalid_at FROM '2018-06-01' TO NULL
   WHERE id = '[5,6)';
 
--- The wrong type fails
+-- The wrong start type fails
 DELETE FROM for_portion_of_test
-  FOR PORTION OF valid_at FROM 1 TO 4
+  FOR PORTION OF valid_at FROM 1 TO '2020-01-01'
+  WHERE id = '[3,4)';
+
+-- The wrong end type fails
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at FROM '2000-01-01' TO 4
   WHERE id = '[3,4)';
 
 -- Deleting with timestamps reversed fails
