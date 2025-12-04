@@ -2571,6 +2571,10 @@ expression_tree_walker_impl(Node *node,
 			{
 				ForPortionOfExpr *forPortionOf = (ForPortionOfExpr *) node;
 
+				if (WALK(forPortionOf->targetFrom))
+					return true;
+				if (WALK(forPortionOf->targetTo))
+					return true;
 				if (WALK(forPortionOf->targetRange))
 					return true;
 				if (WALK(forPortionOf->overlapsExpr))
@@ -3628,6 +3632,8 @@ expression_tree_mutator_impl(Node *node,
 
 				FLATCOPY(newnode, fpo, ForPortionOfExpr);
 				MUTATE(newnode->rangeVar, fpo->rangeVar, Var *);
+				MUTATE(newnode->targetFrom, fpo->targetFrom, Node *);
+				MUTATE(newnode->targetTo, fpo->targetTo, Node *);
 				MUTATE(newnode->targetRange, fpo->targetRange, Node *);
 				MUTATE(newnode->overlapsExpr, fpo->overlapsExpr, Node *);
 				MUTATE(newnode->rangeTargetList, fpo->rangeTargetList, List *);
