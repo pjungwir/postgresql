@@ -655,12 +655,8 @@ END;
 DROP FUNCTION fpo_delete();
 
 
--- test on domain columns
+-- test domains and CHECK constraints
 
--- With a rangetype over a domain
--- TODO
--- With a multirangetype over a domain
--- TODO
 -- With a domain on a rangetype
 CREATE DOMAIN daterange_d AS daterange CHECK (upper(VALUE) <> '2005-05-05'::date);
 CREATE TABLE for_portion_of_test2 (
@@ -673,6 +669,7 @@ INSERT INTO for_portion_of_test2 VALUES
   (2, '[2000-01-01,2020-01-01)', 'two');
 INSERT INTO for_portion_of_test2 VALUES
   (1, '[2000-01-01,2005-05-05)', 'nope');
+-- UPDATE works:
 UPDATE for_portion_of_test2
   FOR PORTION OF valid_at FROM '2010-01-01' TO '2010-01-05'
   SET name = 'one^1'
@@ -681,6 +678,7 @@ UPDATE for_portion_of_test2
   FOR PORTION OF valid_at ('[2010-01-07,2010-01-09)')
   SET name = 'one^2'
   WHERE id = 1;
+SELECT * FROM for_portion_of_test2 WHERE id = 1 ORDER BY valid_at;
 -- The target is allowed to violate the domain:
 UPDATE for_portion_of_test2
   FOR PORTION OF valid_at FROM '1999-01-01' TO '2005-05-05'
@@ -700,7 +698,24 @@ UPDATE for_portion_of_test2
   FOR PORTION OF valid_at FROM '2005-05-05' TO '2010-01-01'
   SET name = 'one^3'
   WHERE id = 1;
+-- test updated row violating CHECK constraints
+ALTER TABLE for_portion_of_test2
+  ADD CONSTRAINT fpo2_check CHECK (upper(valid_at) <> '2001-01-11');
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at FROM '2000-01-01' TO '2001-01-11'
+  SET name = 'one^3'
+  WHERE id = 1;
+ALTER TABLE for_portion_of_test2 DROP CONSTRAINT fpo2_check;
+-- test inserts violating CHECK constraints
+ALTER TABLE for_portion_of_test2
+  ADD CONSTRAINT fpo2_check CHECK (lower(valid_at) <> '2002-02-02');
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at FROM '2001-01-01' TO '2002-02-02'
+  SET name = 'one^3'
+  WHERE id = 1;
+ALTER TABLE for_portion_of_test2 DROP CONSTRAINT fpo2_check;
 SELECT * FROM for_portion_of_test2 WHERE id = 1 ORDER BY valid_at;
+-- DELETE works:
 DELETE FROM for_portion_of_test2
   FOR PORTION OF valid_at FROM '2010-01-01' TO '2010-01-05'
   WHERE id = 2;
@@ -708,9 +723,105 @@ DELETE FROM for_portion_of_test2
   FOR PORTION OF valid_at ('[2010-01-07,2010-01-09)')
   WHERE id = 2;
 SELECT * FROM for_portion_of_test2 WHERE id = 2 ORDER BY valid_at;
+-- The target is allowed to violate the domain:
+DELETE FROM for_portion_of_test2
+  FOR PORTION OF valid_at FROM '1999-01-01' TO '2005-05-05'
+  WHERE id = -1;
+DELETE FROM for_portion_of_test2
+  FOR PORTION OF valid_at ('[1999-01-01,2005-05-05)')
+  WHERE id = -1;
+-- test inserts violating the domain
+DELETE FROM for_portion_of_test2
+  FOR PORTION OF valid_at FROM '2005-05-05' TO '2010-01-01'
+  WHERE id = 2;
+-- test inserts violating CHECK constraints
+ALTER TABLE for_portion_of_test2
+  ADD CONSTRAINT fpo2_check CHECK (lower(valid_at) <> '2002-02-02');
+DELETE FROM for_portion_of_test2
+  FOR PORTION OF valid_at FROM '2001-01-01' TO '2002-02-02'
+  WHERE id = 2;
+ALTER TABLE for_portion_of_test2 DROP CONSTRAINT fpo2_check;
+SELECT * FROM for_portion_of_test2 WHERE id = 2 ORDER BY valid_at;
 DROP TABLE for_portion_of_test2;
+
 -- With a domain on a multirangetype
--- TODO
+CREATE FUNCTION multirange_lowers(mr anymultirange) RETURNS anyarray LANGUAGE sql AS $$
+  SELECT array_agg(lower(r)) FROM UNNEST(mr) u(r);
+$$;
+CREATE FUNCTION multirange_uppers(mr anymultirange) RETURNS anyarray LANGUAGE sql AS $$
+  SELECT array_agg(upper(r)) FROM UNNEST(mr) u(r);
+$$;
+CREATE DOMAIN datemultirange_d AS datemultirange CHECK (NOT '2005-05-05'::date = ANY (multirange_uppers(VALUE)));
+CREATE TABLE for_portion_of_test2 (
+  id integer,
+  valid_at datemultirange_d,
+  name text
+);
+INSERT INTO for_portion_of_test2 VALUES
+  (1, '{[2000-01-01,2020-01-01)}', 'one'),
+  (2, '{[2000-01-01,2020-01-01)}', 'two');
+INSERT INTO for_portion_of_test2 VALUES
+  (1, '{[2000-01-01,2005-05-05)}', 'nope');
+-- UPDATE works:
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at ('{[2010-01-07,2010-01-09)}')
+  SET name = 'one^2'
+  WHERE id = 1;
+SELECT * FROM for_portion_of_test2 WHERE id = 1 ORDER BY valid_at;
+-- The target is allowed to violate the domain:
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at ('{[1999-01-01,2005-05-05)}')
+  SET name = 'miss'
+  WHERE id = -1;
+-- test the updated row violating the domain
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at ('{[1999-01-01,2005-05-05)}')
+  SET name = 'one^3'
+  WHERE id = 1;
+-- test inserts violating the domain
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at ('{[2005-05-05,2010-01-01)}')
+  SET name = 'one^3'
+  WHERE id = 1;
+-- test updated row violating CHECK constraints
+ALTER TABLE for_portion_of_test2
+  ADD CONSTRAINT fpo2_check CHECK (upper(valid_at) <> '2001-01-11');
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at ('{[2000-01-01,2001-01-11)}')
+  SET name = 'one^3'
+  WHERE id = 1;
+ALTER TABLE for_portion_of_test2 DROP CONSTRAINT fpo2_check;
+-- test inserts violating CHECK constraints
+ALTER TABLE for_portion_of_test2
+  ADD CONSTRAINT fpo2_check CHECK (NOT '2002-02-02'::date = ANY (multirange_lowers(valid_at)));
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at ('{[2001-01-01,2002-02-02)}')
+  SET name = 'one^3'
+  WHERE id = 1;
+ALTER TABLE for_portion_of_test2 DROP CONSTRAINT fpo2_check;
+SELECT * FROM for_portion_of_test2 WHERE id = 1 ORDER BY valid_at;
+-- DELETE works:
+DELETE FROM for_portion_of_test2
+  FOR PORTION OF valid_at ('{[2010-01-07,2010-01-09)}')
+  WHERE id = 2;
+SELECT * FROM for_portion_of_test2 WHERE id = 2 ORDER BY valid_at;
+-- The target is allowed to violate the domain:
+DELETE FROM for_portion_of_test2
+  FOR PORTION OF valid_at ('{[1999-01-01,2005-05-05)}')
+  WHERE id = -1;
+-- test inserts violating the domain
+DELETE FROM for_portion_of_test2
+  FOR PORTION OF valid_at ('{[2005-05-05,2010-01-01)}')
+  WHERE id = 2;
+-- test inserts violating CHECK constraints
+ALTER TABLE for_portion_of_test2
+  ADD CONSTRAINT fpo2_check CHECK (NOT '2002-02-02'::date = ANY (multirange_lowers(valid_at)));
+DELETE FROM for_portion_of_test2
+  FOR PORTION OF valid_at ('{[2001-01-01,2002-02-02)}')
+  WHERE id = 2;
+ALTER TABLE for_portion_of_test2 DROP CONSTRAINT fpo2_check;
+SELECT * FROM for_portion_of_test2 WHERE id = 2 ORDER BY valid_at;
+DROP TABLE for_portion_of_test2;
 
 -- test on non-range/multirange columns
 
