@@ -5323,7 +5323,7 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 		exprState = ExecPrepareExpr((Expr *) forPortionOf->targetRange, estate);
 		targetRange = ExecEvalExpr(exprState, econtext, &isNull);
 		if (isNull)
-			elog(ERROR, "got a NULL FOR PORTION OF target range");
+			elog(ERROR, "got a NULL FOR PORTION OF target");
 
 		/* Create state for FOR PORTION OF operation */
 

@@ -245,6 +245,31 @@ UPDATE for_portion_of_test
   WHERE id = '[1,2)';
 SELECT * FROM for_portion_of_test WHERE id = '[1,2)' ORDER BY id, valid_at;
 
+-- Updating with a direct target of the wrong range subtype fails
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at (int4range(1, 4))
+  SET name = 'one^3'
+  WHERE id = '[1,2)';
+
+-- Updating with a direct target of a non-rangetype fails
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at (4)
+  SET name = 'one^3'
+  WHERE id = '[1,2)';
+
+-- Updating with a direct target of NULL fails
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at (NULL)
+  SET name = 'one^3'
+  WHERE id = '[1,2)';
+
+-- Updating with a direct target of empty does nothing
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at ('empty')
+  SET name = 'one^3'
+  WHERE id = '[1,2)';
+SELECT * FROM for_portion_of_test WHERE id = '[1,2)' ORDER BY id, valid_at;
+
 -- Updating the non-range part of the PK:
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-02-15' TO NULL
@@ -516,6 +541,27 @@ SELECT * FROM for_portion_of_test WHERE id = '[8,9)' ORDER BY id, valid_at;
 -- Deleting with a direct target
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at (daterange('2018-03-10', '2018-03-17'))
+  WHERE id = '[1,2)';
+SELECT * FROM for_portion_of_test WHERE id = '[1,2)' ORDER BY id, valid_at;
+
+-- Deleting with a direct target of the wrong range subtype fails
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at (int4range(1, 4))
+  WHERE id = '[1,2)';
+
+-- Deleting with a direct target of a non-rangetype fails
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at (4)
+  WHERE id = '[1,2)';
+
+-- Deleting with a direct target of NULL fails
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at (NULL)
+  WHERE id = '[1,2)';
+
+-- Deleting with a direct target of empty does nothing
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at ('empty')
   WHERE id = '[1,2)';
 SELECT * FROM for_portion_of_test WHERE id = '[1,2)' ORDER BY id, valid_at;
 

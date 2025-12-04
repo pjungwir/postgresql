@@ -1352,12 +1352,39 @@ transformForPortionOfClause(ParseState *pstate,
 
 	if (forPortionOf->target)
 	{
+		Oid declared_target_type = attr->atttypid;
+		Oid actual_target_type;
+
 		/*
 		 * We were already given an expression for the target, so we don't
-		 * have to build anything.
+		 * have to build anything. We still have to make sure we got the right
+		 * type. NULL will be caught be the executor.
 		 */
+
 		result->targetRange = transformExpr(pstate, forPortionOf->target, EXPR_KIND_FOR_PORTION);
-		// TODO: what if the type is wrong here? test needed!
+
+		actual_target_type = exprType(result->targetRange);
+
+		if (!can_coerce_type(1, &actual_target_type, &declared_target_type, COERCION_IMPLICIT))
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("could not coerce FOR PORTION OF target from %s to %s",
+					 format_type_be(actual_target_type),
+					 format_type_be(declared_target_type)),
+					 parser_errposition(pstate, exprLocation(forPortionOf->target))));
+
+		result->targetRange = coerce_type(pstate,
+										  result->targetRange,
+										  actual_target_type,
+										  declared_target_type,
+										  -1,
+										  COERCION_IMPLICIT,
+										  COERCE_IMPLICIT_CAST,
+										  exprLocation(forPortionOf->target));
+
+		// TODO: test multiranges too
+		// TODO: what if the column is a domain and you give the base type?
+		// TODO: what if the base type violates the domain? probably that should be allowed.
 	}
 	else
 	{
