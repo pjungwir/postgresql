@@ -690,12 +690,16 @@ UPDATE for_portion_of_test2
   FOR PORTION OF valid_at ('[1999-01-01,2005-05-05)')
   SET name = 'miss'
   WHERE id = -1;
--- TODO: test the updated row violating the domain
+-- test the updated row violating the domain
 UPDATE for_portion_of_test2
   FOR PORTION OF valid_at FROM '1999-01-01' TO '2005-05-05'
   SET name = 'one^3'
   WHERE id = 1;
--- TODO: test inserts violating the domain
+-- test inserts violating the domain
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at FROM '2005-05-05' TO '2010-01-01'
+  SET name = 'one^3'
+  WHERE id = 1;
 SELECT * FROM for_portion_of_test2 WHERE id = 1 ORDER BY valid_at;
 DELETE FROM for_portion_of_test2
   FOR PORTION OF valid_at FROM '2010-01-01' TO '2010-01-05'

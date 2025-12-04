@@ -1346,7 +1346,14 @@ transformForPortionOfClause(ParseState *pstate,
 					   0);
 	rangeVar->location = forPortionOf->location;
 	result->rangeVar = rangeVar;
-	result->rangeType = attbasetype; // TODO: what happens if we use attr->atttypid here?
+	/* Store the domain oid so that leftovers can check against it: */
+	// TODO: I might need both.
+	// ExecForPortionOfLeftovers needs to validate that the new ranges don't
+	// violate their domain. How do I do that? Cast the result of
+	// without_portion to the domain type? Probably yes.
+	// maybe call domain_check or domain_check_safe.
+	// TODO: what if leftovers violate non-domain CHECK constraints? Do we catch that?
+	result->rangeType = attr->atttypid;
 
 	if (forPortionOf->target)
 	{
@@ -1516,7 +1523,7 @@ transformForPortionOfClause(ParseState *pstate,
 		// Oid			actual_arg_types[2] = {attr->atttypid, attbasetype};
 		Oid			intersectoperoid;
 		List	   *funcArgs;
-		FuncExpr   *rangeTLEExpr;
+		Node	    *rangeTLEExpr;
 		TargetEntry *tle;
 
 		/*
@@ -1546,8 +1553,20 @@ transformForPortionOfClause(ParseState *pstate,
 		funcArgs = list_make2(copyObject(rangeVar), copyObject(result->targetRange));
 		// TODO: coerce inputs; they might be domains
 		// make_fn_arguments(pstate, funcArgs, actual_arg_types, declared_arg_types);
-		rangeTLEExpr = makeFuncExpr(funcid, attr->atttypid, funcArgs,
+		rangeTLEExpr = (Node *) makeFuncExpr(funcid, attbasetype, funcArgs,
 									InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
+		/*
+		 * Coerce to domain if necessary.
+		 * If we skip this, we will allow updating to forbidden values.
+		 */
+		rangeTLEExpr = coerce_type(pstate,
+								   rangeTLEExpr,
+								   attbasetype,
+								   attr->atttypid,
+								   -1,
+								   COERCION_IMPLICIT,
+								   COERCE_IMPLICIT_CAST,
+								   exprLocation(forPortionOf->target));
 		// TODO: pprint something like `select '[2000-02-01,2010-01-01)'::daterange_d && '[2005-01-01,2006-01-01)'::daterange_d;` to see where postgres is stripping off the domain and turning them into basetypes. Must be before calling the oper proc. So why doesn't make_fn_arguments do that?
 		// pprint(rangeTLEExpr);
 		// TODO: FuncExpr should return basetype, so coerce if necessary
