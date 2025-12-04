@@ -7384,6 +7384,9 @@ get_delete_query_def(Query *query, deparse_context *context)
 					 only_marker(rte),
 					 generate_relation_name(rte->relid, NIL));
 
+	/* Print the FOR PORTION OF, if needed */
+	get_for_portion_of(query->forPortionOf, context);
+
 	/* Print the relation alias, if needed */
 	get_rte_alias(rte, query->resultRelation, false, context);
 
@@ -12757,6 +12760,8 @@ get_rte_alias(RangeTblEntry *rte, int varno, bool use_as,
 
 /*
  * get_for_portion_of - print FOR PORTION OF if needed
+ * XXX: Newlines would help here, at least when pretty-printing. But then the
+ * alias and SET will be on their own line with a leading space.
  */
 static void
 get_for_portion_of(ForPortionOfExpr *forPortionOf, deparse_context *context)
@@ -12766,10 +12771,8 @@ get_for_portion_of(ForPortionOfExpr *forPortionOf, deparse_context *context)
 				quote_identifier(forPortionOf->range_name));
 
 		/*
-		 * Try to write it as FROM ... TO ... if possible,
-		 * otherwise (targetExpr)
-		 *
-		 * To use FROM ... TO ... it must be a
+		 * Try to write it as FROM ... TO ... if we received it that way,
+		 * otherwise (targetExpr).
 		 */
 		if (forPortionOf->targetFrom && forPortionOf->targetTo)
 		{

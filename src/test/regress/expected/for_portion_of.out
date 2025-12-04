@@ -594,8 +594,7 @@ END;
          RETURNS text
          LANGUAGE sql
 1       BEGIN ATOMIC
-2        UPDATE for_portion_of_test SET name = 'one^1'::text
-2        UPDATE for_portion_of_test FOR PORTION OF valid_at (daterange('2018-01-15', '2020-01-01') * daterange('2019-01-01', '2022-01-01')) SET name = 'one^1'::text
+2        UPDATE for_portion_of_test FOR PORTION OF valid_at ((daterange('2018-01-15'::date, '2020-01-01'::date) * daterange('2019-01-01'::date, '2022-01-01'::date))) SET name = 'one^1'::text
 3          RETURNING for_portion_of_test.name;
 4       END
 DROP FUNCTION fpo_update();
@@ -895,7 +894,7 @@ END;
          RETURNS text
          LANGUAGE sql
 1       BEGIN ATOMIC
-2        DELETE FROM for_portion_of_test FOR PORTION OF valid_at ('2018-01-15', '2020-01-01') * daterange('2019-01-01', 2022-01-01'))
+2        DELETE FROM for_portion_of_test FOR PORTION OF valid_at ((daterange('2018-01-15'::date, '2020-01-01'::date) * daterange('2019-01-01'::date, '2022-01-01'::date)))
 3          RETURNING for_portion_of_test.name;
 4       END
 DROP FUNCTION fpo_delete();

@@ -1360,6 +1360,12 @@ transformForPortionOfClause(ParseState *pstate,
 	}
 	else
 	{
+		// TODO: ranges over domains....
+		Oid rngsubtype = get_range_subtype(attr->atttypid);
+		Oid declared_arg_types[2] = {rngsubtype, rngsubtype};
+		Oid actual_arg_types[2];
+		List *args;
+
 		/* Make sure it's a range column */
 		if (!type_is_range(attr->atttypid))
 			ereport(ERROR,
@@ -1376,17 +1382,17 @@ transformForPortionOfClause(ParseState *pstate,
 		 */
 		result->targetFrom = transformExpr(pstate, forPortionOf->target_start, EXPR_KIND_FOR_PORTION);
 		result->targetTo = transformExpr(pstate, forPortionOf->target_end, EXPR_KIND_FOR_PORTION);
+		actual_arg_types[0] = exprType(result->targetFrom);
+		actual_arg_types[1] = exprType(result->targetTo);
+		args = list_make2(copyObject(result->targetFrom), copyObject(result->targetTo));
+		// TODO: better error message, with position.
+		// Calling can_coerce_type doesn't help, because our inputs are probably UNKNOWN.
+		make_fn_arguments(pstate, args, actual_arg_types, declared_arg_types);
 		result->targetRange = (Node *) makeFuncExpr(
 				range_get_constructor2(attr->atttypid),
 				attr->atttypid,
-				list_make2(copyObject(result->targetFrom), copyObject(result->targetTo)),
+				args,
 				InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
-		// TODO: seems like an impossible qual is getting added, because we wind
-		// up not uipdating anything.
-		// Maybe break here and see what we're making
-		// (especially compared to before),
-		// or break in the rewriting and see what adding a qual does
-		// (again, we could compare to what we had before).
 	}
 	if (contain_volatile_functions_after_planning((Expr *) result->targetRange))
 		ereport(ERROR,
