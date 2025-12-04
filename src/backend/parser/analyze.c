@@ -1384,6 +1384,18 @@ transformForPortionOfClause(ParseState *pstate,
 
 		// TODO: what if the column is a domain and you give the base type?
 		// TODO: what if the base type violates the domain? probably that should be allowed.
+		/*
+		 * XXX: For now we only support ranges and multiranges, so we fail on
+		 * anything else.
+		 */
+		if (!type_is_range(attr->atttypid) && !type_is_multirange(attr->atttypid))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+					 errmsg("column \"%s\" of relation \"%s\" is not a range or multirange type",
+							range_name,
+							RelationGetRelationName(targetrel)),
+					 parser_errposition(pstate, forPortionOf->location)));
+
 	}
 	else
 	{
@@ -1448,6 +1460,14 @@ transformForPortionOfClause(ParseState *pstate,
 	 * operator (usually "&&").
 	 */
 	opclass = GetDefaultOpClass(attr->atttypid, GIST_AM_OID);
+	if (!OidIsValid(opclass))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("data type %s has no default operator class for access method \"%s\"",
+						format_type_be(attr->atttypid), "gist"),
+				 errhint("You must define a default operator class for the data type.")));
+
+	/* Look up the operators and functions we need. */
 	strat = RTOverlapStrategyNumber;
 	GetOperatorFromCompareType(opclass, InvalidOid, COMPARE_OVERLAP, &opid, &strat);
 	op = makeNode(OpExpr);

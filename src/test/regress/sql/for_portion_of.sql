@@ -655,6 +655,50 @@ END;
 DROP FUNCTION fpo_delete();
 
 
+-- test on non-range/multirange columns
+
+-- With a direct target and a scalar column
+CREATE TABLE for_portion_of_test2 (
+  id integer,
+  valid_at date,
+  name text
+);
+INSERT INTO for_portion_of_test2 VALUES (1, '2020-01-01', 'one');
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at ('2010-01-01')
+  SET name = 'one^1';
+DELETE FROM for_portion_of_test2
+  FOR PORTION OF valid_at ('2010-01-01');
+DROP TABLE for_portion_of_test2;
+
+-- With a direct target and a non-{,multi}range gistable column without overlaps
+CREATE TABLE for_portion_of_test2 (
+  id integer,
+  valid_at point,
+  name text
+);
+INSERT INTO for_portion_of_test2 VALUES (1, '0,0', 'one');
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at ('1,1')
+  SET name = 'one^1';
+DELETE FROM for_portion_of_test2
+  FOR PORTION OF valid_at ('1,1');
+DROP TABLE for_portion_of_test2;
+
+-- With a direct target and a non-{,multi}range column with overlaps
+CREATE TABLE for_portion_of_test2 (
+  id integer,
+  valid_at box,
+  name text
+);
+INSERT INTO for_portion_of_test2 VALUES (1, '0,0,4,4', 'one');
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at ('1,1,2,2')
+  SET name = 'one^1';
+DELETE FROM for_portion_of_test2
+  FOR PORTION OF valid_at ('1,1,2,2');
+DROP TABLE for_portion_of_test2;
+
 -- test that we run triggers on the UPDATE/DELETEd row and the INSERTed rows
 
 CREATE FUNCTION dump_trigger()
