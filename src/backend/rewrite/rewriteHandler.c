@@ -4115,20 +4115,23 @@ RewriteQuery(Query *parsetree, List *rewrite_events, int orig_rt_length,
 
 			if (parsetree->forPortionOf) {
 				/*
-				 * UPDATE FOR PORTION OF should be limited to rows
-				 * that overlap the target range.
-				 */
-				AddQual(parsetree, parsetree->forPortionOf->overlapsExpr);
-
-				/*
-				 * Update FOR PORTION OF column(s) automatically. Don't do this
-				 * until we're done rewriting a view update, so that we don't add
-				 * the same update on the recursion.
+				 * Don't add FOR PORTION OF details until we're done rewriting a
+				 * view update, so that we don't add the same qual and TLE on the
+				 * recursion.
+				 *
+				 * Views don't need to do anything special here to remap Vars;
+				 * that is handled by the tree walker.
 				 */
 				if (rt_entry_relation->rd_rel->relkind != RELKIND_VIEW)
 				{
 					ListCell   *tl;
+					/*
+					 * Add qual: UPDATE FOR PORTION OF should be limited to rows
+					 * that overlap the target range.
+					 */
+					AddQual(parsetree, parsetree->forPortionOf->overlapsExpr);
 
+					/* Update FOR PORTION OF column(s) automatically. */
 					foreach(tl, parsetree->forPortionOf->rangeTargetList)
 					{
 						TargetEntry *tle = (TargetEntry *) lfirst(tl);
@@ -4185,10 +4188,21 @@ RewriteQuery(Query *parsetree, List *rewrite_events, int orig_rt_length,
 		{
 			if (parsetree->forPortionOf) {
 				/*
-				 * DELETE FOR PORTION OF should be limited to rows
-				 * that overlap the target range.
+				 * Don't add FOR PORTION OF details until we're done rewriting a
+				 * view delete, so that we don't add the same qual on the
+				 * recursion.
+				 *
+				 * Views don't need to do anything special here to remap Vars;
+				 * that is handled by the tree walker.
 				 */
-				AddQual(parsetree, parsetree->forPortionOf->overlapsExpr);
+				if (rt_entry_relation->rd_rel->relkind != RELKIND_VIEW)
+				{
+					/*
+					 * Add qual: DELETE FOR PORTION OF should be limited to rows
+					 * that overlap the target range.
+					 */
+					AddQual(parsetree, parsetree->forPortionOf->overlapsExpr);
+				}
 			}
 		}
 		else

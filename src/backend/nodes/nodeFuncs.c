@@ -2573,6 +2573,8 @@ expression_tree_walker_impl(Node *node,
 
 				if (WALK(forPortionOf->targetRange))
 					return true;
+				if (WALK(forPortionOf->overlapsExpr))
+					return true;
 			}
 			break;
 		case T_PartitionPruneStepOp:
@@ -3627,6 +3629,7 @@ expression_tree_mutator_impl(Node *node,
 				FLATCOPY(newnode, fpo, ForPortionOfExpr);
 				MUTATE(newnode->rangeVar, fpo->rangeVar, Var *);
 				MUTATE(newnode->targetRange, fpo->targetRange, Node *);
+				MUTATE(newnode->overlapsExpr, fpo->overlapsExpr, Node *);
 				MUTATE(newnode->rangeTargetList, fpo->rangeTargetList, List *);
 
 				return (Node *) newnode;
