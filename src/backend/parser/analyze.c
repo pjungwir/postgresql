@@ -1400,12 +1400,16 @@ transformForPortionOfClause(ParseState *pstate,
 	else
 	{
 		// TODO: ranges over domains....
-		Oid rngsubtype = get_range_subtype(attr->atttypid);
-		Oid declared_arg_types[2] = {rngsubtype, rngsubtype};
+		Oid rngsubtype;
+		Oid declared_arg_types[2];
 		Oid actual_arg_types[2];
 		List *args;
 
-		/* Make sure it's a range column */
+		/*
+		 * Make sure it's a range column.
+		 * XXX: We could support this syntax on multirange columns too,
+		 * if we just built a one-range multirange from the FROM/TO phrases.
+		 */
 		if (!type_is_range(attr->atttypid))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
@@ -1414,8 +1418,12 @@ transformForPortionOfClause(ParseState *pstate,
 							RelationGetRelationName(targetrel)),
 					 parser_errposition(pstate, forPortionOf->location)));
 
+		rngsubtype = get_range_subtype(attr->atttypid);
+		declared_arg_types[0] = rngsubtype;
+		declared_arg_types[1] = rngsubtype;
+
 		/*
-		 * Build a range from the FROM ... TO .... bounds. This should give a
+		 * Build a range from the FROM ... TO ... bounds. This should give a
 		 * constant result, so we accept functions like NOW() but not column
 		 * references, subqueries, etc.
 		 */

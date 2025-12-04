@@ -1004,6 +1004,11 @@ INSERT INTO for_portion_of_test2 (id, valid_at, name) VALUES
   ('[3,4)', datemultirange(daterange('2018-01-01', null)), 'three');
   ;
 
+-- Updating with FROM/TO
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at FROM '2000-01-01' TO '2010-01-01'
+  SET name = 'one^1'
+  WHERE id = '[1,2)';
 -- Updating with multirange
 UPDATE for_portion_of_test2
   FOR PORTION OF valid_at (datemultirange(daterange('2018-01-10', '2018-02-10'), daterange('2018-03-05', '2018-05-01')))
@@ -1038,6 +1043,11 @@ UPDATE for_portion_of_test2
   WHERE id = '[1,2)';
 SELECT * FROM for_portion_of_test2 WHERE id = '[1,2)' ORDER BY valid_at;
 
+-- Deleting with FROM/TO
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at FROM '2000-01-01' TO '2010-01-01'
+  SET name = 'one^1'
+  WHERE id = '[1,2)';
 -- Deleting with multirange
 DELETE FROM for_portion_of_test2
   FOR PORTION OF valid_at (datemultirange(daterange('2018-01-15', '2018-02-15'), daterange('2018-03-01', '2018-03-15')))
