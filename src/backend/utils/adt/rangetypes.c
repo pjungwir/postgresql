@@ -455,6 +455,9 @@ range_constructor3(PG_FUNCTION_ARGS)
  * we make sure that prosrc is 'range_constructor2' and probin IS NULL.
  *
  * We can't use pg_depend, because built-in rangetypes don't have entries there.
+ *
+ * Domains on rangetypes don't define their own constructors,
+ * so caller should pass the basetype oid.
  */
 Oid
 range_get_constructor2(Oid rngtypid)

@@ -1305,6 +1305,7 @@ transformForPortionOfClause(ParseState *pstate,
 	char	   *range_name = forPortionOf->range_name;
 	int			range_attno = InvalidAttrNumber;
 	Form_pg_attribute attr;
+	Oid			attbasetype;
 	Oid			opclass;
 	Oid			opfamily;
 	Oid			opcintype;
@@ -1334,6 +1335,8 @@ transformForPortionOfClause(ParseState *pstate,
 				 parser_errposition(pstate, forPortionOf->location)));
 	attr = TupleDescAttr(targetrel->rd_att, range_attno - 1);
 
+	attbasetype = getBaseType(attr->atttypid);
+
 	rangeVar = makeVar(
 					   rtindex,
 					   range_attno,
@@ -1343,11 +1346,11 @@ transformForPortionOfClause(ParseState *pstate,
 					   0);
 	rangeVar->location = forPortionOf->location;
 	result->rangeVar = rangeVar;
-	result->rangeType = attr->atttypid;
+	result->rangeType = attbasetype; // TODO: what happens if we use attr->atttypid here?
 
 	if (forPortionOf->target)
 	{
-		Oid declared_target_type = attr->atttypid;
+		Oid declared_target_type = attbasetype;
 		Oid actual_target_type;
 
 		/*
@@ -1383,7 +1386,7 @@ transformForPortionOfClause(ParseState *pstate,
 		 * XXX: For now we only support ranges and multiranges, so we fail on
 		 * anything else.
 		 */
-		if (!type_is_range(attr->atttypid) && !type_is_multirange(attr->atttypid))
+		if (!type_is_range(attbasetype) && !type_is_multirange(attbasetype))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
 					 errmsg("column \"%s\" of relation \"%s\" is not a range or multirange type",
@@ -1405,7 +1408,7 @@ transformForPortionOfClause(ParseState *pstate,
 		 * XXX: We could support this syntax on multirange columns too,
 		 * if we just built a one-range multirange from the FROM/TO phrases.
 		 */
-		if (!type_is_range(attr->atttypid))
+		if (!type_is_range(attbasetype))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
 					 errmsg("column \"%s\" of relation \"%s\" is not a range type",
@@ -1413,7 +1416,7 @@ transformForPortionOfClause(ParseState *pstate,
 							RelationGetRelationName(targetrel)),
 					 parser_errposition(pstate, forPortionOf->location)));
 
-		rngsubtype = get_range_subtype(attr->atttypid);
+		rngsubtype = get_range_subtype(attbasetype);
 		declared_arg_types[0] = rngsubtype;
 		declared_arg_types[1] = rngsubtype;
 
@@ -1448,8 +1451,8 @@ transformForPortionOfClause(ParseState *pstate,
 
 		make_fn_arguments(pstate, args, actual_arg_types, declared_arg_types);
 		result->targetRange = (Node *) makeFuncExpr(
-				range_get_constructor2(attr->atttypid),
-				attr->atttypid,
+				range_get_constructor2(attbasetype),
+				attbasetype,
 				args,
 				InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
 	}
@@ -1509,8 +1512,10 @@ transformForPortionOfClause(ParseState *pstate,
 		 * Now make sure we update the start/end time of the record. For a
 		 * range col (r) this is `r = r * targetRange`.
 		 */
+		// Oid			declared_arg_types[2] = {attbasetype, attbasetype};
+		// Oid			actual_arg_types[2] = {attr->atttypid, attbasetype};
 		Oid			intersectoperoid;
-		List	   *funcArgs = NIL;
+		List	   *funcArgs;
 		FuncExpr   *rangeTLEExpr;
 		TargetEntry *tle;
 
@@ -1536,10 +1541,16 @@ transformForPortionOfClause(ParseState *pstate,
 					errcode(ERRCODE_UNDEFINED_OBJECT),
 					errmsg("could not identify an intersect function for type %s", format_type_be(opcintype)));
 
-		funcArgs = lappend(funcArgs, copyObject(rangeVar));
-		funcArgs = lappend(funcArgs, result->targetRange);
+		// funcArgs = lappend(funcArgs, copyObject(rangeVar));
+		// funcArgs = lappend(funcArgs, result->targetRange);
+		funcArgs = list_make2(copyObject(rangeVar), copyObject(result->targetRange));
+		// TODO: coerce inputs; they might be domains
+		// make_fn_arguments(pstate, funcArgs, actual_arg_types, declared_arg_types);
 		rangeTLEExpr = makeFuncExpr(funcid, attr->atttypid, funcArgs,
 									InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
+		// TODO: pprint something like `select '[2000-02-01,2010-01-01)'::daterange_d && '[2005-01-01,2006-01-01)'::daterange_d;` to see where postgres is stripping off the domain and turning them into basetypes. Must be before calling the oper proc. So why doesn't make_fn_arguments do that?
+		// pprint(rangeTLEExpr);
+		// TODO: FuncExpr should return basetype, so coerce if necessary
 
 		/* Make a TLE to set the range column */
 		result->rangeTargetList = NIL;

@@ -655,6 +655,59 @@ END;
 DROP FUNCTION fpo_delete();
 
 
+-- test on domain columns
+
+-- With a rangetype over a domain
+-- TODO
+-- With a multirangetype over a domain
+-- TODO
+-- With a domain on a rangetype
+CREATE DOMAIN daterange_d AS daterange CHECK (upper(VALUE) <> '2005-05-05'::date);
+CREATE TABLE for_portion_of_test2 (
+  id integer,
+  valid_at daterange_d,
+  name text
+);
+INSERT INTO for_portion_of_test2 VALUES
+  (1, '[2000-01-01,2020-01-01)', 'one'),
+  (2, '[2000-01-01,2020-01-01)', 'two');
+INSERT INTO for_portion_of_test2 VALUES
+  (1, '[2000-01-01,2005-05-05)', 'nope');
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at FROM '2010-01-01' TO '2010-01-05'
+  SET name = 'one^1'
+  WHERE id = 1;
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at ('[2010-01-07,2010-01-09)')
+  SET name = 'one^2'
+  WHERE id = 1;
+-- The target is allowed to violate the domain:
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at FROM '1999-01-01' TO '2005-05-05'
+  SET name = 'miss'
+  WHERE id = -1;
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at ('[1999-01-01,2005-05-05)')
+  SET name = 'miss'
+  WHERE id = -1;
+-- TODO: test the updated row violating the domain
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at FROM '1999-01-01' TO '2005-05-05'
+  SET name = 'one^3'
+  WHERE id = 1;
+-- TODO: test inserts violating the domain
+SELECT * FROM for_portion_of_test2 WHERE id = 1 ORDER BY valid_at;
+DELETE FROM for_portion_of_test2
+  FOR PORTION OF valid_at FROM '2010-01-01' TO '2010-01-05'
+  WHERE id = 2;
+DELETE FROM for_portion_of_test2
+  FOR PORTION OF valid_at ('[2010-01-07,2010-01-09)')
+  WHERE id = 2;
+SELECT * FROM for_portion_of_test2 WHERE id = 2 ORDER BY valid_at;
+DROP TABLE for_portion_of_test2;
+-- With a domain on a multirangetype
+-- TODO
+
 -- test on non-range/multirange columns
 
 -- With a direct target and a scalar column
