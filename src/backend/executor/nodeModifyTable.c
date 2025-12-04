@@ -1482,6 +1482,14 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 		if (fcinfo->isnull)
 			elog(ERROR, "Got a null from without_portion function");
 
+		/* Does the new Datum violate domain checks? */
+		if (forPortionOf->isDomain)
+			domain_check(leftover, false, forPortionOf->rangeVar->vartype, NULL, NULL);
+		// TODO: Perhaps I should build an expr node with coerce_type instead
+		// and execute it here?
+		// Maybe, but let's see if this works first, and see if we need to do
+		// something for CHECK constraints.
+
 		if (!didInit)
 		{
 			/*

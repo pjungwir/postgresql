@@ -1346,14 +1346,17 @@ transformForPortionOfClause(ParseState *pstate,
 					   0);
 	rangeVar->location = forPortionOf->location;
 	result->rangeVar = rangeVar;
-	/* Store the domain oid so that leftovers can check against it: */
-	// TODO: I might need both.
-	// ExecForPortionOfLeftovers needs to validate that the new ranges don't
+	// TODO: ExecForPortionOfLeftovers needs to validate that the new ranges don't
 	// violate their domain. How do I do that? Cast the result of
 	// without_portion to the domain type? Probably yes.
 	// maybe call domain_check or domain_check_safe.
 	// TODO: what if leftovers violate non-domain CHECK constraints? Do we catch that?
-	result->rangeType = attr->atttypid;
+	/*
+	 * Use the basetype for the target, which shouldn't be required to follow
+	 * domain rules. The table's column type is in the Var if we need it.
+	 */
+	result->rangeType = attbasetype;
+	result->isDomain = attbasetype != attr->atttypid;
 
 	if (forPortionOf->target)
 	{
