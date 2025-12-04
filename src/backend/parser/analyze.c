@@ -1382,7 +1382,6 @@ transformForPortionOfClause(ParseState *pstate,
 										  COERCE_IMPLICIT_CAST,
 										  exprLocation(forPortionOf->target));
 
-		// TODO: test multiranges too
 		// TODO: what if the column is a domain and you give the base type?
 		// TODO: what if the base type violates the domain? probably that should be allowed.
 	}

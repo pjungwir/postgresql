@@ -960,13 +960,65 @@ INSERT INTO for_portion_of_test2 (id, valid_at, name) VALUES
   ('[3,4)', datemultirange(daterange('2018-01-01', null)), 'three');
   ;
 
+-- Updating with multirange
 UPDATE for_portion_of_test2
   FOR PORTION OF valid_at (datemultirange(daterange('2018-01-10', '2018-02-10'), daterange('2018-03-05', '2018-05-01')))
   SET name = 'one^1'
   WHERE id = '[1,2)';
+SELECT * FROM for_portion_of_test2 WHERE id = '[1,2)' ORDER BY valid_at;
+-- Updating with string coercion
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at ('{[2018-03-05,2018-03-10)}')
+  SET name = 'one^2'
+  WHERE id = '[1,2)';
+SELECT * FROM for_portion_of_test2 WHERE id = '[1,2)' ORDER BY valid_at;
+-- Updating with the wrong range subtype fails
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at ('{[1,4)}'::int4multirange)
+  SET name = 'one^3'
+  WHERE id = '[1,2)';
+-- Updating with a non-multirangetype fails
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at (4)
+  SET name = 'one^3'
+  WHERE id = '[1,2)';
+-- Updating with NULL fails
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at (NULL)
+  SET name = 'one^3'
+  WHERE id = '[1,2)';
+-- Updating with empty does nothing
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at ('{}')
+  SET name = 'one^3'
+  WHERE id = '[1,2)';
+SELECT * FROM for_portion_of_test2 WHERE id = '[1,2)' ORDER BY valid_at;
 
+-- Deleting with multirange
 DELETE FROM for_portion_of_test2
   FOR PORTION OF valid_at (datemultirange(daterange('2018-01-15', '2018-02-15'), daterange('2018-03-01', '2018-03-15')))
+  WHERE id = '[2,3)';
+SELECT * FROM for_portion_of_test2 WHERE id = '[2,3)' ORDER BY valid_at;
+-- Deleting with string coercion
+DELETE FROM for_portion_of_test2
+  FOR PORTION OF valid_at ('{[2018-03-05,2018-03-20)}')
+  WHERE id = '[2,3)';
+SELECT * FROM for_portion_of_test2 WHERE id = '[2,3)' ORDER BY valid_at;
+-- Deleting with the wrong range subtype fails
+DELETE FROM for_portion_of_test2
+  FOR PORTION OF valid_at ('{[1,4)}'::int4multirange)
+  WHERE id = '[2,3)';
+-- Deleting with a non-multirangetype fails
+DELETE FROM for_portion_of_test2
+  FOR PORTION OF valid_at (4)
+  WHERE id = '[2,3)';
+-- Deleting with NULL fails
+DELETE FROM for_portion_of_test2
+  FOR PORTION OF valid_at (NULL)
+  WHERE id = '[2,3)';
+-- Deleting with empty does nothing
+DELETE FROM for_portion_of_test2
+  FOR PORTION OF valid_at ('{}')
   WHERE id = '[2,3)';
 
 SELECT * FROM for_portion_of_test2 ORDER BY id, valid_at;

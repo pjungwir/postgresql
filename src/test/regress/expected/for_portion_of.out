@@ -1480,12 +1480,114 @@ INSERT INTO for_portion_of_test2 (id, valid_at, name) VALUES
   ('[2,3)', datemultirange(daterange('2018-01-01', '2018-05-01)')), 'two'),
   ('[3,4)', datemultirange(daterange('2018-01-01', null)), 'three');
   ;
+-- Updating with multirange
 UPDATE for_portion_of_test2
   FOR PORTION OF valid_at (datemultirange(daterange('2018-01-10', '2018-02-10'), daterange('2018-03-05', '2018-05-01')))
   SET name = 'one^1'
   WHERE id = '[1,2)';
+SELECT * FROM for_portion_of_test2 WHERE id = '[1,2)' ORDER BY valid_at;
+  id   |                     valid_at                      | name  
+-------+---------------------------------------------------+-------
+ [1,2) | {[2018-01-02,2018-01-10),[2018-02-10,2018-03-03)} | one
+ [1,2) | {[2018-01-10,2018-02-03),[2018-02-04,2018-02-10)} | one^1
+ [1,2) | {[2018-03-03,2018-03-05)}                         | one
+ [1,2) | {[2018-03-05,2018-04-04)}                         | one^1
+(4 rows)
+
+-- Updating with string coercion
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at ('{[2018-03-05,2018-03-10)}')
+  SET name = 'one^2'
+  WHERE id = '[1,2)';
+SELECT * FROM for_portion_of_test2 WHERE id = '[1,2)' ORDER BY valid_at;
+  id   |                     valid_at                      | name  
+-------+---------------------------------------------------+-------
+ [1,2) | {[2018-01-02,2018-01-10),[2018-02-10,2018-03-03)} | one
+ [1,2) | {[2018-01-10,2018-02-03),[2018-02-04,2018-02-10)} | one^1
+ [1,2) | {[2018-03-03,2018-03-05)}                         | one
+ [1,2) | {[2018-03-05,2018-03-10)}                         | one^2
+ [1,2) | {[2018-03-10,2018-04-04)}                         | one^1
+(5 rows)
+
+-- Updating with the wrong range subtype fails
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at ('{[1,4)}'::int4multirange)
+  SET name = 'one^3'
+  WHERE id = '[1,2)';
+ERROR:  could not coerce FOR PORTION OF target from int4multirange to datemultirange
+LINE 2:   FOR PORTION OF valid_at ('{[1,4)}'::int4multirange)
+                                   ^
+-- Updating with a non-multirangetype fails
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at (4)
+  SET name = 'one^3'
+  WHERE id = '[1,2)';
+ERROR:  could not coerce FOR PORTION OF target from integer to datemultirange
+LINE 2:   FOR PORTION OF valid_at (4)
+                                   ^
+-- Updating with NULL fails
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at (NULL)
+  SET name = 'one^3'
+  WHERE id = '[1,2)';
+ERROR:  got a NULL FOR PORTION OF target
+-- Updating with empty does nothing
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at ('{}')
+  SET name = 'one^3'
+  WHERE id = '[1,2)';
+SELECT * FROM for_portion_of_test2 WHERE id = '[1,2)' ORDER BY valid_at;
+  id   |                     valid_at                      | name  
+-------+---------------------------------------------------+-------
+ [1,2) | {[2018-01-02,2018-01-10),[2018-02-10,2018-03-03)} | one
+ [1,2) | {[2018-01-10,2018-02-03),[2018-02-04,2018-02-10)} | one^1
+ [1,2) | {[2018-03-03,2018-03-05)}                         | one
+ [1,2) | {[2018-03-05,2018-03-10)}                         | one^2
+ [1,2) | {[2018-03-10,2018-04-04)}                         | one^1
+(5 rows)
+
+-- Deleting with multirange
 DELETE FROM for_portion_of_test2
   FOR PORTION OF valid_at (datemultirange(daterange('2018-01-15', '2018-02-15'), daterange('2018-03-01', '2018-03-15')))
+  WHERE id = '[2,3)';
+SELECT * FROM for_portion_of_test2 WHERE id = '[2,3)' ORDER BY valid_at;
+  id   |                                 valid_at                                  | name 
+-------+---------------------------------------------------------------------------+------
+ [2,3) | {[2018-01-01,2018-01-15),[2018-02-15,2018-03-01),[2018-03-15,2018-05-01)} | two
+(1 row)
+
+-- Deleting with string coercion
+DELETE FROM for_portion_of_test2
+  FOR PORTION OF valid_at ('{[2018-03-05,2018-03-20)}')
+  WHERE id = '[2,3)';
+SELECT * FROM for_portion_of_test2 WHERE id = '[2,3)' ORDER BY valid_at;
+  id   |                                 valid_at                                  | name 
+-------+---------------------------------------------------------------------------+------
+ [2,3) | {[2018-01-01,2018-01-15),[2018-02-15,2018-03-01),[2018-03-20,2018-05-01)} | two
+(1 row)
+
+-- Deleting with the wrong range subtype fails
+DELETE FROM for_portion_of_test2
+  FOR PORTION OF valid_at ('{[1,4)}'::int4multirange)
+  WHERE id = '[2,3)';
+ERROR:  could not coerce FOR PORTION OF target from int4multirange to datemultirange
+LINE 2:   FOR PORTION OF valid_at ('{[1,4)}'::int4multirange)
+                                   ^
+-- Deleting with a non-multirangetype fails
+DELETE FROM for_portion_of_test2
+  FOR PORTION OF valid_at (4)
+  WHERE id = '[2,3)';
+ERROR:  could not coerce FOR PORTION OF target from integer to datemultirange
+LINE 2:   FOR PORTION OF valid_at (4)
+                                   ^
+-- Deleting with NULL fails
+DELETE FROM for_portion_of_test2
+  FOR PORTION OF valid_at (NULL)
+  WHERE id = '[2,3)';
+ERROR:  got a NULL FOR PORTION OF target
+-- Deleting with empty does nothing
+DELETE FROM for_portion_of_test2
+  FOR PORTION OF valid_at ('{}')
   WHERE id = '[2,3)';
 SELECT * FROM for_portion_of_test2 ORDER BY id, valid_at;
   id   |                                 valid_at                                  | name  
@@ -1493,10 +1595,11 @@ SELECT * FROM for_portion_of_test2 ORDER BY id, valid_at;
  [1,2) | {[2018-01-02,2018-01-10),[2018-02-10,2018-03-03)}                         | one
  [1,2) | {[2018-01-10,2018-02-03),[2018-02-04,2018-02-10)}                         | one^1
  [1,2) | {[2018-03-03,2018-03-05)}                                                 | one
- [1,2) | {[2018-03-05,2018-04-04)}                                                 | one^1
- [2,3) | {[2018-01-01,2018-01-15),[2018-02-15,2018-03-01),[2018-03-15,2018-05-01)} | two
+ [1,2) | {[2018-03-05,2018-03-10)}                                                 | one^2
+ [1,2) | {[2018-03-10,2018-04-04)}                                                 | one^1
+ [2,3) | {[2018-01-01,2018-01-15),[2018-02-15,2018-03-01),[2018-03-20,2018-05-01)} | two
  [3,4) | {[2018-01-01,)}                                                           | three
-(6 rows)
+(7 rows)
 
 DROP TABLE for_portion_of_test2;
 -- Test with a custom range type
