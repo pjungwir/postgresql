@@ -1303,8 +1303,6 @@ transformForPortionOfClause(ParseState *pstate,
 	Relation	targetrel = pstate->p_target_relation;
 	RTEPermissionInfo *target_perminfo = pstate->p_target_nsitem->p_perminfo;
 	char	   *range_name = forPortionOf->range_name;
-	char	   *range_type_namespace = NULL;
-	char	   *range_type_name = NULL;
 	int			range_attno = InvalidAttrNumber;
 	Form_pg_attribute attr;
 	Oid			opclass;
@@ -1346,9 +1344,6 @@ transformForPortionOfClause(ParseState *pstate,
 	rangeVar->location = forPortionOf->location;
 	result->rangeVar = rangeVar;
 	result->rangeType = attr->atttypid;
-	if (!get_typname_and_namespace(attr->atttypid, &range_type_name, &range_type_namespace))
-		elog(ERROR, "cache lookup failed for type %u", attr->atttypid);
-
 
 	if (forPortionOf->target)
 	{
