@@ -1587,6 +1587,11 @@ transformForPortionOfClause(ParseState *pstate,
 		/*
 		 * The range column will change, but you don't need UPDATE permission
 		 * on it, so we don't add to updatedCols here.
+		 * XXX: If
+		 * https://www.postgresql.org/message-id/CACJufxEtY1hdLcx%3DFhnqp-ERcV1PhbvELG5COy_CZjoEW76ZPQ%40mail.gmail.com
+		 * is merged (only validate CHECK constraints if they depend on one of
+		 * the columns being UPDATEd), we need to make sure that code knows that
+		 * we are updating the application-time column.
 		 */
 	}
 	else
