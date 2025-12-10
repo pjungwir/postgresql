@@ -646,16 +646,112 @@ gistplacetopage(Relation rel, Size freespace, GISTSTATE *giststate,
  * The giststate must already point to a leaf page.
  */
 static TransactionId
-gist_check_unique(Relation r, GISTSTATE *giststate, Relation heapRel,
-				  IndexUniqueCheck checkUnique, bool *is_unique)
+gist_check_unique(Relation r, GISTSTATE *giststate, GISTInsertState *state, Relation heapRel,
+				  IndexTuple itup, IndexUniqueCheck checkUnique, bool *is_unique)
 {
-	Assert(OidIsValid(giststate->excludeFn));
+	Page		page;
+	OffsetNumber maxoff;
+	OffsetNumber i;
+	MemoryContext oldcxt;
+
+	*is_unique = true;
 	// Use giststate->excludeFn to check.
 	// Is there any tuple on the page that returns true
 	// when compared with new tuple?
-	// TODO: So don't we need itup from the caller (i.e. the new tuple)?
-	// Does the btree version of check_unique take a parameter like that?
-	*is_unique = true;
+	/*
+	 * check all tuples on page
+	 */
+	page = state->stack->page;
+	maxoff = PageGetMaxOffsetNumber(page);
+	for (i = FirstOffsetNumber; i <= maxoff; i = OffsetNumberNext(i))
+	{
+		ItemId		iid = PageGetItemId(page, i);
+		IndexTuple	it;
+		// bool		match;
+		// bool		recheck;	// TODO
+		// bool		recheck_distances;
+		int			j;
+		bool		conflicts = false;
+
+		/* Quit if we found one duplicate. */
+		if (!*is_unique)
+			break;
+
+		/*
+		 * If the scan specifies not to return killed tuples, then we treat a
+		 * killed tuple as not passing the qual.
+		 */
+		// if (scan->ignore_killed_tuples && ItemIdIsDead(iid)) // TODO: check ignore_killed_tuples
+		if (ItemIdIsDead(iid))
+			continue;
+
+		it = (IndexTuple) PageGetItem(page, iid);
+
+		oldcxt = MemoryContextSwitchTo(giststate->tempCxt);
+
+		/* Check all the key elements against excludeFn */
+		for (j = 0; j < giststate->leafTupdesc->natts; j++)
+		{
+			Datum	existing;
+			Datum	newval;
+			bool	isNull;
+			Datum	test;
+
+			Assert(OidIsValid(giststate->excludeFn[j].fn_oid));
+			existing = index_getattr(it,
+									 j + 1,
+									 giststate->leafTupdesc,
+									 &isNull);
+			if (isNull)
+				break;
+
+			// TODO: This raises "compressed pglz data is corrupt".
+			//
+			// For example:
+			// create table gist_rngtbl (id int4range);
+			// insert into gist_rngtbl values ('[1,2)'), ('[2,3)'); -- okay
+			// create unique index uq_gist_rngtbl on gist_rngtbl using gist (id);
+			// insert into gist_rngtbl values ('[3,4)'), ('[4,5)'); -- DIES
+			//
+			// Always on the *second* index entry ([2,3) not [1,2)).
+			// Why???
+			// Wrong tuple descriptor?
+			// Decompressing overwrites the value in-place?
+			// Keep in mind the Datum should be a GISTENTRY not a RangeType,
+			// so we need to call equalFn[j] not excludeFn[j]
+			// (at least for now).
+			// Using gistKeyisEQ doesn't help because we don't get that far.
+			// TODO: Add my patch to print Datums in a debugger; maybe that will
+			// help.
+			newval = index_getattr(itup,
+								   j + 1,
+								   giststate->leafTupdesc,
+								   &isNull);
+			if (isNull)
+				break;
+
+			/*
+			test = FunctionCall2Coll(&giststate->excludeFn[j],
+									 InvalidOid,	// TODO: collation
+									 existing,
+									 newval);
+									 */
+			test = gistKeyIsEQ(giststate, j, existing, newval);
+
+			if (DatumGetBool(test))
+			{
+				conflicts = true;
+				break;
+			}
+		}
+
+		*is_unique = !conflicts;
+
+		MemoryContextSwitchTo(oldcxt);
+		MemoryContextReset(giststate->tempCxt);
+	}
+
+	// TODO: xwait when it is not unique
 	return 0;
 }
 
@@ -946,8 +1042,8 @@ search:
 				// (which of course is outside of access/nbtree, but has btree
 				// in many function names).
 
-				xwait = gist_check_unique(r, giststate, heapRel, checkUnique,
-										  &is_unique);
+				xwait = gist_check_unique(r, giststate, &state, heapRel, itup,
+										  checkUnique, &is_unique);
 				if (unlikely(TransactionIdIsValid(xwait)))
 				{
 					// TODO: more here
@@ -1790,7 +1886,7 @@ initGISTstateExclude(GISTSTATE *giststate, Relation index)
 		if (!OidIsValid(proc))
 			elog(ERROR, "cache lookup failed for operator %u", opid);
 
-		giststate->excludeFn[i].fn_oid = proc;
+		fmgr_info_cxt(proc, &(giststate->excludeFn[i]), giststate->scanCxt);
 	}
 }
 
