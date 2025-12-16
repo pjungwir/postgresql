@@ -23421,7 +23421,7 @@ createTableConstraints(List **wqueue, AlteredTableInfo *tab,
 		 * can't have NO INHERIT constraint.
 		 */
 		nnconstraints = RelationGetNotNullConstraints(RelationGetRelid(parent_rel),
-													  false, false);
+													  false, false, NULL);
 
 		Assert(list_length(nnconstraints) > 0);
 
