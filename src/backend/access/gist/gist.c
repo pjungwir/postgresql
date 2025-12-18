@@ -638,23 +638,36 @@ gistplacetopage(Relation rel, Size freespace, GISTSTATE *giststate,
 }
 
 /*
- * Sets is_unique if there is no conflicting entry already.
+ * gist_check_unique -- enforce UNIQUEness with given excludeFn.
  *
- * Returns the TransactionId that must be waited on if there is a possible
- * conflict from a not-yet-committed session.
+ * ereports if there is a definite conflict, or returns InvalidTransactionId if
+ * there is no conflict, or returns the TransactionId that must be waited on if
+ * there is a potential conflict from a not-yet-committed transaction.
  *
  * The giststate must already point to a leaf page.
+ *
+ * Our definition of uniqueness is based on the excludeFn, which does not
+ * necessarily check for equality. That lets you create so-called UNIQUE indexes
+ * that forbid something else, like overlaps. This is useful for indexes
+ * backing temporal constraints (i.e. WITHOUT OVERLAPS).
+ *
+ * Uniqueness can only be enforced if the GISTENTRY Datum is the same as the
+ * heap Datum---in other words there is no compress support proc.
  */
 static TransactionId
-gist_check_unique(Relation r, GISTSTATE *giststate, GISTInsertState *state, Relation heapRel,
-				  IndexTuple itup, IndexUniqueCheck checkUnique, bool *is_unique)
+gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
+				  Relation heapRel, IndexTuple itup, IndexUniqueCheck checkUnique,
+				  bool *is_unique)
 {
 	Page		page;
 	OffsetNumber maxoff;
 	OffsetNumber i;
 	MemoryContext oldcxt;
+	bool		conflicts = false;
+	SnapshotData SnapshotDirty;
 
-	*is_unique = true;
+	InitDirtySnapshot(SnapshotDirty);
+
 	// Use giststate->excludeFn to check.
 	// Is there any tuple on the page that returns true
 	// when compared with new tuple?
@@ -663,7 +676,7 @@ gist_check_unique(Relation r, GISTSTATE *giststate, GISTInsertState *state, Rela
 	 */
 	page = state->stack->page;
 	maxoff = PageGetMaxOffsetNumber(page);
-	for (i = FirstOffsetNumber; i <= maxoff; i = OffsetNumberNext(i))
+	for (i = FirstOffsetNumber; i <= maxoff && !conflicts; i = OffsetNumberNext(i))
 	{
 		ItemId		iid = PageGetItemId(page, i);
 		IndexTuple	it;
@@ -671,11 +684,6 @@ gist_check_unique(Relation r, GISTSTATE *giststate, GISTInsertState *state, Rela
 		// bool		recheck;	// TODO
 		// bool		recheck_distances;
 		int			j;
-		bool		conflicts = false;
-
-		/* Quit if we found one duplicate. */
-		if (!*is_unique)
-			break;
 
 		/*
 		 * If the scan specifies not to return killed tuples, then we treat a
@@ -686,43 +694,31 @@ gist_check_unique(Relation r, GISTSTATE *giststate, GISTInsertState *state, Rela
 			continue;
 
 		it = (IndexTuple) PageGetItem(page, iid);
+		conflicts = true;
 
 		oldcxt = MemoryContextSwitchTo(giststate->tempCxt);
 
 		/* Check all the key elements against excludeFn */
 		for (j = 0; j < giststate->leafTupdesc->natts; j++)
 		{
-			Datum	existing;
+			Datum	oldval;
 			Datum	newval;
 			bool	isNull;
 			Datum	test;
 
 			Assert(OidIsValid(giststate->excludeFn[j].fn_oid));
-			existing = index_getattr(it,
-									 j + 1,
-									 giststate->leafTupdesc,
-									 &isNull);
+
+			oldval = index_getattr(it,
+								   j + 1,
+								   giststate->leafTupdesc,
+								   &isNull);
 			if (isNull)
 				break;
 
-			// TODO: This raises "compressed pglz data is corrupt".
-			//
-			// For example:
-			// create table gist_rngtbl (id int4range);
-			// insert into gist_rngtbl values ('[1,2)'), ('[2,3)'); -- okay
-			// create unique index uq_gist_rngtbl on gist_rngtbl using gist (id);
-			// insert into gist_rngtbl values ('[3,4)'), ('[4,5)'); -- DIES
-			//
-			// Always on the *second* index entry ([2,3) not [1,2)).
-			// Why???
-			// Wrong tuple descriptor?
-			// Decompressing overwrites the value in-place?
-			// Keep in mind the Datum should be a GISTENTRY not a RangeType,
-			// so we need to call equalFn[j] not excludeFn[j]
-			// (at least for now).
-			// Using gistKeyisEQ doesn't help because we don't get that far.
-			// TODO: Add my patch to print Datums in a debugger; maybe that will
-			// help.
+			// TODO: pull this out of the loop
+			// TODO: Assert that there is no compression function
+			// TODO: Check in analysis that there is not compression function
+			// when creating the index
 			newval = index_getattr(itup,
 								   j + 1,
 								   giststate->leafTupdesc,
@@ -730,29 +726,51 @@ gist_check_unique(Relation r, GISTSTATE *giststate, GISTInsertState *state, Rela
 			if (isNull)
 				break;
 
-			/*
 			test = FunctionCall2Coll(&giststate->excludeFn[j],
 									 InvalidOid,	// TODO: collation
-									 existing,
+									 oldval,
 									 newval);
-									 */
-			test = gistKeyIsEQ(giststate, j, existing, newval);
+			// test = gistKeyIsEQ(giststate, j, oldval, newval);
 
-			if (DatumGetBool(test))
-			{
-				conflicts = true;
+			/*
+			 * If all attributes conflict, then then we violate uniqueness.
+			 * So as soon as conflicts is false, we can abort.
+			 */
+			conflicts &= DatumGetBool(test);
+			if (!conflicts)
 				break;
-			}
 		}
 
-		*is_unique = !conflicts;
-
 		MemoryContextSwitchTo(oldcxt);
-		MemoryContextReset(giststate->tempCxt);
+		// MemoryContextReset(giststate->tempCxt);
+	}
+	*is_unique = !conflicts;
+
+	// TODO: depends on checkUnique
+	// TODO: deal with MVCC
+	if (conflicts) {
+		Datum		values[INDEX_MAX_KEYS];
+		bool		isnull[INDEX_MAX_KEYS];
+		char	   *key_desc;
+
+		index_deform_tuple(itup, RelationGetDescr(rel),
+						   values, isnull);
+
+		key_desc = BuildIndexValueDescription(rel, values,
+											  isnull);
+
+		ereport(ERROR,
+				(errcode(ERRCODE_UNIQUE_VIOLATION),
+				 errmsg("duplicate key value violates unique constraint \"%s\"",
+						RelationGetRelationName(rel)),
+				 key_desc ? errdetail("Key %s already exists.",
+									  key_desc) : 0,
+				 errtableconstraint(heapRel,
+									RelationGetRelationName(rel))));
 	}
 
 	// TODO: xwait when it is not unique
-	return 0;
+	return InvalidTransactionId;
 }
 
 /*
