@@ -2799,6 +2799,8 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 					if (!OidIsValid(typid) && column)
 						typid = typenameTypeId(NULL, column->typeName);
 
+					typid = getBaseType(typid);
+
 					if (!OidIsValid(typid) || !(type_is_range(typid) || type_is_multirange(typid)))
 						ereport(ERROR,
 								(errcode(ERRCODE_DATATYPE_MISMATCH),

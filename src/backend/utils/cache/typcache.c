@@ -944,6 +944,8 @@ lookup_type_cache(Oid type_id, int flags)
 		typentry->domainBaseTypmod = -1;
 		typentry->domainBaseType =
 			getBaseTypeAndTypmod(type_id, &typentry->domainBaseTypmod);
+		typentry->domainBaseTyptype =
+			get_typtype(typentry->domainBaseType);
 	}
 	if ((flags & TYPECACHE_DOMAIN_CONSTR_INFO) &&
 		(typentry->flags & TCFLAGS_CHECKED_DOMAIN_CONSTRAINTS) == 0 &&

@@ -100,7 +100,153 @@ CREATE TABLE temporal_rng3 (
 );
 ALTER TABLE temporal_rng3 DROP CONSTRAINT temporal_rng3_pk;
 DROP TABLE temporal_rng3;
-DROP TYPE textrange2;
+
+--
+-- test PRIMARY KEY and UNIQUE constraint interaction with domains:
+--
+CREATE DOMAIN int4_d as integer check (value <> 10);
+-- range over domain:
+CREATE TYPE int4_d_range as range (subtype = int4_d);
+-- domain over built-in range:
+CREATE DOMAIN int4range_d AS int4range CHECK (VALUE <> '[10,11)');
+-- domain over custom range (not tested directly):
+CREATE DOMAIN textrange2_d AS textrange2 CHECK (VALUE <> '[c,d)');
+-- domain over domain over custom range:
+CREATE DOMAIN textrange2_dd AS textrange2_d;
+-- domain over built-in multirange:
+CREATE DOMAIN int4multirange_d as int4multirange check (value <> '{[10,11)}');
+-- domain over custom multirange:
+CREATE DOMAIN textmultirange2_d AS textmultirange2 CHECK (VALUE <> '{[c,d)}');
+-- We also test a multirange over a domain subtype (below).
+-- We can't test a multirange whose rangetype is a domain,
+-- because defining a domain on a rangetype doesn't create a new multirangetype
+-- (or new range constructors, pg_range entry, etc.).
+
+-- The range's subtype is a domain:
+CREATE TABLE temporal_rng4 (
+  id int4range,
+  valid_at int4_d_range,
+  CONSTRAINT temporal_rng4_pk PRIMARY KEY(id, valid_at WITHOUT OVERLAPS)
+);
+INSERT INTO temporal_rng4 VALUES ('[1,11)', '[9,10)'); -- start bound violates domain
+INSERT INTO temporal_rng4 VALUES ('[1,2)', '[10,11)'); -- end bound violates domain
+INSERT INTO temporal_rng4 VALUES ('[1,2)', '[1,13)'), ('[1,2)', '[2,5)'); -- not unique
+INSERT INTO temporal_rng4 VALUES ('[1,2)', '[1,13)'), ('[1,2)', '[20,23)'); -- okay
+INSERT INTO temporal_rng4 VALUES ('[1,2)', '[30,)'); -- null bound is okay
+DROP TABLE temporal_rng4;
+
+-- The domain is over a built-in range type:
+CREATE TABLE temporal_rng4 (
+  id int4range,
+  valid_at int4range_d,
+  CONSTRAINT temporal_rng4_pk UNIQUE (id, valid_at WITHOUT OVERLAPS)
+);
+INSERT INTO temporal_rng4 VALUES ('[1,2)', '[10,11)'); -- violates domain
+INSERT INTO temporal_rng4 VALUES ('[1,2)', '[1,13)'), ('[1,2)', '[2,13)'); -- not unique
+INSERT INTO temporal_rng4 VALUES ('[1,2)', '[1,13)'), ('[1,2)', '[20,23)'); -- okay
+DROP TABLE temporal_rng4;
+
+-- The domain is over another domain which is over a user-defined range type:
+CREATE TABLE temporal_rng4 (
+  id int4range,
+  valid_at textrange2_dd,
+  CONSTRAINT temporal_rng4_pk UNIQUE (id, valid_at WITHOUT OVERLAPS)
+);
+INSERT INTO temporal_rng4 VALUES ('[1,2)', NULL), (NULL, '[1,2)');
+INSERT INTO temporal_rng4 VALUES ('[1,2)', '[c,d)'); -- violates domain
+INSERT INTO temporal_rng4 VALUES ('[1,2)', '[a,d)'); -- okay
+INSERT INTO temporal_rng4 VALUES ('[1,2)', '[b,c)'); -- not unique
+INSERT INTO temporal_rng4 VALUES ('[2,3)', '[B,C)'), ('[2,3)', '[A,C)'); -- not unique
+
+-- It is a multirange type rather than a domain type; however, the multirange
+-- type’s subtype is a domain type.
+CREATE TABLE temporal_mltrng4 (
+  id  int4range,
+  valid_at int4_d_multirange,
+  CONSTRAINT temporal_mltrng4_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+INSERT INTO temporal_mltrng4 VALUES ('[1,2)', '{[10,11)}'); -- violates domain
+INSERT INTO temporal_mltrng4 VALUES ('[1,2)', '{[1,13)}'), ('[1,2)', '{[2,13)}'); -- not unique
+INSERT INTO temporal_mltrng4 VALUES ('[1,2)', '{[1,13)}'), ('[1,2)', '{[20,23)}'); -- okay
+DROP TABLE temporal_mltrng4;
+
+-- The domain is over a built-in multirange type.
+CREATE TABLE temporal_mltrng4 (
+  id  int4range,
+  valid_at int4multirange_d,
+  CONSTRAINT temporal_mltrng4_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+INSERT INTO temporal_mltrng4 VALUES ('[1,2)', '{[10,11)}'); -- violates domain
+INSERT INTO temporal_mltrng4 VALUES ('[1,2)', '{[1,13)}'), ('[1,2)', '{[2,13)}'); -- not unique
+INSERT INTO temporal_mltrng4 VALUES ('[1,2)', '{[1,13)}'), ('[1,2)', '{[20,23)}'); -- okay
+DROP TABLE temporal_mltrng4;
+
+-- The domain is over a user-defined multirange type.
+CREATE TABLE temporal_mltrng4 (
+  id int4range,
+  valid_at textmultirange2_d,
+  CONSTRAINT temporal_mltrng4_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+INSERT INTO temporal_mltrng4 VALUES ('[1,2)', '{[c,d)}'); -- violates domain
+INSERT INTO temporal_mltrng4 VALUES ('[1,2)', '{[a,g)}'); -- okay
+INSERT INTO temporal_mltrng4 VALUES ('[1,2)', '{[b,c)}'); -- not unique
+INSERT INTO temporal_mltrng4 VALUES ('[2,3)', '{[B,C)}'), ('[2,3)', '{[A,C)}'); -- not unique
+
+-- test foreign key interactions with domains:
+
+-- domain references domain:
+UPDATE temporal_mltrng4 SET valid_at = '{[a,g)}'; -- reset
+CREATE TABLE temporal_mltrngfk (
+  parent_id int4range,
+  id int4range,
+  valid_at textmultirange2_d,
+  CONSTRAINT temporal_mltrngfk_fk
+    FOREIGN KEY (parent_id, PERIOD valid_at)
+    REFERENCES temporal_mltrng4
+);
+INSERT INTO temporal_mltrngfk VALUES ('[1,2)', '[2,3)', '{[d,e)}');
+UPDATE temporal_mltrng4 SET valid_at = '{[c,d)}'; -- violates domain
+UPDATE temporal_mltrng4 SET valid_at = '{[a,h)}'; -- okay
+UPDATE temporal_mltrng4 SET valid_at = '{[f,g)}'; -- violates reference
+DROP TABLE temporal_mltrngfk;
+
+-- non-domain references domain:
+UPDATE temporal_mltrng4 SET valid_at = '{[a,g)}'; -- reset
+CREATE TABLE temporal_mltrngfk (
+  parent_id int4range,
+  id int4range,
+  valid_at textmultirange2,
+  CONSTRAINT temporal_mltrngfk_fk
+    FOREIGN KEY (parent_id, PERIOD valid_at)
+    REFERENCES temporal_mltrng4
+);
+INSERT INTO temporal_mltrngfk VALUES ('[1,2)', '[2,3)', '{[d,e)}');
+UPDATE temporal_mltrng4 SET valid_at = '{[c,d)}'; -- violates domain
+UPDATE temporal_mltrng4 SET valid_at = '{[a,h)}'; -- okay
+UPDATE temporal_mltrng4 SET valid_at = '{[f,g)}'; -- violates reference
+DROP TABLE temporal_mltrngfk;
+
+-- domain references non-domain:
+CREATE TABLE temporal_mltrng3 (
+  id int4range,
+  valid_at textmultirange2
+);
+INSERT INTO temporal_mltrng3 VALUES ('[1,2)', '{[a,g)}');
+CREATE TABLE temporal_mltrngfk (
+  id int4range,
+  parent_id int4range,
+  valid_at textmultirange2_d,
+  CONSTRAINT temporal_mltrngfk_fk
+    FOREIGN KEY (parent_id, PERIOD valid_at)
+    REFERENCES temporal_mltrng4
+);
+INSERT INTO temporal_mltrngfk VALUES ('[1,2)', '[1,2)', '{[d,e)}');
+UPDATE temporal_mltrng4 SET valid_at = '{[c,d)}'; -- violates domain
+UPDATE temporal_mltrng4 SET valid_at = '{[a,h)}'; -- okay
+UPDATE temporal_mltrng4 SET valid_at = '{[f,g)}'; -- violates reference
+DROP TABLE temporal_mltrng3, temporal_mltrngfk;
+
+DROP TABLE temporal_mltrng4, temporal_rng4;
 
 -- PK with one column plus a multirange:
 CREATE TABLE temporal_mltrng (
@@ -170,7 +316,6 @@ SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'te
 DROP TABLE temporal_rng3;
 
 -- UNIQUE with a custom range type:
-CREATE TYPE textrange2 AS range (subtype=text, collation="C");
 CREATE TABLE temporal_rng3 (
   id int4range,
   valid_at textrange2,
@@ -178,6 +323,9 @@ CREATE TABLE temporal_rng3 (
 );
 ALTER TABLE temporal_rng3 DROP CONSTRAINT temporal_rng3_uq;
 DROP TABLE temporal_rng3;
+DROP TYPE int4_d_range;
+DROP DOMAIN int4range_d, textrange2_dd, textrange2_d,
+            textmultirange2_d, int4multirange_d, int4_d;
 DROP TYPE textrange2;
 
 --

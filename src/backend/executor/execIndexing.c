@@ -752,13 +752,19 @@ check_exclusion_or_unique_constraint(Relation heap, Relation index,
 
 		if (!isnull[indnkeyatts - 1])
 		{
+			char 		typtype;
 			TupleDesc	tupdesc = RelationGetDescr(heap);
 			Form_pg_attribute att = TupleDescAttr(tupdesc, attno - 1);
-			TypeCacheEntry *typcache = lookup_type_cache(att->atttypid, 0);
+			TypeCacheEntry *typcache = lookup_type_cache(att->atttypid, TYPECACHE_DOMAIN_BASE_INFO);
+
+			if (OidIsValid(typcache->domainBaseType))
+				typtype = typcache->domainBaseTyptype;
+			else
+				typtype = typcache->typtype;
 
 			ExecWithoutOverlapsNotEmpty(heap, att->attname,
 										values[indnkeyatts - 1],
-										typcache->typtype, att->atttypid);
+										typtype, att->atttypid);
 		}
 	}
 
