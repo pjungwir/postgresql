@@ -109,11 +109,12 @@ typedef struct TypeCacheEntry
 	struct TypeCacheEntry *rngtype; /* multirange's range underlying type */
 
 	/*
-	 * Domain's base type and typmod if it's a domain type.  Zeroes if not
-	 * domain, or if information hasn't been requested.
+	 * Domain's base type, typmod, and typtype if it's a domain type.
+	 * Zeroes if not domain, or if information hasn't been requested.
 	 */
 	Oid			domainBaseType;
 	int32		domainBaseTypmod;
+	char		domainBaseTyptype;
 
 	/*
 	 * Domain constraint data if it's a domain type.  NULL if not domain, or

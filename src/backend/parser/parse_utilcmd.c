@@ -2764,7 +2764,7 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 			}
 
 			/*
-			 * The WITHOUT OVERLAPS part (if any) must be a range or
+			 * The WITHOUT OVERLAPS part (if any) base type must be a range or
 			 * multirange type.
 			 */
 			if (constraint->without_overlaps && lc == list_last_cell(constraint->keys))
@@ -2798,6 +2798,8 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 				{
 					if (!OidIsValid(typid) && column)
 						typid = typenameTypeId(NULL, column->typeName);
+
+					typid = getBaseType(typid);
 
 					if (!OidIsValid(typid) || !(type_is_range(typid) || type_is_multirange(typid)))
 						ereport(ERROR,
