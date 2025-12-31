@@ -413,6 +413,8 @@ extern void freeGISTstate(GISTSTATE *giststate);
 extern bool gistdoinsert(Relation r,
 						 IndexTuple itup,
 						 IndexUniqueCheck checkUnique,
+						 Datum *values,
+						 bool *isnull,
 						 Size freespace,
 						 GISTSTATE *giststate,
 						 Relation heapRel,

@@ -874,6 +874,7 @@ gistBuildCallback(Relation index,
 		bool known_unique = gistdoinsert(index, itup,
 										 buildstate->isunique ? UNIQUE_CHECK_YES
 															  : UNIQUE_CHECK_NO,
+										 values, isnull,
 										 buildstate->freespace,
 										 buildstate->giststate,
 										 buildstate->heaprel, true);
