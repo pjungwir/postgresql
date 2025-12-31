@@ -671,6 +671,8 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 	bool		call_again = false;
 	bool		found = false;
 	bool		all_dead = false; // TODO: use this? nbtree does.
+	Datum		oldvals[INDEX_MAX_KEYS];
+	bool		oldnulls[INDEX_MAX_KEYS];
 
 	InitDirtySnapshot(SnapshotDirty);
 
@@ -757,6 +759,12 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 			{
 				oldval = slot->tts_values[heapattr - 1];
 			}
+			/*
+			 * Record the heap Datums in index-attribute order,
+			 * so we can build an error message below.
+			 */
+			oldnulls[j] = oldIsNull;
+			oldvals[j] = oldval;
 
 			// XXX: I assume the index has a null iff the heap does?
 			// XXX: What about nulls_not_distinct? Btree seems to ignore that
@@ -796,22 +804,46 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 	}
 	*is_unique = !conflicts;
 
-	ExecDropSingleTupleTableSlot(slot);
-
 	// TODO: depends on checkUnique
 	// TODO: deal with MVCC
 	if (conflicts) {
 		char *key_desc = BuildIndexValueDescription(rel, newvals, newnulls);
 
-		ereport(ERROR,
-				(errcode(ERRCODE_UNIQUE_VIOLATION),
-				 errmsg("duplicate key value violates unique constraint \"%s\"",
-						RelationGetRelationName(rel)),
-				 key_desc ? errdetail("Key %s already exists.",
-									  key_desc) : 0,
-				 errtableconstraint(heapRel,
-									RelationGetRelationName(rel))));
+		/* For WITHOUT OVERLAPS, match the exclusion constraint message */
+		if (rel->rd_index->indisexclusion)
+		{
+			char *old_key_desc = BuildIndexValueDescription(rel, oldvals, oldnulls);
+			if (state->is_build)
+				ereport(ERROR,
+						(errcode(ERRCODE_UNIQUE_VIOLATION),
+						 errmsg("could not create exclusion constraint \"%s\"",
+								RelationGetRelationName(rel)),
+						 key_desc && old_key_desc ? errdetail("Key %s conflicts with key %s.",
+											  key_desc, old_key_desc) : 0,
+						 errtableconstraint(heapRel,
+											RelationGetRelationName(rel))));
+			else
+				ereport(ERROR,
+						(errcode(ERRCODE_UNIQUE_VIOLATION),
+						 errmsg("conflicting key value violates exclusion constraint \"%s\"",
+								RelationGetRelationName(rel)),
+						 key_desc && old_key_desc ? errdetail("Key %s conflicts with existing key %s.",
+											  key_desc, old_key_desc) : 0,
+						 errtableconstraint(heapRel,
+											RelationGetRelationName(rel))));
+		}
+		else
+			ereport(ERROR,
+					(errcode(ERRCODE_UNIQUE_VIOLATION),
+					 errmsg("duplicate key value violates unique constraint \"%s\"",
+							RelationGetRelationName(rel)),
+					 key_desc ? errdetail("Key %s already exists.",
+										  key_desc) : 0,
+					 errtableconstraint(heapRel,
+										RelationGetRelationName(rel))));
 	}
+
+	ExecDropSingleTupleTableSlot(slot);
 
 	// TODO: xwait when it is not unique
 	return InvalidTransactionId;
@@ -1911,8 +1943,12 @@ initGISTstate(Relation index)
 void
 initGISTstateExclude(GISTSTATE *giststate, Relation index)
 {
+	int			natts = IndexRelationGetNumberOfKeyAttributes(index);
 	int			i;
-	for (i = 0; i < IndexRelationGetNumberOfKeyAttributes(index); i++)
+
+	Assert(index->rd_index->indisunique);
+
+	for (i = 0; i < natts; i++)
 	{
 		/*
 		 * Set the operator (or rather its function) for the equality CompareType
@@ -1927,19 +1963,32 @@ initGISTstateExclude(GISTSTATE *giststate, Relation index)
 		 * strategy numbers. This is probably a fair assumption, but it
 		 * means we disregard the index attributes' opclasses when getting
 		 * stratnums.
-		 *
-		 * XXX: Support other CompareTypes, e.g. COMPARE_OVERLAP
 		 */
 		RegProcedure proc;
-		CompareType cmptype = COMPARE_EQ;
 		Oid opfamily = index->rd_opfamily[i];
-		StrategyNumber strat = IndexAmTranslateCompareType(cmptype,
-														   GIST_AM_OID,
-														   opfamily,
-														   false);
-		Oid	opid = get_opfamily_member(index->rd_opfamily[i],
-									   index->rd_opcintype[i],
-									   index->rd_opcintype[i], strat);
+		CompareType cmptype;
+		StrategyNumber strat;
+		Oid				opid;
+
+		/*
+		 * If this is a WITHOUT OVERLAPS index, we use overlaps for the last
+		 * element. Otherwise we use equality. The only time both indisunique
+		 * and indisexclusion are set is for WITHOUT OVERLAPS.
+		 *
+		 * XXX: We could do checking for all exclusion constraints here,
+		 * if we wanted to look up their operators.
+		 */
+		if (index->rd_index->indisexclusion && i == natts - 1)
+			cmptype = COMPARE_OVERLAP;
+		else
+			cmptype = COMPARE_EQ;
+
+		strat = IndexAmTranslateCompareType(cmptype, GIST_AM_OID, opfamily, false);
+
+
+		opid = get_opfamily_member(index->rd_opfamily[i],
+								   index->rd_opcintype[i],
+								   index->rd_opcintype[i], strat);
 		if (!OidIsValid(opid))
 			ereport(ERROR,
 					errmsg("could not identify equality operator for unique constraint"),
