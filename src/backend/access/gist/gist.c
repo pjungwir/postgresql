@@ -730,8 +730,6 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 									 InvalidOid,	// TODO: collation
 									 oldval,
 									 newval);
-			// test = gistKeyIsEQ(giststate, j, oldval, newval);
-
 			/*
 			 * If all attributes conflict, then then we violate uniqueness.
 			 * So as soon as conflicts is false, we can abort.

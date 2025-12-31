@@ -110,6 +110,7 @@ typedef struct
 	BulkWriteState *bulkstate;
 
 	bool		isunique;
+	bool		nulls_not_distinct;
 } GISTBuildState;
 
 #define GIST_SORTED_BUILD_PAGE_NUM 4
@@ -203,6 +204,7 @@ gistbuild(Relation heap, Relation index, IndexInfo *indexInfo)
 	if (indexInfo->ii_Unique)
 		initGISTstateExclude(buildstate.giststate, index);
 	buildstate.isunique = indexInfo->ii_Unique;
+	buildstate.nulls_not_distinct = indexInfo->ii_NullsNotDistinct;
 
 	/*
 	 * Create a temporary memory context that is reset once for each tuple
@@ -271,6 +273,8 @@ gistbuild(Relation heap, Relation index, IndexInfo *indexInfo)
 		 */
 		buildstate.sortstate = tuplesort_begin_index_gist(heap,
 														  index,
+														  buildstate.isunique,
+														  buildstate.nulls_not_distinct,
 														  maintenance_work_mem,
 														  NULL,
 														  TUPLESORT_NONE);
@@ -867,8 +871,10 @@ gistBuildCallback(Relation index,
 		 * There's no buffers (yet). Since we already have the index relation
 		 * locked, we call gistdoinsert directly.
 		 */
-		bool known_unique = gistdoinsert(index, itup, buildstate->freespace,
-										 buildstate->isunique,
+		bool known_unique = gistdoinsert(index, itup,
+										 buildstate->isunique ? UNIQUE_CHECK_YES
+															  : UNIQUE_CHECK_NO,
+										 buildstate->freespace,
 										 buildstate->giststate,
 										 buildstate->heaprel, true);
 		/*

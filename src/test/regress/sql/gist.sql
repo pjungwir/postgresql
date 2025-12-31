@@ -184,7 +184,6 @@ select pg_get_indexdef('uq_gist_rngtbl'::regclass);
 drop index uq_gist_rngtbl;
 insert into gist_rngtbl values ('[1,2)');
 create unique index uq_gist_rngtbl on gist_rngtbl using gist (id); -- fail
-drop index uq_gist_rngtbl;
 truncate gist_rngtbl;
 -- enforced on insert
 create unique index uq_gist_rngtbl on gist_rngtbl using gist (id);
