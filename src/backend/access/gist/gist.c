@@ -16,6 +16,7 @@
 
 #include "access/gist_private.h"
 #include "access/gistscan.h"
+#include "access/tableam.h"
 #include "access/xloginsert.h"
 #include "catalog/pg_am.h"
 #include "catalog/pg_collation.h"
@@ -694,6 +695,14 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 			continue;
 
 		it = (IndexTuple) PageGetItem(page, iid);
+
+		/*
+		 * Skip deleted records
+		 * XXX: What if t_tid gets modified?
+		 */
+		if (!table_index_fetch_tuple_check(heapRel, &it->t_tid, &SnapshotDirty, false))
+			continue;
+
 		conflicts = true;
 
 		oldcxt = MemoryContextSwitchTo(giststate->tempCxt);
