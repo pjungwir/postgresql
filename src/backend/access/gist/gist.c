@@ -712,7 +712,8 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 		{
 			Datum	oldval;
 			Datum	newval;
-			bool	isNull;
+			bool	oldIsNull;
+			bool	newIsNull;
 			Datum	test;
 
 			Assert(OidIsValid(giststate->excludeFn[j].fn_oid));
@@ -720,9 +721,15 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 			oldval = index_getattr(it,
 								   j + 1,
 								   giststate->leafTupdesc,
-								   &isNull);
-			if (isNull)
+								   &oldIsNull);
+			// XXX: I assume the index has a null iff the heap does?
+			// XXX: What about nulls_not_distinct? Btree seems to ignore that
+			// though in access/nbtree/nbtinsert.c:_bt_doinsert
+			if (oldIsNull)
+			{
+				conflicts = false;
 				break;
+			}
 
 			// TODO: pull this out of the loop
 			// TODO: Assert that there is no compression function
@@ -731,14 +738,25 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 			newval = index_getattr(itup,
 								   j + 1,
 								   giststate->leafTupdesc,
-								   &isNull);
-			if (isNull)
+								   &newIsNull);
+			// XXX: I assume the index has a null iff the heap does?
+			// XXX: What about nulls_not_distinct? Btree seems to ignore that
+			// though in access/nbtree/nbtinsert.c:_bt_doinsert
+			if (newIsNull)
+			{
+				// XXX: probably a higher level prevents even checking the index here?
+				conflicts = false;
 				break;
+			}
 
-			test = FunctionCall2Coll(&giststate->excludeFn[j],
-									 InvalidOid,	// TODO: collation
-									 oldval,
-									 newval);
+			if (oldIsNull && newIsNull)
+				/* We already know that giststate->nulls_not_distinct */
+				test = true;
+			else
+				test = FunctionCall2Coll(&giststate->excludeFn[j],
+										 InvalidOid,	// TODO: collation
+										 oldval,
+										 newval);
 			/*
 			 * If all attributes conflict, then then we violate uniqueness.
 			 * So as soon as conflicts is false, we can abort.
