@@ -24,6 +24,7 @@
 #include "commands/vacuum.h"
 #include "miscadmin.h"
 #include "nodes/execnodes.h"
+#include "storage/lmgr.h"
 #include "storage/predicate.h"
 #include "utils/fmgrprotos.h"
 #include "utils/index_selfuncs.h"
@@ -676,6 +677,7 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 	bool		all_dead = false; // TODO: use this? nbtree does.
 	Datum		oldvals[INDEX_MAX_KEYS];
 	bool		oldnulls[INDEX_MAX_KEYS];
+	TransactionId xwait = InvalidTransactionId;
 
 	InitDirtySnapshot(SnapshotDirty);
 
@@ -805,12 +807,48 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 		table_index_fetch_end(scan);
 		MemoryContextSwitchTo(oldcxt);
 	}
-	*is_unique = !conflicts;
+	*is_unique = true;
 
-	// TODO: depends on checkUnique
-	// TODO: deal with MVCC
 	if (conflicts) {
-		char *key_desc = BuildIndexValueDescription(rel, newvals, newnulls);
+		char *key_desc;
+
+		/*
+		 * It is a duplicate. If we are only doing a partial
+		 * check, then don't bother checking if the tuple is being
+		 * updated in another transaction. Just return the fact
+		 * that it is a potential conflict and leave the full
+		 * check till later.
+		 */
+		if (checkUnique == UNIQUE_CHECK_PARTIAL)
+		{
+			*is_unique = false;
+			xwait = InvalidTransactionId;
+			goto cleanup;
+		}
+
+		/*
+		 * If this tuple is being updated by another transaction
+		 * then we have to wait for its commit/abort.
+		 */
+		xwait = (TransactionIdIsValid(SnapshotDirty.xmin)) ?
+			SnapshotDirty.xmin : SnapshotDirty.xmax;
+
+		if (TransactionIdIsValid(xwait))
+		{
+			/* Tell gistdoinsert to wait... */
+			// TODO: *speculativeToken = SnapshotDirty.speculativeToken;
+			goto cleanup;
+		}
+
+		/*
+		 * Otherwise we have a definite conflict.
+		 * XXX: See _bt_check_unique for CREATE INDEX CONCURRENTLY
+		 * considerations.
+		 */
+
+		// TODO: Release buffer locks like _bt_check_unique, to avoid deadlocks.
+
+		key_desc = BuildIndexValueDescription(rel, newvals, newnulls);
 
 		/* For WITHOUT OVERLAPS, match the exclusion constraint message */
 		if (rel->rd_index->indisexclusion)
@@ -846,10 +884,11 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 										RelationGetRelationName(rel))));
 	}
 
+cleanup:
+
 	ExecDropSingleTupleTableSlot(slot);
 
-	// TODO: xwait when it is not unique
-	return InvalidTransactionId;
+	return xwait;
 }
 
 /*
@@ -1126,10 +1165,11 @@ search:
 				}
 			}
 
-			/* now state.stack->(page, buffer and blkno) points to leaf page */
-
-			// TODO: now that we have the lock,
-			// we can check for uniqueness and raise an error if needed.
+			/*
+			 * Now state.stack->(page, buffer and blkno) points to leaf page.
+			 * We have the lock, so we can check for uniqueness and raise an
+			 * error if needed.
+			 */
 			if (checkingunique)
 			{
 				TransactionId xwait;
@@ -1145,7 +1185,20 @@ search:
 										  checkUnique, &is_unique);
 				if (unlikely(TransactionIdIsValid(xwait)))
 				{
-					// TODO: more here
+					/*
+					 * Have to wait for the other guy ...
+					 * Release any pins and locks we might hold
+					 */
+					for (; stack; stack = stack->parent)
+						UnlockReleaseBuffer(stack->buffer);
+					xlocked = false;
+
+					// TODO: speculative insertions
+
+					XactLockTableWait(xwait, r, &itup->t_tid, XLTW_InsertIndex);
+
+					/* start over... */
+
 					goto search;
 				}
 			}
