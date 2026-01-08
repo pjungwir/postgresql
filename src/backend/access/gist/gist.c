@@ -848,6 +848,17 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 		 */
 
 		/*
+		 * Check for a conflict-in as we would if we were going to
+		 * write to this page.  We aren't actually going to write,
+		 * but we want a chance to report SSI conflicts that would
+		 * otherwise be masked by this unique constraint
+		 * violation.
+		 */
+		// TODO: write an isolation test for this case
+		CheckForSerializableConflictIn(rel, NULL,
+									   BufferGetBlockNumber(state->stack->buffer));
+
+		/*
 		 * Build the error message.
 		 * But BuildIndexValueDescription might search this same index,
 		 * locking buffers, so to avoid deadlocks we'd better release all locks
