@@ -854,7 +854,6 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 		 * otherwise be masked by this unique constraint
 		 * violation.
 		 */
-		// TODO: write an isolation test for this case
 		CheckForSerializableConflictIn(rel, NULL,
 									   BufferGetBlockNumber(state->stack->buffer));
 
