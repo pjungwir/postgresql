@@ -1223,8 +1223,10 @@ search:
 
 			if (checkUnique != UNIQUE_CHECK_EXISTING)
 			{
-				// TODO: need SERIALIZABLE check like nbtree?
-
+				/*
+				 * nbtree checks for serializable locks here,
+				 * but we do that in gistinserttuples.
+				 */
 				gistinserttuple(&state, stack, giststate, itup,
 								InvalidOffsetNumber);
 			}
