@@ -810,6 +810,7 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 	*is_unique = true;
 
 	if (conflicts) {
+		GISTInsertStack *stack;
 		char *key_desc;
 
 		/*
@@ -846,7 +847,14 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 		 * considerations.
 		 */
 
-		// TODO: Release buffer locks like _bt_check_unique, to avoid deadlocks.
+		/*
+		 * Build the error message.
+		 * But BuildIndexValueDescription might search this same index,
+		 * locking buffers, so to avoid deadlocks we'd better release all locks
+		 * and pins we hold.
+		 */
+		for (stack = state->stack; stack; stack = stack->parent)
+			UnlockReleaseBuffer(stack->buffer);
 
 		key_desc = BuildIndexValueDescription(rel, newvals, newnulls);
 
