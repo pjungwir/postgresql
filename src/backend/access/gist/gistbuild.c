@@ -870,29 +870,17 @@ gistBuildCallback(Relation index,
 		/*
 		 * There's no buffers (yet). Since we already have the index relation
 		 * locked, we call gistdoinsert directly.
+		 *
+		 * Since we only pass YES or NO for checkUnique, we don't have to check
+		 * the return value. A unique conflict will fail inside gistdoinsert.
 		 */
-		bool known_unique = gistdoinsert(index, itup,
-										 buildstate->isunique ? UNIQUE_CHECK_YES
-															  : UNIQUE_CHECK_NO,
-										 values, isnull,
-										 buildstate->freespace,
-										 buildstate->giststate,
-										 buildstate->heaprel, true);
-		/*
-		 * There are no other users of the index yet, so if we aren't sure it's
-		 * unique, there must be duplicates.
-		 * TODO: right??
-		 */
-		// TODO: say which keys are duplicated if possible (as in
-		// utils/sort/tuplesortvariants.c)
-		if (buildstate->isunique && !known_unique)
-			ereport(ERROR,
-					(errcode(ERRCODE_UNIQUE_VIOLATION),
-					 errmsg("could not create unique index \"%s\"",
-							RelationGetRelationName(buildstate->indexrel)),
-					 errdetail("Duplicate keys exist."),
-					 errtableconstraint(buildstate->heaprel,
-										RelationGetRelationName(buildstate->indexrel))));
+		gistdoinsert(index, itup,
+					 buildstate->isunique ? UNIQUE_CHECK_YES
+										  : UNIQUE_CHECK_NO,
+					 values, isnull,
+					 buildstate->freespace,
+					 buildstate->giststate,
+					 buildstate->heaprel, true);
 	}
 
 	MemoryContextSwitchTo(oldCtx);
