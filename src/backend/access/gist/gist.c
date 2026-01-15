@@ -747,23 +747,41 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 
 			Assert(OidIsValid(giststate->excludeFn[j].fn_oid));
 
-			// TODO: If it's an expression index with a compress function,
-			// we have to give up. Unless we want to re-evaluate the expression.
 			heapattr = rel->rd_index->indkey.values[j];
 
-			// XXX: I assume the index has a null iff the heap does?
-			// XXX: What about nulls_not_distinct? Btree seems to ignore that
-			// though in access/nbtree/nbtinsert.c:_bt_doinsert
-			oldIsNull = slot->tts_isnull[heapattr - 1];
-			if (oldIsNull)
+			if (AttributeNumberIsValid(heapattr))
 			{
-				conflicts = false;
-				break;
+				// XXX: I assume the index has a null iff the heap does?
+				// XXX: What about nulls_not_distinct? Btree seems to ignore that
+				// though in access/nbtree/nbtinsert.c:_bt_doinsert
+				oldIsNull = slot->tts_isnull[heapattr - 1];
+				if (oldIsNull)
+				{
+					conflicts = false;
+					break;
+				}
+				else
+				{
+					oldval = slot->tts_values[heapattr - 1];
+				}
 			}
 			else
 			{
-				oldval = slot->tts_values[heapattr - 1];
+				/*
+				 * A zero attno signifies an expression.
+				 * For expressions, we have to get the null and Datum from the
+				 * index tuple. If the opclass has a compress function, we have
+				 * to give up (unless we want to re-evaluate the expression?).
+				 */
+				// TODO: can we check this in analysis instead? Do IAMs get a
+				// chance to make decisions like this then?
+				if (OidIsValid(giststate->compressFn[j].fn_oid))
+					// TODO: write a test for this:
+					ereport(ERROR, (errmsg("Can't build a unique GiST index with expression keys and a compress function.")));
+
+				oldval = index_getattr(it, j + 1, giststate->leafTupdesc, &oldIsNull);
 			}
+
 			/*
 			 * Record the heap Datums in index-attribute order,
 			 * so we can build an error message below.

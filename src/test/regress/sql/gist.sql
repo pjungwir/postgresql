@@ -184,11 +184,24 @@ select pg_get_indexdef('uq_gist_rngtbl'::regclass);
 drop index uq_gist_rngtbl;
 insert into gist_rngtbl values ('[1,2)');
 create unique index uq_gist_rngtbl on gist_rngtbl using gist (id); -- fail
+-- expressions are okay when there is no compress function:
+create unique index uq_gist_rngtbl_expr on gist_rngtbl using gist (
+  int4range(lower(id) + 1, upper(id) + 1)
+); -- fail
+delete from gist_rngtbl where id = '[1,2)';
+create unique index uq_gist_rngtbl_expr on gist_rngtbl using gist (
+  int4range(lower(id) + 1, upper(id) + 1)
+); -- now okay
 truncate gist_rngtbl;
+drop index uq_gist_rngtbl_expr;
 -- enforced on insert
 create unique index uq_gist_rngtbl on gist_rngtbl using gist (id);
 insert into gist_rngtbl values ('[1,2)'), ('[2,3)'); -- okay
 insert into gist_rngtbl values ('[1,2)'); -- fail
+-- expressions aren't supported when there is a compress function (like multiranges):
+create table gist_mltrngtbl (id int4multirange);
+insert into gist_mltrngtbl values ('{[1,2)}'), ('{[2,3)}'); -- okay
+create unique index uq_gist_mltrngtbl_expr on gist_mltrngtbl using gist ((id + '{[0,1)}')); -- fail
 
 -- Clean up
 reset enable_seqscan;
