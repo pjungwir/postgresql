@@ -249,6 +249,20 @@ pageSplit(page, allkeys)
 	return newkeys
 
 
+To insert into a unique index, we must combine a search with an insert. Because
+inner-node pages can have multiple overlapping entries that are consistent with
+the insert key, we can't rely on an insert to find the same leaf page as a
+previous insert of the same key. (The penalty may be different now vs when the
+first insert happened.) So we must search each consistent child page, even
+though we descend just one for the actual insert. Thus the stack elements note
+whether they are for an insert or just a search.
+
+To avoid problems from concurrent inserts of the same key, we place a predicate
+lock (on `= key`) on each page we visit. We release these locks when we pop that
+stack entry. For search-only pages, we can rely on the parent page's lock to
+still prevent concurrent conflicting inserts.
+
+
 
 Concurrency control
 -------------------
