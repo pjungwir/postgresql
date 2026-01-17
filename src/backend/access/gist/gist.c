@@ -973,6 +973,12 @@ search:
 	 * pointers with the key we're inserting as we go. If we crash in the
 	 * middle, the tree is consistent, although the possible parent updates
 	 * were a waste.
+	 *
+	 * If we are enforcing uniqueness, we have to combine a search with an insert.
+	 * Since GiST entries don't partition the keyspace (i.e. they can overlap),
+	 * we need to search more than just the smallest penalty. So we add those
+	 * children to the stack as well, but only for searching, not actually
+	 * inserting.
 	 */
 	for (;;)
 	{
