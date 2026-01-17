@@ -272,6 +272,9 @@ CREATE INDEX ON my_table USING GIST (my_inet_column inet_ops);
    and <function>union</function> methods, while efficiency (size and speed) of the
    index will depend on the <function>penalty</function> and <function>picksplit</function>
    methods.
+ </para>
+
+ <para>
    Two optional methods are <function>compress</function> and
    <function>decompress</function>, which allow an index to have internal tree data of
    a different type than the data it indexes. The leaves are to be of the
@@ -279,7 +282,15 @@ CREATE INDEX ON my_table USING GIST (my_inet_column inet_ops);
    you still have to follow <productname>PostgreSQL</productname> data type rules here,
    see about <literal>varlena</literal> for variable sized data). If the tree's
    internal data type exists at the SQL level, the <literal>STORAGE</literal> option
-   of the <command>CREATE OPERATOR CLASS</command> command can be used.
+   of the <command>CREATE OPERATOR CLASS</command> command can be used. If either
+   function is missing, it is assumed to be the identity function. It is allowed
+   to have <function>compress</function> without <function>decompress</function>:
+   that makes the index "lossy". Actually since <productname>PostgreSQL</productname>
+   can't interpret what <function>decompress</function> might do, any
+   <function>compress</function> function is interpreted as lossy.
+ </para>
+
+ <para>
    The optional eighth method is <function>distance</function>, which is needed
    if the operator class wishes to support ordered scans (nearest-neighbor
    searches). The optional ninth method <function>fetch</function> is needed if the
