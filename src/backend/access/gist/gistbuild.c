@@ -234,8 +234,12 @@ gistbuild(Relation heap, Relation index, IndexInfo *indexInfo)
 
 	/*
 	 * Unless buffering mode was forced, see if we can use sorting instead.
+	 * But we can't guarantee that sorting is enough to detect uniqueness conflicts,
+	 * so we'd better build unsorted for unique indexes.
+	 * XXX: Perhaps if excludeFn is equality (not overlaps) this is possible?
+	 * But we'd need a separate spool for potentially-deleted rows, like btree.
 	 */
-	if (buildstate.buildMode != GIST_BUFFERING_STATS)
+	if (buildstate.buildMode != GIST_BUFFERING_STATS && !buildstate.isunique)
 	{
 		bool		hasallsortsupports = true;
 		int			keyscount = IndexRelationGetNumberOfKeyAttributes(index);
