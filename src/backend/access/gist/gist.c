@@ -979,6 +979,11 @@ search:
 	 * we need to search more than just the smallest penalty. So we add those
 	 * children to the stack as well, but only for searching, not actually
 	 * inserting.
+	 *
+	 * For a non-unique index maybe you can never rule out two overlapping entries
+	 * though, because you might just have too many identical keys to fit into a
+	 * single page, and those sibling pages both need an entry in the parent
+	 * page?
 	 */
 	for (;;)
 	{
@@ -1054,6 +1059,11 @@ search:
 			state.stack = stack = stack->parent;
 			continue;
 		}
+
+		// TODO: If it's a UNIQUE index, we must attach a predicate lock to
+		// the page on the key, to avoid concurrent updates.
+		// I guess this is the same as locking the index tuple?
+		// What about overlaps?
 
 		if (!GistPageIsLeaf(stack->page))
 		{
