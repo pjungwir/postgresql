@@ -760,6 +760,9 @@ check_exclusion_or_unique_constraint(Relation heap, Relation index,
 										values[indnkeyatts - 1],
 										typcache->typtype, att->atttypid);
 		}
+
+		// TODO: We already checked for conflicts in the index, so we
+		// don't need to re-check here.
 	}
 
 	/*

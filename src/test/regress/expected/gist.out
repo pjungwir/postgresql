@@ -390,9 +390,9 @@ ERROR:  lossy distance functions are not supported in index-only scans
 -- Force an index build using buffering.
 create index gist_tbl_box_index_forcing_buffering on gist_tbl using gist (p)
   with (buffering=on, fillfactor=50);
--- create unique indexes
+-- Unique indexes, no compress function:
 create table gist_rngtbl (id int4range);
-insert into gist_rngtbl values ('[1,2)'), ('[2,3)'); -- okay
+insert into gist_rngtbl values ('[1,2)'), ('[2,3)');
 create unique index uq_gist_rngtbl on gist_rngtbl using gist (id);
 insert into gist_rngtbl values ('[3,4)'), ('[4,5)'); -- okay
 \d gist_rngtbl
@@ -415,7 +415,7 @@ insert into gist_rngtbl values ('[1,2)');
 create unique index uq_gist_rngtbl on gist_rngtbl using gist (id); -- fail
 ERROR:  duplicate key value violates unique constraint "uq_gist_rngtbl"
 DETAIL:  Key (id)=([1,2)) already exists.
--- expressions are okay when there is no compress function:
+-- expressions:
 create unique index uq_gist_rngtbl_expr on gist_rngtbl using gist (
   int4range(lower(id) + 1, upper(id) + 1)
 ); -- fail
@@ -433,11 +433,53 @@ insert into gist_rngtbl values ('[1,2)'), ('[2,3)'); -- okay
 insert into gist_rngtbl values ('[1,2)'); -- fail
 ERROR:  duplicate key value violates unique constraint "uq_gist_rngtbl"
 DETAIL:  Key (id)=([1,2)) already exists.
--- expressions aren't supported when there is a compress function (like multiranges):
+drop table gist_rngtbl;
+-- Unique indexes, compress function and lossy keys (e.g. multiranges):
 create table gist_mltrngtbl (id int4multirange);
-insert into gist_mltrngtbl values ('{[1,2)}'), ('{[2,3)}'); -- okay
-create unique index uq_gist_mltrngtbl_expr on gist_mltrngtbl using gist ((id + '{[0,1)}')); -- fail
-ERROR:  Can't build a unique GiST index with expression keys and a compress function.
+insert into gist_mltrngtbl values ('{[1,10)}'), ('{[20,30)}');
+create unique index uq_gist_mltrngtbl on gist_mltrngtbl using gist (id);
+insert into gist_mltrngtbl values ('{[3,4)}'), ('{[4,5)}'); -- okay
+\d gist_mltrngtbl
+              Table "public.gist_mltrngtbl"
+ Column |      Type      | Collation | Nullable | Default 
+--------+----------------+-----------+----------+---------
+ id     | int4multirange |           |          | 
+Indexes:
+    "uq_gist_mltrngtbl" UNIQUE, gist (id)
+
+select pg_get_indexdef('uq_gist_mltrngtbl'::regclass);
+                                pg_get_indexdef                                 
+--------------------------------------------------------------------------------
+ CREATE UNIQUE INDEX uq_gist_mltrngtbl ON public.gist_mltrngtbl USING gist (id)
+(1 row)
+
+-- enforced on build
+drop index uq_gist_mltrngtbl;
+insert into gist_mltrngtbl values ('{[1,10)}');
+create unique index uq_gist_mltrngtbl on gist_mltrngtbl using gist (id); -- fail
+ERROR:  duplicate key value violates unique constraint "uq_gist_mltrngtbl"
+DETAIL:  Key (id)=({[1,10)}) already exists.
+-- expressions:
+create unique index uq_gist_mltrngtbl_expr on gist_mltrngtbl using gist (
+  (id + '{[100,200)}')
+); -- fail
+ERROR:  duplicate key value violates unique constraint "uq_gist_mltrngtbl_expr"
+DETAIL:  Key ((id + '{[100,200)}'::int4multirange))=({[1,10),[100,200)}) already exists.
+delete from gist_mltrngtbl where id = '{[1,10)}';
+create unique index uq_gist_mltrngtbl_expr on gist_mltrngtbl using gist (
+  (id + '{[100,200)}')
+); -- now okay
+truncate gist_mltrngtbl;
+drop index uq_gist_mltrngtbl_expr;
+-- enforced on insert
+create unique index uq_gist_mltrngtbl on gist_mltrngtbl using gist (id);
+insert into gist_mltrngtbl values ('{[1,10)}'), ('{[20,30)}'); -- okay
+-- okay, even though compresses to [1,10):
+insert into gist_mltrngtbl values ('{[1,3), [8,10)}');
+insert into gist_mltrngtbl values ('{[1,10)}'); -- fails, exact duplicate
+ERROR:  duplicate key value violates unique constraint "uq_gist_mltrngtbl"
+DETAIL:  Key (id)=({[1,10)}) already exists.
+drop table gist_mltrngtbl;
 -- Clean up
 reset enable_seqscan;
 reset enable_bitmapscan;

@@ -96,6 +96,10 @@ typedef struct GISTSTATE
 
 	/* Collations to pass to the support functions */
 	Oid			supportCollation[INDEX_MAX_KEYS];
+
+	/* Strategy numbers and proc oids for uniqueness */
+	StrategyNumber	uniqueStratnum[INDEX_MAX_KEYS];
+	Oid				uniqueProc[INDEX_MAX_KEYS];
 } GISTSTATE;
 
 
@@ -418,7 +422,8 @@ extern bool gistdoinsert(Relation r,
 						 Size freespace,
 						 GISTSTATE *giststate,
 						 Relation heapRel,
-						 bool is_build);
+						 bool is_build,
+						 IndexInfo *indexInfo);
 
 /* A List of these is returned from gistplacetopage() in *splitinfo */
 typedef struct

@@ -111,6 +111,7 @@ typedef struct
 
 	bool		isunique;
 	bool		nulls_not_distinct;
+	IndexInfo  *indexInfo;
 } GISTBuildState;
 
 #define GIST_SORTED_BUILD_PAGE_NUM 4
@@ -205,6 +206,7 @@ gistbuild(Relation heap, Relation index, IndexInfo *indexInfo)
 		initGISTstateExclude(buildstate.giststate, index);
 	buildstate.isunique = indexInfo->ii_Unique;
 	buildstate.nulls_not_distinct = indexInfo->ii_NullsNotDistinct;
+	buildstate.indexInfo = indexInfo;
 
 	/*
 	 * Create a temporary memory context that is reset once for each tuple
@@ -884,7 +886,8 @@ gistBuildCallback(Relation index,
 					 values, isnull,
 					 buildstate->freespace,
 					 buildstate->giststate,
-					 buildstate->heaprel, true);
+					 buildstate->heaprel, true,
+					 buildstate->indexInfo);
 	}
 
 	MemoryContextSwitchTo(oldCtx);

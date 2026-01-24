@@ -173,9 +173,9 @@ select p from gist_tbl order by circle(p,1) <-> point(0,0) limit 1;
 create index gist_tbl_box_index_forcing_buffering on gist_tbl using gist (p)
   with (buffering=on, fillfactor=50);
 
--- create unique indexes
+-- Unique indexes, no compress function:
 create table gist_rngtbl (id int4range);
-insert into gist_rngtbl values ('[1,2)'), ('[2,3)'); -- okay
+insert into gist_rngtbl values ('[1,2)'), ('[2,3)');
 create unique index uq_gist_rngtbl on gist_rngtbl using gist (id);
 insert into gist_rngtbl values ('[3,4)'), ('[4,5)'); -- okay
 \d gist_rngtbl
@@ -184,7 +184,7 @@ select pg_get_indexdef('uq_gist_rngtbl'::regclass);
 drop index uq_gist_rngtbl;
 insert into gist_rngtbl values ('[1,2)');
 create unique index uq_gist_rngtbl on gist_rngtbl using gist (id); -- fail
--- expressions are okay when there is no compress function:
+-- expressions:
 create unique index uq_gist_rngtbl_expr on gist_rngtbl using gist (
   int4range(lower(id) + 1, upper(id) + 1)
 ); -- fail
@@ -198,10 +198,48 @@ drop index uq_gist_rngtbl_expr;
 create unique index uq_gist_rngtbl on gist_rngtbl using gist (id);
 insert into gist_rngtbl values ('[1,2)'), ('[2,3)'); -- okay
 insert into gist_rngtbl values ('[1,2)'); -- fail
--- expressions aren't supported when there is a compress function (like multiranges):
+drop table gist_rngtbl;
+
+-- Unique indexes, NULLS NOT DISTINCT:
+create table gist_rngtbl (id int4range);
+-- enforced on build
+insert into gist_rngtbl values (NULL), (NULL);
+create unique index uq_gist_rngtbl on gist_rngtbl using gist (id) nulls not distinct; -- fail
+-- enforced on insert
+delete from gist_rngtbl;
+create unique index uq_gist_rngtbl on gist_rngtbl using gist (id) nulls not distinct; -- fail
+insert into gist_rngtbl values (NULL); -- okay
+insert into gist_rngtbl values (NULL); -- fail
+
+-- Unique indexes, compress function and lossy keys (e.g. multiranges):
 create table gist_mltrngtbl (id int4multirange);
-insert into gist_mltrngtbl values ('{[1,2)}'), ('{[2,3)}'); -- okay
-create unique index uq_gist_mltrngtbl_expr on gist_mltrngtbl using gist ((id + '{[0,1)}')); -- fail
+insert into gist_mltrngtbl values ('{[1,10)}'), ('{[20,30)}');
+create unique index uq_gist_mltrngtbl on gist_mltrngtbl using gist (id);
+insert into gist_mltrngtbl values ('{[3,4)}'), ('{[4,5)}'); -- okay
+\d gist_mltrngtbl
+select pg_get_indexdef('uq_gist_mltrngtbl'::regclass);
+-- enforced on build
+drop index uq_gist_mltrngtbl;
+insert into gist_mltrngtbl values ('{[1,10)}');
+create unique index uq_gist_mltrngtbl on gist_mltrngtbl using gist (id); -- fail
+-- expressions:
+create unique index uq_gist_mltrngtbl_expr on gist_mltrngtbl using gist (
+  (id + '{[100,200)}')
+); -- fail
+delete from gist_mltrngtbl where id = '{[1,10)}';
+create unique index uq_gist_mltrngtbl_expr on gist_mltrngtbl using gist (
+  (id + '{[100,200)}')
+); -- now okay
+truncate gist_mltrngtbl;
+drop index uq_gist_mltrngtbl_expr;
+-- enforced on insert
+create unique index uq_gist_mltrngtbl on gist_mltrngtbl using gist (id);
+insert into gist_mltrngtbl values ('{[1,10)}'), ('{[20,30)}'); -- okay
+-- okay, even though compresses to [1,10):
+insert into gist_mltrngtbl values ('{[1,3), [8,10)}');
+insert into gist_mltrngtbl values ('{[1,10)}'); -- fails, exact duplicate
+drop table gist_mltrngtbl;
+
 
 -- Clean up
 reset enable_seqscan;

@@ -18,10 +18,12 @@
 #include "access/gistscan.h"
 #include "access/tableam.h"
 #include "access/xloginsert.h"
+#include "catalog/index.h"
 #include "catalog/pg_am.h"
 #include "catalog/pg_collation.h"
 #include "commands/defrem.h"
 #include "commands/vacuum.h"
+#include "executor/executor.h"
 #include "miscadmin.h"
 #include "nodes/execnodes.h"
 #include "storage/lmgr.h"
@@ -197,7 +199,7 @@ gistinsert(Relation r, Datum *values, bool *isnull,
 	itup = gistFormTuple(giststate, r, values, isnull, true);
 	itup->t_tid = *ht_ctid;
 
-	known_unique = gistdoinsert(r, itup, checkUnique, values, isnull, 0, giststate, heapRel, false);
+	known_unique = gistdoinsert(r, itup, checkUnique, values, isnull, 0, giststate, heapRel, false, indexInfo);
 
 	/* cleanup */
 	MemoryContextSwitchTo(oldCxt);
@@ -662,227 +664,198 @@ gistplacetopage(Relation rel, Size freespace, GISTSTATE *giststate,
 static TransactionId
 gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 				  Relation heapRel, IndexTuple itup, Datum *newvals, bool *newnulls,
-				  IndexUniqueCheck checkUnique, bool *is_unique)
+				  IndexUniqueCheck checkUnique, bool *is_unique,
+				  IndexInfo *indexInfo)
 {
-	Page		page;
-	OffsetNumber maxoff;
-	OffsetNumber i;
-	MemoryContext oldcxt;
-	bool		conflicts = false;
-	SnapshotData SnapshotDirty;
-	IndexFetchTableData *scan;
-	TupleTableSlot *slot;
-	bool		call_again = false;
-	bool		found = false;
-	bool		all_dead = false; // TODO: use this? nbtree does.
-	Datum		oldvals[INDEX_MAX_KEYS];
-	bool		oldnulls[INDEX_MAX_KEYS];
-	TransactionId xwait = InvalidTransactionId;
+	SnapshotData	SnapshotDirty;
+	TransactionId	xwait = InvalidTransactionId;
 
+	// build the scan key,
+	// if nulls are not distinct and we are looking for nulls, match isnull for
+	// those.
+	// call gistgettuple
+	// recheck if necessary
+	// if it's not committed, return xwait.
+	// how to deal with expressions?
+	ScanKeyData		scankeys[INDEX_MAX_KEYS];
+	IndexScanDesc	scan;
+	Oid			   *index_collations;
+	Oid			   *constr_procs;
+	StrategyNumber *constr_strats;
+	int	natts;
+	int nkeyatts;
+	int i;
+	EState *estate = NULL;
+	ExprContext *econtext = NULL;
+	TupleTableSlot *existing_slot;
+	TupleTableSlot *save_scantuple;
+	bool	found_self;
+	char *key_desc;
+
+	natts = giststate->leafTupdesc->natts;
+	nkeyatts = IndexRelationGetNumberOfKeyAttributes(rel);
+
+	index_collations = rel->rd_indcollation;
+	constr_strats = giststate->uniqueStratnum;
+	constr_procs = giststate->uniqueProc;
+
+	/*
+	 * If any of the input values are NULL, and the index uses the default
+	 * nulls-are-distinct mode, the constraint check is assumed to pass (i.e.,
+	 * we assume the operators are strict).  Otherwise, we interpret the
+	 * constraint as specifying IS NULL for each column whose input value is
+	 * NULL.
+	 */
+	if (!rel->rd_index->indnullsnotdistinct)
+	{
+		for (i = 0; i < nkeyatts; i++)
+		{
+			if (newnulls[i])
+			{
+				*is_unique = true;
+				return InvalidTransactionId;
+			}
+		}
+	}
+
+
+	/*
+	 * Search the tuples that are in the index for any violations, including
+	 * tuples that aren't visible yet.
+	 */
 	InitDirtySnapshot(SnapshotDirty);
 
-	slot = table_slot_create(heapRel, NULL);
-
-	/* Check all tuples on the page for a conflict. */
-	page = state->stack->page;
-	maxoff = PageGetMaxOffsetNumber(page);
-	for (i = FirstOffsetNumber; i <= maxoff && !conflicts; i = OffsetNumberNext(i))
-	{
-		ItemId		iid = PageGetItemId(page, i);
-		IndexTuple	it;
-		// bool		match;
-		// bool		recheck;	// TODO
-		// bool		recheck_distances;
-		int			j;
-
-		/*
-		 * XXX: orindary scans only skip dead items if passed
-		 * ignore_killed_tuples. Do we ever want to see killed tuples?
-		 */
-		if (ItemIdIsDead(iid))
-			continue;
-
-		it = (IndexTuple) PageGetItem(page, iid);
-
-		/*
-		 * Get the original Datums from the heap.
-		 * We have to look there anyway for visibility info.
-		 * We'll pass these Datums to the excludeFn.
-		 * If the opclass has no compression function,
-		 * we could use the Datums from the index tuple instead,
-		 * but as long as we're loading the heap record
-		 * we might as well use it.
-		 */
-
-		scan = table_index_fetch_begin(heapRel);
-		do {
-			// TODO: What if t_tid gets modified?
-			found |= table_index_fetch_tuple(scan, &it->t_tid, &SnapshotDirty, slot,
-											&call_again, &all_dead);
-			/*
-			 * XXX: Is looping on call_again actually needed here?
-			 * table_index_fetch_tuple_check ignores it.
-			 * But since we use the Datums, we do need the latest values.
-			 */
-		} while (call_again);
-		if (!found)
-		{
-			table_index_fetch_end(scan);
-			continue;
-		}
-		slot_getallattrs(slot);
-
-		conflicts = true;
-
-		oldcxt = MemoryContextSwitchTo(giststate->tempCxt);
-
-		/* Check all the key elements against excludeFn */
-		for (j = 0; j < giststate->leafTupdesc->natts; j++)
-		{
-			int		heapattr;
-			Datum	oldval;
-			Datum	newval;
-			bool	oldIsNull;
-			Datum	test;
-
-			Assert(OidIsValid(giststate->excludeFn[j].fn_oid));
-
-			heapattr = rel->rd_index->indkey.values[j];
-
-			if (AttributeNumberIsValid(heapattr))
-			{
-				// XXX: I assume the index has a null iff the heap does?
-				// XXX: What about nulls_not_distinct? Btree seems to ignore that
-				// though in access/nbtree/nbtinsert.c:_bt_doinsert
-				oldIsNull = slot->tts_isnull[heapattr - 1];
-				if (oldIsNull)
-				{
-					conflicts = false;
-					break;
-				}
-				else
-				{
-					oldval = slot->tts_values[heapattr - 1];
-				}
-			}
-			else
-			{
-				/*
-				 * A zero attno signifies an expression.
-				 * For expressions, we have to get the null and Datum from the
-				 * index tuple. If the opclass has a compress function, we have
-				 * to give up (unless we want to re-evaluate the expression?).
-				 */
-				// TODO: can we check this in analysis instead? Do IAMs get a
-				// chance to make decisions like this then?
-				if (OidIsValid(giststate->compressFn[j].fn_oid))
-					// TODO: write a test for this:
-					ereport(ERROR, (errmsg("Can't build a unique GiST index with expression keys and a compress function.")));
-
-				oldval = index_getattr(it, j + 1, giststate->leafTupdesc, &oldIsNull);
-			}
-
-			/*
-			 * Record the heap Datums in index-attribute order,
-			 * so we can build an error message below.
-			 */
-			oldnulls[j] = oldIsNull;
-			oldvals[j] = oldval;
-
-			// XXX: I assume the index has a null iff the heap does?
-			// XXX: What about nulls_not_distinct? Btree seems to ignore that
-			// though in access/nbtree/nbtinsert.c:_bt_doinsert
-			if (newnulls[j])
-			{
-				// XXX: probably a higher level prevents even checking the index here?
-				conflicts = false;
-				break;
-			}
-			else
-			{
-				// TODO: detoast the newvals up front, only once?
-				newval = newvals[j];
-			}
-
-			// TODO: If we check nulls_not_distinct here,
-			// and both new and old are null,
-			// then treat it as a conflict.
-			// Somehow nbtree doesn't do that.
-
-			test = FunctionCall2Coll(&giststate->excludeFn[j],
-									 InvalidOid,	// TODO: collation
-									 oldval,
-									 newval);
-			/*
-			 * If all attributes conflict, then we violate uniqueness.
-			 * So we can abort on the first non-conflicting attribute.
-			 */
-			conflicts &= DatumGetBool(test);
-			if (!conflicts)
-				break;
-		}
-
-		table_index_fetch_end(scan);
-		MemoryContextSwitchTo(oldcxt);
+	// TODO: we never care about orderbys, right?:
+	// TODO: does the scan proc need to be for the compressed value?
+	for (i = 0; i < natts; i++) {
+		ScanKeyEntryInitialize(&scankeys[i],
+							   newnulls[i] ? SK_ISNULL | SK_SEARCHNULL : 0,
+							   i + 1,
+							   constr_strats[i],
+							   InvalidOid,
+							   index_collations[i],
+							   constr_procs[i],
+							   newvals[i]);
 	}
-	*is_unique = true;
 
-	if (conflicts) {
-		GISTInsertStack *stack;
-		char *key_desc;
+	/*
+	 * Need a TupleTableSlot to put existing tuples in.
+	 */
+	existing_slot = table_slot_create(heapRel, NULL);
 
+	if (indexInfo->ii_Expressions != NIL)
+	{
 		/*
-		 * It is a duplicate. If we are only doing a partial
-		 * check, then don't bother checking if the tuple is being
-		 * updated in another transaction. Just return the fact
-		 * that it is a potential conflict and leave the full
-		 * check till later.
+		 * We need an EState to evaluate index expressions.
+		 *
+		 * XXX: IAMs don't normally do this, so there must be a better way.
+		 * Put it on the giststate?
+		 * We only need it for expressions, so can we just forbid those, at
+		 * least for now?
+		 *
+		 * To use FormIndexDatum, we have to make the econtext's scantuple point
+		 * to this slot.  Be sure to save and restore caller's value for
+		 * scantuple.
 		 */
-		if (checkUnique == UNIQUE_CHECK_PARTIAL)
+		estate = CreateExecutorState();
+
+		econtext = GetPerTupleExprContext(estate);
+		save_scantuple = econtext->ecxt_scantuple;
+		econtext->ecxt_scantuple = existing_slot;
+	}
+
+	/*
+	 * May have to restart scan from this point if a potential conflict is
+	 * found.
+	 */
+//retry:
+	found_self = false;
+	// scan = gistbeginscan(rel, natts, 0);
+	// TODO: set instrumentation:
+	scan = index_beginscan(heapRel, rel, &SnapshotDirty, NULL, natts, 0);
+	index_rescan(scan, scankeys, natts, NULL, 0);
+
+	/*
+	 * We need the uncompressed heap values,
+	 * as well as visibility information,
+	 * so we just load the heap tuples.
+	 */
+	while (index_getnext_slot(scan, ForwardScanDirection, existing_slot))
+	{
+		Datum	oldvals[INDEX_MAX_KEYS];
+		bool	oldnulls[INDEX_MAX_KEYS];
+
+		/* Ignore the entry for the tuple we're trying to check. */
+		if (ItemPointerIsValid(&itup->t_tid) &&
+			ItemPointerEquals(&itup->t_tid, &existing_slot->tts_tid))
 		{
-			*is_unique = false;
-			xwait = InvalidTransactionId;
-			goto cleanup;
+			if (found_self)		/* should not happen */
+				elog(ERROR, "found self tuple multiple times in index \"%s\"",
+						RelationGetRelationName(rel));
+			found_self = true;
+			continue;
 		}
 
 		/*
-		 * If this tuple is being updated by another transaction
-		 * then we have to wait for its commit/abort.
+		 * Extract the index column values and isnull flags from the existing
+		 * tuple.
 		 */
-		xwait = (TransactionIdIsValid(SnapshotDirty.xmin)) ?
+		FormIndexDatum(indexInfo, existing_slot, estate,
+					   oldvals, oldnulls);
+
+
+		/* If lossy indexscan, must recheck the condition */
+		if (scan->xs_recheck)
+		{
+			bool	conflicts = true;
+			// TODO: not natts but keynatts, right?
+			// TODO: I'm a little confused why this rechecking is valid
+			// and not just a repeat of what we did before. Doesn't oldvals
+			// still have the same compressed values that are in the index?
+			// But exclusion constraints do it this way so I must be missing
+			// something....
+			for (i = 0; i < giststate->leafTupdesc->natts; i++)
+			{
+				/* Assume the exclusion operators are strict */
+				if (oldnulls[i])
+					break;
+
+			}
+
+			/* Check all the key elements against excludeFn */
+			for (i = 0; i < giststate->leafTupdesc->natts; i++)
+			{
+				Datum test = FunctionCall2Coll(&giststate->excludeFn[i],
+										 index_collations[i],
+										 oldvals[i],
+										 newvals[i]);
+				/*
+				 * If all attributes conflict, then we violate uniqueness.
+				 * So we can abort on the first non-conflicting attribute.
+				 */
+				conflicts &= DatumGetBool(test);
+				if (!conflicts)
+					break;
+			}
+
+			if (!conflicts)
+				continue;	/* tuple doesn't match, look for others */
+		}
+
+		/*
+		 * At this point we have either a conflict or a potential conflict.
+		 *
+		 * If an in-progress transaction is affecting the visibility of this
+		 * tuple, we need to wait for it to complete and then recheck (unless
+		 * the caller requested not to).  For simplicity we do rechecking by
+		 * just restarting the whole scan --- this case probably doesn't
+		 * happen often enough to be worth trying harder, and anyway we don't
+		 * want to hold any index internal locks while waiting.
+		 */
+		xwait = TransactionIdIsValid(SnapshotDirty.xmin) ?
 			SnapshotDirty.xmin : SnapshotDirty.xmax;
 
-		if (TransactionIdIsValid(xwait))
-		{
-			/* Tell gistdoinsert to wait... */
-			// TODO: *speculativeToken = SnapshotDirty.speculativeToken;
-			goto cleanup;
-		}
-
-		/*
-		 * Otherwise we have a definite conflict.
-		 * XXX: See _bt_check_unique for CREATE INDEX CONCURRENTLY
-		 * considerations.
-		 */
-
-		/*
-		 * Check for a conflict-in as we would if we were going to
-		 * write to this page.  We aren't actually going to write,
-		 * but we want a chance to report SSI conflicts that would
-		 * otherwise be masked by this unique constraint
-		 * violation.
-		 */
-		CheckForSerializableConflictIn(rel, NULL,
-									   BufferGetBlockNumber(state->stack->buffer));
-
-		/*
-		 * Build the error message.
-		 * But BuildIndexValueDescription might search this same index,
-		 * locking buffers, so to avoid deadlocks we'd better release all locks
-		 * and pins we hold.
-		 */
-		for (stack = state->stack; stack; stack = stack->parent)
-			UnlockReleaseBuffer(stack->buffer);
+		// if (TransactionIdIsValid(xwait) &&
 
 		key_desc = BuildIndexValueDescription(rel, newvals, newnulls);
 
@@ -920,9 +893,14 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 										RelationGetRelationName(rel))));
 	}
 
-cleanup:
+	/* cleanup */
 
-	ExecDropSingleTupleTableSlot(slot);
+	index_endscan(scan);
+
+	ExecDropSingleTupleTableSlot(existing_slot);
+
+	if (econtext)
+		econtext->ecxt_scantuple = save_scantuple;
 
 	return xwait;
 }
@@ -941,7 +919,8 @@ cleanup:
 bool
 gistdoinsert(Relation r, IndexTuple itup, IndexUniqueCheck checkUnique,
 			 Datum *values, bool *isnull,
-			 Size freespace, GISTSTATE *giststate, Relation heapRel, bool is_build)
+			 Size freespace, GISTSTATE *giststate, Relation heapRel, bool is_build,
+			 IndexInfo *indexInfo)
 {
 	ItemId		iid;
 	IndexTuple	idxtuple;
@@ -1217,44 +1196,6 @@ search:
 				}
 			}
 
-			/*
-			 * Now state.stack->(page, buffer and blkno) points to leaf page.
-			 * We have the lock, so we can check for uniqueness and raise an
-			 * error if needed.
-			 */
-			if (checkingunique)
-			{
-				TransactionId xwait;
-				// If there are null values, it can't be unique
-				// TODO: but what about NULLS NOT DISTINCT? I don't see that in
-				// nbtree _bt_doinsert.
-				// For btree this seems to be handled in utils/sort/tuplesortvariants.c
-				// (which of course is outside of access/nbtree, but has btree
-				// in many function names).
-
-				xwait = gist_check_unique(r, giststate, &state, heapRel, itup,
-										  values, isnull,
-										  checkUnique, &is_unique);
-				if (unlikely(TransactionIdIsValid(xwait)))
-				{
-					/*
-					 * Have to wait for the other guy ...
-					 * Release any pins and locks we might hold
-					 */
-					for (; stack; stack = stack->parent)
-						UnlockReleaseBuffer(stack->buffer);
-					xlocked = false;
-
-					// TODO: speculative insertions
-
-					XactLockTableWait(xwait, r, &itup->t_tid, XLTW_InsertIndex);
-
-					/* start over... */
-
-					goto search;
-				}
-			}
-
 			if (checkUnique != UNIQUE_CHECK_EXISTING)
 			{
 				/*
@@ -1272,6 +1213,48 @@ search:
 				ReleaseBuffer(stack->buffer);
 
 			break;
+		}
+	}
+
+	/*
+	 * Checking uniqueness requires a separate scan of the index, because we
+	 * have to look in all consistent nodes, not just the nodes of lowest
+	 * penalty.
+	 *
+	 * By scanning after inserting the tuple, we avoid needing predicate locks
+	 * on all the visited nodes, as in the 1997 GiST concurrency paper (see
+	 * README).
+	 */
+	if (checkingunique)
+	{
+		TransactionId xwait;
+		// If there are null values, it can't be unique
+		// TODO: but what about NULLS NOT DISTINCT? I don't see that in
+		// nbtree _bt_doinsert.
+		// For btree this seems to be handled in utils/sort/tuplesortvariants.c
+		// (which of course is outside of access/nbtree, but has btree
+		// in many function names).
+
+		xwait = gist_check_unique(r, giststate, &state, heapRel, itup,
+								  values, isnull,
+								  checkUnique, &is_unique, indexInfo);
+		if (unlikely(TransactionIdIsValid(xwait)))
+		{
+			/*
+			 * Have to wait for the other guy ...
+			 * Release any pins and locks we might hold
+			 */
+			for (; stack; stack = stack->parent)
+				UnlockReleaseBuffer(stack->buffer);
+			xlocked = false;
+
+			// TODO: speculative insertions
+
+			XactLockTableWait(xwait, r, &itup->t_tid, XLTW_InsertIndex);
+
+			/* start over... */
+
+			goto search;
 		}
 	}
 
@@ -2048,7 +2031,9 @@ initGISTstate(Relation index)
 }
 
 /*
- * Initialize excludeFn (assumes this is a UNIQUE index).
+ * Initialize properties needed for unique indexes.
+ *
+ * Assumes caller has already made sure this index should be unique.
  */
 void
 initGISTstateExclude(GISTSTATE *giststate, Relation index)
@@ -2077,7 +2062,6 @@ initGISTstateExclude(GISTSTATE *giststate, Relation index)
 		RegProcedure proc;
 		Oid opfamily = index->rd_opfamily[i];
 		CompareType cmptype;
-		StrategyNumber strat;
 		Oid				opid;
 
 		/*
@@ -2093,12 +2077,13 @@ initGISTstateExclude(GISTSTATE *giststate, Relation index)
 		else
 			cmptype = COMPARE_EQ;
 
-		strat = IndexAmTranslateCompareType(cmptype, GIST_AM_OID, opfamily, false);
+		giststate->uniqueStratnum[i] = IndexAmTranslateCompareType(cmptype, GIST_AM_OID, opfamily, false);
 
 
 		opid = get_opfamily_member(index->rd_opfamily[i],
 								   index->rd_opcintype[i],
-								   index->rd_opcintype[i], strat);
+								   index->rd_opcintype[i],
+								   giststate->uniqueStratnum[i]);
 		if (!OidIsValid(opid))
 			ereport(ERROR,
 					errmsg("could not identify equality operator for unique constraint"),
@@ -2109,6 +2094,7 @@ initGISTstateExclude(GISTSTATE *giststate, Relation index)
 		if (!OidIsValid(proc))
 			elog(ERROR, "cache lookup failed for operator %u", opid);
 
+		giststate->uniqueProc[i] = proc;
 		fmgr_info_cxt(proc, &(giststate->excludeFn[i]), giststate->scanCxt);
 	}
 }
