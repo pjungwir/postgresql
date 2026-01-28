@@ -764,6 +764,7 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 	 * May have to restart scan from this point if a potential conflict is
 	 * found.
 	 */
+retry:
 	found_self = false;
 	/*
 	 * We can leave instrumentation NULL, because we only set that for
@@ -863,17 +864,21 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 		 * the caller requested not to).  For simplicity we do rechecking by
 		 * just restarting the whole scan --- this case probably doesn't
 		 * happen often enough to be worth trying harder, and anyway we don't
-		 * want to hold any index internal locks while waiting.
+		 * want to hold any locks while waiting.
 		 */
 		xwait = TransactionIdIsValid(SnapshotDirty.xmin) ?
 			SnapshotDirty.xmin : SnapshotDirty.xmax;
 
-		if (TransactionIdIsValid(xwait))
+		if (unlikely(TransactionIdIsValid(xwait)))
 		{
-			/* Tell gistdoinsert to wait... */
+			index_endscan(scan);
+
 			// TODO: speculative token (test with ON CONFLICT DO UPDATE)
 			// *speculativeToken = SnapshotDirty.speculativeToken;
-			goto cleanup;
+
+			XactLockTableWait(xwait, rel, &itup->t_tid, XLTW_InsertIndex);
+
+			goto retry;
 		}
 
 		so = (GISTScanOpaque) scan->opaque;
@@ -959,8 +964,6 @@ gistdoinsert(Relation r, IndexTuple itup, IndexUniqueCheck checkUnique,
 	bool		xlocked = false;
 	bool		checkingunique = (checkUnique != UNIQUE_CHECK_NO);
 	bool		is_unique = false;
-
-search:
 
 	memset(&state, 0, sizeof(GISTInsertState));
 	state.freespace = freespace;
@@ -1068,11 +1071,6 @@ search:
 			continue;
 		}
 
-		// TODO: If it's a UNIQUE index, we must attach a predicate lock to
-		// the page on the key, to avoid concurrent updates.
-		// I guess this is the same as locking the index tuple?
-		// What about overlaps?
-
 		if (!GistPageIsLeaf(stack->page))
 		{
 			/*
@@ -1168,12 +1166,6 @@ search:
 			 * Leaf page. Insert the new key. We've already updated all the
 			 * parents on the way down, but we might have to split the page if
 			 * it doesn't fit. gistinserttuple() will take care of that.
-			 * TODO: If the parents are already updated,
-			 * isn't that a problem if the uniqueness check fails??
-			 * Do we need to descend twice and keep the locks longer for unique
-			 * indexes?
-			 * If guess if the new entry *is* non-unique, the parents didn't
-			 * actually change, right?
 			 */
 
 			/*
@@ -1240,7 +1232,6 @@ search:
 			/* Release any pins we might still hold before exiting */
 			for (; stack; stack = stack->parent)
 				ReleaseBuffer(stack->buffer);
-
 			break;
 		}
 	}
@@ -1256,7 +1247,6 @@ search:
 	 */
 	if (checkingunique)
 	{
-		TransactionId xwait;
 		// If there are null values, it can't be unique
 		// TODO: but what about NULLS NOT DISTINCT? I don't see that in
 		// nbtree _bt_doinsert.
@@ -1264,27 +1254,9 @@ search:
 		// (which of course is outside of access/nbtree, but has btree
 		// in many function names).
 
-		xwait = gist_check_unique(r, giststate, &state, heapRel, itup,
-								  values, isnull,
-								  checkUnique, &is_unique, indexInfo);
-		if (unlikely(TransactionIdIsValid(xwait)))
-		{
-			/*
-			 * Have to wait for the other guy ...
-			 * Release any pins and locks we might hold
-			 */
-			for (; stack; stack = stack->parent)
-				UnlockReleaseBuffer(stack->buffer);
-			xlocked = false;
-
-			// TODO: speculative insertions
-
-			XactLockTableWait(xwait, r, &itup->t_tid, XLTW_InsertIndex);
-
-			/* start over... */
-
-			goto search;
-		}
+		gist_check_unique(r, giststate, &state, heapRel, itup,
+						  values, isnull,
+						  checkUnique, &is_unique, indexInfo);
 	}
 
 	return is_unique;
