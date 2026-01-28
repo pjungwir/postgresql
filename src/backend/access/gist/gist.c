@@ -682,7 +682,6 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 	Oid			   *index_collations;
 	Oid			   *constr_procs;
 	StrategyNumber *constr_strats;
-	int	natts;
 	int nkeyatts;
 	int i;
 	EState *estate = NULL;
@@ -692,7 +691,6 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 	bool	found_self;
 	char *key_desc;
 
-	natts = giststate->leafTupdesc->natts;
 	nkeyatts = IndexRelationGetNumberOfKeyAttributes(rel);
 
 	index_collations = rel->rd_indcollation;
@@ -727,7 +725,10 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 
 	// TODO: we never care about orderbys, right?:
 	// TODO: does the scan proc need to be for the compressed value?
-	for (i = 0; i < natts; i++) {
+	// When a regular SELECT calls ScanKeyEntryInitialize with a compressable
+	// value (like multirange), what are the Datums in newvals? The original
+	// multiranges or the compressed values (rangetypes)?
+	for (i = 0; i < nkeyatts; i++) {
 		ScanKeyEntryInitialize(&scankeys[i],
 							   newnulls[i] ? SK_ISNULL | SK_SEARCHNULL : 0,
 							   i + 1,
@@ -748,11 +749,6 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 		/*
 		 * We need an EState to evaluate index expressions.
 		 *
-		 * XXX: IAMs don't normally do this, so there must be a better way.
-		 * Put it on the giststate?
-		 * We only need it for expressions, so can we just forbid those, at
-		 * least for now?
-		 *
 		 * To use FormIndexDatum, we have to make the econtext's scantuple point
 		 * to this slot.  Be sure to save and restore caller's value for
 		 * scantuple.
@@ -770,10 +766,9 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 	 */
 //retry:
 	found_self = false;
-	// scan = gistbeginscan(rel, natts, 0);
 	// TODO: set instrumentation:
-	scan = index_beginscan(heapRel, rel, &SnapshotDirty, NULL, natts, 0);
-	index_rescan(scan, scankeys, natts, NULL, 0);
+	scan = index_beginscan(heapRel, rel, &SnapshotDirty, NULL, nkeyatts, 0);
+	index_rescan(scan, scankeys, nkeyatts, NULL, 0);
 
 	/*
 	 * We need the uncompressed heap values,
@@ -798,7 +793,13 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 
 		/*
 		 * Extract the index column values and isnull flags from the existing
-		 * tuple.
+		 * tuple. This gives us the indexed values before compression, so we can
+		 * pass them to excludeFn.
+		 *
+		 * XXX: Is it safe to use estate here and evaluate arbitrary
+		 * expressions? Probably not. But then we need to reject expression
+		 * indexes with a compression function. It's not a problem for nbtree
+		 * because there is no compression there.
 		 */
 		FormIndexDatum(indexInfo, existing_slot, estate,
 					   oldvals, oldnulls);
@@ -808,27 +809,23 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 		if (scan->xs_recheck)
 		{
 			bool	conflicts = true;
-			// TODO: not natts but keynatts, right?
-			// TODO: I'm a little confused why this rechecking is valid
-			// and not just a repeat of what we did before. Doesn't oldvals
-			// still have the same compressed values that are in the index?
-			// But exclusion constraints do it this way so I must be missing
-			// something....
-			for (i = 0; i < giststate->leafTupdesc->natts; i++)
+			for (i = 0; i < nkeyatts; i++)
 			{
 				/* Assume the exclusion operators are strict */
+				// TODO: If excludeFn is equality and we have
+				// nulls_not_distinct, then we should treat this as a conflict.
 				if (oldnulls[i])
 					break;
 
 			}
 
 			/* Check all the key elements against excludeFn */
-			for (i = 0; i < giststate->leafTupdesc->natts; i++)
+			for (i = 0; i < nkeyatts; i++)
 			{
 				Datum test = FunctionCall2Coll(&giststate->excludeFn[i],
-										 index_collations[i],
-										 oldvals[i],
-										 newvals[i]);
+											   index_collations[i],
+											   oldvals[i],
+											   newvals[i]);
 				/*
 				 * If all attributes conflict, then we violate uniqueness.
 				 * So we can abort on the first non-conflicting attribute.
