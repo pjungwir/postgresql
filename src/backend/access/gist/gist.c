@@ -779,6 +779,7 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 	{
 		Datum	oldvals[INDEX_MAX_KEYS];
 		bool	oldnulls[INDEX_MAX_KEYS];
+		GISTScanOpaque so;
 
 		/* Ignore the entry for the tuple we're trying to check. */
 		if (ItemPointerIsValid(&itup->t_tid) &&
@@ -865,10 +866,22 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 		xwait = TransactionIdIsValid(SnapshotDirty.xmin) ?
 			SnapshotDirty.xmin : SnapshotDirty.xmax;
 
-		// if (TransactionIdIsValid(xwait) &&
-		// TODO right here, copying old stuff.....
-		// TODO: speculative token (test with ON CONFLICT DO UPDATE)
+		if (TransactionIdIsValid(xwait))
+		{
+			/* Tell gistdoinsert to wait... */
+			// TODO: speculative token (test with ON CONFLICT DO UPDATE)
+			// *speculativeToken = SnapshotDirty.speculativeToken;
+			goto cleanup;
+		}
 
+		so = (GISTScanOpaque) scan->opaque;
+		CheckForSerializableConflictIn(rel, NULL, so->curBlkno);
+
+		/*
+		 * Build the error message.
+		 * TODO: need to end the scan here to avoid deadlocks?
+		 * See note from old code.
+		 */
 		key_desc = BuildIndexValueDescription(rel, newvals, newnulls);
 
 		/* For WITHOUT OVERLAPS, match the exclusion constraint message */
