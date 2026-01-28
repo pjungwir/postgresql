@@ -243,6 +243,24 @@ insert into gist_mltrngtbl values ('{[1,3), [8,10)}');
 insert into gist_mltrngtbl values ('{[1,10)}'); -- fails, exact duplicate
 drop table gist_mltrngtbl;
 
+-- Unique indexes with non-key attributes:
+create table gist_rngtbl (id int4range, name text);
+insert into gist_rngtbl values ('[1,2)', 'a'), ('[2,3)', 'b'), (NULL, 'c'), (NULL, 'd');
+create unique index uq_gist_rngtbl on gist_rngtbl using gist (id) include (name);
+insert into gist_rngtbl values ('[3,4)', 'e'), ('[4,5)', 'f'); -- okay
+\d gist_rngtbl
+select pg_get_indexdef('uq_gist_rngtbl'::regclass);
+-- enforced on build
+drop index uq_gist_rngtbl;
+insert into gist_rngtbl values ('[1,2)', 'g');
+create unique index uq_gist_rngtbl on gist_rngtbl using gist (id) include (name); -- fail
+truncate gist_rngtbl;
+-- enforced on insert
+create unique index uq_gist_rngtbl on gist_rngtbl using gist (id) include (name);
+insert into gist_rngtbl values ('[1,2)', 'a'), ('[2,3)', 'b'); -- okay
+insert into gist_rngtbl values (NULL, 'c'), (NULL, 'd'); -- okay
+insert into gist_rngtbl values ('[1,2)', 'g'); -- fail
+drop table gist_rngtbl;
 
 -- Clean up
 reset enable_seqscan;
