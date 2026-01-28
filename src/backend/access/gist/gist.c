@@ -878,10 +878,12 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 		CheckForSerializableConflictIn(rel, NULL, so->curBlkno);
 
 		/*
-		 * Build the error message.
-		 * TODO: need to end the scan here to avoid deadlocks?
-		 * See note from old code.
+		 * Build the error message. But BuildIndexValueDescription might search
+		 * this same index, locking buffers, so to avoid deadlocks we'd better
+		 * release all locks and pins we hold.
 		 */
+		index_endscan(scan);
+
 		key_desc = BuildIndexValueDescription(rel, newvals, newnulls);
 
 		/* For WITHOUT OVERLAPS, match the exclusion constraint message */
