@@ -644,11 +644,8 @@ gistplacetopage(Relation rel, Size freespace, GISTSTATE *giststate,
 /*
  * gist_check_unique -- enforce UNIQUEness with given excludeFn.
  *
- * ereports if there is a definite conflict, or returns InvalidTransactionId if
- * there is no conflict, or returns the TransactionId that must be waited on if
- * there is a potential conflict from a not-yet-committed transaction.
- *
- * The giststate must already point to a leaf page.
+ * ereports if there is a conflict. If there is a potential conflict, waits on
+ * the other transaction to commit or rollback then tries again.
  *
  * Our definition of uniqueness is based on the excludeFn, which does not
  * necessarily check for equality. That lets you create so-called UNIQUE indexes
@@ -656,10 +653,7 @@ gistplacetopage(Relation rel, Size freespace, GISTSTATE *giststate,
  * backing temporal constraints (i.e. WITHOUT OVERLAPS).
  *
  * newvals and newnulls are values of the indexed attribute(s)
- * (pre-compression), but in order of the index key(s)s.
- *
- * Uniqueness can only be enforced if the GISTENTRY Datum is the same as the
- * heap Datum---in other words there is no compress support proc.
+ * (pre-compression), but in order of the index key(s).
  */
 static TransactionId
 gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
