@@ -764,9 +764,11 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 	 * May have to restart scan from this point if a potential conflict is
 	 * found.
 	 */
-//retry:
 	found_self = false;
-	// TODO: set instrumentation:
+	/*
+	 * We can leave instrumentation NULL, because we only set that for
+	 * amgettuple and amgetbitmap calls.
+	 */
 	scan = index_beginscan(heapRel, rel, &SnapshotDirty, NULL, nkeyatts, 0);
 	index_rescan(scan, scankeys, nkeyatts, NULL, 0);
 
