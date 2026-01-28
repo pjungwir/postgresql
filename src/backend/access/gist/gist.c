@@ -845,6 +845,19 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 		/*
 		 * At this point we have either a conflict or a potential conflict.
 		 *
+		 * If we are only doing a potential check, then don't bother checking if
+		 * the tuple is being updated in another transaction. Just return the
+		 * fact that it is a potential conflict and leave the full check til
+		 * later.
+		 */
+		if (checkUnique == UNIQUE_CHECK_PARTIAL)
+		{
+			*is_unique = false;
+			xwait = InvalidTransactionId;
+			goto cleanup;
+		}
+
+		/*
 		 * If an in-progress transaction is affecting the visibility of this
 		 * tuple, we need to wait for it to complete and then recheck (unless
 		 * the caller requested not to).  For simplicity we do rechecking by
@@ -856,6 +869,8 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 			SnapshotDirty.xmin : SnapshotDirty.xmax;
 
 		// if (TransactionIdIsValid(xwait) &&
+		// TODO right here, copying old stuff.....
+		// TODO: speculative token (test with ON CONFLICT DO UPDATE)
 
 		key_desc = BuildIndexValueDescription(rel, newvals, newnulls);
 
@@ -893,7 +908,7 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 										RelationGetRelationName(rel))));
 	}
 
-	/* cleanup */
+cleanup:
 
 	index_endscan(scan);
 
