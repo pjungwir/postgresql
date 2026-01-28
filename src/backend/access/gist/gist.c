@@ -664,13 +664,6 @@ gist_check_unique(Relation rel, GISTSTATE *giststate, GISTInsertState *state,
 	SnapshotData	SnapshotDirty;
 	TransactionId	xwait = InvalidTransactionId;
 
-	// build the scan key,
-	// if nulls are not distinct and we are looking for nulls, match isnull for
-	// those.
-	// call gistgettuple
-	// recheck if necessary
-	// if it's not committed, return xwait.
-	// how to deal with expressions?
 	ScanKeyData		scankeys[INDEX_MAX_KEYS];
 	IndexScanDesc	scan;
 	Oid			   *index_collations;
@@ -807,23 +800,26 @@ retry:
 		if (scan->xs_recheck)
 		{
 			bool	conflicts = true;
-			for (i = 0; i < nkeyatts; i++)
-			{
-				/* Assume the exclusion operators are strict */
-				// TODO: If excludeFn is equality and we have
-				// nulls_not_distinct, then we should treat this as a conflict.
-				if (oldnulls[i])
-					break;
-
-			}
-
 			/* Check all the key elements against excludeFn */
 			for (i = 0; i < nkeyatts; i++)
 			{
-				Datum test = FunctionCall2Coll(&giststate->excludeFn[i],
-											   index_collations[i],
-											   oldvals[i],
-											   newvals[i]);
+				Datum	test;
+
+				/*
+				 * Finding a null implies we did SK_SEARCHNULL above
+				 * (assuming the search operators are strict),
+				 * and we only reach here with nulls in the new tuple
+				 * for NULLS NOT DISTINCT indexes. (For regular indexes, we
+				 * already looked for nulls in the new tuple above.)
+				 * So a null in the old tuple is a conflict.
+				 */
+				if (oldnulls[i])
+					break;
+
+				test = FunctionCall2Coll(&giststate->excludeFn[i],
+										 index_collations[i],
+										 oldvals[i],
+										 newvals[i]);
 				/*
 				 * If all attributes conflict, then we violate uniqueness.
 				 * So we can abort on the first non-conflicting attribute.

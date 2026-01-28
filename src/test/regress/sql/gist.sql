@@ -175,7 +175,7 @@ create index gist_tbl_box_index_forcing_buffering on gist_tbl using gist (p)
 
 -- Unique indexes, no compress function:
 create table gist_rngtbl (id int4range);
-insert into gist_rngtbl values ('[1,2)'), ('[2,3)');
+insert into gist_rngtbl values ('[1,2)'), ('[2,3)'), (NULL), (NULL);
 create unique index uq_gist_rngtbl on gist_rngtbl using gist (id);
 insert into gist_rngtbl values ('[3,4)'), ('[4,5)'); -- okay
 \d gist_rngtbl
@@ -185,6 +185,7 @@ drop index uq_gist_rngtbl;
 insert into gist_rngtbl values ('[1,2)');
 create unique index uq_gist_rngtbl on gist_rngtbl using gist (id); -- fail
 -- expressions:
+delete from gist_rngtbl where id is null;
 create unique index uq_gist_rngtbl_expr on gist_rngtbl using gist (
   int4range(lower(id) + 1, upper(id) + 1)
 ); -- fail
@@ -197,6 +198,7 @@ drop index uq_gist_rngtbl_expr;
 -- enforced on insert
 create unique index uq_gist_rngtbl on gist_rngtbl using gist (id);
 insert into gist_rngtbl values ('[1,2)'), ('[2,3)'); -- okay
+insert into gist_rngtbl values (NULL), (NULL); -- okay
 insert into gist_rngtbl values ('[1,2)'); -- fail
 drop table gist_rngtbl;
 
@@ -210,6 +212,7 @@ delete from gist_rngtbl;
 create unique index uq_gist_rngtbl on gist_rngtbl using gist (id) nulls not distinct; -- fail
 insert into gist_rngtbl values (NULL); -- okay
 insert into gist_rngtbl values (NULL); -- fail
+drop table gist_rngtbl;
 
 -- Unique indexes, compress function and lossy keys (e.g. multiranges):
 create table gist_mltrngtbl (id int4multirange);
