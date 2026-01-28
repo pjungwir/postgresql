@@ -29,7 +29,7 @@ step c2 { COMMIT; }
 # T2 reports a serialization failure.
 #
 # (In an earlier version of Postgres, T2 would report a unique
-# constraint violation).
+# constraint violation (for btree, not gist)).
 
 permutation r1 r2 w1 w2 c1 c2
 
