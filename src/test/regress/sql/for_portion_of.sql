@@ -1964,4 +1964,29 @@ SELECT * FROM fpo_explain ORDER BY valid_at;
 
 DROP TABLE fpo_explain;
 
+-- FOR PORTION OF leftovers should be skipped on views with INSTEAD OF triggers
+CREATE TABLE fpo_instead_base (id int, valid_at daterange, val int);
+INSERT INTO fpo_instead_base VALUES (1, '[2024-01-01,2024-12-31)', 100);
+CREATE VIEW fpo_instead_view AS SELECT * FROM fpo_instead_base;
+CREATE FUNCTION fpo_instead_trig_fn() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER fpo_instead_trig INSTEAD OF UPDATE ON fpo_instead_view
+  FOR EACH ROW EXECUTE FUNCTION fpo_instead_trig_fn();
+CREATE TRIGGER fpo_instead_del_trig INSTEAD OF DELETE ON fpo_instead_view
+  FOR EACH ROW EXECUTE FUNCTION fpo_instead_trig_fn();
+
+UPDATE fpo_instead_view FOR PORTION OF valid_at FROM '2024-04-01' TO '2024-08-01'
+    SET val = 999 WHERE id = 1;
+SELECT * FROM fpo_instead_view;
+
+DELETE FROM fpo_instead_view FOR PORTION OF valid_at FROM '2024-04-01' TO '2024-08-01'
+    WHERE id = 1;
+SELECT * FROM fpo_instead_view;
+
+DROP VIEW fpo_instead_view;
+DROP TABLE fpo_instead_base;
+
 RESET datestyle;

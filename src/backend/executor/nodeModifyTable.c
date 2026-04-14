@@ -1824,7 +1824,15 @@ ExecDeleteEpilogue(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 
 	/* Compute temporal leftovers in FOR PORTION OF */
 	if (((ModifyTable *) context->mtstate->ps.plan)->forPortionOf)
-		ExecForPortionOfLeftovers(context, estate, resultRelInfo, tupleid);
+	{
+		/*
+		 * Skip leftovers if there were INSTEAD OF triggers.
+		 * We would have no way of accessing the old row.
+		 */
+		if (!resultRelInfo->ri_TrigDesc ||
+			!resultRelInfo->ri_TrigDesc->trig_delete_instead_row)
+				ExecForPortionOfLeftovers(context, estate, resultRelInfo, tupleid);
+	}
 
 	/* AFTER ROW DELETE Triggers */
 	ExecARDeleteTriggers(estate, resultRelInfo, tupleid, oldtuple,
@@ -2629,7 +2637,15 @@ ExecUpdateEpilogue(ModifyTableContext *context, UpdateContext *updateCxt,
 
 	/* Compute temporal leftovers in FOR PORTION OF */
 	if (((ModifyTable *) context->mtstate->ps.plan)->forPortionOf)
-		ExecForPortionOfLeftovers(context, context->estate, resultRelInfo, tupleid);
+	{
+		/*
+		 * Skip leftovers if there were INSTEAD OF triggers.
+		 * We would have no way of accessing the old row.
+		 */
+		if (!resultRelInfo->ri_TrigDesc ||
+			!resultRelInfo->ri_TrigDesc->trig_delete_instead_row)
+			ExecForPortionOfLeftovers(context, context->estate, resultRelInfo, tupleid);
+	}
 
 	/* AFTER ROW UPDATE Triggers */
 	ExecARUpdateTriggers(context->estate, resultRelInfo,
