@@ -483,6 +483,11 @@ typedef struct ForPortionOfState
 	TypeCacheEntry *fp_leftoverstypcache;	/* type cache entry of the range */
 	TupleTableSlot *fp_Existing;	/* slot to store old tuple */
 	TupleTableSlot *fp_Leftover;	/* slot to store leftover */
+	Datum		fp_origNewRange;	/* range column value captured just before
+									 * BEFORE UPDATE triggers fire, so we can
+									 * detect whether they changed it */
+	bool		fp_origNewRangeIsNull;
+	bool		fp_origNewRangeValid;	/* is fp_origNewRange meaningful? */
 } ForPortionOfState;
 
 /*
