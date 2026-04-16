@@ -173,7 +173,8 @@ static bool ExecOnConflictSelect(ModifyTableContext *context,
 static void ExecForPortionOfLeftovers(ModifyTableContext *context,
 									  EState *estate,
 									  ResultRelInfo *resultRelInfo,
-									  ItemPointer tupleid);
+									  ItemPointer tupleid,
+									  TupleTableSlot *newSlot);
 static TupleTableSlot *ExecPrepareTupleRouting(ModifyTableState *mtstate,
 											   EState *estate,
 											   PartitionTupleRouting *proute,
@@ -201,6 +202,9 @@ static void fireBSTriggers(ModifyTableState *node);
 static void fireASTriggers(ModifyTableState *node);
 static void ExecInitForPortionOf(ModifyTableState *mtstate, EState *estate,
 								 ResultRelInfo *resultRelInfo);
+static void ExecForPortionOfSaveRange(ModifyTableContext *context,
+									  ResultRelInfo *resultRelInfo,
+									  TupleTableSlot *slot);
 
 
 /*
@@ -1407,13 +1411,13 @@ static void
 ExecForPortionOfLeftovers(ModifyTableContext *context,
 						  EState *estate,
 						  ResultRelInfo *resultRelInfo,
-						  ItemPointer tupleid)
+						  ItemPointer tupleid,
+						  TupleTableSlot *newSlot)
 {
 	ModifyTableState *mtstate = context->mtstate;
 	ModifyTable *node = (ModifyTable *) mtstate->ps.plan;
 	ForPortionOfExpr *forPortionOf = (ForPortionOfExpr *) node->forPortionOf;
 	Datum		oldRange;
-	TypeCacheEntry *typcache;
 	ForPortionOfState *fpoState;
 	TupleTableSlot *oldtupleSlot;
 	TupleTableSlot *leftoverSlot;
@@ -1461,15 +1465,54 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	oldRange = oldtupleSlot->tts_values[fpoState->fp_rangeAttno - 1];
 
 	/*
-	 * Get the range's type cache entry. This is worth caching for the whole
-	 * UPDATE/DELETE as range functions do.
+	 * Forbid changing the range column with BEFORE triggers. Just as the user
+	 * can't SET the same column used in FOR PORTION OF, so they can't change
+	 * it with BEFORE triggers. If we captured the pre-trigger value in
+	 * ExecForPortionOfSaveRange, here we make sure it hasn't been changed.
+	 * (If there are no BEFORE UPDATE triggers, then fp_origNewRangeValid is
+	 * null and we skip the whole thing.)
 	 */
-
-	typcache = fpoState->fp_leftoverstypcache;
-	if (typcache == NULL)
+	if (newSlot != NULL && fpoState->fp_origNewRangeValid)
 	{
-		typcache = lookup_type_cache(forPortionOf->rangeType, 0);
-		fpoState->fp_leftoverstypcache = typcache;
+		bool		newIsNull;
+		Datum		newRange;
+		TypeCacheEntry *typcache;
+
+		/*
+		 * Get the range's type cache entry. This is worth caching for the whole
+		 * UPDATE/DELETE as range functions do.
+		 */
+		typcache = fpoState->fp_leftoverstypcache;
+		if (typcache == NULL)
+		{
+			typcache = lookup_type_cache(forPortionOf->rangeType,
+										 TYPECACHE_EQ_OPR_FINFO);
+			fpoState->fp_leftoverstypcache = typcache;
+		}
+
+		slot_getallattrs(newSlot);
+		newIsNull = newSlot->tts_isnull[fpoState->fp_rangeAttno - 1];
+		newRange = newSlot->tts_values[fpoState->fp_rangeAttno - 1];
+
+		/*
+		 * Compare with the default btree equality operator.
+		 */
+		if (!OidIsValid(typcache->eq_opr_finfo.fn_oid))
+			ereport(ERROR,
+					errcode(ERRCODE_UNDEFINED_FUNCTION),
+					errmsg("could not identify an equality operator for type %s",
+						   format_type_be(forPortionOf->rangeType)));
+
+		if (newIsNull != fpoState->fp_origNewRangeIsNull ||
+			(!newIsNull &&
+			 !DatumGetBool(FunctionCall2Coll(&typcache->eq_opr_finfo,
+											 InvalidOid,
+											 newRange,
+											 fpoState->fp_origNewRange))))
+			ereport(ERROR,
+					errcode(ERRCODE_TRIGGERED_DATA_CHANGE_VIOLATION),
+					errmsg("cannot change column \"%s\" from a BEFORE trigger because it is used in FOR PORTION OF",
+						   forPortionOf->range_name));
 	}
 
 	/*
@@ -1814,7 +1857,8 @@ ExecDeleteEpilogue(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 
 	/* Compute temporal leftovers in FOR PORTION OF */
 	if (((ModifyTable *) context->mtstate->ps.plan)->forPortionOf)
-		ExecForPortionOfLeftovers(context, estate, resultRelInfo, tupleid);
+		ExecForPortionOfLeftovers(context, estate, resultRelInfo, tupleid,
+								  NULL);
 
 	/* AFTER ROW DELETE Triggers */
 	ExecARDeleteTriggers(estate, resultRelInfo, tupleid, oldtuple,
@@ -2394,6 +2438,13 @@ ExecUpdatePrologue(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 		if (context->estate->es_insert_pending_result_relations != NIL)
 			ExecPendingInserts(context->estate);
 
+		/*
+		 * For FOR PORTION OF, remember the range column value so we can
+		 * later detect whether a BEFORE trigger changed it.
+		 */
+		if (((ModifyTable *) context->mtstate->ps.plan)->forPortionOf)
+			ExecForPortionOfSaveRange(context, resultRelInfo, slot);
+
 		return ExecBRUpdateTriggers(context->estate, context->epqstate,
 									resultRelInfo, tupleid, oldtuple, slot,
 									result, &context->tmfd,
@@ -2619,7 +2670,8 @@ ExecUpdateEpilogue(ModifyTableContext *context, UpdateContext *updateCxt,
 
 	/* Compute temporal leftovers in FOR PORTION OF */
 	if (((ModifyTable *) context->mtstate->ps.plan)->forPortionOf)
-		ExecForPortionOfLeftovers(context, context->estate, resultRelInfo, tupleid);
+		ExecForPortionOfLeftovers(context, context->estate, resultRelInfo,
+								  tupleid, slot);
 
 	/* AFTER ROW UPDATE Triggers */
 	ExecARUpdateTriggers(context->estate, resultRelInfo,
@@ -5930,4 +5982,86 @@ ExecInitForPortionOf(ModifyTableState *mtstate, EState *estate,
 	resultRelInfo->ri_forPortionOf = leafState;
 
 	MemoryContextSwitchTo(oldcxt);
+}
+
+/* ----------------------------------------------------------------
+ *		ExecForPortionOfSaveRange
+ *
+ *		Capture the FOR PORTION OF range column value from the new tuple
+ *		slot just before BEFORE UPDATE triggers run. ExecForPortionOfLeftovers
+ *		later compares the saved value with the post-trigger value to detect
+ *		whether a trigger changed the range column, which is not allowed.
+ *
+ *		At first glance we shouldn't have to capture the value here,
+ *		because ExecForPortionOfLeftovers already looks at the pre-update
+ *		row (to insert the leftovers). But that runs after the actual update,
+ *		including the changes made to the range column by FOR PORTION OF,
+ *		so it can't distinguish between our updates and a trigger's.
+ * ----------------------------------------------------------------
+ */
+static void
+ExecForPortionOfSaveRange(ModifyTableContext *context,
+						  ResultRelInfo *resultRelInfo,
+						  TupleTableSlot *slot)
+{
+	ModifyTableState   *mtstate = context->mtstate;
+	ModifyTable		   *node = (ModifyTable *) mtstate->ps.plan;
+	ForPortionOfExpr   *forPortionOf = (ForPortionOfExpr *) node->forPortionOf;
+	EState			   *estate = mtstate->ps.state;
+	ForPortionOfState  *fpoState;
+	TypeCacheEntry	   *typcache;
+	MemoryContext oldcontext;
+
+	/*
+	 * Lazily initialize the partition child's ForPortionOfState, mirroring
+	 * ExecForPortionOfLeftovers so the saved value lives on the same struct
+	 * the check will read from.
+	 */
+	if (!resultRelInfo->ri_forPortionOf)
+		ExecInitForPortionOf(mtstate, estate, resultRelInfo);
+
+	fpoState = resultRelInfo->ri_forPortionOf;
+
+	slot_getallattrs(slot);
+
+	typcache = fpoState->fp_leftoverstypcache;
+	if (typcache == NULL)
+	{
+		typcache = lookup_type_cache(forPortionOf->rangeType,
+									 TYPECACHE_EQ_OPR_FINFO);
+		fpoState->fp_leftoverstypcache = typcache;
+	}
+
+	/* Release any value saved from a prior row. */
+	if (fpoState->fp_origNewRangeValid)
+	{
+		fpoState->fp_origNewRangeValid = false;
+		if (!typcache->typbyval && !fpoState->fp_origNewRangeIsNull)
+			pfree(DatumGetPointer(fpoState->fp_origNewRange));
+	}
+
+	if (slot->tts_isnull[fpoState->fp_rangeAttno - 1])
+	{
+		fpoState->fp_origNewRange = (Datum) 0;
+		fpoState->fp_origNewRangeIsNull = true;
+	}
+	else
+	{
+		Datum	origRange = slot->tts_values[fpoState->fp_rangeAttno - 1];
+
+		if (typcache->typbyval)
+			fpoState->fp_origNewRange = origRange;
+		else
+		{
+			/*
+			 * Make sure we copy everything for pass-by-reference types
+			 * (like range and multirange).
+			 */
+			oldcontext = MemoryContextSwitchTo(mtstate->ps.state->es_query_cxt);
+			fpoState->fp_origNewRange = datumCopy(origRange, false, -1);
+			MemoryContextSwitchTo(oldcontext);
+		}
+		fpoState->fp_origNewRangeIsNull = false;
+	}
+	fpoState->fp_origNewRangeValid = true;
 }
