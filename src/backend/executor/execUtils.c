@@ -1403,14 +1403,20 @@ ExecGetInsertedCols(ResultRelInfo *relinfo, EState *estate)
 	return perminfo->insertedCols;
 }
 
-/* Return a bitmap representing columns being updated */
+/*
+ * Return a bitmap representing columns being updated.  If we allocate a new
+ * Bitmapset it will be in the current memory context.
+ */
 Bitmapset *
 ExecGetUpdatedCols(ResultRelInfo *relinfo, EState *estate)
 {
 	RTEPermissionInfo *perminfo = GetResultRTEPermissionInfo(relinfo, estate);
+	Bitmapset  *updatedCols;
 
 	if (perminfo == NULL)
 		return NULL;
+
+	updatedCols = perminfo->updatedCols;
 
 	/* Map the columns to child's attribute numbers if needed. */
 	if (relinfo->ri_RootResultRelInfo)
@@ -1418,10 +1424,37 @@ ExecGetUpdatedCols(ResultRelInfo *relinfo, EState *estate)
 		TupleConversionMap *map = ExecGetRootToChildMap(relinfo, estate);
 
 		if (map)
-			return execute_attr_map_cols(map->attrMap, perminfo->updatedCols);
+			updatedCols = execute_attr_map_cols(map->attrMap, updatedCols);
 	}
 
-	return perminfo->updatedCols;
+	/*
+	 * For UPDATE ... FOR PORTION OF, the range column is being modified
+	 * (narrowed via intersection), but it is not included in updatedCols
+	 * because the user does not need UPDATE permission on it. Now manually
+	 * add it to updatedCols.
+	 *
+	 * For partitioned tables, ri_forPortionOf->fp_rangeAttno is already
+	 * mapped for the child partition, so we have to add it after the mapping
+	 * just above. Also that makes it unsafe to mutate perminfo. We make an
+	 * explicit copy of the Bitmapset since bms_add_member may change it
+	 * in-place. XXX: Always add the unmapped attno instead (before mapping),
+	 * and mutate perminfo, to avoid repeated allocations?
+	 */
+	if (relinfo->ri_forPortionOf)
+	{
+		AttrNumber	rangeAttno = relinfo->ri_forPortionOf->fp_rangeAttno - FirstLowInvalidHeapAttributeNumber;
+
+		if (!bms_is_member(rangeAttno, updatedCols))
+		{
+			/* Skip the copy if execute_attr_map_cols did it already. */
+			if (updatedCols == perminfo->updatedCols)
+				updatedCols = bms_copy(updatedCols);
+
+			updatedCols = bms_add_member(updatedCols, rangeAttno);
+		}
+	}
+
+	return updatedCols;
 }
 
 /* Return a bitmap representing generated columns being updated */

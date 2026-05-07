@@ -1398,4 +1398,62 @@ SELECT * FROM fpo_rule ORDER BY f1;
 
 DROP TABLE fpo_rule;
 
+-- UPDATE FOR PORTION OF with generated stored columns
+-- The generated column depends on the range column, so it must be
+-- recomputed when FOR PORTION OF narrows the range.
+CREATE TABLE fpo_generated (
+  id int,
+  valid_at int4range,
+  range_len int GENERATED ALWAYS AS (upper(valid_at) - lower(valid_at)) STORED,
+  range_lenv int GENERATED ALWAYS AS (upper(valid_at) - lower(valid_at))
+);
+INSERT INTO fpo_generated (id, valid_at) VALUES (1, '[10,100)');
+
+SELECT * FROM fpo_generated ORDER BY valid_at;
+
+-- After the FOR PORTION OF (FPO) update, all three resulting rows
+-- (leftover-before, updated, and leftover-after) must contain the correct
+-- values for range_len and range_lenv.
+UPDATE fpo_generated
+  FOR PORTION OF valid_at FROM 30 TO 70
+  SET id = 2;
+
+SELECT * FROM fpo_generated ORDER BY valid_at;
+
+-- Also test with a generated column that references both a SET column
+-- and the range column.
+DROP TABLE fpo_generated;
+CREATE TABLE fpo_generated (
+  id int,
+  valid_at int4range,
+  id_plus_len int GENERATED ALWAYS AS (id + upper(valid_at) - lower(valid_at)) STORED,
+  id_plus_lenv int GENERATED ALWAYS AS (id + upper(valid_at) - lower(valid_at))
+);
+
+INSERT INTO fpo_generated (id, valid_at) VALUES (1, '[10,100)');
+SELECT * FROM fpo_generated ORDER BY valid_at;
+
+UPDATE fpo_generated
+  FOR PORTION OF valid_at FROM 30 TO 70
+  SET id = 2;
+SELECT * FROM fpo_generated ORDER BY valid_at;
+DROP TABLE fpo_generated;
+
+-- Test that UPDATE OF colname triggers fire if colname is valid_at:
+CREATE TABLE fpo_update_of_trigger (
+  id int,
+  valid_at int4range
+);
+INSERT INTO fpo_update_of_trigger (id, valid_at) VALUES (1, '[10,100)');
+CREATE TRIGGER fpo_before_row1
+  BEFORE UPDATE OF valid_at ON fpo_update_of_trigger
+  FOR EACH ROW EXECUTE PROCEDURE dump_trigger(false, false);
+CREATE TRIGGER fpo_before_row2
+  BEFORE UPDATE OF valid_at ON fpo_update_of_trigger
+  FOR EACH STATEMENT EXECUTE PROCEDURE dump_trigger(false, false);
+UPDATE fpo_update_of_trigger
+  FOR PORTION OF valid_at FROM 30 TO 70
+  SET id = 2;
+DROP TABLE fpo_update_of_trigger;
+
 RESET datestyle;
