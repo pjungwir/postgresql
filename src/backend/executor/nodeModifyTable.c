@@ -5587,6 +5587,23 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 		tupDesc = rootRelInfo->ri_RelationDesc->rd_att;
 		forPortionOf = (ForPortionOfExpr *) node->forPortionOf;
 
+		/*
+		 * Reject generated columns. We can't write to a virtual generated column,
+		 * and a stored generated column should be written by its own expression.
+		 *
+		 * For virtual columns, forPortionOf->rangeVar gets replaced by the planner,
+		 * so it's not actually a Var anymore!
+		 *
+		 * XXX: We plan to implement PERIODs as stored generated columns, so later
+		 * we will loosen this restriction if the column belongs to a PERIOD.
+		 */
+		if (!IsA(forPortionOf->rangeVar, Var) ||
+			TupleDescAttr(tupDesc, forPortionOf->rangeVar->varattno - 1)->attgenerated)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot use generated column \"%s\" in FOR PORTION OF",
+							forPortionOf->range_name)));
+
 		/* Eval the FOR PORTION OF target */
 		if (mtstate->ps.ps_ExprContext == NULL)
 			ExecAssignExprContext(estate, &mtstate->ps);
