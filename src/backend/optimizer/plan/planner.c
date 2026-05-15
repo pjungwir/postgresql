@@ -1081,6 +1081,17 @@ subquery_planner(PlannerGlobal *glob, Query *parse, char *plan_name,
 		/* exclRelTlist contains only Vars, so no preprocessing needed */
 	}
 
+	if (parse->forPortionOf)
+	{
+		parse->forPortionOf->targetRange =
+			preprocess_expression(root,
+								  parse->forPortionOf->targetRange,
+								  EXPRKIND_TARGET);
+		if (contain_volatile_functions(parse->forPortionOf->targetRange))
+			ereport(ERROR,
+					(errmsg("FOR PORTION OF bounds cannot contain volatile functions")));
+	}
+
 	foreach(l, parse->mergeActionList)
 	{
 		MergeAction *action = (MergeAction *) lfirst(l);
