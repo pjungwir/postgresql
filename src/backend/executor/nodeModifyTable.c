@@ -1440,6 +1440,7 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	ReturnSetInfo rsi;
 	bool		didInit = false;
 	bool		shouldFree = false;
+	bool		addTriggerLevel = !(estate->es_top_eflags & EXEC_FLAG_SKIP_TRIGGERS);
 	ResultRelInfo *rootRelInfo = mtstate->rootResultRelInfo;
 	bool		partitionRouting =
 		rootRelInfo &&
@@ -1618,7 +1619,8 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 		 * We have to make sure that the inserts don't add to the ROW_COUNT
 		 * diagnostic or the command tag, so we pass false for canSetTag.
 		 */
-		AfterTriggerBeginQuery();
+		if (addTriggerLevel)
+			AfterTriggerBeginQuery();
 		ExecSetupTransitionCaptureState(mtstate, estate, resultRelInfo);
 
 		/*
@@ -1637,7 +1639,8 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 		if (mtstate->mt_transition_capture != NULL)
 			mtstate->mt_transition_capture->tcs_original_insert_tuple = NULL;
 
-		AfterTriggerEndQuery(estate);
+		if (addTriggerLevel)
+			AfterTriggerEndQuery(estate);
 	}
 
 	if (didInit)
