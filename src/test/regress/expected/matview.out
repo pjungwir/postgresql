@@ -702,6 +702,27 @@ DROP MATERIALIZED VIEW matview_ine_tab;
 --
 -- Test CREATE OR REPLACE MATERIALIZED VIEW
 --
+-- Command completion tags must not depend on whether an existing matview is
+-- being replaced: replacing must report what creating reports, never the tag
+-- of the REFRESH that is run internally to populate the matview.
+\set QUIET false
+CREATE MATERIALIZED VIEW mvtest_tag AS
+  SELECT g AS a FROM generate_series(1, 3) g;
+SELECT 3
+CREATE OR REPLACE MATERIALIZED VIEW mvtest_tag AS
+  SELECT g AS a FROM generate_series(1, 5) g;
+SELECT 5
+CREATE OR REPLACE MATERIALIZED VIEW mvtest_tag AS
+  SELECT g AS a FROM generate_series(1, 5) g
+  WITH NO DATA;
+CREATE MATERIALIZED VIEW
+CREATE OR REPLACE MATERIALIZED VIEW mvtest_tag AS
+  SELECT g AS a FROM generate_series(1, 5) g
+  WITH OLD DATA;
+CREATE MATERIALIZED VIEW
+DROP MATERIALIZED VIEW mvtest_tag;
+DROP MATERIALIZED VIEW
+\set QUIET true
 -- Matview does not already exist
 DROP MATERIALIZED VIEW IF EXISTS mvtest_replace;
 NOTICE:  materialized view "mvtest_replace" does not exist, skipping

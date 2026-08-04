@@ -388,20 +388,33 @@ ExecCreateTableAs(ParseState *pstate, CreateTableAsStmt *stmt,
 			address = create_ctas_nodata(query->targetList, into);
 
 			/*
-			 * Refresh the materialized view with a fake statement unless we
-			 * must keep the old data.
+			 * Populate the matview, unless we must keep the old data.  The
+			 * relation is already locked, and ownership of it has been
+			 * verified while running the ALTER TABLE subcommands above, so
+			 * enter the refresh by OID rather than by name.
+			 *
+			 * Passing is_create = true is what keeps the command completion
+			 * tag honest: going through ExecRefreshMatView() instead would
+			 * report REFRESH MATERIALIZED VIEW for a command the user typed
+			 * as CREATE OR REPLACE MATERIALIZED VIEW.
 			 */
-			if (into->data != WITHDATA_OLD)
+			if (into->data == WITHDATA_DEFAULT)
+				RefreshMatViewByOid(address.objectId, true, false, false,
+									pstate->p_sourcetext, qc);
+			else if (into->data == WITHDATA_NONE)
 			{
-				RefreshMatViewStmt *refresh;
-
-				refresh = makeNode(RefreshMatViewStmt);
-				refresh->relation = into->rel;
-				refresh->skipData = into->skipData;
-				refresh->concurrent = false;
-
-				address = ExecRefreshMatView(refresh, pstate->p_sourcetext, qc);
+				/*
+				 * WITH NO DATA must still truncate the old contents and mark
+				 * the matview unpopulated, but it must not set the tag: plain
+				 * CREATE MATERIALIZED VIEW ... WITH NO DATA runs no refresh
+				 * at all and so reports CREATE MATERIALIZED VIEW.  Pass a
+				 * NULL QueryCompletion to end up with the same tag here.
+				 */
+				RefreshMatViewByOid(address.objectId, true, true, false,
+									pstate->p_sourcetext, NULL);
 			}
+
+			/* For WITHDATA_OLD the existing contents are left untouched. */
 
 			return address;
 		}
