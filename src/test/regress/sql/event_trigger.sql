@@ -346,6 +346,16 @@ CREATE SCHEMA evttrig
 CREATE OR REPLACE VIEW evttrig.one_view AS SELECT * FROM evttrig.two, evttrig.id;
 DROP VIEW evttrig.one_view;
 
+-- Materialized view, likewise.  Replacing one runs ALTER TABLE internally, so
+-- the command collection state must be set up for it the same way it is for
+-- CREATE OR REPLACE VIEW.
+CREATE MATERIALIZED VIEW evttrig.one_matview AS SELECT * FROM evttrig.two;
+CREATE OR REPLACE MATERIALIZED VIEW evttrig.one_matview AS
+  SELECT * FROM evttrig.two, evttrig.id;
+CREATE OR REPLACE MATERIALIZED VIEW evttrig.one_matview AS
+  SELECT * FROM evttrig.two, evttrig.id WITH NO DATA;
+DROP MATERIALIZED VIEW evttrig.one_matview;
+
 -- Partitioned tables with a partitioned index
 CREATE TABLE evttrig.parted (
     id int PRIMARY KEY)

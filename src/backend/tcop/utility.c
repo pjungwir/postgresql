@@ -1679,8 +1679,24 @@ ProcessUtilitySlow(ParseState *pstate,
 				break;
 
 			case T_CreateTableAsStmt:
+
+				/*
+				 * CREATE OR REPLACE MATERIALIZED VIEW adjusts the columns and
+				 * the storage properties of the existing matview by running
+				 * ALTER TABLE internally, so the ALTER TABLE collection state
+				 * has to be set up here, exactly as it is for CREATE OR
+				 * REPLACE VIEW below.  Every other CreateTableAsStmt collects
+				 * no subcommands at all, and EventTriggerAlterTableEnd() then
+				 * simply discards the entry.
+				 */
+				EventTriggerAlterTableStart(parsetree);
 				address = ExecCreateTableAs(pstate, (CreateTableAsStmt *) parsetree,
 											params, queryEnv, qc);
+				EventTriggerCollectSimpleCommand(address, secondaryObject,
+												 parsetree);
+				/* stashed internally */
+				commandCollected = true;
+				EventTriggerAlterTableEnd();
 				break;
 
 			case T_RefreshMatViewStmt:

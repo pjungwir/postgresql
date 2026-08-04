@@ -460,6 +460,21 @@ NOTICE:  END: command_tag=CREATE VIEW type=view identity=evttrig.one_view
 NOTICE:  END: command_tag=CREATE VIEW type=view identity=evttrig.one_view
 DROP VIEW evttrig.one_view;
 NOTICE:  NORMAL: orig=t normal=f istemp=f type=view identity=evttrig.one_view schema=evttrig name=one_view addr={evttrig,one_view} args={}
+-- Materialized view, likewise.  Replacing one runs ALTER TABLE internally, so
+-- the command collection state must be set up for it the same way it is for
+-- CREATE OR REPLACE VIEW.
+CREATE MATERIALIZED VIEW evttrig.one_matview AS SELECT * FROM evttrig.two;
+NOTICE:  END: command_tag=CREATE MATERIALIZED VIEW type=materialized view identity=evttrig.one_matview
+CREATE OR REPLACE MATERIALIZED VIEW evttrig.one_matview AS
+  SELECT * FROM evttrig.two, evttrig.id;
+NOTICE:  END: command_tag=CREATE MATERIALIZED VIEW type=materialized view identity=evttrig.one_matview
+NOTICE:  END: command_tag=CREATE MATERIALIZED VIEW type=materialized view identity=evttrig.one_matview
+CREATE OR REPLACE MATERIALIZED VIEW evttrig.one_matview AS
+  SELECT * FROM evttrig.two, evttrig.id WITH NO DATA;
+NOTICE:  END: command_tag=CREATE MATERIALIZED VIEW type=materialized view identity=evttrig.one_matview
+NOTICE:  END: command_tag=CREATE MATERIALIZED VIEW type=materialized view identity=evttrig.one_matview
+DROP MATERIALIZED VIEW evttrig.one_matview;
+NOTICE:  NORMAL: orig=t normal=f istemp=f type=materialized view identity=evttrig.one_matview schema=evttrig name=one_matview addr={evttrig,one_matview} args={}
 -- Partitioned tables with a partitioned index
 CREATE TABLE evttrig.parted (
     id int PRIMARY KEY)
