@@ -716,4 +716,93 @@ is( $result, qq{[1,2)|[2000-01-01,2010-01-01)|a
 
 drop_everything();
 
+# #################################
+# Test column lists and row filters interacting with FOR PORTION OF leftovers
+# #################################
+
+# A FOR PORTION OF update/delete emits the truncated row as an UPDATE/DELETE and
+# each temporal leftover as an INSERT.  The leftover INSERTs must honor the
+# publication's column list and row filter like any other INSERT.
+
+# --- Column list: leftovers replicate only the listed columns ---
+
+$node_publisher->safe_psql('postgres',
+	"CREATE TABLE temporal_collist (id int4range, valid_at daterange, a text, b text, PRIMARY KEY (id, valid_at WITHOUT OVERLAPS))"
+);
+$node_subscriber->safe_psql('postgres',
+	"CREATE TABLE temporal_collist (id int4range, valid_at daterange, a text, b text, PRIMARY KEY (id, valid_at WITHOUT OVERLAPS))"
+);
+$node_publisher->safe_psql('postgres',
+	"INSERT INTO temporal_collist VALUES ('[1,2)', '[2000-01-01,2010-01-01)', 'a', 'secret')"
+);
+
+# The publication replicates only (id, valid_at, a); b is excluded.  The column
+# list includes the replica identity columns, as required.
+$node_publisher->safe_psql('postgres',
+	"CREATE PUBLICATION pub_collist FOR TABLE temporal_collist (id, valid_at, a)");
+$node_subscriber->safe_psql('postgres',
+	"CREATE SUBSCRIPTION sub_collist CONNECTION '$publisher_connstr' PUBLICATION pub_collist"
+);
+$node_subscriber->wait_for_subscription_sync($node_publisher, 'sub_collist');
+
+$node_publisher->safe_psql('postgres',
+	"UPDATE temporal_collist FOR PORTION OF valid_at FROM '2004-01-01' TO '2006-01-01' SET a = 'x' WHERE id = '[1,2)'"
+);
+$node_publisher->wait_for_catchup('sub_collist');
+
+# b is never replicated, so it is NULL on the subscriber for the truncated row
+# and both leftovers:
+$result = $node_subscriber->safe_psql('postgres',
+	"SELECT id, valid_at, a, b FROM temporal_collist ORDER BY valid_at");
+is( $result, qq{[1,2)|[2000-01-01,2004-01-01)|a|
+[1,2)|[2004-01-01,2006-01-01)|x|
+[1,2)|[2006-01-01,2010-01-01)|a|},
+	'column list applies to FOR PORTION OF leftovers');
+
+$node_subscriber->safe_psql('postgres', "DROP SUBSCRIPTION sub_collist");
+$node_publisher->safe_psql('postgres', "DROP PUBLICATION pub_collist");
+$node_publisher->safe_psql('postgres', "DROP TABLE temporal_collist");
+$node_subscriber->safe_psql('postgres', "DROP TABLE temporal_collist");
+
+# --- Row filter: leftovers are subject to the publication row filter ---
+
+$node_publisher->safe_psql('postgres',
+	"CREATE TABLE temporal_rowfilter (id int4range, valid_at daterange, a text, PRIMARY KEY (id, valid_at WITHOUT OVERLAPS))"
+);
+$node_subscriber->safe_psql('postgres',
+	"CREATE TABLE temporal_rowfilter (id int4range, valid_at daterange, a text, PRIMARY KEY (id, valid_at WITHOUT OVERLAPS))"
+);
+$node_publisher->safe_psql('postgres',
+	"INSERT INTO temporal_rowfilter VALUES ('[1,2)', '[2000-01-01,2010-01-01)', 'a')"
+);
+
+# Only rows whose validity starts before 2005 are replicated.  valid_at is part
+# of the replica identity, so it may appear in the row filter.
+$node_publisher->safe_psql('postgres',
+	"CREATE PUBLICATION pub_rowfilter FOR TABLE temporal_rowfilter WHERE (lower(valid_at) < '2005-01-01')"
+);
+$node_subscriber->safe_psql('postgres',
+	"CREATE SUBSCRIPTION sub_rowfilter CONNECTION '$publisher_connstr' PUBLICATION pub_rowfilter"
+);
+$node_subscriber->wait_for_subscription_sync($node_publisher, 'sub_rowfilter');
+
+# FOR PORTION OF splits [2000,2010) into leftovers [2000,2004) and [2006,2010)
+# around the truncated [2004,2006).  The [2006,2010) leftover starts in 2006, so
+# it fails the row filter and is not replicated.
+$node_publisher->safe_psql('postgres',
+	"UPDATE temporal_rowfilter FOR PORTION OF valid_at FROM '2004-01-01' TO '2006-01-01' SET a = 'x' WHERE id = '[1,2)'"
+);
+$node_publisher->wait_for_catchup('sub_rowfilter');
+
+$result = $node_subscriber->safe_psql('postgres',
+	"SELECT id, valid_at, a FROM temporal_rowfilter ORDER BY valid_at");
+is( $result, qq{[1,2)|[2000-01-01,2004-01-01)|a
+[1,2)|[2004-01-01,2006-01-01)|x},
+	'row filter applies to FOR PORTION OF leftovers');
+
+$node_subscriber->safe_psql('postgres', "DROP SUBSCRIPTION sub_rowfilter");
+$node_publisher->safe_psql('postgres', "DROP PUBLICATION pub_rowfilter");
+$node_publisher->safe_psql('postgres', "DROP TABLE temporal_rowfilter");
+$node_subscriber->safe_psql('postgres', "DROP TABLE temporal_rowfilter");
+
 done_testing();
