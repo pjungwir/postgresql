@@ -2054,4 +2054,254 @@ SELECT * FROM fpo_explain ORDER BY valid_at;
 
 DROP TABLE fpo_explain;
 
+-- Bounds may not contain aggregates, window functions, or set-returning functions:
+CREATE TABLE fpo_bounds (id int, valid_at int4range);
+INSERT INTO fpo_bounds VALUES (1, '[1,100)');
+-- aggregate:
+UPDATE fpo_bounds FOR PORTION OF valid_at FROM count(*) TO 10 SET id = 2;
+-- window function:
+UPDATE fpo_bounds FOR PORTION OF valid_at FROM row_number() OVER () TO 10 SET id = 2;
+-- set-returning function:
+UPDATE fpo_bounds FOR PORTION OF valid_at FROM generate_series(1, 2) TO 10 SET id = 2;
+DROP TABLE fpo_bounds;
+
+-- EXPLAIN of FOR PORTION OF (plan shape should be stable):
+CREATE TABLE fpo_explain (id int, valid_at daterange, name text);
+INSERT INTO fpo_explain VALUES (1, '[2000-01-01,2010-01-01)', 'a');
+EXPLAIN (COSTS OFF) UPDATE fpo_explain
+  FOR PORTION OF valid_at FROM '2001-01-01' TO '2002-01-01'
+  SET name = 'b';
+EXPLAIN (COSTS OFF) DELETE FROM fpo_explain
+  FOR PORTION OF valid_at FROM '2001-01-01' TO '2002-01-01';
+DROP TABLE fpo_explain;
+
+-- Parameterized bounds via PREPARE/EXECUTE must keep working once a generic plan
+-- is chosen (parameters are allowed in bounds even though volatile functions
+-- are not):
+CREATE TABLE fpo_prepared (id int, valid_at int4range, name text);
+INSERT INTO fpo_prepared VALUES (1, '[1,100)', 'a');
+PREPARE fpo_upd (int, int) AS
+  UPDATE fpo_prepared FOR PORTION OF valid_at FROM $1 TO $2 SET name = 'b'
+  WHERE id = 1;
+EXECUTE fpo_upd(10, 20);
+EXECUTE fpo_upd(30, 40);
+EXECUTE fpo_upd(50, 60);
+EXECUTE fpo_upd(70, 80);
+EXECUTE fpo_upd(85, 90);
+EXECUTE fpo_upd(92, 95);
+SELECT valid_at, name FROM fpo_prepared ORDER BY valid_at;
+DEALLOCATE fpo_upd;
+DROP TABLE fpo_prepared;
+
+-- Leftover rows must copy the original row's values for identity and
+-- default-valued columns; those defaults must NOT re-fire for leftovers:
+CREATE SEQUENCE fpo_seq;
+CREATE TABLE fpo_defaults (
+  id int GENERATED ALWAYS AS IDENTITY,
+  seqval int DEFAULT nextval('fpo_seq'),
+  valid_at int4range,
+  name text
+);
+INSERT INTO fpo_defaults (valid_at, name) VALUES ('[1,100)', 'a');
+UPDATE fpo_defaults FOR PORTION OF valid_at FROM 40 TO 60 SET name = 'b';
+-- All three rows keep id=1 and seqval=1 (defaults did not re-fire):
+SELECT id, seqval, valid_at, name FROM fpo_defaults ORDER BY valid_at;
+-- The sequence did not advance past the single explicit insert:
+SELECT last_value FROM fpo_seq;
+DROP TABLE fpo_defaults;
+DROP SEQUENCE fpo_seq;
+
+-- A large (toasted) value must be preserved intact in leftovers:
+CREATE TABLE fpo_toast (id int, valid_at int4range, big text);
+INSERT INTO fpo_toast VALUES (1, '[1,100)', repeat('x', 100000));
+UPDATE fpo_toast FOR PORTION OF valid_at FROM 40 TO 60 SET id = 2;
+SELECT id, valid_at, length(big) FROM fpo_toast ORDER BY valid_at;
+DROP TABLE fpo_toast;
+
+-- FOR PORTION OF is not supported inside MERGE:
+CREATE TABLE fpo_merge (id int, valid_at int4range, name text);
+CREATE TABLE fpo_merge_src (id int);
+MERGE INTO fpo_merge t
+USING fpo_merge_src s ON t.id = s.id
+WHEN MATCHED THEN
+  UPDATE FOR PORTION OF valid_at FROM 1 TO 2 SET name = 'x';
+DROP TABLE fpo_merge, fpo_merge_src;
+
+-- Subtransaction rollback undoes a FOR PORTION OF, including its leftovers:
+CREATE TABLE fpo_savepoint (id int, valid_at int4range, name text);
+INSERT INTO fpo_savepoint VALUES (1, '[1,100)', 'a');
+BEGIN;
+SAVEPOINT sp;
+UPDATE fpo_savepoint FOR PORTION OF valid_at FROM 40 TO 60 SET name = 'b';
+SELECT valid_at, name FROM fpo_savepoint ORDER BY valid_at;
+ROLLBACK TO SAVEPOINT sp;
+SELECT valid_at, name FROM fpo_savepoint ORDER BY valid_at;
+COMMIT;
+DROP TABLE fpo_savepoint;
+
+-- If a leftover insert fails, the whole statement rolls back and the target
+-- row is not left truncated:
+CREATE TABLE fpo_atomic (id int, valid_at int4range, name text);
+INSERT INTO fpo_atomic VALUES (1, '[1,100)', 'a');
+CREATE FUNCTION fpo_reject_insert() RETURNS trigger LANGUAGE plpgsql AS
+  $$ BEGIN RAISE EXCEPTION 'no leftovers allowed'; END $$;
+CREATE TRIGGER fpo_atomic_trg BEFORE INSERT ON fpo_atomic
+  FOR EACH ROW EXECUTE PROCEDURE fpo_reject_insert();
+UPDATE fpo_atomic FOR PORTION OF valid_at FROM 40 TO 60 SET name = 'b';
+-- The original row is intact (not truncated to [1,40)):
+SELECT * FROM fpo_atomic ORDER BY valid_at;
+DROP TABLE fpo_atomic;
+DROP FUNCTION fpo_reject_insert();
+
+-- Degenerate targets: no matching row, target entirely outside, target covering:
+CREATE TABLE fpo_edge (id int, valid_at int4range, name text);
+INSERT INTO fpo_edge VALUES (1, '[10,20)', 'a');
+-- WHERE matches nothing: no change, no leftovers:
+UPDATE fpo_edge FOR PORTION OF valid_at FROM 12 TO 15 SET name = 'b' WHERE id = 999;
+SELECT * FROM fpo_edge ORDER BY valid_at;
+-- Target range entirely outside the row's range: no change, no leftovers:
+UPDATE fpo_edge FOR PORTION OF valid_at FROM 100 TO 200 SET name = 'b';
+SELECT * FROM fpo_edge ORDER BY valid_at;
+-- Target range fully covers the row: whole-row update, no leftovers:
+UPDATE fpo_edge FOR PORTION OF valid_at FROM 0 TO 50 SET name = 'c';
+SELECT * FROM fpo_edge ORDER BY valid_at;
+DROP TABLE fpo_edge;
+
+-- FOR PORTION OF after DROP COLUMN and after a dropped-then-readded column
+-- (leftover tuple construction must handle attnum gaps):
+CREATE TABLE fpo_dropcol (id int, junk int, valid_at int4range, name text);
+INSERT INTO fpo_dropcol VALUES (1, 42, '[1,100)', 'a');
+ALTER TABLE fpo_dropcol DROP COLUMN junk;
+UPDATE fpo_dropcol FOR PORTION OF valid_at FROM 40 TO 60 SET name = 'b';
+SELECT id, valid_at, name FROM fpo_dropcol ORDER BY valid_at;
+ALTER TABLE fpo_dropcol ADD COLUMN extra text DEFAULT 'z';
+UPDATE fpo_dropcol FOR PORTION OF valid_at FROM 10 TO 20 SET name = 'c';
+SELECT id, valid_at, name, extra FROM fpo_dropcol ORDER BY valid_at;
+DROP TABLE fpo_dropcol;
+
+-- FOR PORTION OF applied directly to a partition (not the root):
+CREATE TABLE fpo_proot (id int, valid_at int4range, name text) PARTITION BY LIST (id);
+CREATE TABLE fpo_pchild PARTITION OF fpo_proot FOR VALUES IN (1);
+INSERT INTO fpo_proot VALUES (1, '[1,100)', 'a');
+UPDATE fpo_pchild FOR PORTION OF valid_at FROM 40 TO 60 SET name = 'b';
+SELECT * FROM fpo_proot ORDER BY valid_at;
+DROP TABLE fpo_proot;
+
+-- A leftover that routes to no partition raises an error (and the whole
+-- statement rolls back).  Partition by the range's lower bound so that narrowing
+-- valid_at can push a leftover out of every existing partition.
+CREATE TABLE fpo_part_err (id int, valid_at int4range, name text)
+  PARTITION BY RANGE (lower(valid_at));
+CREATE TABLE fpo_part_err_low PARTITION OF fpo_part_err
+  FOR VALUES FROM (MINVALUE) TO (50);
+INSERT INTO fpo_part_err VALUES (1, '[10,100)', 'a');
+-- The leftover [60,100) has lower bound 60, which no partition covers:
+UPDATE fpo_part_err FOR PORTION OF valid_at FROM 40 TO 60 SET name = 'b';
+-- The original row is intact (statement rolled back atomically):
+SELECT * FROM fpo_part_err ORDER BY valid_at;
+DROP TABLE fpo_part_err;
+
+-- FOR PORTION OF against a table referenced by a temporal foreign key (NO ACTION).
+-- UPDATE preserves total coverage via leftovers, so the FK stays satisfied even
+-- when the target overlaps a range the child needs; DELETE removes coverage and
+-- so is rejected when the child depends on it.
+CREATE TABLE fpo_fk_parent (
+  id int4range,
+  valid_at daterange,
+  note text,
+  PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+CREATE TABLE fpo_fk_child (
+  id int4range,
+  valid_at daterange,
+  parent_id int4range,
+  FOREIGN KEY (parent_id, PERIOD valid_at) REFERENCES fpo_fk_parent (id, PERIOD valid_at)
+);
+INSERT INTO fpo_fk_parent VALUES ('[1,2)', '[2000-01-01,2010-01-01)', 'a');
+INSERT INTO fpo_fk_child VALUES ('[1,2)', '[2000-01-01,2005-01-01)', '[1,2)');
+-- ok: leftovers restore the coverage the child needs:
+UPDATE fpo_fk_parent
+  FOR PORTION OF valid_at FROM '2001-01-01' TO '2002-01-01'
+  SET note = 'b';
+SELECT * FROM fpo_fk_parent ORDER BY valid_at;
+-- error: DELETE removes coverage the child depends on:
+DELETE FROM fpo_fk_parent
+  FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01';
+-- ok: DELETE outside the child's needed range:
+DELETE FROM fpo_fk_parent
+  FOR PORTION OF valid_at FROM '2008-01-01' TO '2009-01-01';
+SELECT * FROM fpo_fk_parent ORDER BY valid_at;
+DROP TABLE fpo_fk_child, fpo_fk_parent;
+
+-- FOR PORTION OF on the *referencing* side of a temporal foreign key: leftovers
+-- only narrow the child's own validity, so they always still satisfy the FK.
+CREATE TABLE fpo_ref_parent (
+  id int4range,
+  valid_at daterange,
+  PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+CREATE TABLE fpo_ref_child (
+  id int4range,
+  valid_at daterange,
+  parent_id int4range,
+  note text,
+  FOREIGN KEY (parent_id, PERIOD valid_at) REFERENCES fpo_ref_parent (id, PERIOD valid_at)
+);
+INSERT INTO fpo_ref_parent VALUES ('[1,2)', '[2000-01-01,2010-01-01)');
+INSERT INTO fpo_ref_child VALUES ('[1,2)', '[2000-01-01,2008-01-01)', '[1,2)', 'a');
+-- UPDATE FOR PORTION OF the child: leftovers still reference covered parent ranges:
+UPDATE fpo_ref_child
+  FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01'
+  SET note = 'b';
+SELECT id, valid_at, parent_id, note FROM fpo_ref_child ORDER BY valid_at;
+-- DELETE FOR PORTION OF the child: removes part of the child's validity (FK-safe):
+DELETE FROM fpo_ref_child
+  FOR PORTION OF valid_at FROM '2004-01-01' TO '2005-01-01';
+SELECT id, valid_at, parent_id, note FROM fpo_ref_child ORDER BY valid_at;
+DROP TABLE fpo_ref_child, fpo_ref_parent;
+
+-- A NOT NULL non-range column is copied into leftovers (not nulled out):
+CREATE TABLE fpo_notnull (id int, valid_at int4range, name text NOT NULL);
+INSERT INTO fpo_notnull VALUES (1, '[1,100)', 'keep');
+UPDATE fpo_notnull FOR PORTION OF valid_at FROM 40 TO 60 SET id = 2;
+SELECT * FROM fpo_notnull ORDER BY valid_at;
+DROP TABLE fpo_notnull;
+
+-- A non-default collation on a non-range column is preserved in leftovers:
+CREATE TABLE fpo_collate (id int, valid_at int4range, name text COLLATE "C");
+INSERT INTO fpo_collate VALUES (1, '[1,100)', 'Xyz');
+UPDATE fpo_collate FOR PORTION OF valid_at FROM 40 TO 60 SET id = 2;
+SELECT id, valid_at, name FROM fpo_collate ORDER BY valid_at;
+DROP TABLE fpo_collate;
+
+-- EXPLAIN ANALYZE executes the FOR PORTION OF (including its leftovers):
+CREATE TABLE fpo_ea (id int, valid_at daterange, name text);
+INSERT INTO fpo_ea VALUES (1, '[2000-01-01,2010-01-01)', 'a');
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF, BUFFERS OFF)
+  UPDATE fpo_ea FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01' SET name = 'b';
+SELECT valid_at, name FROM fpo_ea ORDER BY valid_at;
+DROP TABLE fpo_ea;
+
+-- RLS USING visibility: FOR PORTION OF only sees and splits rows the USING
+-- policy makes visible; rows hidden by USING are left untouched.  Runs as a
+-- non-superuser role, since superusers bypass RLS.  The leftovers keep the
+-- tenant column, so they satisfy the policy's implied WITH CHECK.
+CREATE ROLE regress_fpo_rls_using;
+CREATE TABLE fpo_rls_using (id int, valid_at int4range, tenant name, name text);
+INSERT INTO fpo_rls_using VALUES
+  (1, '[1,100)', 'regress_fpo_rls_using', 'a'),
+  (2, '[1,100)', 'other', 'b');
+ALTER TABLE fpo_rls_using ENABLE ROW LEVEL SECURITY;
+CREATE POLICY fpo_rls_using_pol ON fpo_rls_using USING (tenant = current_user);
+GRANT SELECT, INSERT, UPDATE ON fpo_rls_using TO regress_fpo_rls_using;
+SET ROLE regress_fpo_rls_using;
+-- Only the row whose tenant = current_user is visible, so only it is split:
+UPDATE fpo_rls_using FOR PORTION OF valid_at FROM 40 TO 60 SET name = 'a2';
+SELECT id, valid_at, tenant, name FROM fpo_rls_using ORDER BY id, valid_at;
+RESET ROLE;
+-- As the RLS-bypassing owner: the 'other' row was never seen or touched:
+SELECT id, valid_at, tenant, name FROM fpo_rls_using ORDER BY id, valid_at;
+DROP TABLE fpo_rls_using;
+DROP ROLE regress_fpo_rls_using;
+
 RESET datestyle;
