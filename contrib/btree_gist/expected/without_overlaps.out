@@ -24,9 +24,9 @@ SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rn
 (1 row)
 
 SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng_pk';
-                                pg_get_indexdef                                
--------------------------------------------------------------------------------
- CREATE UNIQUE INDEX temporal_rng_pk ON temporal_rng USING gist (id, valid_at)
+                                        pg_get_indexdef                                         
+------------------------------------------------------------------------------------------------
+ CREATE UNIQUE INDEX temporal_rng_pk ON temporal_rng USING gist (id, valid_at WITHOUT OVERLAPS)
 (1 row)
 
 INSERT INTO temporal_rng VALUES

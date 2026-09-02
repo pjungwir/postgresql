@@ -1212,6 +1212,33 @@ my %tests = (
 		},
 	},
 
+	# A constraint adopted from an index built by hand has to dump exactly
+	# like one that built its own index, or dump and reload would not
+	# reproduce it.  That is what lets ADD CONSTRAINT ... USING INDEX accept
+	# such an index in the first place.
+	'CONSTRAINT PRIMARY KEY / WITHOUT OVERLAPS USING INDEX' => {
+		create_sql => 'CREATE TABLE dump_test.test_table_tpkidx (
+							col1 int4range NOT NULL,
+							col2 tstzrange NOT NULL);
+					   CREATE UNIQUE INDEX test_table_tpkidx_pkey
+						ON dump_test.test_table_tpkidx
+						USING gist (col1, col2 WITHOUT OVERLAPS);
+					   ALTER TABLE dump_test.test_table_tpkidx
+						ADD CONSTRAINT test_table_tpkidx_pkey
+						PRIMARY KEY USING INDEX test_table_tpkidx_pkey;',
+		regexp => qr/^
+			\QALTER TABLE ONLY dump_test.test_table_tpkidx\E \n^\s+
+			\QADD CONSTRAINT test_table_tpkidx_pkey PRIMARY KEY (col1, col2 WITHOUT OVERLAPS);\E
+			/xm,
+		like => {
+			%full_runs, %dump_test_schema_runs, section_post_data => 1,
+		},
+		unlike => {
+			exclude_dump_test_schema => 1,
+			only_dump_measurement => 1,
+		},
+	},
+
 	'ALTER TABLE (partitioned) ADD CONSTRAINT ... FOREIGN KEY' => {
 		create_order => 4,
 		create_sql => 'CREATE TABLE dump_test.test_table_fk (

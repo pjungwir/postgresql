@@ -2514,12 +2514,33 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 					 parser_errposition(cxt->pstate, constraint->location)));
 
 		/*
-		 * Insist on it being a btree.  We must have an index that exactly
-		 * matches what you'd get from plain ADD CONSTRAINT syntax, else dump
-		 * and reload will produce a different index (breaking pg_upgrade in
-		 * particular).
+		 * An index whose last column is marked WITHOUT OVERLAPS makes a
+		 * WITHOUT OVERLAPS constraint.  There is nowhere in the USING INDEX
+		 * syntax to say so, and no reason to make the user repeat it, so take
+		 * it from the index.
 		 */
-		if (index_rel->rd_rel->relam != get_index_am_oid(DEFAULT_INDEX_TYPE, false))
+		if (RelationIndexHasWithoutOverlaps(index_rel))
+			constraint->without_overlaps = true;
+
+		/*
+		 * Insist on the access method plain ADD CONSTRAINT would use: btree,
+		 * or GiST for a WITHOUT OVERLAPS constraint (see below).  We must
+		 * have an index that exactly matches what you'd get from plain ADD
+		 * CONSTRAINT syntax, else dump and reload will produce a different
+		 * index (breaking pg_upgrade in particular) -- which is also why the
+		 * per-column checks below insist on default everything.  A plain
+		 * unique GiST index, say, would come back from a dump as a btree.
+		 */
+		if (constraint->without_overlaps)
+		{
+			if (index_rel->rd_rel->relam != GIST_AM_OID)
+				ereport(ERROR,
+						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+						 errmsg("index \"%s\" is not a GiST index", index_name),
+						 errdetail("Cannot create a primary key or unique constraint WITHOUT OVERLAPS using such an index."),
+						 parser_errposition(cxt->pstate, constraint->location)));
+		}
+		else if (index_rel->rd_rel->relam != get_index_am_oid(DEFAULT_INDEX_TYPE, false))
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 					 errmsg("index \"%s\" is not a btree", index_name),
@@ -2565,12 +2586,22 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 				Datum		attoptions =
 					get_attoptions(RelationGetRelid(index_rel), i + 1);
 
+				int16		indoption = index_rel->rd_indoption[i];
+
+				/*
+				 * WITHOUT OVERLAPS on the last key column is not a deviation
+				 * from default behavior; it is part of the constraint we are
+				 * about to create.
+				 */
+				if (constraint->without_overlaps && i == index_form->indnkeyatts - 1)
+					indoption &= ~INDOPTION_WITHOUT_OVERLAPS;
+
 				defopclass = GetDefaultOpClass(attform->atttypid,
 											   index_rel->rd_rel->relam);
 				if (indclass->values[i] != defopclass ||
 					attform->attcollation != index_rel->rd_indcollation[i] ||
 					attoptions != (Datum) 0 ||
-					index_rel->rd_indoption[i] != 0)
+					indoption != 0)
 					ereport(ERROR,
 							(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 							 errmsg("index \"%s\" column number %d does not have default sorting behavior", index_name, i + 1),

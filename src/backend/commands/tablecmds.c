@@ -9823,6 +9823,41 @@ ATExecAddIndexConstraint(AlteredTableInfo *tab, Relation rel,
 		elog(ERROR, "index \"%s\" is not unique", indexName);
 
 	/*
+	 * A WITHOUT OVERLAPS index makes a WITHOUT OVERLAPS constraint, whose
+	 * pg_constraint entry records the operators that make two rows conflict.
+	 * BuildIndexInfo() only fills those in for an index that already backs an
+	 * exclusion constraint, so work them out here if it doesn't.
+	 */
+	if (indexInfo->ii_WithoutOverlaps && indexInfo->ii_ExclusionOps == NULL)
+	{
+		int			nkeyatts = indexInfo->ii_NumIndexKeyAttrs;
+		Datum		indclassDatum;
+		oidvector  *indclass;
+
+		indclassDatum = SysCacheGetAttrNotNull(INDEXRELID,
+											   indexRel->rd_indextuple,
+											   Anum_pg_index_indclass);
+		indclass = (oidvector *) DatumGetPointer(indclassDatum);
+
+		indexInfo->ii_ExclusionOps = palloc_array(Oid, nkeyatts);
+		indexInfo->ii_ExclusionProcs = palloc_array(Oid, nkeyatts);
+		indexInfo->ii_ExclusionStrats = palloc_array(uint16, nkeyatts);
+
+		for (int i = 0; i < nkeyatts; i++)
+		{
+			CompareType cmptype = (i == nkeyatts - 1) ? COMPARE_OVERLAP : COMPARE_EQ;
+			Oid			opid;
+			StrategyNumber strat;
+
+			GetOperatorFromCompareType(indclass->values[i], InvalidOid,
+									   cmptype, &opid, &strat);
+			indexInfo->ii_ExclusionOps[i] = opid;
+			indexInfo->ii_ExclusionProcs[i] = get_opcode(opid);
+			indexInfo->ii_ExclusionStrats[i] = strat;
+		}
+	}
+
+	/*
 	 * Determine name to assign to constraint.  We require a constraint to
 	 * have the same name as the underlying index; therefore, use the index's
 	 * existing name as the default constraint name, and if the user
@@ -9855,7 +9890,8 @@ ATExecAddIndexConstraint(AlteredTableInfo *tab, Relation rel,
 		INDEX_CONSTR_CREATE_REMOVE_OLD_DEPS |
 		(stmt->initdeferred ? INDEX_CONSTR_CREATE_INIT_DEFERRED : 0) |
 		(stmt->deferrable ? INDEX_CONSTR_CREATE_DEFERRABLE : 0) |
-		(stmt->primary ? INDEX_CONSTR_CREATE_MARK_AS_PRIMARY : 0);
+		(stmt->primary ? INDEX_CONSTR_CREATE_MARK_AS_PRIMARY : 0) |
+		(indexInfo->ii_WithoutOverlaps ? INDEX_CONSTR_CREATE_WITHOUT_OVERLAPS : 0);
 
 	address = index_constraint_create(rel,
 									  index_oid,

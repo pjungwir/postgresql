@@ -2370,8 +2370,13 @@ ComputeIndexAttrs(ParseState *pstate,
 			indexInfo->ii_WithoutOverlaps = true;
 		}
 
-		/* Record the overlaps column on the index. */
-		if (attribute->without_overlaps)
+		/*
+		 * Record the overlaps column on the index, however we were told about
+		 * it, so that an index built by hand and then made into a constraint
+		 * comes out identical to one the constraint built for itself.
+		 */
+		if (attribute->without_overlaps ||
+			(iswithoutoverlaps && attn == nkeycols - 1))
 			colOptions[attn] |= INDOPTION_WITHOUT_OVERLAPS;
 
 		/* Set up the per-column opclass options (attoptions field). */

@@ -2079,7 +2079,8 @@ index_constraint_create(Relation heapRelation,
 	}
 
 	/*
-	 * If needed, mark the index as primary and/or deferred in pg_index.
+	 * If needed, mark the index as primary, deferred and/or an exclusion
+	 * constraint's index in pg_index.
 	 *
 	 * Note: When making an existing index into a constraint, caller must have
 	 * a table lock that prevents concurrent table updates; otherwise, there
@@ -2087,7 +2088,7 @@ index_constraint_create(Relation heapRelation,
 	 * index at all.
 	 */
 	if ((constr_flags & INDEX_CONSTR_CREATE_UPDATE_INDEX) &&
-		(mark_as_primary || deferrable))
+		(mark_as_primary || deferrable || is_without_overlaps))
 	{
 		Relation	pg_index;
 		HeapTuple	indexTuple;
@@ -2113,6 +2114,18 @@ index_constraint_create(Relation heapRelation,
 		if (deferrable && indexForm->indimmediate)
 		{
 			indexForm->indimmediate = false;
+			dirty = true;
+		}
+
+		/*
+		 * A WITHOUT OVERLAPS constraint is an exclusion constraint, whatever
+		 * syntax made it.  Record that on the index too, so that an index
+		 * built by hand and then made into a constraint ends up looking
+		 * exactly like one the constraint created for itself.
+		 */
+		if (is_without_overlaps && !indexForm->indisexclusion)
+		{
+			indexForm->indisexclusion = true;
 			dirty = true;
 		}
 

@@ -55,9 +55,9 @@ SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rn
 (1 row)
 
 SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng_pk';
-                                pg_get_indexdef                                
--------------------------------------------------------------------------------
- CREATE UNIQUE INDEX temporal_rng_pk ON temporal_rng USING gist (id, valid_at)
+                                        pg_get_indexdef                                         
+------------------------------------------------------------------------------------------------
+ CREATE UNIQUE INDEX temporal_rng_pk ON temporal_rng USING gist (id, valid_at WITHOUT OVERLAPS)
 (1 row)
 
 -- PK from LIKE:
@@ -151,9 +151,9 @@ SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rn
 (1 row)
 
 SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng2_pk';
-                                    pg_get_indexdef                                    
----------------------------------------------------------------------------------------
- CREATE UNIQUE INDEX temporal_rng2_pk ON temporal_rng2 USING gist (id1, id2, valid_at)
+                                            pg_get_indexdef                                             
+--------------------------------------------------------------------------------------------------------
+ CREATE UNIQUE INDEX temporal_rng2_pk ON temporal_rng2 USING gist (id1, id2, valid_at WITHOUT OVERLAPS)
 (1 row)
 
 -- PK with a custom range type:
@@ -188,9 +188,9 @@ SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_ml
 (1 row)
 
 SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_mltrng_pk';
-                                   pg_get_indexdef                                   
--------------------------------------------------------------------------------------
- CREATE UNIQUE INDEX temporal_mltrng_pk ON temporal_mltrng USING gist (id, valid_at)
+                                           pg_get_indexdef                                            
+------------------------------------------------------------------------------------------------------
+ CREATE UNIQUE INDEX temporal_mltrng_pk ON temporal_mltrng USING gist (id, valid_at WITHOUT OVERLAPS)
 (1 row)
 
 -- PK with two columns plus a multirange:
@@ -217,9 +217,9 @@ SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_ml
 (1 row)
 
 SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_mltrng2_pk';
-                                       pg_get_indexdef                                       
----------------------------------------------------------------------------------------------
- CREATE UNIQUE INDEX temporal_mltrng2_pk ON temporal_mltrng2 USING gist (id1, id2, valid_at)
+                                               pg_get_indexdef                                                
+--------------------------------------------------------------------------------------------------------------
+ CREATE UNIQUE INDEX temporal_mltrng2_pk ON temporal_mltrng2 USING gist (id1, id2, valid_at WITHOUT OVERLAPS)
 (1 row)
 
 -- UNIQUE with no columns just WITHOUT OVERLAPS:
@@ -267,9 +267,9 @@ SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rn
 (1 row)
 
 SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng3_uq';
-                                 pg_get_indexdef                                 
----------------------------------------------------------------------------------
- CREATE UNIQUE INDEX temporal_rng3_uq ON temporal_rng3 USING gist (id, valid_at)
+                                         pg_get_indexdef                                          
+--------------------------------------------------------------------------------------------------
+ CREATE UNIQUE INDEX temporal_rng3_uq ON temporal_rng3 USING gist (id, valid_at WITHOUT OVERLAPS)
 (1 row)
 
 DROP TABLE temporal_rng3;
@@ -297,9 +297,9 @@ SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_rn
 (1 row)
 
 SELECT pg_get_indexdef(conindid, 0, true) FROM pg_constraint WHERE conname = 'temporal_rng3_uq';
-                                    pg_get_indexdef                                    
----------------------------------------------------------------------------------------
- CREATE UNIQUE INDEX temporal_rng3_uq ON temporal_rng3 USING gist (id1, id2, valid_at)
+                                            pg_get_indexdef                                             
+--------------------------------------------------------------------------------------------------------
+ CREATE UNIQUE INDEX temporal_rng3_uq ON temporal_rng3 USING gist (id1, id2, valid_at WITHOUT OVERLAPS)
 (1 row)
 
 DROP TABLE temporal_rng3;
@@ -568,7 +568,7 @@ CREATE TABLE temporal_rng (
 ALTER TABLE temporal_rng
   ADD CONSTRAINT temporal_rng_pk
   PRIMARY KEY (id, valid_at WITHOUT OVERLAPS);
--- PK with USING INDEX (not possible):
+-- PK with USING INDEX, non-unique index (not possible):
 CREATE TABLE temporal3 (
   id int4range,
   valid_at daterange
@@ -582,7 +582,7 @@ LINE 2:   ADD CONSTRAINT temporal3_pk
               ^
 DETAIL:  Cannot create a primary key or unique constraint using such an index.
 DROP TABLE temporal3;
--- UNIQUE with USING INDEX (not possible):
+-- UNIQUE with USING INDEX, non-unique index (not possible):
 CREATE TABLE temporal3 (
   id int4range,
   valid_at daterange
@@ -606,6 +606,81 @@ ALTER TABLE temporal3
   ADD CONSTRAINT temporal3_uq
   UNIQUE USING INDEX idx_temporal3_uq;
 NOTICE:  ALTER TABLE / ADD CONSTRAINT USING INDEX will rename index "idx_temporal3_uq" to "temporal3_uq"
+DROP TABLE temporal3;
+-- PK with USING INDEX, from a WITHOUT OVERLAPS index:
+-- this is the point of the syntax -- build the index first, maybe
+-- concurrently, then attach the constraint under a short lock.
+CREATE TABLE temporal3 (
+  id int4range NOT NULL,
+  valid_at daterange NOT NULL
+);
+CREATE UNIQUE INDEX idx_temporal3_uq ON temporal3
+  USING gist (id, valid_at WITHOUT OVERLAPS);
+ALTER TABLE temporal3
+  ADD CONSTRAINT temporal3_pk
+  PRIMARY KEY USING INDEX idx_temporal3_uq;
+NOTICE:  ALTER TABLE / ADD CONSTRAINT USING INDEX will rename index "idx_temporal3_uq" to "temporal3_pk"
+\d temporal3
+               Table "public.temporal3"
+  Column  |   Type    | Collation | Nullable | Default 
+----------+-----------+-----------+----------+---------
+ id       | int4range |           | not null | 
+ valid_at | daterange |           | not null | 
+Indexes:
+    "temporal3_pk" PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal3_pk';
+            pg_get_constraintdef             
+---------------------------------------------
+ PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+(1 row)
+
+-- the index looks just like one the constraint would have built for itself:
+SELECT indisunique, indisexclusion, indisprimary, indoption
+  FROM pg_index WHERE indexrelid = 'temporal3_pk'::regclass;
+ indisunique | indisexclusion | indisprimary | indoption 
+-------------+----------------+--------------+-----------
+ t           | t              | t            | 0 4
+(1 row)
+
+-- and the constraint is enforced:
+INSERT INTO temporal3 VALUES ('[1,2)', daterange('2018-01-01', '2018-06-01'));
+INSERT INTO temporal3 VALUES ('[1,2)', daterange('2018-03-01', '2018-09-01'));
+ERROR:  conflicting key value violates exclusion constraint "temporal3_pk"
+DETAIL:  Key (id, valid_at)=([1,2), [2018-03-01,2018-09-01)) conflicts with existing key (id, valid_at)=([1,2), [2018-01-01,2018-06-01)).
+INSERT INTO temporal3 VALUES ('[1,2)', daterange('2018-06-01', '2018-09-01'));
+DROP TABLE temporal3;
+-- UNIQUE with USING INDEX, from a WITHOUT OVERLAPS index:
+CREATE TABLE temporal3 (
+  id int4range,
+  valid_at daterange
+);
+CREATE UNIQUE INDEX idx_temporal3_uq ON temporal3
+  USING gist (id, valid_at WITHOUT OVERLAPS);
+ALTER TABLE temporal3
+  ADD CONSTRAINT temporal3_uq
+  UNIQUE USING INDEX idx_temporal3_uq;
+NOTICE:  ALTER TABLE / ADD CONSTRAINT USING INDEX will rename index "idx_temporal3_uq" to "temporal3_uq"
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal3_uq';
+          pg_get_constraintdef          
+----------------------------------------
+ UNIQUE (id, valid_at WITHOUT OVERLAPS)
+(1 row)
+
+DROP TABLE temporal3;
+-- UNIQUE with USING INDEX, plain unique GiST index (not possible): plain
+-- ADD UNIQUE would build a btree, so a dump would turn this into one:
+CREATE TABLE temporal3 (
+  id int4range,
+  valid_at daterange
+);
+CREATE UNIQUE INDEX idx_temporal3_uq ON temporal3 USING gist (id);
+ALTER TABLE temporal3
+  ADD CONSTRAINT temporal3_uq
+  UNIQUE USING INDEX idx_temporal3_uq;
+ERROR:  index "idx_temporal3_uq" is not a btree
+LINE 2:   ADD CONSTRAINT temporal3_uq
+              ^
 DROP TABLE temporal3;
 -- Add range column and the PK at the same time
 CREATE TABLE temporal3 (
