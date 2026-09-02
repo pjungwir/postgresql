@@ -110,66 +110,24 @@ gistkillitems(IndexScanDesc scan)
 }
 
 /*
- * gistindex_keytest() -- does this index tuple satisfy the scan key(s)?
+ * gistindex_qualtest() -- does this index tuple satisfy the given quals?
  *
- * The index tuple might represent either a heap tuple or a lower index page,
- * depending on whether the containing page is a leaf page or not.
+ * This is the part of gistindex_keytest() that applies the search keys, split
+ * out so that gistcheckunique() can test index tuples against keys of its own
+ * without a scan.  key/keySize are the search keys, each calling the
+ * opclass's Consistent method.  The caller must already have dealt with
+ * invalid (pre-9.1) tuples.
  *
- * On success return for a heap tuple, *recheck_p is set to indicate whether
- * the quals need to be rechecked.  We recheck if any of the consistent()
- * functions request it.  recheck is not interesting when examining a non-leaf
- * entry, since we must visit the lower index page if there's any doubt.
- * Similarly, *recheck_distances_p is set to indicate whether the distances
- * need to be rechecked, and it is also ignored for non-leaf entries.
- *
- * If we are doing an ordered scan, so->distances[] is filled with distance
- * data from the distance() functions before returning success.
- *
- * We must decompress the key in the IndexTuple before passing it to the
- * sk_funcs (which actually are the opclass Consistent or Distance methods).
- *
- * Note that this function is always invoked in a short-lived memory context,
- * so we don't need to worry about cleaning up allocated memory, either here
- * or in the implementation of any Consistent or Distance methods.
+ * *recheck_p is set if any Consistent method said its answer was lossy.  It
+ * is not interesting for a non-leaf entry; see gistindex_keytest().
  */
-static bool
-gistindex_keytest(IndexScanDesc scan,
-				  IndexTuple tuple,
-				  Page page,
-				  OffsetNumber offset,
-				  bool *recheck_p,
-				  bool *recheck_distances_p)
+bool
+gistindex_qualtest(GISTSTATE *giststate, Relation r, ScanKey key, int keySize,
+				   IndexTuple tuple, Page page, OffsetNumber offset,
+				   bool *recheck_p)
 {
-	GISTScanOpaque so = (GISTScanOpaque) scan->opaque;
-	GISTSTATE  *giststate = so->giststate;
-	ScanKey		key = scan->keyData;
-	int			keySize = scan->numberOfKeys;
-	IndexOrderByDistance *distance_p;
-	Relation	r = scan->indexRelation;
-
 	*recheck_p = false;
-	*recheck_distances_p = false;
 
-	/*
-	 * If it's a leftover invalid tuple from pre-9.1, treat it as a match with
-	 * minimum possible distances.  This means we'll always follow it to the
-	 * referenced page.
-	 */
-	if (GistTupleIsInvalid(tuple))
-	{
-		int			i;
-
-		if (GistPageIsLeaf(page))	/* shouldn't happen */
-			elog(ERROR, "invalid GiST tuple found on leaf page");
-		for (i = 0; i < scan->numberOfOrderBys; i++)
-		{
-			so->distances[i].value = -get_float8_infinity();
-			so->distances[i].isnull = false;
-		}
-		return true;
-	}
-
-	/* Check whether it matches according to the Consistent functions */
 	while (keySize > 0)
 	{
 		Datum		datum;
@@ -245,6 +203,74 @@ gistindex_keytest(IndexScanDesc scan,
 		key++;
 		keySize--;
 	}
+
+	return true;
+}
+
+/*
+ * gistindex_keytest() -- does this index tuple satisfy the scan key(s)?
+ *
+ * The index tuple might represent either a heap tuple or a lower index page,
+ * depending on whether the containing page is a leaf page or not.
+ *
+ * On success return for a heap tuple, *recheck_p is set to indicate whether
+ * the quals need to be rechecked.  We recheck if any of the consistent()
+ * functions request it.  recheck is not interesting when examining a non-leaf
+ * entry, since we must visit the lower index page if there's any doubt.
+ * Similarly, *recheck_distances_p is set to indicate whether the distances
+ * need to be rechecked, and it is also ignored for non-leaf entries.
+ *
+ * If we are doing an ordered scan, so->distances[] is filled with distance
+ * data from the distance() functions before returning success.
+ *
+ * We must decompress the key in the IndexTuple before passing it to the
+ * sk_funcs (which actually are the opclass Consistent or Distance methods).
+ *
+ * Note that this function is always invoked in a short-lived memory context,
+ * so we don't need to worry about cleaning up allocated memory, either here
+ * or in the implementation of any Consistent or Distance methods.
+ */
+static bool
+gistindex_keytest(IndexScanDesc scan,
+				  IndexTuple tuple,
+				  Page page,
+				  OffsetNumber offset,
+				  bool *recheck_p,
+				  bool *recheck_distances_p)
+{
+	GISTScanOpaque so = (GISTScanOpaque) scan->opaque;
+	GISTSTATE  *giststate = so->giststate;
+	ScanKey		key = scan->keyData;
+	int			keySize = scan->numberOfKeys;
+	IndexOrderByDistance *distance_p;
+	Relation	r = scan->indexRelation;
+
+	*recheck_p = false;
+	*recheck_distances_p = false;
+
+	/*
+	 * If it's a leftover invalid tuple from pre-9.1, treat it as a match with
+	 * minimum possible distances.  This means we'll always follow it to the
+	 * referenced page.
+	 */
+	if (GistTupleIsInvalid(tuple))
+	{
+		int			i;
+
+		if (GistPageIsLeaf(page))	/* shouldn't happen */
+			elog(ERROR, "invalid GiST tuple found on leaf page");
+		for (i = 0; i < scan->numberOfOrderBys; i++)
+		{
+			so->distances[i].value = -get_float8_infinity();
+			so->distances[i].isnull = false;
+		}
+		return true;
+	}
+
+	/* Check whether it matches according to the Consistent functions */
+	if (!gistindex_qualtest(giststate, r, key, keySize, tuple, page, offset,
+							recheck_p))
+		return false;
 
 	/* OK, it passes --- now let's compute the distances */
 	key = scan->orderByData;
@@ -358,16 +384,8 @@ gistScanPage(IndexScanDesc scan, GISTSearchItem *pageItem,
 	page = BufferGetPage(buffer);
 	opaque = GistPageGetOpaque(page);
 
-	/*
-	 * Check if we need to follow the rightlink. We need to follow it if the
-	 * page was concurrently split since we visited the parent (in which case
-	 * parentlsn < nsn), or if the system crashed after a page split but
-	 * before the downlink was inserted into the parent.
-	 */
-	if (XLogRecPtrIsValid(pageItem->data.parentlsn) &&
-		(GistFollowRight(page) ||
-		 pageItem->data.parentlsn < GistPageGetNSN(page)) &&
-		opaque->rightlink != InvalidBlockNumber /* sanity check */ )
+	/* Check if we need to follow the rightlink. */
+	if (gistPageNeedsFollowRight(page, pageItem->data.parentlsn))
 	{
 		/* There was a page split, follow right link to add pages */
 		GISTSearchItem *item;

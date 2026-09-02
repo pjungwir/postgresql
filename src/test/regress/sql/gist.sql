@@ -223,6 +223,174 @@ drop table gist_prune_tbl;
 create index gist_tbl_box_index_forcing_buffering on gist_tbl using gist (p)
   with (buffering=on, fillfactor=50);
 
+-- Unique indexes need an equality operator in the opclass's operator family.
+-- tsvector_ops has only @@, so there is nothing to translate COMPARE_EQ to:
+create table gist_tsvtbl (t tsvector);
+create unique index on gist_tsvtbl using gist (t); -- fail
+drop table gist_tsvtbl;
+
+-- Unique indexes, no compress function:
+create table gist_rngtbl (id int4range);
+insert into gist_rngtbl values ('[1,2)'), ('[2,3)'), (NULL), (NULL);
+create unique index uq_gist_rngtbl on gist_rngtbl using gist (id);
+insert into gist_rngtbl values ('[3,4)'), ('[4,5)'); -- okay
+\d gist_rngtbl
+select pg_get_indexdef('uq_gist_rngtbl'::regclass);
+-- enforced on build
+drop index uq_gist_rngtbl;
+insert into gist_rngtbl values ('[1,2)');
+create unique index uq_gist_rngtbl on gist_rngtbl using gist (id); -- fail
+-- expressions:
+delete from gist_rngtbl where id is null;
+create unique index uq_gist_rngtbl_expr on gist_rngtbl using gist (
+  int4range(lower(id) + 1, upper(id) + 1)
+); -- fail
+delete from gist_rngtbl where id = '[1,2)';
+create unique index uq_gist_rngtbl_expr on gist_rngtbl using gist (
+  int4range(lower(id) + 1, upper(id) + 1)
+); -- now okay
+truncate gist_rngtbl;
+drop index uq_gist_rngtbl_expr;
+-- enforced on insert
+create unique index uq_gist_rngtbl on gist_rngtbl using gist (id);
+insert into gist_rngtbl values ('[1,2)'), ('[2,3)'); -- okay
+insert into gist_rngtbl values (NULL), (NULL); -- okay
+insert into gist_rngtbl values ('[1,2)'); -- fail
+drop table gist_rngtbl;
+
+-- Unique indexes, NULLS NOT DISTINCT:
+create table gist_rngtbl (id int4range);
+-- enforced on build
+insert into gist_rngtbl values (NULL), (NULL);
+create unique index uq_gist_rngtbl on gist_rngtbl using gist (id) nulls not distinct; -- fail
+-- enforced on insert
+delete from gist_rngtbl;
+create unique index uq_gist_rngtbl on gist_rngtbl using gist (id) nulls not distinct; -- okay
+insert into gist_rngtbl values (NULL); -- okay
+insert into gist_rngtbl values (NULL); -- fail
+drop table gist_rngtbl;
+
+-- Unique indexes, compress function and lossy keys (e.g. multiranges):
+create table gist_mltrngtbl (id int4multirange);
+insert into gist_mltrngtbl values ('{[1,10)}'), ('{[20,30)}');
+create unique index uq_gist_mltrngtbl on gist_mltrngtbl using gist (id);
+insert into gist_mltrngtbl values ('{[3,4)}'), ('{[4,5)}'); -- okay
+\d gist_mltrngtbl
+select pg_get_indexdef('uq_gist_mltrngtbl'::regclass);
+-- enforced on build
+drop index uq_gist_mltrngtbl;
+insert into gist_mltrngtbl values ('{[1,10)}');
+create unique index uq_gist_mltrngtbl on gist_mltrngtbl using gist (id); -- fail
+-- expressions:
+create unique index uq_gist_mltrngtbl_expr on gist_mltrngtbl using gist (
+  (id + '{[100,200)}')
+); -- fail
+delete from gist_mltrngtbl where id = '{[1,10)}';
+create unique index uq_gist_mltrngtbl_expr on gist_mltrngtbl using gist (
+  (id + '{[100,200)}')
+); -- now okay
+truncate gist_mltrngtbl;
+drop index uq_gist_mltrngtbl_expr;
+-- enforced on insert
+create unique index uq_gist_mltrngtbl on gist_mltrngtbl using gist (id);
+insert into gist_mltrngtbl values ('{[1,10)}'), ('{[20,30)}'); -- okay
+-- okay, even though compresses to [1,10):
+insert into gist_mltrngtbl values ('{[1,3), [8,10)}');
+insert into gist_mltrngtbl values ('{[1,10)}'); -- fails, exact duplicate
+drop table gist_mltrngtbl;
+
+-- Duplicates can be in any leaf page whose ancestors' keys are consistent with
+-- the new value, not only the page an insert descends to, so make sure we look
+-- at the whole tree.  These keys overlap enough that the index has several
+-- pages with overlapping downlinks.
+create table gist_uniqtbl (id int4range);
+insert into gist_uniqtbl
+  select int4range((i * 7919) % 3000, (i * 7919) % 3000 + 1 + i % 13)
+  from generate_series(1, 3000) i;
+create unique index uq_gist_uniqtbl on gist_uniqtbl using gist (id);
+do $$
+declare
+  r record;
+  missed int := 0;
+begin
+  for r in select id from gist_uniqtbl loop
+    begin
+      insert into gist_uniqtbl values (r.id);
+      missed := missed + 1;
+    exception when unique_violation then
+      null;
+    end;
+  end loop;
+  raise notice 'missed % duplicates', missed;
+end
+$$;
+drop table gist_uniqtbl;
+
+-- A buffered build is validated afterwards like any other:
+create table gist_buftbl (id int4range);
+insert into gist_buftbl select int4range(i, i + 1) from generate_series(1, 2000) i;
+insert into gist_buftbl values ('[1000,1001)');
+create unique index uq_gist_buftbl on gist_buftbl using gist (id)
+  with (buffering = on); -- fail
+delete from gist_buftbl where ctid = (select max(ctid) from gist_buftbl);
+create unique index uq_gist_buftbl on gist_buftbl using gist (id)
+  with (buffering = on); -- okay
+drop table gist_buftbl;
+
+-- Unique indexes as ON CONFLICT arbiters:
+create table gist_rngtbl (id int4range, n int);
+create unique index uq_gist_rngtbl on gist_rngtbl using gist (id);
+insert into gist_rngtbl values ('[1,2)', 1);
+insert into gist_rngtbl values ('[1,2)', 2) on conflict do nothing;
+insert into gist_rngtbl values ('[1,2)', 3)
+  on conflict (id) do update set n = excluded.n;
+insert into gist_rngtbl values ('[2,3)', 4)
+  on conflict (id) do update set n = excluded.n;
+select * from gist_rngtbl order by id;
+drop table gist_rngtbl;
+
+-- Multi-column unique indexes, NULLS NOT DISTINCT, with some columns null:
+create table gist_mctbl (a int4range, b int4range);
+create unique index uq_gist_mctbl on gist_mctbl using gist (a, b) nulls not distinct;
+insert into gist_mctbl values
+  ('[1,2)', NULL), (NULL, '[1,2)'), (NULL, NULL), ('[1,2)', '[1,2)'); -- okay
+insert into gist_mctbl values ('[1,2)', NULL); -- fail
+insert into gist_mctbl values (NULL, '[1,2)'); -- fail
+insert into gist_mctbl values (NULL, NULL); -- fail
+insert into gist_mctbl values ('[1,2)', '[1,2)'); -- fail
+insert into gist_mctbl values ('[1,2)', '[2,3)'); -- okay
+drop table gist_mctbl;
+
+-- Partial unique indexes:
+create table gist_parttbl (id int4range, active bool);
+create unique index uq_gist_parttbl on gist_parttbl using gist (id) where active;
+insert into gist_parttbl values ('[1,2)', true), ('[1,2)', false), ('[1,2)', false); -- okay
+insert into gist_parttbl values ('[1,2)', true); -- fail
+-- enforced on build, only for the rows the index covers
+drop index uq_gist_parttbl;
+create unique index uq_gist_parttbl on gist_parttbl using gist (id) where active; -- okay
+create unique index uq_gist_parttbl2 on gist_parttbl using gist (id) where not active; -- fail
+drop table gist_parttbl;
+
+-- Unique indexes with non-key attributes:
+create table gist_rngtbl (id int4range, name text);
+insert into gist_rngtbl values ('[1,2)', 'a'), ('[2,3)', 'b'), (NULL, 'c'), (NULL, 'd');
+create unique index uq_gist_rngtbl on gist_rngtbl using gist (id) include (name);
+insert into gist_rngtbl values ('[3,4)', 'e'), ('[4,5)', 'f'); -- okay
+\d gist_rngtbl
+select pg_get_indexdef('uq_gist_rngtbl'::regclass);
+-- enforced on build
+drop index uq_gist_rngtbl;
+insert into gist_rngtbl values ('[1,2)', 'g');
+create unique index uq_gist_rngtbl on gist_rngtbl using gist (id) include (name); -- fail
+truncate gist_rngtbl;
+-- enforced on insert
+create unique index uq_gist_rngtbl on gist_rngtbl using gist (id) include (name);
+insert into gist_rngtbl values ('[1,2)', 'a'), ('[2,3)', 'b'); -- okay
+insert into gist_rngtbl values (NULL, 'c'), (NULL, 'd'); -- okay
+insert into gist_rngtbl values ('[1,2)', 'g'); -- fail
+drop table gist_rngtbl;
+
 -- Clean up
 reset enable_seqscan;
 reset enable_bitmapscan;

@@ -44,6 +44,7 @@
 #include "storage/bufmgr.h"
 #include "storage/bulk_write.h"
 
+#include "utils/injection_point.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
 #include "utils/tuplesort.h"
@@ -108,6 +109,10 @@ typedef struct
 	BlockNumber pages_allocated;
 
 	BulkWriteState *bulkstate;
+
+	/* Must we validate uniqueness once built?  See gistBuildValidateUnique(). */
+	bool		checkunique;
+	IndexInfo  *indexInfo;
 } GISTBuildState;
 
 #define GIST_SORTED_BUILD_PAGE_NUM 4
@@ -142,6 +147,15 @@ static void gist_indexsortbuild_levelstate_flush(GISTBuildState *state,
 
 static void gistInitBuffering(GISTBuildState *buildstate);
 static int	calculatePagesPerBuffer(GISTBuildState *buildstate, int levelStep);
+static void gistBuildValidateUnique(Relation heap, Relation index,
+									IndexInfo *indexInfo,
+									GISTBuildState *buildstate);
+static void gistBuildValidateCallback(Relation index,
+									  ItemPointer tid,
+									  Datum *values,
+									  bool *isnull,
+									  bool tupleIsAlive,
+									  void *state);
 static void gistBuildCallback(Relation index,
 							  ItemPointer tid,
 							  Datum *values,
@@ -198,6 +212,19 @@ gistbuild(Relation heap, Relation index, IndexInfo *indexInfo)
 	buildstate.heaprel = heap;
 	buildstate.sortstate = NULL;
 	buildstate.giststate = initGISTstate(index);
+	buildstate.indexInfo = indexInfo;
+
+	/*
+	 * Do we have to validate uniqueness ourselves once the index is built?
+	 * Only if the index is unique and nothing else is going to do it for us:
+	 * an index backing an exclusion constraint gets a second pass over the
+	 * heap from index_build()'s IndexCheckExclusion(), and
+	 * gistneedsuniquecheck() tells us so.
+	 */
+	buildstate.checkunique = (indexInfo->ii_Unique &&
+							  gistneedsuniquecheck(index, indexInfo));
+	if (buildstate.checkunique)
+		initGISTstateExclude(buildstate.giststate, index);
 
 	/*
 	 * Create a temporary memory context that is reset once for each tuple
@@ -338,6 +365,18 @@ gistbuild(Relation heap, Relation index, IndexInfo *indexInfo)
 	}
 
 	/* okay, all heap tuples are indexed */
+
+	/*
+	 * If this is a unique index and nobody else is going to validate it, do
+	 * that now, with the index complete.  We could instead have checked each
+	 * tuple as it went in, but that rules out the sorted and buffered build
+	 * strategies -- and this way round is stronger anyway, since every row is
+	 * checked against the whole index rather than only against the rows that
+	 * happened to precede it.
+	 */
+	if (buildstate.checkunique)
+		gistBuildValidateUnique(heap, index, indexInfo, &buildstate);
+
 	MemoryContextSwitchTo(oldcxt);
 	MemoryContextDelete(buildstate.giststate->tempCxt);
 
@@ -813,6 +852,69 @@ calculatePagesPerBuffer(GISTBuildState *buildstate, int levelStep)
 	pagesPerBuffer = 2 * pow(avgIndexTuplesPerPage, levelStep);
 
 	return (int) rint(pagesPerBuffer);
+}
+
+/*
+ * Per-tuple callback for gistBuildValidateUnique().
+ */
+static void
+gistBuildValidateCallback(Relation index,
+						  ItemPointer tid,
+						  Datum *values,
+						  bool *isnull,
+						  bool tupleIsAlive,
+						  void *state)
+{
+	GISTBuildState *buildstate = (GISTBuildState *) state;
+	MemoryContext oldCtx;
+	IndexUniqueCheck checkUnique;
+
+	/*
+	 * A row that is no longer live (it can only be recently dead here) can't
+	 * be a duplicate.  If it conflicts with a live row, checking the live row
+	 * finds it and sees that it is dead, which is how nbtree's build treats
+	 * such rows too.
+	 */
+	if (!tupleIsAlive)
+		return;
+
+	/*
+	 * Ordinarily this row's entry is already in the index, since the build
+	 * scanned the same rows, and we are only asking whether anything else
+	 * conflicts with it -- UNIQUE_CHECK_EXISTING, which also complains if the
+	 * entry isn't there.  But each pass of a concurrent build takes a fresh
+	 * snapshot, so this pass can see rows committed since the build pass.
+	 * Those have no entry yet; validate_index() adds them later.  Check them
+	 * as ordinary candidates instead.
+	 */
+	checkUnique = buildstate->indexInfo->ii_Concurrent ?
+		UNIQUE_CHECK_YES : UNIQUE_CHECK_EXISTING;
+
+	oldCtx = MemoryContextSwitchTo(buildstate->giststate->tempCxt);
+
+	gistcheckunique(index, buildstate->giststate, buildstate->heaprel,
+					buildstate->indexInfo, tid, values, isnull,
+					checkUnique, true);
+
+	MemoryContextSwitchTo(oldCtx);
+	MemoryContextReset(buildstate->giststate->tempCxt);
+}
+
+/*
+ * Verify that a freshly built unique index really is unique.
+ *
+ * Walks the table a second time and asks the finished index whether anything
+ * conflicts with each row.  This is the same shape as IndexCheckExclusion(),
+ * and for the same reason: it lets the build itself run at full speed.
+ */
+static void
+gistBuildValidateUnique(Relation heap, Relation index, IndexInfo *indexInfo,
+						GISTBuildState *buildstate)
+{
+	INJECTION_POINT("gist-unique-before-validate", NULL);
+
+	table_index_build_scan(heap, index, indexInfo, true, false,
+						   gistBuildValidateCallback, buildstate, NULL);
 }
 
 /*

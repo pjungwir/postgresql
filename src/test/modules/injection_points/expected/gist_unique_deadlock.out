@@ -1,0 +1,42 @@
+Parsed test spec with 3 sessions
+
+starting permutation: attach ins1 ins2 wake result
+step attach: 
+    SELECT injection_points_attach('gist-unique-before-search', 'wait');
+
+injection_points_attach
+-----------------------
+                       
+(1 row)
+
+step ins1: INSERT INTO gist_deadlock VALUES ('[1,2)'); <waiting ...>
+step ins2: INSERT INTO gist_deadlock VALUES ('[1,2)'); <waiting ...>
+step wake: 
+    SELECT await('gist-unique-before-search', 2);
+    SELECT injection_points_detach('gist-unique-before-search');
+    SELECT wake_all('gist-unique-before-search');
+
+await
+-----
+     
+(1 row)
+
+injection_points_detach
+-----------------------
+                       
+(1 row)
+
+wake_all
+--------
+        
+(1 row)
+
+step ins1: <... completed>
+step ins2: <... completed>
+ERROR:  deadlock detected
+step result: SELECT * FROM gist_deadlock;
+id   
+-----
+[1,2)
+(1 row)
+

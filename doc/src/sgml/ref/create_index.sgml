@@ -345,6 +345,13 @@ CREATE [ UNIQUE ] INDEX [ CONCURRENTLY ] [ [ IF NOT EXISTS ] <replaceable class=
         distinct (not equal).  The default is that they are distinct, so that
         a unique index could contain multiple null values in a column.
        </para>
+       <para>
+        For a <acronym>GiST</acronym> index, <literal>NULLS NOT DISTINCT</literal>
+        makes inserting a null more expensive: a null key column does nothing to
+        narrow the uniqueness check's search of the index, because an internal
+        key says nothing about whether its subtree contains nulls.  See
+        <xref linkend="gist-unique"/>.
+       </para>
       </listitem>
      </varlistentry>
 

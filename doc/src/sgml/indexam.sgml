@@ -1196,7 +1196,7 @@ amtranslatecmptype (CompareType cmptype, Oid opfamily, Oid opcintype);
    using <firstterm>unique indexes</firstterm>, which are indexes that disallow
    multiple entries with identical keys.  An access method that supports this
    feature sets <structfield>amcanunique</structfield> true.
-   (At present, only b-tree supports it.)  Columns listed in the
+   (At present, only b-tree and GiST support it.)  Columns listed in the
    <literal>INCLUDE</literal> clause are not considered when enforcing
    uniqueness.
   </para>
@@ -1258,6 +1258,17 @@ amtranslatecmptype (CompareType cmptype, Oid opfamily, Oid opcintype);
    insert the new row's index entry.  What's more, there is no obvious way
    to avoid race conditions unless the conflict check is an integral part
    of insertion of the new index entry.
+  </para>
+
+  <para>
+   The conflict check does not have to happen before the insertion, though.
+   An access method whose conflicting entries need not share a page, so that
+   no single page lock can serialize two would-be inserters, may instead insert
+   the entry first and search afterwards, as exclusion constraints do; a search
+   that starts after the entry is in place is guaranteed to see any conflicting
+   entry that was already there.  This is what <acronym>GiST</acronym> does.
+   The cost is that two transactions inserting conflicting keys at the same
+   instant may each wait for the other and deadlock.
   </para>
 
   <para>

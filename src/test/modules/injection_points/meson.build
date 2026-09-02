@@ -44,6 +44,9 @@ tests += {
   'isolation': {
     'specs': [
       'basic',
+      'gist_unique_concurrently',
+      'gist_unique_deadlock',
+      'gist_unique_upsert',
       'inplace',
       'reindex_concurrently_deferred',
       'repack',

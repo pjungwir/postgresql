@@ -8,6 +8,7 @@ backend_sources += files(
   'gistproc.c',
   'gistscan.c',
   'gistsplit.c',
+  'gistunique.c',
   'gistutil.c',
   'gistvacuum.c',
   'gistvalidate.c',

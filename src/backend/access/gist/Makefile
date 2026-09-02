@@ -20,6 +20,7 @@ OBJS = \
 	gistproc.o \
 	gistscan.o \
 	gistsplit.o \
+	gistunique.o \
 	gistutil.o \
 	gistvacuum.o \
 	gistvalidate.o \

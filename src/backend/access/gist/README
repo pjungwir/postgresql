@@ -256,6 +256,37 @@ pageSplit(page, allkeys)
 	return newkeys
 
 
+Unique indexes
+--------------
+
+A GiST index can be declared UNIQUE.  Enforcing that is harder than it is in a
+B-tree, for two reasons.  First, the keys of the downlinks on an internal page
+may overlap, so a tuple equal to the one being inserted may be in any subtree
+whose downlink is consistent with the new key; the insertion descends only the
+single path of smallest penalty, so it doesn't necessarily pass the leaf page
+the duplicate is on.  Finding every duplicate means searching the whole tree,
+following every consistent downlink.  Second, and consequently, there is no
+single page whose lock could serialize two backends inserting the same key,
+the way a B-tree's leaf page lock does.
+
+So the tuple is inserted first and the tree searched afterwards, the same way
+exclusion constraints are enforced.  That ordering is what makes the check safe
+against concurrent inserters: whichever transaction inserts second starts its
+search after the first tuple is already in the tree, and a search finds every
+tuple that was present when it began.  Searching first and inserting afterwards
+would let both transactions see a tree without the other's tuple.  The 1997
+paper cited above instead does the search first and leaves a predicate lock on
+every node it visits; doing it in this order needs no extra locking.
+
+Like an exclusion constraint, this can leave dead tuples in the index, and two
+backends inserting conflicting keys at the same instant can deadlock instead of
+one of them reporting the violation.  To make that rare, the search does not
+stop at the first conflicting tuple whose transaction is still in progress: it
+keeps looking for one that has already committed, and only waits if the whole
+tree has been searched without finding one.
+
+See gistunique.c.
+
 
 Concurrency control
 -------------------

@@ -1,0 +1,70 @@
+Parsed test spec with 2 sessions
+
+starting permutation: cic ins_new wakeup noop1 check
+injection_points_attach
+-----------------------
+                       
+(1 row)
+
+step cic: CREATE UNIQUE INDEX CONCURRENTLY gist_cic_uq ON gist_cic USING gist (id); <waiting ...>
+step ins_new: INSERT INTO gist_cic VALUES ('[5,6)');
+step wakeup: 
+    SELECT injection_points_detach('gist-unique-before-validate');
+    SELECT injection_points_wakeup('gist-unique-before-validate');
+
+injection_points_detach
+-----------------------
+                       
+(1 row)
+
+injection_points_wakeup
+-----------------------
+                       
+(1 row)
+
+step cic: <... completed>
+step noop1: 
+step check: 
+    SELECT i.indisvalid, (SELECT count(*) FROM gist_cic) AS nrows
+    FROM pg_index i WHERE i.indexrelid = 'gist_cic_uq'::regclass;
+
+indisvalid|nrows
+----------+-----
+t         |    3
+(1 row)
+
+
+starting permutation: cic ins_dup wakeup noop1 check
+injection_points_attach
+-----------------------
+                       
+(1 row)
+
+step cic: CREATE UNIQUE INDEX CONCURRENTLY gist_cic_uq ON gist_cic USING gist (id); <waiting ...>
+step ins_dup: INSERT INTO gist_cic VALUES ('[1,2)');
+step wakeup: 
+    SELECT injection_points_detach('gist-unique-before-validate');
+    SELECT injection_points_wakeup('gist-unique-before-validate');
+
+injection_points_detach
+-----------------------
+                       
+(1 row)
+
+injection_points_wakeup
+-----------------------
+                       
+(1 row)
+
+step cic: <... completed>
+ERROR:  could not create unique index "gist_cic_uq"
+step noop1: 
+step check: 
+    SELECT i.indisvalid, (SELECT count(*) FROM gist_cic) AS nrows
+    FROM pg_index i WHERE i.indexrelid = 'gist_cic_uq'::regclass;
+
+indisvalid|nrows
+----------+-----
+f         |    3
+(1 row)
+

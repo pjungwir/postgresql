@@ -40,6 +40,49 @@
 
 </sect2>
 
+<sect2 id="gist-unique">
+ <title>Unique Indexes</title>
+
+ <para>
+  A <acronym>GiST</acronym> index can be declared <literal>UNIQUE</literal>.
+  Two rows conflict when, for every key column, the operator class's equality
+  operator says the two values are equal.  That operator is found the same way
+  the one for a <literal>WITHOUT OVERLAPS</literal> constraint is: the operator
+  family must provide a <function>translate_cmptype</function> support function
+  (see below) that maps <literal>COMPARE_EQ</literal> to one of its strategies,
+  for example <function>gist_translate_cmptype_common</function>.  Creating the
+  index fails if no equality operator can be found.
+ </para>
+
+ <para>
+  Unlike a B-tree, a <acronym>GiST</acronym> index cannot tell from the
+  insertion path alone whether a duplicate exists, because the keys of an
+  internal page's downlinks may overlap: a duplicate may be under any downlink
+  whose key is consistent with the new value.  So the new entry is added first
+  and the tree is then searched for conflicts, which is also how exclusion
+  constraints work.  Two sessions inserting the same key at the same instant
+  may therefore deadlock, and one of them will be rolled back rather than
+  reporting a unique violation.
+ </para>
+
+ <para>
+  Because the check is a search, its cost depends on how selective the index is
+  for the value being inserted.  In particular, in an index declared
+  <literal>NULLS NOT DISTINCT</literal> a null key column does nothing to
+  narrow the search, since a <acronym>GiST</acronym> internal key says nothing
+  about whether its subtree contains nulls; if every key column is null, the
+  whole index is searched.
+ </para>
+
+ <para>
+  A unique index is built the same way as the equivalent non-unique index,
+  then checked with one more pass over the table that searches the index for
+  each row.  So building one takes longer, by roughly the cost of those
+  searches.
+ </para>
+
+</sect2>
+
 <sect2 id="gist-builtin-opclasses">
  <title>Built-in Operator Classes</title>
 

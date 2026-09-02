@@ -739,7 +739,10 @@ CREATE INDEX test3_desc_index ON test3 (id DESC NULLS LAST);
 <synopsis>
 CREATE UNIQUE INDEX <replaceable>name</replaceable> ON <replaceable>table</replaceable> (<replaceable>column</replaceable> <optional>, ...</optional>) <optional> NULLS <optional> NOT </optional> DISTINCT </optional>;
 </synopsis>
-   Currently, only B-tree indexes can be declared unique.
+   Currently, only B-tree and <acronym>GiST</acronym> indexes can be declared
+   unique.  For a <acronym>GiST</acronym> index, "equal" means the operator
+   that the operator class nominates as its equality operator; see
+   <xref linkend="gist-unique"/>.
   </para>
 
   <para>

@@ -95,6 +95,17 @@ typedef struct GISTSTATE
 
 	/* Collations to pass to the support functions */
 	Oid			supportCollation[INDEX_MAX_KEYS];
+
+	/*
+	 * For each key column, the strategy number of the opfamily's equality
+	 * operator and that operator's function, filled in by
+	 * initGISTstateExclude() for unique indexes only.  Two index entries
+	 * conflict when all of their key columns satisfy these.  (The name
+	 * anticipates enforcing WITHOUT OVERLAPS keys here as well, where the
+	 * last column would use overlaps rather than equality.)
+	 */
+	StrategyNumber uniqueStratnum[INDEX_MAX_KEYS];
+	FmgrInfo	excludeFn[INDEX_MAX_KEYS];
 } GISTSTATE;
 
 
@@ -398,6 +409,21 @@ typedef struct GiSTOptions
 	GistOptBufferingMode buffering_mode;	/* buffering build mode */
 } GiSTOptions;
 
+/*
+ * Must a search that reached this page through a downlink read at parentlsn
+ * also visit the page's right sibling?  Yes if the page was split after we
+ * read the downlink (parentlsn < NSN), or if the system crashed after a split
+ * but before the downlink was inserted into the parent.  At the root,
+ * parentlsn is invalid and there is nothing to follow.
+ */
+static inline bool
+gistPageNeedsFollowRight(Page page, GistNSN parentlsn)
+{
+	return XLogRecPtrIsValid(parentlsn) &&
+		(GistFollowRight(page) || parentlsn < GistPageGetNSN(page)) &&
+		GistPageGetOpaque(page)->rightlink != InvalidBlockNumber;
+}
+
 /* gist.c */
 extern void gistbuildempty(Relation index);
 extern bool gistinsert(Relation r, Datum *values, bool *isnull,
@@ -407,6 +433,7 @@ extern bool gistinsert(Relation r, Datum *values, bool *isnull,
 					   struct IndexInfo *indexInfo);
 extern MemoryContext createTempGistContext(void);
 extern GISTSTATE *initGISTstate(Relation index);
+extern void initGISTstateExclude(GISTSTATE *giststate, Relation index);
 extern void freeGISTstate(GISTSTATE *giststate);
 extern void gistdoinsert(Relation r,
 						 IndexTuple itup,
@@ -457,10 +484,21 @@ extern XLogRecPtr gistXLogSplit(bool page_is_leaf,
 								BlockNumber origrlink, GistNSN orignsn,
 								Buffer leftchildbuf, bool markfollowright);
 
+/* gistunique.c */
+extern bool gistneedsuniquecheck(Relation r, struct IndexInfo *indexInfo);
+extern bool gistcheckunique(Relation r, GISTSTATE *giststate, Relation heapRel,
+							struct IndexInfo *indexInfo, ItemPointer heapTid,
+							const Datum *values, const bool *isnull,
+							IndexUniqueCheck checkUnique, bool is_build);
+
 /* gistget.c */
 extern void gistkillitems(IndexScanDesc scan);
 extern bool gistgettuple(IndexScanDesc scan, ScanDirection dir);
 extern int64 gistgetbitmap(IndexScanDesc scan, TIDBitmap *tbm);
+extern bool gistindex_qualtest(GISTSTATE *giststate, Relation r,
+							   ScanKey key, int keySize, IndexTuple tuple,
+							   Page page, OffsetNumber offset,
+							   bool *recheck_p);
 extern bool gistcanreturn(Relation index, int attno);
 
 /* gistvalidate.c */

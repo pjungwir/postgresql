@@ -1,0 +1,122 @@
+Parsed test spec with 3 sessions
+
+starting permutation: attach ins1 ins2 wake_insert wake_search conflicted wake_conflict detach_wake result
+step attach: 
+    SELECT injection_points_attach('exec-insert-before-insert-speculative', 'wait');
+    SELECT injection_points_attach('gist-unique-before-search', 'wait');
+    SELECT injection_points_attach('gist-unique-partial-conflict', 'wait');
+
+injection_points_attach
+-----------------------
+                       
+(1 row)
+
+injection_points_attach
+-----------------------
+                       
+(1 row)
+
+injection_points_attach
+-----------------------
+                       
+(1 row)
+
+step ins1: INSERT INTO gist_upsert VALUES ('[1,2)') ON CONFLICT DO NOTHING; <waiting ...>
+step ins2: INSERT INTO gist_upsert VALUES ('[1,2)') ON CONFLICT DO NOTHING; <waiting ...>
+step wake_insert: 
+    SELECT await('waiting_at(''exec-insert-before-insert-speculative'') = 2');
+    SELECT wake_all('exec-insert-before-insert-speculative');
+
+await
+-----
+     
+(1 row)
+
+wake_all
+--------
+        
+(1 row)
+
+step wake_search: 
+    SELECT await('waiting_at(''gist-unique-before-search'') = 2');
+    SELECT wake_all('gist-unique-before-search');
+
+await
+-----
+     
+(1 row)
+
+wake_all
+--------
+        
+(1 row)
+
+step conflicted: 
+    SELECT await('waiting_at(''gist-unique-partial-conflict'') + locked() = 2');
+    SELECT waiting_at('gist-unique-partial-conflict') AS backing_out,
+           locked() AS waiting;
+
+await
+-----
+     
+(1 row)
+
+backing_out|waiting
+-----------+-------
+          1|      1
+(1 row)
+
+step wake_conflict: 
+    SELECT wake_all('gist-unique-partial-conflict');
+    SELECT await('inserting() = 0 OR waiting_at(''exec-insert-before-insert-speculative'') = 2');
+    SELECT waiting_at('exec-insert-before-insert-speculative') AS retrying;
+
+wake_all
+--------
+        
+(1 row)
+
+await
+-----
+     
+(1 row)
+
+retrying
+--------
+       0
+(1 row)
+
+step ins1: <... completed>
+step ins2: <... completed>
+step detach_wake: 
+    SELECT injection_points_detach('exec-insert-before-insert-speculative');
+    SELECT injection_points_detach('gist-unique-before-search');
+    SELECT injection_points_detach('gist-unique-partial-conflict');
+    SELECT wake_all('exec-insert-before-insert-speculative');
+
+injection_points_detach
+-----------------------
+                       
+(1 row)
+
+injection_points_detach
+-----------------------
+                       
+(1 row)
+
+injection_points_detach
+-----------------------
+                       
+(1 row)
+
+wake_all
+--------
+        
+(1 row)
+
+step result: SELECT * FROM gist_upsert;
+id   
+-----
+[1,2)
+(1 row)
+

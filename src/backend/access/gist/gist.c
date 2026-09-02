@@ -14,18 +14,24 @@
  */
 #include "postgres.h"
 
+#include "access/amapi.h"
 #include "access/gist_private.h"
 #include "access/gistscan.h"
 #include "access/xloginsert.h"
+#include "catalog/pg_am.h"
 #include "catalog/pg_collation.h"
+#include "commands/defrem.h"
 #include "commands/vacuum.h"
 #include "miscadmin.h"
 #include "nodes/execnodes.h"
 #include "storage/predicate.h"
+#include "utils/builtins.h"
 #include "utils/fmgrprotos.h"
 #include "utils/index_selfuncs.h"
+#include "utils/lsyscache.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
+#include "utils/syscache.h"
 
 /* non-export function prototypes */
 static void gistfixsplit(GISTInsertState *state, GISTSTATE *giststate);
@@ -69,7 +75,7 @@ gisthandler(PG_FUNCTION_ARGS)
 		.amconsistentequality = false,
 		.amconsistentordering = false,
 		.amcanbackward = false,
-		.amcanunique = false,
+		.amcanunique = true,
 		.amcanmulticol = true,
 		.amoptionalkey = true,
 		.amsearcharray = false,
@@ -172,12 +178,19 @@ gistinsert(Relation r, Datum *values, bool *isnull,
 	GISTSTATE  *giststate = (GISTSTATE *) indexInfo->ii_AmCache;
 	IndexTuple	itup;
 	MemoryContext oldCxt;
+	bool		checkingunique;
+	bool		is_unique = false;
+
+	checkingunique = (checkUnique != UNIQUE_CHECK_NO &&
+					  gistneedsuniquecheck(r, indexInfo));
 
 	/* Initialize GISTSTATE cache if first call in this statement */
 	if (giststate == NULL)
 	{
 		oldCxt = MemoryContextSwitchTo(indexInfo->ii_Context);
 		giststate = initGISTstate(r);
+		if (checkingunique)
+			initGISTstateExclude(giststate, r);
 		giststate->tempCxt = createTempGistContext();
 		indexInfo->ii_AmCache = giststate;
 		MemoryContextSwitchTo(oldCxt);
@@ -188,13 +201,28 @@ gistinsert(Relation r, Datum *values, bool *isnull,
 	itup = gistFormTuple(giststate, r, values, isnull, true);
 	itup->t_tid = *ht_ctid;
 
-	gistdoinsert(r, itup, 0, giststate, heapRel, false);
+	/*
+	 * For UNIQUE_CHECK_EXISTING the tuple is already in the index and we are
+	 * only being asked to re-verify that it is unique.
+	 */
+	if (checkUnique != UNIQUE_CHECK_EXISTING)
+		gistdoinsert(r, itup, 0, giststate, heapRel, false);
+
+	/*
+	 * Unlike nbtree, we can only check for duplicates after inserting: they
+	 * may be in any leaf page whose ancestors' keys are consistent with ours,
+	 * not just the one we descended to.  See gistunique.c.
+	 */
+	if (checkingunique)
+		is_unique = gistcheckunique(r, giststate, heapRel, indexInfo,
+									&itup->t_tid, values, isnull,
+									checkUnique, false);
 
 	/* cleanup */
 	MemoryContextSwitchTo(oldCxt);
 	MemoryContextReset(giststate->tempCxt);
 
-	return false;
+	return is_unique;
 }
 
 
@@ -1623,6 +1651,10 @@ initGISTstate(Relation index)
 		else
 			giststate->fetchFn[i].fn_oid = InvalidOid;
 
+		/* Only unique indexes need excludeFn; see initGISTstateExclude(). */
+		giststate->uniqueStratnum[i] = InvalidStrategy;
+		giststate->excludeFn[i].fn_oid = InvalidOid;
+
 		/*
 		 * If the index column has a specified collation, we should honor that
 		 * while doing comparisons.  However, we may have a collatable storage
@@ -1652,12 +1684,63 @@ initGISTstate(Relation index)
 		giststate->equalFn[i].fn_oid = InvalidOid;
 		giststate->distanceFn[i].fn_oid = InvalidOid;
 		giststate->fetchFn[i].fn_oid = InvalidOid;
+		giststate->uniqueStratnum[i] = InvalidStrategy;
+		giststate->excludeFn[i].fn_oid = InvalidOid;
 		giststate->supportCollation[i] = InvalidOid;
 	}
 
 	MemoryContextSwitchTo(oldCxt);
 
 	return giststate;
+}
+
+/*
+ * Look up the operator that makes two entries conflict, for each key column.
+ *
+ * Two rows conflict when every key column of one conflicts with the same
+ * column of the other.  For a unique index that comparison is equality, and
+ * finding "equal" is not as simple as it sounds: the GiST AM doesn't get to
+ * pick the strategy numbers its opfamilies use -- btree_gist uses the B-tree
+ * numbers while the built-in opclasses use the R-tree ones -- so we have to
+ * ask the opfamily to translate a CompareType for us.
+ *
+ * Equality is the only comparison we ask for today.  A WITHOUT OVERLAPS key
+ * needs COMPARE_OVERLAP for its last column instead, so the choice is made
+ * per column and everything downstream is written in terms of "conflicts
+ * with" rather than "is equal to".
+ *
+ * Assumes the caller has already established that this index is unique.
+ */
+void
+initGISTstateExclude(GISTSTATE *giststate, Relation index)
+{
+	int			nkeyatts = IndexRelationGetNumberOfKeyAttributes(index);
+	oidvector  *indclass;
+	int			i;
+
+	Assert(index->rd_index->indisunique);
+
+	indclass = (oidvector *)
+		DatumGetPointer(SysCacheGetAttrNotNull(INDEXRELID, index->rd_indextuple,
+											   Anum_pg_index_indclass));
+
+	for (i = 0; i < nkeyatts; i++)
+	{
+		StrategyNumber strat;
+		Oid			opid;
+		RegProcedure proc;
+
+		/* The comparison this column has to make.  See above. */
+		GetOperatorFromCompareType(indclass->values[i], InvalidOid,
+								   COMPARE_EQ, &opid, &strat);
+
+		proc = get_opcode(opid);
+		if (!OidIsValid(proc))
+			elog(ERROR, "cache lookup failed for operator %u", opid);
+
+		giststate->uniqueStratnum[i] = strat;
+		fmgr_info_cxt(proc, &(giststate->excludeFn[i]), giststate->scanCxt);
+	}
 }
 
 void

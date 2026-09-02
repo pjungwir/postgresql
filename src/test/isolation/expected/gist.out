@@ -1,0 +1,45 @@
+Parsed test spec with 2 sessions
+
+starting permutation: s1rc s1ins s1c s1rc s2rc s1del s2ins s1c s2c
+step s1rc: BEGIN ISOLATION LEVEL READ COMMITTED;
+step s1ins: INSERT INTO t VALUES ('[1,2)');
+step s1c: COMMIT;
+step s1rc: BEGIN ISOLATION LEVEL READ COMMITTED;
+step s2rc: BEGIN ISOLATION LEVEL READ COMMITTED;
+step s1del: DELETE FROM t WHERE id = '[1,2)';
+step s2ins: INSERT INTO t VALUES ('[1,2)'); <waiting ...>
+step s1c: COMMIT;
+step s2ins: <... completed>
+step s2c: COMMIT;
+
+starting permutation: s1rc s1ins s1c s1rc s2rc s1del s2ins s1r s2c
+step s1rc: BEGIN ISOLATION LEVEL READ COMMITTED;
+step s1ins: INSERT INTO t VALUES ('[1,2)');
+step s1c: COMMIT;
+step s1rc: BEGIN ISOLATION LEVEL READ COMMITTED;
+step s2rc: BEGIN ISOLATION LEVEL READ COMMITTED;
+step s1del: DELETE FROM t WHERE id = '[1,2)';
+step s2ins: INSERT INTO t VALUES ('[1,2)'); <waiting ...>
+step s1r: ROLLBACK;
+step s2ins: <... completed>
+ERROR:  duplicate key value violates unique constraint "t_id_idx"
+step s2c: COMMIT;
+
+starting permutation: s1rc s2rc s1ins s2ins s1c s2c
+step s1rc: BEGIN ISOLATION LEVEL READ COMMITTED;
+step s2rc: BEGIN ISOLATION LEVEL READ COMMITTED;
+step s1ins: INSERT INTO t VALUES ('[1,2)');
+step s2ins: INSERT INTO t VALUES ('[1,2)'); <waiting ...>
+step s1c: COMMIT;
+step s2ins: <... completed>
+ERROR:  duplicate key value violates unique constraint "t_id_idx"
+step s2c: COMMIT;
+
+starting permutation: s1rc s2rc s1ins s2ins s1r s2c
+step s1rc: BEGIN ISOLATION LEVEL READ COMMITTED;
+step s2rc: BEGIN ISOLATION LEVEL READ COMMITTED;
+step s1ins: INSERT INTO t VALUES ('[1,2)');
+step s2ins: INSERT INTO t VALUES ('[1,2)'); <waiting ...>
+step s1r: ROLLBACK;
+step s2ins: <... completed>
+step s2c: COMMIT;

@@ -1082,6 +1082,9 @@ GISTScanOpaqueData
 GISTSearchHeapItem
 GISTSearchItem
 GISTTYPE
+GISTUniqueCandidate
+GISTUniqueItem
+GISTUniqueState
 GIST_SPLITVEC
 GMReaderTupleBuffer
 GROUP
