@@ -1518,6 +1518,14 @@ pg_get_indexdef_worker(Oid indexrelid, int colno,
 								 generate_operator_name(excludeOps[keyno],
 														keycoltype,
 														keycoltype));
+
+			/*
+			 * Say if the column has to not overlap rather than not be equal.
+			 * Only meaningful on an index; an exclusion constraint spells the
+			 * same thing out with WITH above.
+			 */
+			if (excludeOps == NULL && (opt & INDOPTION_WITHOUT_OVERLAPS))
+				appendStringInfoString(&buf, " WITHOUT OVERLAPS");
 		}
 	}
 

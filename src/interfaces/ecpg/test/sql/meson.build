@@ -29,6 +29,7 @@ pgc_files = [
   'sqljson_jsontable',
   'sqlpgq',
   'twophase',
+  'without_overlaps',
 ]
 
 pgc_extra_flags = {

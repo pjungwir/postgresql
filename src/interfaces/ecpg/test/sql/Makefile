@@ -31,7 +31,8 @@ TESTS = array array.c \
         insupd insupd.c \
 		declare declare.c \
 		bytea bytea.c \
-		prepareas prepareas.c
+		prepareas prepareas.c \
+		without_overlaps without_overlaps.c
 
 all: $(TESTS)
 

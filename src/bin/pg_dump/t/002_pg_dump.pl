@@ -1193,6 +1193,25 @@ my %tests = (
 		},
 	},
 
+	'CREATE INDEX / WITHOUT OVERLAPS' => {
+		create_sql => 'CREATE TABLE dump_test.test_table_tidx (
+							col1 int4range,
+							col2 tstzrange);
+					   CREATE UNIQUE INDEX test_table_tidx_idx
+						ON dump_test.test_table_tidx
+						USING gist (col1, col2 WITHOUT OVERLAPS);',
+		regexp => qr/^
+			\QCREATE UNIQUE INDEX test_table_tidx_idx ON dump_test.test_table_tidx USING gist (col1, col2 WITHOUT OVERLAPS);\E
+			/xm,
+		like => {
+			%full_runs, %dump_test_schema_runs, section_post_data => 1,
+		},
+		unlike => {
+			exclude_dump_test_schema => 1,
+			only_dump_measurement => 1,
+		},
+	},
+
 	'ALTER TABLE (partitioned) ADD CONSTRAINT ... FOREIGN KEY' => {
 		create_order => 4,
 		create_sql => 'CREATE TABLE dump_test.test_table_fk (

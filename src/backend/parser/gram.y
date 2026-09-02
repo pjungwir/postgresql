@@ -4541,7 +4541,7 @@ opt_no_inherit:	NO INHERIT							{  $$ = true; }
 		;
 
 opt_without_overlaps:
-			WITHOUT OVERLAPS						{ $$ = true; }
+			WITHOUT_LA OVERLAPS						{ $$ = true; }
 			| /*EMPTY*/								{ $$ = false; }
 	;
 
@@ -8470,7 +8470,7 @@ index_params:	index_elem							{ $$ = list_make1($1); }
 
 
 index_elem_options:
-	opt_collate opt_qualified_name opt_asc_desc opt_nulls_order
+	opt_collate opt_qualified_name opt_asc_desc opt_nulls_order opt_without_overlaps
 		{
 			$$ = makeNode(IndexElem);
 			$$->name = NULL;
@@ -8481,9 +8481,10 @@ index_elem_options:
 			$$->opclassopts = NIL;
 			$$->ordering = $3;
 			$$->nulls_ordering = $4;
+			$$->without_overlaps = $5;
 			/* location will be filled in index_elem production */
 		}
-	| opt_collate any_name reloptions opt_asc_desc opt_nulls_order
+	| opt_collate any_name reloptions opt_asc_desc opt_nulls_order opt_without_overlaps
 		{
 			$$ = makeNode(IndexElem);
 			$$->name = NULL;
@@ -8494,6 +8495,7 @@ index_elem_options:
 			$$->opclassopts = $3;
 			$$->ordering = $4;
 			$$->nulls_ordering = $5;
+			$$->without_overlaps = $6;
 			/* location will be filled in index_elem production */
 		}
 	;

@@ -175,6 +175,9 @@ pg_noreturn static void gistUniqueReport(GISTUniqueState *state,
  * but it can leave that to somebody else: index_build() already makes such a
  * pass with IndexCheckExclusion() for any index backing an exclusion
  * constraint, and a second one would only repeat it.
+ *
+ * An index that carries WITHOUT OVERLAPS without a constraint attached has no
+ * such second pass, so it gets checked here like any other unique index.
  */
 bool
 gistneedsuniquecheck(Relation r, IndexInfo *indexInfo)
@@ -229,7 +232,7 @@ gistcheckunique(Relation r, GISTSTATE *giststate, Relation heapRel,
 	 * test -- and it has to come before the NULL check below, or a row could
 	 * sneak an empty range in beside a NULL scalar part.
 	 */
-	ExecCheckWithoutOverlapsNotEmpty(heapRel, indexInfo, values, isnull);
+	ExecCheckWithoutOverlapsNotEmpty(heapRel, r, indexInfo, values, isnull);
 
 	/*
 	 * If any of the values is NULL and the index uses the default
@@ -556,13 +559,13 @@ retry:
 			CheckForSerializableConflictIn(r, NULL, item.blkno);
 
 			/*
-			 * The exclusion-constraint message describes the row we conflict
+			 * A WITHOUT OVERLAPS key's message describes the row we conflict
 			 * with as well as our own.  Recompute its key values rather than
 			 * reusing anything the recheck above produced, which lived in the
 			 * per-tuple context and is gone by now.  We still hold the heap
 			 * pin, so the slot is good.
 			 */
-			if (r->rd_index->indisexclusion)
+			if (RelationIndexHasWithoutOverlaps(r))
 				gistUniqueFormValues(&state, oldvals, oldnulls);
 
 			ReleaseBuffer(buffer);
@@ -792,29 +795,52 @@ gistUniqueReport(GISTUniqueState *state,
 
 	key_desc = BuildIndexValueDescription(rel, state->newvals, state->newnulls);
 
-	if (rel->rd_index->indisexclusion)
+	if (RelationIndexHasWithoutOverlaps(rel))
 	{
 		char	   *old_key_desc;
+		bool		isconstraint = rel->rd_index->indisexclusion;
 
 		/*
-		 * A build never gets here for one of these: index_build() validates
-		 * an exclusion constraint's index itself, so we don't (see
-		 * gistneedsuniquecheck()).
+		 * Overlapping rows are not "duplicates", so name both of them.  An
+		 * index that backs an exclusion constraint gets that constraint's
+		 * usual wording; one that carries WITHOUT OVERLAPS on its own is
+		 * still just a unique index as far as the user is concerned.
 		 */
-		Assert(!state->is_build);
-
 		old_key_desc = BuildIndexValueDescription(rel, oldvals, oldnulls);
 
-		ereport(ERROR,
-				(errcode(ERRCODE_EXCLUSION_VIOLATION),
-				 errmsg("conflicting key value violates exclusion constraint \"%s\"",
-						RelationGetRelationName(rel)),
-				 key_desc && old_key_desc ?
-				 errdetail("Key %s conflicts with existing key %s.",
-						   key_desc, old_key_desc) :
-				 errdetail("Key conflicts with existing key."),
-				 errtableconstraint(heapRel,
-									RelationGetRelationName(rel))));
+		if (state->is_build)
+		{
+			/*
+			 * index_build() validates an exclusion constraint's index itself,
+			 * so only a standalone WITHOUT OVERLAPS index gets here (see
+			 * gistneedsuniquecheck()).
+			 */
+			Assert(!isconstraint);
+			ereport(ERROR,
+					(errcode(ERRCODE_EXCLUSION_VIOLATION),
+					 errmsg("could not create unique index \"%s\"",
+							RelationGetRelationName(rel)),
+					 key_desc && old_key_desc ?
+					 errdetail("Key %s conflicts with key %s.",
+							   key_desc, old_key_desc) :
+					 errdetail("Key conflicts exist."),
+					 errtableconstraint(heapRel,
+										RelationGetRelationName(rel))));
+		}
+		else
+			ereport(ERROR,
+					(errcode(ERRCODE_EXCLUSION_VIOLATION),
+					 isconstraint ?
+					 errmsg("conflicting key value violates exclusion constraint \"%s\"",
+							RelationGetRelationName(rel)) :
+					 errmsg("conflicting key value violates unique constraint \"%s\"",
+							RelationGetRelationName(rel)),
+					 key_desc && old_key_desc ?
+					 errdetail("Key %s conflicts with existing key %s.",
+							   key_desc, old_key_desc) :
+					 errdetail("Key conflicts with existing key."),
+					 errtableconstraint(heapRel,
+										RelationGetRelationName(rel))));
 	}
 	else if (state->is_build)
 		ereport(ERROR,

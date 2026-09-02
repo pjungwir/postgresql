@@ -314,6 +314,212 @@ ALTER TABLE temporal_rng3 DROP CONSTRAINT temporal_rng3_uq;
 DROP TABLE temporal_rng3;
 DROP TYPE textrange2;
 --
+-- test WITHOUT OVERLAPS on a standalone index
+--
+CREATE TABLE temporal_idx (
+  id int4range,
+  valid_at daterange
+);
+CREATE UNIQUE INDEX temporal_idx_uq ON temporal_idx
+  USING gist (id, valid_at WITHOUT OVERLAPS);
+\d temporal_idx
+              Table "public.temporal_idx"
+  Column  |   Type    | Collation | Nullable | Default 
+----------+-----------+-----------+----------+---------
+ id       | int4range |           |          | 
+ valid_at | daterange |           |          | 
+Indexes:
+    "temporal_idx_uq" UNIQUE, gist (id, valid_at WITHOUT OVERLAPS)
+
+-- the definition round-trips:
+SELECT pg_get_indexdef('temporal_idx_uq'::regclass);
+                                            pg_get_indexdef                                            
+-------------------------------------------------------------------------------------------------------
+ CREATE UNIQUE INDEX temporal_idx_uq ON public.temporal_idx USING gist (id, valid_at WITHOUT OVERLAPS)
+(1 row)
+
+-- and it enforces overlaps, not equality:
+INSERT INTO temporal_idx VALUES ('[1,2)', daterange('2018-01-01', '2018-06-01'));
+-- overlapping: should fail
+INSERT INTO temporal_idx VALUES ('[1,2)', daterange('2018-03-01', '2018-09-01'));
+ERROR:  conflicting key value violates unique constraint "temporal_idx_uq"
+DETAIL:  Key (id, valid_at)=([1,2), [2018-03-01,2018-09-01)) conflicts with existing key (id, valid_at)=([1,2), [2018-01-01,2018-06-01)).
+-- adjacent: okay
+INSERT INTO temporal_idx VALUES ('[1,2)', daterange('2018-06-01', '2018-09-01'));
+-- different scalar part: okay
+INSERT INTO temporal_idx VALUES ('[2,3)', daterange('2018-03-01', '2018-09-01'));
+-- empty is rejected, just as it is for a constraint:
+INSERT INTO temporal_idx VALUES ('[3,4)', 'empty');
+ERROR:  empty WITHOUT OVERLAPS value found in column "valid_at" in relation "temporal_idx"
+-- NULLs are still distinct by default:
+INSERT INTO temporal_idx VALUES (NULL, daterange('2018-01-01', '2018-06-01'));
+INSERT INTO temporal_idx VALUES (NULL, daterange('2018-01-01', '2018-06-01'));
+SELECT * FROM temporal_idx ORDER BY id, valid_at;
+  id   |        valid_at         
+-------+-------------------------
+ [1,2) | [2018-01-01,2018-06-01)
+ [1,2) | [2018-06-01,2018-09-01)
+ [2,3) | [2018-03-01,2018-09-01)
+       | [2018-01-01,2018-06-01)
+       | [2018-01-01,2018-06-01)
+(5 rows)
+
+DROP TABLE temporal_idx;
+-- enforced on build too:
+CREATE TABLE temporal_idx (id int4range, valid_at daterange);
+INSERT INTO temporal_idx VALUES ('[1,2)', daterange('2018-01-01', '2018-06-01')),
+                                ('[1,2)', daterange('2018-03-01', '2018-09-01'));
+CREATE UNIQUE INDEX temporal_idx_uq ON temporal_idx
+  USING gist (id, valid_at WITHOUT OVERLAPS); -- fail
+ERROR:  could not create unique index "temporal_idx_uq"
+DETAIL:  Key (id, valid_at)=([1,2), [2018-01-01,2018-06-01)) conflicts with key (id, valid_at)=([1,2), [2018-03-01,2018-09-01)).
+DELETE FROM temporal_idx;
+INSERT INTO temporal_idx VALUES ('[1,2)', 'empty');
+CREATE UNIQUE INDEX temporal_idx_uq ON temporal_idx
+  USING gist (id, valid_at WITHOUT OVERLAPS); -- fail
+ERROR:  empty WITHOUT OVERLAPS value found in column "valid_at" in relation "temporal_idx"
+DROP TABLE temporal_idx;
+-- WITHOUT OVERLAPS is only for the last column of a unique index:
+CREATE TABLE temporal_idx (id int4range, valid_at daterange);
+CREATE UNIQUE INDEX ON temporal_idx
+  USING gist (id WITHOUT OVERLAPS, valid_at); -- fail
+ERROR:  WITHOUT OVERLAPS is only supported on the last column of an index
+LINE 2:   USING gist (id WITHOUT OVERLAPS, valid_at);
+                      ^
+CREATE INDEX ON temporal_idx
+  USING gist (id, valid_at WITHOUT OVERLAPS); -- fail
+ERROR:  WITHOUT OVERLAPS requires a unique index
+LINE 2:   USING gist (id, valid_at WITHOUT OVERLAPS);
+                          ^
+-- and the opclass must have an overlaps operator:
+CREATE UNIQUE INDEX ON temporal_idx
+  USING gist (valid_at, id WITHOUT OVERLAPS); -- okay, int4range overlaps
+DROP TABLE temporal_idx;
+-- the column has to be a range or multirange, even if its opclass has an
+-- overlaps operator:
+CREATE TABLE temporal_idx (id int4range, b box);
+CREATE UNIQUE INDEX ON temporal_idx
+  USING gist (id, b WITHOUT OVERLAPS); -- fail
+ERROR:  column "b" in WITHOUT OVERLAPS is not a range or multirange type
+LINE 2:   USING gist (id, b WITHOUT OVERLAPS);
+                          ^
+CREATE UNIQUE INDEX ON temporal_idx
+  USING gist (id, (b) WITHOUT OVERLAPS); -- fail
+ERROR:  expression in WITHOUT OVERLAPS is not a range or multirange type
+LINE 2:   USING gist (id, (b) WITHOUT OVERLAPS);
+                          ^
+DROP TABLE temporal_idx;
+-- an expression can be the WITHOUT OVERLAPS column:
+CREATE TABLE temporal_idx (id int4range, a date, b date);
+CREATE UNIQUE INDEX temporal_idx_uq ON temporal_idx
+  USING gist (id, (daterange(a, b)) WITHOUT OVERLAPS);
+INSERT INTO temporal_idx VALUES ('[1,2)', '2018-01-01', '2018-06-01');
+INSERT INTO temporal_idx VALUES ('[1,2)', '2018-03-01', '2018-09-01'); -- fail
+ERROR:  conflicting key value violates unique constraint "temporal_idx_uq"
+DETAIL:  Key (id, daterange(a, b))=([1,2), [2018-03-01,2018-09-01)) conflicts with existing key (id, daterange(a, b))=([1,2), [2018-01-01,2018-06-01)).
+INSERT INTO temporal_idx VALUES ('[1,2)', '2018-07-01', '2018-07-01'); -- fail, empty
+ERROR:  empty WITHOUT OVERLAPS value found in column "daterange_a_b" in relation "temporal_idx"
+INSERT INTO temporal_idx VALUES ('[1,2)', '2018-06-01', '2018-09-01'); -- okay
+DROP TABLE temporal_idx;
+-- copies of the index keep WITHOUT OVERLAPS:
+CREATE TABLE temporal_idx (id int4range, valid_at daterange);
+CREATE UNIQUE INDEX temporal_idx_uq ON temporal_idx
+  USING gist (id, valid_at WITHOUT OVERLAPS);
+CREATE TABLE temporal_idx_like (LIKE temporal_idx INCLUDING INDEXES);
+SELECT pg_get_indexdef(indexrelid) FROM pg_index
+  WHERE indrelid = 'temporal_idx_like'::regclass;
+                                                       pg_get_indexdef                                                        
+------------------------------------------------------------------------------------------------------------------------------
+ CREATE UNIQUE INDEX temporal_idx_like_id_valid_at_idx ON public.temporal_idx_like USING gist (id, valid_at WITHOUT OVERLAPS)
+(1 row)
+
+INSERT INTO temporal_idx_like VALUES ('[1,2)', daterange('2018-01-01', '2018-06-01'));
+INSERT INTO temporal_idx_like VALUES ('[1,2)', daterange('2018-03-01', '2018-09-01')); -- fail
+ERROR:  conflicting key value violates unique constraint "temporal_idx_like_id_valid_at_idx"
+DETAIL:  Key (id, valid_at)=([1,2), [2018-03-01,2018-09-01)) conflicts with existing key (id, valid_at)=([1,2), [2018-01-01,2018-06-01)).
+DROP TABLE temporal_idx_like, temporal_idx;
+-- and so do partitions' indexes:
+CREATE TABLE temporal_idx_part (id int4range, valid_at daterange)
+  PARTITION BY LIST (id);
+CREATE TABLE temporal_idx_part1 PARTITION OF temporal_idx_part
+  FOR VALUES IN ('[1,2)');
+CREATE UNIQUE INDEX temporal_idx_part_uq ON temporal_idx_part
+  USING gist (id, valid_at WITHOUT OVERLAPS);
+CREATE TABLE temporal_idx_part2 PARTITION OF temporal_idx_part
+  FOR VALUES IN ('[2,3)');
+SELECT indrelid::regclass, pg_get_indexdef(indexrelid) FROM pg_index
+  WHERE indrelid IN ('temporal_idx_part1'::regclass, 'temporal_idx_part2'::regclass)
+  ORDER BY 1;
+      indrelid      |                                                        pg_get_indexdef                                                         
+--------------------+--------------------------------------------------------------------------------------------------------------------------------
+ temporal_idx_part1 | CREATE UNIQUE INDEX temporal_idx_part1_id_valid_at_idx ON public.temporal_idx_part1 USING gist (id, valid_at WITHOUT OVERLAPS)
+ temporal_idx_part2 | CREATE UNIQUE INDEX temporal_idx_part2_id_valid_at_idx ON public.temporal_idx_part2 USING gist (id, valid_at WITHOUT OVERLAPS)
+(2 rows)
+
+INSERT INTO temporal_idx_part VALUES ('[1,2)', daterange('2018-01-01', '2018-06-01'));
+INSERT INTO temporal_idx_part VALUES ('[1,2)', daterange('2018-03-01', '2018-09-01')); -- fail
+ERROR:  conflicting key value violates unique constraint "temporal_idx_part1_id_valid_at_idx"
+DETAIL:  Key (id, valid_at)=([1,2), [2018-03-01,2018-09-01)) conflicts with existing key (id, valid_at)=([1,2), [2018-01-01,2018-06-01)).
+INSERT INTO temporal_idx_part VALUES ('[2,3)', daterange('2018-01-01', '2018-06-01'));
+INSERT INTO temporal_idx_part VALUES ('[2,3)', daterange('2018-03-01', '2018-09-01')); -- fail
+ERROR:  conflicting key value violates unique constraint "temporal_idx_part2_id_valid_at_idx"
+DETAIL:  Key (id, valid_at)=([2,3), [2018-03-01,2018-09-01)) conflicts with existing key (id, valid_at)=([2,3), [2018-01-01,2018-06-01)).
+-- an existing index on an attached partition is only adopted if it matches:
+CREATE TABLE temporal_idx_part3 (id int4range, valid_at daterange);
+CREATE UNIQUE INDEX temporal_idx_part3_eq ON temporal_idx_part3
+  USING gist (id, valid_at);
+CREATE UNIQUE INDEX temporal_idx_part3_wo ON temporal_idx_part3
+  USING gist (id, valid_at WITHOUT OVERLAPS);
+ALTER TABLE temporal_idx_part ATTACH PARTITION temporal_idx_part3
+  FOR VALUES IN ('[3,4)');
+SELECT c.relname, i.inhparent::regclass FROM pg_class c
+  LEFT JOIN pg_inherits i ON i.inhrelid = c.oid
+  WHERE c.relname LIKE 'temporal_idx_part3_%' ORDER BY 1;
+        relname        |      inhparent       
+-----------------------+----------------------
+ temporal_idx_part3_eq | 
+ temporal_idx_part3_wo | temporal_idx_part_uq
+(2 rows)
+
+DROP TABLE temporal_idx_part;
+-- a WITHOUT OVERLAPS column can't match a partition key, which compares with
+-- equality:
+CREATE TABLE temporal_idx_part (id int4range, valid_at daterange)
+  PARTITION BY RANGE (valid_at);
+CREATE UNIQUE INDEX ON temporal_idx_part
+  USING gist (id, valid_at WITHOUT OVERLAPS); -- fail
+ERROR:  cannot match partition key to index on column "valid_at" using non-equal operator "&&"
+DROP TABLE temporal_idx_part;
+-- ON CONFLICT doesn't infer a WITHOUT OVERLAPS index as an arbiter, any more
+-- than it does a WITHOUT OVERLAPS constraint:
+CREATE TABLE temporal_idx (id int4range, valid_at daterange, n int);
+CREATE UNIQUE INDEX temporal_idx_uq ON temporal_idx
+  USING gist (id, valid_at WITHOUT OVERLAPS);
+INSERT INTO temporal_idx VALUES ('[1,2)', daterange('2018-01-01', '2018-06-01'), 1);
+INSERT INTO temporal_idx VALUES ('[1,2)', daterange('2018-03-01', '2018-09-01'), 2)
+  ON CONFLICT (id, valid_at) DO UPDATE SET n = excluded.n; -- fail
+ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification
+INSERT INTO temporal_idx VALUES ('[1,2)', daterange('2018-03-01', '2018-09-01'), 2)
+  ON CONFLICT (id, valid_at WITHOUT OVERLAPS) DO NOTHING; -- fail
+ERROR:  WITHOUT OVERLAPS is not allowed in ON CONFLICT clause
+LINE 2:   ON CONFLICT (id, valid_at WITHOUT OVERLAPS) DO NOTHING;
+                           ^
+INSERT INTO temporal_idx VALUES ('[1,2)', daterange('2018-03-01', '2018-09-01'), 2)
+  ON CONFLICT DO NOTHING; -- okay, but inserts nothing
+SELECT * FROM temporal_idx;
+  id   |        valid_at         | n 
+-------+-------------------------+---
+ [1,2) | [2018-01-01,2018-06-01) | 1
+(1 row)
+
+-- and an included column can't be WITHOUT OVERLAPS:
+CREATE UNIQUE INDEX ON temporal_idx
+  USING gist (id) INCLUDE (valid_at WITHOUT OVERLAPS); -- fail
+ERROR:  including column does not support WITHOUT OVERLAPS
+LINE 2:   USING gist (id) INCLUDE (valid_at WITHOUT OVERLAPS);
+                                   ^
+DROP TABLE temporal_idx;
+--
 -- test PRIMARY KEY and UNIQUE constraints' interaction with domains
 --
 -- range over domain:

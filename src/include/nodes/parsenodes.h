@@ -834,6 +834,7 @@ typedef struct IndexElem
 	List	   *opclassopts;	/* opclass-specific options, or NIL */
 	SortByDir	ordering;		/* ASC/DESC/default */
 	SortByNulls nulls_ordering; /* FIRST/LAST/default */
+	bool		without_overlaps;	/* WITHOUT OVERLAPS given? */
 	ParseLoc	location;		/* token location, or -1 if unknown */
 } IndexElem;
 

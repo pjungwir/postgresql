@@ -1066,6 +1066,29 @@ DefineIndex(ParseState *pstate,
 					if (key->partcollation[i] != collationIds[j])
 						continue;
 
+					/*
+					 * A standalone WITHOUT OVERLAPS column compares with
+					 * overlaps rather than equality, so it can't match a
+					 * partition key column.  (A constraint says the same
+					 * thing through ii_ExclusionOps, below.)
+					 */
+					if (indexInfo->ii_WithoutOverlaps && !exclusion &&
+						j == indexInfo->ii_NumIndexKeyAttrs - 1)
+					{
+						Form_pg_attribute att = TupleDescAttr(RelationGetDescr(rel), key->partattrs[i] - 1);
+						Oid			overlapsop;
+						StrategyNumber strat;
+
+						GetOperatorFromCompareType(opclassIds[j], InvalidOid,
+												   COMPARE_OVERLAP,
+												   &overlapsop, &strat);
+						ereport(ERROR,
+								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								 errmsg("cannot match partition key to index on column \"%s\" using non-equal operator \"%s\"",
+										NameStr(att->attname),
+										get_opname(overlapsop))));
+					}
+
 					if (get_opclass_opfamily_and_input_type(opclassIds[j],
 															&idx_opfamily,
 															&idx_opcintype))
@@ -2090,6 +2113,11 @@ ComputeIndexAttrs(ParseState *pstate,
 						(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
 						 errmsg("including column does not support NULLS FIRST/LAST options"),
 						 parser_errposition(pstate, attribute->location)));
+			if (attribute->without_overlaps)
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
+						 errmsg("including column does not support WITHOUT OVERLAPS"),
+						 parser_errposition(pstate, attribute->location)));
 
 			opclassOids[attn] = InvalidOid;
 			opclassOptions[attn] = (Datum) 0;
@@ -2285,6 +2313,66 @@ ComputeIndexAttrs(ParseState *pstate,
 								accessMethodName),
 						 parser_errposition(pstate, attribute->location)));
 		}
+
+		/*
+		 * WITHOUT OVERLAPS says this column has to not overlap rather than
+		 * not be equal.  Only the last key column can say that, and only for
+		 * a unique index -- there is nothing for it to mean otherwise.
+		 */
+		if (attribute->without_overlaps)
+		{
+			if (!indexInfo->ii_Unique)
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("WITHOUT OVERLAPS requires a unique index"),
+						 parser_errposition(pstate, attribute->location)));
+			if (attn != nkeycols - 1)
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("WITHOUT OVERLAPS is only supported on the last column of an index"),
+						 parser_errposition(pstate, attribute->location)));
+
+			/*
+			 * The column has to be a range or multirange, as it does in a
+			 * constraint: empty values are rejected, and that is only defined
+			 * for those.
+			 */
+			{
+				Oid			basetype = getBaseType(atttype);
+
+				if (!(type_is_range(basetype) || type_is_multirange(basetype)))
+					ereport(ERROR,
+							(errcode(ERRCODE_DATATYPE_MISMATCH),
+							 attribute->name ?
+							 errmsg("column \"%s\" in WITHOUT OVERLAPS is not a range or multirange type",
+									attribute->name) :
+							 errmsg("expression in WITHOUT OVERLAPS is not a range or multirange type"),
+							 parser_errposition(pstate, attribute->location)));
+			}
+
+			/*
+			 * Make sure the opclass can tell us what "overlaps" means before
+			 * we record that the column uses it. GetOperatorFromCompareType()
+			 * raises a usable error if it can't.
+			 */
+			{
+				Oid			opid;
+				StrategyNumber strat;
+
+				GetOperatorFromCompareType(opclassOids[attn], InvalidOid,
+										   COMPARE_OVERLAP, &opid, &strat);
+			}
+
+			/*
+			 * Tell the rest of the system this is a temporal key, the same as
+			 * if it had come from WITHOUT OVERLAPS in a constraint.
+			 */
+			indexInfo->ii_WithoutOverlaps = true;
+		}
+
+		/* Record the overlaps column on the index. */
+		if (attribute->without_overlaps)
+			colOptions[attn] |= INDOPTION_WITHOUT_OVERLAPS;
 
 		/* Set up the per-column opclass options (attoptions field). */
 		if (attribute->opclassopts)

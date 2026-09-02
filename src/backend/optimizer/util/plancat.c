@@ -27,6 +27,7 @@
 #include "access/xlog.h"
 #include "catalog/catalog.h"
 #include "catalog/heap.h"
+#include "catalog/index.h"
 #include "catalog/pg_am.h"
 #include "catalog/pg_proc.h"
 #include "catalog/pg_statistic_ext.h"
@@ -1049,9 +1050,10 @@ infer_arbiter_indexes(PlannerInfo *root)
 
 		/*
 		 * So-called unique constraints with WITHOUT OVERLAPS are really
-		 * exclusion constraints, so skip those too.
+		 * exclusion constraints, so skip those too -- and so are unique
+		 * indexes with WITHOUT OVERLAPS, with or without a constraint.
 		 */
-		if (idxForm->indisexclusion)
+		if (RelationIndexHasWithoutOverlaps(idxRel))
 			continue;
 
 		/* Build BMS representation of plain (non expression) index attrs */

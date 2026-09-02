@@ -1728,6 +1728,7 @@ initGISTstateExclude(GISTSTATE *giststate, Relation index, IndexInfo *indexInfo)
 
 	for (i = 0; i < nkeyatts; i++)
 	{
+		CompareType cmptype;
 		StrategyNumber strat;
 		Oid			opid;
 		RegProcedure proc;
@@ -1740,9 +1741,19 @@ initGISTstateExclude(GISTSTATE *giststate, Relation index, IndexInfo *indexInfo)
 			continue;
 		}
 
-		/* The comparison this column has to make.  See above. */
+		/*
+		 * The comparison this column has to make.  Every column but the last
+		 * has to be equal; the last one has to not overlap if the index says
+		 * WITHOUT OVERLAPS.
+		 */
+		if (i == nkeyatts - 1 &&
+			(index->rd_indoption[i] & INDOPTION_WITHOUT_OVERLAPS))
+			cmptype = COMPARE_OVERLAP;
+		else
+			cmptype = COMPARE_EQ;
+
 		GetOperatorFromCompareType(indclass->values[i], InvalidOid,
-								   COMPARE_EQ, &opid, &strat);
+								   cmptype, &opid, &strat);
 
 		proc = get_opcode(opid);
 		if (!OidIsValid(proc))

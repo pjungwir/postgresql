@@ -750,7 +750,7 @@ check_exclusion_or_unique_constraint(Relation heap, Relation index,
 	 * a UNIQUE constraint could insert an empty range along with a NULL
 	 * scalar part.
 	 */
-	ExecCheckWithoutOverlapsNotEmpty(heap, indexInfo, values, isnull);
+	ExecCheckWithoutOverlapsNotEmpty(heap, index, indexInfo, values, isnull);
 
 	/*
 	 * If any of the input values are NULL, and the index uses the default
@@ -1150,13 +1150,14 @@ index_expression_changed_walker(Node *node, Bitmapset *allUpdatedCols)
  * Does nothing if this isn't a WITHOUT OVERLAPS key.
  */
 void
-ExecCheckWithoutOverlapsNotEmpty(Relation heap, IndexInfo *indexInfo,
+ExecCheckWithoutOverlapsNotEmpty(Relation heap, Relation index,
+								 IndexInfo *indexInfo,
 								 const Datum *values, const bool *isnull)
 {
 	int			indnkeyatts = indexInfo->ii_NumIndexKeyAttrs;
 	AttrNumber	attno;
-	TupleDesc	tupdesc;
-	Form_pg_attribute att;
+	Oid			typid;
+	NameData	attname;
 	TypeCacheEntry *typcache;
 	char		typtype;
 
@@ -1167,21 +1168,42 @@ ExecCheckWithoutOverlapsNotEmpty(Relation heap, IndexInfo *indexInfo,
 		return;
 
 	/*
-	 * Look up the type from the heap tuple, but check the Datum from the
-	 * index tuple.
+	 * Look up the type from the heap column, or from the expression if the
+	 * column is one (only a standalone index can do that), but check the
+	 * Datum from the index tuple.
 	 */
 	attno = indexInfo->ii_IndexAttrNumbers[indnkeyatts - 1];
-	tupdesc = RelationGetDescr(heap);
-	att = TupleDescAttr(tupdesc, attno - 1);
-	typcache = lookup_type_cache(att->atttypid, TYPECACHE_DOMAIN_BASE_INFO);
+	if (attno != 0)
+	{
+		Form_pg_attribute att = TupleDescAttr(RelationGetDescr(heap),
+											  attno - 1);
+
+		typid = att->atttypid;
+		attname = att->attname;
+	}
+	else
+	{
+		ListCell   *indexpr_item = list_head(indexInfo->ii_Expressions);
+
+		/* Skip the expressions belonging to earlier columns */
+		for (int i = 0; i < indnkeyatts - 1; i++)
+		{
+			if (indexInfo->ii_IndexAttrNumbers[i] == 0)
+				indexpr_item = lnext(indexInfo->ii_Expressions, indexpr_item);
+		}
+		typid = exprType((Node *) lfirst(indexpr_item));
+		attname = TupleDescAttr(RelationGetDescr(index),
+								indnkeyatts - 1)->attname;
+	}
+	typcache = lookup_type_cache(typid, TYPECACHE_DOMAIN_BASE_INFO);
 
 	if (OidIsValid(typcache->domainBaseType))
 		typtype = get_typtype(typcache->domainBaseType);
 	else
 		typtype = typcache->typtype;
 
-	ExecWithoutOverlapsNotEmpty(heap, att->attname, values[indnkeyatts - 1],
-								typtype, att->atttypid);
+	ExecWithoutOverlapsNotEmpty(heap, attname, values[indnkeyatts - 1],
+								typtype, typid);
 }
 
 /*

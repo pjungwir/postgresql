@@ -1964,6 +1964,14 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
 			}
 		}
 
+		/*
+		 * Copy WITHOUT OVERLAPS from a standalone index.  One that backs a
+		 * constraint says so through iswithoutoverlaps instead (see above),
+		 * and must not say it twice.
+		 */
+		if ((opt & INDOPTION_WITHOUT_OVERLAPS) && !index->iswithoutoverlaps)
+			iparam->without_overlaps = true;
+
 		iparam->location = -1;
 
 		index->indexParams = lappend(index->indexParams, iparam);

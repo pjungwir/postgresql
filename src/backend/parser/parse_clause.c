@@ -3414,6 +3414,12 @@ resolve_unique_index_expr(ParseState *pstate, InferClause *infer,
 					errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
 					errmsg("operator class options are not allowed in ON CONFLICT clause"),
 					parser_errposition(pstate, ielem->location));
+		if (ielem->without_overlaps)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
+					 errmsg("%s is not allowed in ON CONFLICT clause",
+							"WITHOUT OVERLAPS"),
+					 parser_errposition(pstate, ielem->location)));
 
 		if (!ielem->expr)
 		{

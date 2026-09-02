@@ -54,3 +54,5 @@
 /sqlpgq.c
 /twophase
 /twophase.c
+/without_overlaps
+/without_overlaps.c

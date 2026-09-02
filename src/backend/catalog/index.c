@@ -2447,6 +2447,31 @@ index_drop(Oid indexId, bool concurrent, bool concurrent_lock_mode)
  * ----------------------------------------------------------------
  */
 
+/*
+ * RelationIndexHasWithoutOverlaps
+ *		Does this unique index's last key column use overlaps, not equality?
+ *
+ * True either because the index backs an exclusion constraint that was
+ * created as a WITHOUT OVERLAPS key, or because the index itself was created
+ * with WITHOUT OVERLAPS on its last column.  Indexes made before the latter
+ * existed only have the former, so both have to be checked.
+ */
+bool
+RelationIndexHasWithoutOverlaps(Relation relation)
+{
+	int			nkeyatts;
+
+	Assert(relation->rd_index != NULL);
+
+	if (!relation->rd_index->indisunique)
+		return false;
+	if (relation->rd_index->indisexclusion)
+		return true;
+
+	nkeyatts = relation->rd_index->indnkeyatts;
+	return (relation->rd_indoption[nkeyatts - 1] & INDOPTION_WITHOUT_OVERLAPS) != 0;
+}
+
 /* ----------------
  *		BuildIndexInfo
  *			Construct an IndexInfo record for an open index
@@ -2485,7 +2510,7 @@ BuildIndexInfo(Relation index)
 					   indexStruct->indisready,
 					   false,
 					   index->rd_indam->amsummarizing,
-					   indexStruct->indisexclusion && indexStruct->indisunique);
+					   RelationIndexHasWithoutOverlaps(index));
 
 	/* fill in attribute numbers */
 	for (i = 0; i < numAtts; i++)
@@ -2545,7 +2570,7 @@ BuildDummyIndexInfo(Relation index)
 					   indexStruct->indisready,
 					   false,
 					   index->rd_indam->amsummarizing,
-					   indexStruct->indisexclusion && indexStruct->indisunique);
+					   RelationIndexHasWithoutOverlaps(index));
 
 	/* fill in attribute numbers */
 	for (i = 0; i < numAtts; i++)
@@ -2578,6 +2603,10 @@ CompareIndexInfo(const IndexInfo *info1, const IndexInfo *info2,
 		return false;
 
 	if (info1->ii_NullsNotDistinct != info2->ii_NullsNotDistinct)
+		return false;
+
+	/* a WITHOUT OVERLAPS key is a different constraint from a plain one */
+	if (info1->ii_WithoutOverlaps != info2->ii_WithoutOverlaps)
 		return false;
 
 	/* indexes are only equivalent if they have the same access method */
@@ -2734,8 +2763,19 @@ BuildSpeculativeIndexInfo(Relation index, IndexInfo *ii)
 	/* We need the func OIDs and strategy numbers too */
 	for (i = 0; i < indnkeyatts; i++)
 	{
+		CompareType cmptype;
+
+		/*
+		 * The last column of a WITHOUT OVERLAPS key conflicts by overlapping
+		 * rather than by being equal.
+		 */
+		if (i == indnkeyatts - 1 && ii->ii_WithoutOverlaps)
+			cmptype = COMPARE_OVERLAP;
+		else
+			cmptype = COMPARE_EQ;
+
 		ii->ii_UniqueStrats[i] =
-			IndexAmTranslateCompareType(COMPARE_EQ,
+			IndexAmTranslateCompareType(cmptype,
 										index->rd_rel->relam,
 										index->rd_opfamily[i],
 										false);

@@ -1,0 +1,40 @@
+#include <stdio.h>
+
+exec sql include ../regression;
+
+exec sql whenever sqlerror sqlprint;
+
+/*
+ * WITHOUT OVERLAPS needs the WITHOUT_LA lookahead token, which ecpg's lexer
+ * has to produce the same way the backend's does.
+ */
+int
+main(void)
+{
+	EXEC SQL BEGIN DECLARE SECTION;
+		int n;
+	EXEC SQL END DECLARE SECTION;
+
+	ECPGdebug(1, stderr);
+	EXEC SQL connect to REGRESSDB1;
+	EXEC SQL SET AUTOCOMMIT TO ON;
+
+	EXEC SQL CREATE TABLE wo_test (
+		id int4range,
+		valid_at daterange,
+		PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+	);
+	EXEC SQL CREATE UNIQUE INDEX wo_test_idx ON wo_test
+		USING gist (valid_at, id WITHOUT OVERLAPS);
+
+	EXEC SQL INSERT INTO wo_test VALUES ('[1,2)', '[2020-01-01,2021-01-01)');
+	/* overlaps the first row, so this fails */
+	EXEC SQL INSERT INTO wo_test VALUES ('[1,2)', '[2020-06-01,2021-06-01)');
+	EXEC SQL SELECT count(*) INTO :n FROM wo_test;
+	printf("count = %d\n", n);
+
+	EXEC SQL DROP TABLE wo_test;
+	EXEC SQL DISCONNECT all;
+
+	return 0;
+}

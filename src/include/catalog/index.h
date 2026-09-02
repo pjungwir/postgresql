@@ -131,6 +131,8 @@ extern void index_drop(Oid indexId, bool concurrent, bool concurrent_lock_mode);
 
 extern IndexInfo *BuildIndexInfo(Relation index);
 
+extern bool RelationIndexHasWithoutOverlaps(Relation relation);
+
 extern IndexInfo *BuildDummyIndexInfo(Relation index);
 
 extern bool CompareIndexInfo(const IndexInfo *info1, const IndexInfo *info2,
