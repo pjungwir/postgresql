@@ -1523,8 +1523,19 @@ pg_get_indexdef_worker(Oid indexrelid, int colno,
 			 * Say if the column has to not overlap rather than not be equal.
 			 * Only meaningful on an index; an exclusion constraint spells the
 			 * same thing out with WITH above.
+			 *
+			 * Indexes created before there was an indoption bit for this only
+			 * record it as being both unique and an exclusion constraint's
+			 * index, which is what a WITHOUT OVERLAPS constraint made.  Print
+			 * the clause for those too, or a dump of such a database would
+			 * describe an index that forbids equality rather than overlaps.
+			 * RelationIndexHasWithoutOverlaps() asks the same question of an
+			 * open relation.
 			 */
-			if (excludeOps == NULL && (opt & INDOPTION_WITHOUT_OVERLAPS))
+			if (excludeOps == NULL &&
+				((opt & INDOPTION_WITHOUT_OVERLAPS) ||
+				 (idxrec->indisunique && idxrec->indisexclusion &&
+				  keyno == idxrec->indnkeyatts - 1)))
 				appendStringInfoString(&buf, " WITHOUT OVERLAPS");
 		}
 	}

@@ -318,6 +318,43 @@ CREATE UNIQUE INDEX ON temporal_idx
 DROP TABLE temporal_idx;
 
 --
+-- test that pg_get_indexdef output can recreate an equivalent index
+--
+-- This is the round trip that motivated all of this: the definition
+-- pg_get_indexdef prints for a temporal key's index has to build an index
+-- that enforces the same thing.
+--
+
+CREATE TABLE temporal_roundtrip (
+  id int4range,
+  valid_at daterange,
+  CONSTRAINT temporal_roundtrip_pk PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+SELECT pg_get_indexdef('temporal_roundtrip_pk'::regclass);
+
+-- drop the constraint and rebuild the index from that very definition
+ALTER TABLE temporal_roundtrip DROP CONSTRAINT temporal_roundtrip_pk;
+CREATE UNIQUE INDEX temporal_roundtrip_pk ON public.temporal_roundtrip
+  USING gist (id, valid_at WITHOUT OVERLAPS);
+
+-- it must still forbid overlaps, not equality
+INSERT INTO temporal_roundtrip VALUES ('[1,2)', daterange('2018-01-01', '2018-06-01'));
+-- overlapping but not equal: must fail
+INSERT INTO temporal_roundtrip VALUES ('[1,2)', daterange('2018-03-01', '2018-09-01'));
+-- adjacent: okay
+INSERT INTO temporal_roundtrip VALUES ('[1,2)', daterange('2018-06-01', '2018-09-01'));
+-- empty: must fail
+INSERT INTO temporal_roundtrip VALUES ('[1,2)', 'empty');
+
+-- and the constraint can be put back on top of it
+ALTER TABLE temporal_roundtrip ADD CONSTRAINT temporal_roundtrip_pk
+  PRIMARY KEY USING INDEX temporal_roundtrip_pk;
+SELECT pg_get_constraintdef(oid) FROM pg_constraint
+  WHERE conname = 'temporal_roundtrip_pk';
+SELECT pg_get_indexdef('temporal_roundtrip_pk'::regclass);
+DROP TABLE temporal_roundtrip;
+
+--
 -- test PRIMARY KEY and UNIQUE constraints' interaction with domains
 --
 
