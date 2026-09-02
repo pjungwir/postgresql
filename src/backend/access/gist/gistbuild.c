@@ -224,7 +224,7 @@ gistbuild(Relation heap, Relation index, IndexInfo *indexInfo)
 	buildstate.checkunique = (indexInfo->ii_Unique &&
 							  gistneedsuniquecheck(index, indexInfo));
 	if (buildstate.checkunique)
-		initGISTstateExclude(buildstate.giststate, index);
+		initGISTstateExclude(buildstate.giststate, index, indexInfo);
 
 	/*
 	 * Create a temporary memory context that is reset once for each tuple

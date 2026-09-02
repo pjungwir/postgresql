@@ -59,9 +59,11 @@
  * itself.  We do both after unlocking the leaf page, since either can run
  * user code.
  *
- * Note that an index backing a WITHOUT OVERLAPS constraint is marked unique
- * too, but we are not asked to check those: the executor enforces them through
- * the exclusion constraint machinery.  See gistneedsuniquecheck().
+ * A WITHOUT OVERLAPS key is a unique index too, and is enforced here the same
+ * way; its last column just uses the overlaps operator rather than equality.
+ * Such a key also forbids empty ranges, which is not something an operator
+ * can express, so that is checked separately with
+ * ExecCheckWithoutOverlapsNotEmpty().
  *
  *
  * Portions Copyright (c) 1996-2026, PostgreSQL Global Development Group
@@ -160,27 +162,19 @@ static void gistUniqueFormValues(GISTUniqueState *state,
 								 Datum *oldvals, bool *oldnulls);
 static bool gistUniqueConflicts(GISTUniqueState *state,
 								const Datum *oldvals, const bool *oldnulls);
-pg_noreturn static void gistUniqueReport(GISTUniqueState *state);
+pg_noreturn static void gistUniqueReport(GISTUniqueState *state,
+										 const Datum *oldvals,
+										 const bool *oldnulls);
 
 
 /*
- * gistneedsuniquecheck() -- is enforcing this index's uniqueness our job?
+ * gistneedsuniquecheck() -- must a build of this index validate it itself?
  *
- * An index can be marked unique and still be enforced by somebody else.  A
- * WITHOUT OVERLAPS key sets both indisunique and indisexclusion, and the
- * executor enforces it through the exclusion constraint machinery, using the
- * operators recorded for it in pg_constraint -- which are that constraint's
- * authoritative definition.  Checking the same condition again here would
- * only duplicate the work: on every insert, and at build time a second
- * validation pass over the table on top of the one index_build() already
- * makes with IndexCheckExclusion().
- *
- * XXX It would be better for the index to own the check in that case too, so
- * that a WITHOUT OVERLAPS key behaves like any other unique index and can
- * stand on its own.  That needs ExecInsertIndexTuples() to skip the exclusion
- * check, and it needs somewhere else to do the empty-range rejection that
- * check_exclusion_or_unique_constraint() also does.  Both are separate
- * changes; when they land, this is the function that decides differently.
+ * Inserts always check (see gistinsert()).  A build validates the finished
+ * index with a second pass over the table (see gistBuildValidateUnique()),
+ * but it can leave that to somebody else: index_build() already makes such a
+ * pass with IndexCheckExclusion() for any index backing an exclusion
+ * constraint, and a second one would only repeat it.
  */
 bool
 gistneedsuniquecheck(Relation r, IndexInfo *indexInfo)
@@ -230,6 +224,14 @@ gistcheckunique(Relation r, GISTSTATE *giststate, Relation heapRel,
 	INJECTION_POINT("gist-unique-before-search", NULL);
 
 	/*
+	 * A WITHOUT OVERLAPS key also forbids empty ranges and multiranges.  That
+	 * isn't something the conflict operators can express, so it is a separate
+	 * test -- and it has to come before the NULL check below, or a row could
+	 * sneak an empty range in beside a NULL scalar part.
+	 */
+	ExecCheckWithoutOverlapsNotEmpty(heapRel, indexInfo, values, isnull);
+
+	/*
 	 * If any of the values is NULL and the index uses the default
 	 * nulls-are-distinct mode, the row cannot conflict with anything: the
 	 * search operators are strict, so nothing compares equal to it.  (For a
@@ -277,8 +279,9 @@ gistcheckunique(Relation r, GISTSTATE *giststate, Relation heapRel,
 	/*
 	 * Build the scan keys.  Like gistrescan() we put the opclass's consistent
 	 * method into the key: the strategy number tells it which operator we
-	 * actually mean, namely the equality operator initGISTstateExclude()
-	 * looked up for us.
+	 * actually mean, namely the one initGISTstateExclude() looked up for this
+	 * column -- equality, or overlaps for the last column of a WITHOUT
+	 * OVERLAPS key.
 	 */
 	for (i = 0; i < state.nkeyatts; i++)
 	{
@@ -552,9 +555,19 @@ retry:
 			 */
 			CheckForSerializableConflictIn(r, NULL, item.blkno);
 
+			/*
+			 * The exclusion-constraint message describes the row we conflict
+			 * with as well as our own.  Recompute its key values rather than
+			 * reusing anything the recheck above produced, which lived in the
+			 * per-tuple context and is gone by now.  We still hold the heap
+			 * pin, so the slot is good.
+			 */
+			if (r->rd_index->indisexclusion)
+				gistUniqueFormValues(&state, oldvals, oldnulls);
+
 			ReleaseBuffer(buffer);
 
-			gistUniqueReport(&state);
+			gistUniqueReport(&state, oldvals, oldnulls);
 		}
 
 		if (nkilled > 0)
@@ -760,20 +773,18 @@ gistUniqueConflicts(GISTUniqueState *state,
 /*
  * Complain about a conflict.  Never returns.
  *
- * The wording matches nbtree's, including the different message a build uses
- * ("could not create unique index"), so that the two access methods are
- * interchangeable from the user's point of view.
+ * For an ordinary unique index the wording matches nbtree's, including the
+ * different message a build uses ("could not create unique index"), so that
+ * the two access methods are interchangeable from the user's point of view.
  *
  * An index that is unique and an exclusion constraint at the same time is a
  * WITHOUT OVERLAPS key, and users expect the exclusion constraint wording for
- * those ("conflicting key value violates exclusion constraint", naming both
- * the new and the existing key).  We are never called for one of those yet --
- * see gistneedsuniquecheck() -- but when that changes, this is where the
- * second pair of messages goes, and the caller has to describe the
- * conflicting row's key as well as ours.
+ * those, naming the existing key as well as ours -- so oldvals/oldnulls
+ * describe the row we conflicted with.
  */
 pg_noreturn static void
-gistUniqueReport(GISTUniqueState *state)
+gistUniqueReport(GISTUniqueState *state,
+				 const Datum *oldvals, const bool *oldnulls)
 {
 	Relation	rel = state->rel;
 	Relation	heapRel = state->heapRel;
@@ -781,7 +792,31 @@ gistUniqueReport(GISTUniqueState *state)
 
 	key_desc = BuildIndexValueDescription(rel, state->newvals, state->newnulls);
 
-	if (state->is_build)
+	if (rel->rd_index->indisexclusion)
+	{
+		char	   *old_key_desc;
+
+		/*
+		 * A build never gets here for one of these: index_build() validates
+		 * an exclusion constraint's index itself, so we don't (see
+		 * gistneedsuniquecheck()).
+		 */
+		Assert(!state->is_build);
+
+		old_key_desc = BuildIndexValueDescription(rel, oldvals, oldnulls);
+
+		ereport(ERROR,
+				(errcode(ERRCODE_EXCLUSION_VIOLATION),
+				 errmsg("conflicting key value violates exclusion constraint \"%s\"",
+						RelationGetRelationName(rel)),
+				 key_desc && old_key_desc ?
+				 errdetail("Key %s conflicts with existing key %s.",
+						   key_desc, old_key_desc) :
+				 errdetail("Key conflicts with existing key."),
+				 errtableconstraint(heapRel,
+									RelationGetRelationName(rel))));
+	}
+	else if (state->is_build)
 		ereport(ERROR,
 				(errcode(ERRCODE_UNIQUE_VIOLATION),
 				 errmsg("could not create unique index \"%s\"",

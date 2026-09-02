@@ -760,6 +760,10 @@ extern List *ExecInsertIndexTuples(ResultRelInfo *resultRelInfo, EState *estate,
 								   uint32 flags, TupleTableSlot *slot,
 								   List *arbiterIndexes,
 								   bool *specConflict);
+extern void ExecCheckWithoutOverlapsNotEmpty(Relation heap,
+											 struct IndexInfo *indexInfo,
+											 const Datum *values,
+											 const bool *isnull);
 extern bool ExecCheckIndexConstraints(ResultRelInfo *resultRelInfo,
 									  TupleTableSlot *slot,
 									  EState *estate, ItemPointer conflictTid,

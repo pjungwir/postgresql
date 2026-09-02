@@ -433,7 +433,8 @@ extern bool gistinsert(Relation r, Datum *values, bool *isnull,
 					   struct IndexInfo *indexInfo);
 extern MemoryContext createTempGistContext(void);
 extern GISTSTATE *initGISTstate(Relation index);
-extern void initGISTstateExclude(GISTSTATE *giststate, Relation index);
+extern void initGISTstateExclude(GISTSTATE *giststate, Relation index,
+								 struct IndexInfo *indexInfo);
 extern void freeGISTstate(GISTSTATE *giststate);
 extern void gistdoinsert(Relation r,
 						 IndexTuple itup,

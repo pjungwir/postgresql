@@ -1,4 +1,5 @@
-# INSERT ... ON CONFLICT DO NOTHING racing on a unique GiST index
+# INSERT ... ON CONFLICT DO NOTHING racing on a unique GiST index, and on a
+# WITHOUT OVERLAPS key, which GiST enforces the same way
 #
 # GiST inserts an entry first and searches for conflicts afterwards.  So two
 # sessions inserting the same key can both pass ON CONFLICT's pre-check, both
@@ -20,6 +21,11 @@ setup
     CREATE EXTENSION injection_points;
     CREATE TABLE gist_upsert (id int4range);
     CREATE UNIQUE INDEX gist_upsert_uq ON gist_upsert USING gist (id);
+    CREATE TABLE gist_upsert_t (
+        id int4range,
+        valid_at daterange,
+        PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+    );
     CREATE FUNCTION waiting_at(point text) RETURNS bigint LANGUAGE sql AS $$
         SELECT count(*) FROM pg_stat_activity WHERE wait_event = point
     $$;
@@ -60,7 +66,7 @@ setup
 
 teardown
 {
-    DROP TABLE gist_upsert;
+    DROP TABLE gist_upsert, gist_upsert_t;
     DROP FUNCTION wake_all(text), await(text), locked(), inserting(),
         waiting_at(text);
     DROP EXTENSION injection_points;
@@ -68,9 +74,17 @@ teardown
 
 session s1
 step ins1 { INSERT INTO gist_upsert VALUES ('[1,2)') ON CONFLICT DO NOTHING; }
+step ins1t {
+    INSERT INTO gist_upsert_t VALUES ('[1,2)', '[2020-01-01,2021-01-01)')
+    ON CONFLICT DO NOTHING;
+}
 
 session s2
 step ins2 { INSERT INTO gist_upsert VALUES ('[1,2)') ON CONFLICT DO NOTHING; }
+step ins2t {
+    INSERT INTO gist_upsert_t VALUES ('[1,2)', '[2020-06-01,2021-06-01)')
+    ON CONFLICT DO NOTHING;
+}
 
 session s3
 step attach {
@@ -107,5 +121,7 @@ step detach_wake {
     SELECT wake_all('exec-insert-before-insert-speculative');
 }
 step result { SELECT * FROM gist_upsert; }
+step result_t { SELECT * FROM gist_upsert_t; }
 
 permutation attach ins1 ins2 wake_insert wake_search conflicted wake_conflict detach_wake result
+permutation attach ins1t ins2t wake_insert wake_search conflicted wake_conflict detach_wake result_t

@@ -106,6 +106,7 @@
  */
 #include "postgres.h"
 
+#include "access/amapi.h"
 #include "access/genam.h"
 #include "access/relscan.h"
 #include "access/tableam.h"
@@ -469,8 +470,15 @@ ExecInsertIndexTuples(ResultRelInfo *resultRelInfo,
 		 * An index for an exclusion constraint can't also be UNIQUE (not an
 		 * essential property, we just don't allow it in the grammar), so no
 		 * need to preserve the prior state of satisfiesConstraint.
+		 *
+		 * The one exception is a WITHOUT OVERLAPS key, which is both.  If its
+		 * access method enforces uniqueness itself then index_insert() has
+		 * just applied the constraint for us, empty-range rejection included,
+		 * and there is nothing left to do.
 		 */
-		if (indexInfo->ii_ExclusionOps != NULL)
+		if (indexInfo->ii_ExclusionOps != NULL &&
+			!(indexRelation->rd_index->indisunique &&
+			  indexRelation->rd_indam->amcanunique))
 		{
 			bool		violationOK;
 			CEOUC_WAIT_MODE waitMode;
@@ -742,32 +750,7 @@ check_exclusion_or_unique_constraint(Relation heap, Relation index,
 	 * a UNIQUE constraint could insert an empty range along with a NULL
 	 * scalar part.
 	 */
-	if (indexInfo->ii_WithoutOverlaps)
-	{
-		/*
-		 * Look up the type from the heap tuple, but check the Datum from the
-		 * index tuple.
-		 */
-		AttrNumber	attno = indexInfo->ii_IndexAttrNumbers[indnkeyatts - 1];
-
-		if (!isnull[indnkeyatts - 1])
-		{
-			TupleDesc	tupdesc = RelationGetDescr(heap);
-			Form_pg_attribute att = TupleDescAttr(tupdesc, attno - 1);
-			TypeCacheEntry *typcache = lookup_type_cache(att->atttypid,
-														 TYPECACHE_DOMAIN_BASE_INFO);
-			char		typtype;
-
-			if (OidIsValid(typcache->domainBaseType))
-				typtype = get_typtype(typcache->domainBaseType);
-			else
-				typtype = typcache->typtype;
-
-			ExecWithoutOverlapsNotEmpty(heap, att->attname,
-										values[indnkeyatts - 1],
-										typtype, att->atttypid);
-		}
-	}
+	ExecCheckWithoutOverlapsNotEmpty(heap, indexInfo, values, isnull);
 
 	/*
 	 * If any of the input values are NULL, and the index uses the default
@@ -1152,6 +1135,53 @@ index_expression_changed_walker(Node *node, Bitmapset *allUpdatedCols)
 
 	return expression_tree_walker(node, index_expression_changed_walker,
 								  allUpdatedCols);
+}
+
+/*
+ * ExecCheckWithoutOverlapsNotEmpty - reject an empty range/multirange in the
+ * WITHOUT OVERLAPS column of a temporal key.
+ *
+ * This is part of enforcing such a constraint, but it is not something the
+ * constraint's operators can express, so it is checked separately from the
+ * conflict scan.  Whoever enforces the constraint has to call this: either
+ * check_exclusion_or_unique_constraint() below, or an index AM that enforces
+ * the constraint itself (see gistcheckunique()).
+ *
+ * Does nothing if this isn't a WITHOUT OVERLAPS key.
+ */
+void
+ExecCheckWithoutOverlapsNotEmpty(Relation heap, IndexInfo *indexInfo,
+								 const Datum *values, const bool *isnull)
+{
+	int			indnkeyatts = indexInfo->ii_NumIndexKeyAttrs;
+	AttrNumber	attno;
+	TupleDesc	tupdesc;
+	Form_pg_attribute att;
+	TypeCacheEntry *typcache;
+	char		typtype;
+
+	if (!indexInfo->ii_WithoutOverlaps)
+		return;
+
+	if (isnull[indnkeyatts - 1])
+		return;
+
+	/*
+	 * Look up the type from the heap tuple, but check the Datum from the
+	 * index tuple.
+	 */
+	attno = indexInfo->ii_IndexAttrNumbers[indnkeyatts - 1];
+	tupdesc = RelationGetDescr(heap);
+	att = TupleDescAttr(tupdesc, attno - 1);
+	typcache = lookup_type_cache(att->atttypid, TYPECACHE_DOMAIN_BASE_INFO);
+
+	if (OidIsValid(typcache->domainBaseType))
+		typtype = get_typtype(typcache->domainBaseType);
+	else
+		typtype = typcache->typtype;
+
+	ExecWithoutOverlapsNotEmpty(heap, att->attname, values[indnkeyatts - 1],
+								typtype, att->atttypid);
 }
 
 /*

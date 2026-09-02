@@ -181,8 +181,7 @@ gistinsert(Relation r, Datum *values, bool *isnull,
 	bool		checkingunique;
 	bool		is_unique = false;
 
-	checkingunique = (checkUnique != UNIQUE_CHECK_NO &&
-					  gistneedsuniquecheck(r, indexInfo));
+	checkingunique = (checkUnique != UNIQUE_CHECK_NO);
 
 	/* Initialize GISTSTATE cache if first call in this statement */
 	if (giststate == NULL)
@@ -190,7 +189,7 @@ gistinsert(Relation r, Datum *values, bool *isnull,
 		oldCxt = MemoryContextSwitchTo(indexInfo->ii_Context);
 		giststate = initGISTstate(r);
 		if (checkingunique)
-			initGISTstateExclude(giststate, r);
+			initGISTstateExclude(giststate, r, indexInfo);
 		giststate->tempCxt = createTempGistContext();
 		indexInfo->ii_AmCache = giststate;
 		MemoryContextSwitchTo(oldCxt);
@@ -1704,17 +1703,20 @@ initGISTstate(Relation index)
  * numbers while the built-in opclasses use the R-tree ones -- so we have to
  * ask the opfamily to translate a CompareType for us.
  *
- * Equality is the only comparison we ask for today.  A WITHOUT OVERLAPS key
- * needs COMPARE_OVERLAP for its last column instead, so the choice is made
- * per column and everything downstream is written in terms of "conflicts
- * with" rather than "is equal to".
+ * A WITHOUT OVERLAPS key is the exception: its last column must not overlap
+ * rather than not be equal.  When the index backs an exclusion constraint we
+ * take that constraint's own operators rather than translating a compare type
+ * ourselves, because pg_constraint.conexclop is their authoritative record and
+ * re-deriving them from the opfamily could drift from what the constraint
+ * actually says.
  *
  * Assumes the caller has already established that this index is unique.
  */
 void
-initGISTstateExclude(GISTSTATE *giststate, Relation index)
+initGISTstateExclude(GISTSTATE *giststate, Relation index, IndexInfo *indexInfo)
 {
 	int			nkeyatts = IndexRelationGetNumberOfKeyAttributes(index);
+	bool		fromconstraint = (indexInfo->ii_ExclusionOps != NULL);
 	oidvector  *indclass;
 	int			i;
 
@@ -1729,6 +1731,14 @@ initGISTstateExclude(GISTSTATE *giststate, Relation index)
 		StrategyNumber strat;
 		Oid			opid;
 		RegProcedure proc;
+
+		if (fromconstraint)
+		{
+			giststate->uniqueStratnum[i] = indexInfo->ii_ExclusionStrats[i];
+			fmgr_info_cxt(indexInfo->ii_ExclusionProcs[i],
+						  &(giststate->excludeFn[i]), giststate->scanCxt);
+			continue;
+		}
 
 		/* The comparison this column has to make.  See above. */
 		GetOperatorFromCompareType(indclass->values[i], InvalidOid,
