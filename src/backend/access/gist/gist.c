@@ -76,6 +76,7 @@ gisthandler(PG_FUNCTION_ARGS)
 		.amconsistentordering = false,
 		.amcanbackward = false,
 		.amcanunique = true,
+		.amcantemporal = true,
 		.amcanmulticol = true,
 		.amoptionalkey = true,
 		.amsearcharray = false,

@@ -227,6 +227,9 @@ CREATE UNIQUE INDEX ON temporal_idx
   USING gist (id WITHOUT OVERLAPS, valid_at); -- fail
 CREATE INDEX ON temporal_idx
   USING gist (id, valid_at WITHOUT OVERLAPS); -- fail
+-- and only on an access method that can enforce it:
+CREATE UNIQUE INDEX ON temporal_idx
+  USING btree (id, valid_at WITHOUT OVERLAPS); -- fail
 -- and the opclass must have an overlaps operator:
 CREATE UNIQUE INDEX ON temporal_idx
   USING gist (valid_at, id WITHOUT OVERLAPS); -- okay, int4range overlaps

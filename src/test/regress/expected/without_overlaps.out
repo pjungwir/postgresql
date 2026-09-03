@@ -391,6 +391,10 @@ CREATE INDEX ON temporal_idx
 ERROR:  WITHOUT OVERLAPS requires a unique index
 LINE 2:   USING gist (id, valid_at WITHOUT OVERLAPS);
                           ^
+-- and only on an access method that can enforce it:
+CREATE UNIQUE INDEX ON temporal_idx
+  USING btree (id, valid_at WITHOUT OVERLAPS); -- fail
+ERROR:  access method "btree" does not support WITHOUT OVERLAPS
 -- and the opclass must have an overlaps operator:
 CREATE UNIQUE INDEX ON temporal_idx
   USING gist (valid_at, id WITHOUT OVERLAPS); -- okay, int4range overlaps

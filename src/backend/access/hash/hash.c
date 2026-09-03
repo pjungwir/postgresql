@@ -81,6 +81,7 @@ hashhandler(PG_FUNCTION_ARGS)
 		.amconsistentordering = false,
 		.amcanbackward = true,
 		.amcanunique = false,
+		.amcantemporal = false,
 		.amcanmulticol = false,
 		.amoptionalkey = false,
 		.amsearcharray = false,

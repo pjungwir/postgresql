@@ -50,6 +50,7 @@ ginhandler(PG_FUNCTION_ARGS)
 		.amconsistentordering = false,
 		.amcanbackward = false,
 		.amcanunique = false,
+		.amcantemporal = false,
 		.amcanmulticol = true,
 		.amoptionalkey = true,
 		.amsearcharray = false,

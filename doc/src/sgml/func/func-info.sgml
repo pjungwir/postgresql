@@ -2338,6 +2338,14 @@ SELECT currval(pg_get_serial_sequence('sometable', 'id'));
         clause of <literal>CREATE INDEX</literal>?
       </entry>
      </row>
+     <row>
+      <entry><literal>can_temporal</literal></entry>
+      <entry>Does the access method support the
+        <literal>WITHOUT OVERLAPS</literal> clause of
+        <literal>CREATE INDEX</literal>, and <literal>WITHOUT OVERLAPS</literal>
+        primary key and unique constraints?
+      </entry>
+     </row>
     </tbody>
    </tgroup>
   </table>

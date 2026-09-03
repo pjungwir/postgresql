@@ -368,9 +368,11 @@ CREATE [ UNIQUE ] INDEX [ CONCURRENTLY ] [ [ IF NOT EXISTS ] <replaceable class=
        </para>
        <para>
         Only the last column of the index may say this, the index must be
-        <literal>UNIQUE</literal>, and the column's operator class must provide an
-        overlaps operator.  Empty ranges and multiranges are rejected, as they are
-        for a constraint.
+        <literal>UNIQUE</literal>, the access method must support it (see the
+        <literal>can_temporal</literal> property in
+        <xref linkend="functions-info-indexam-props"/>), and the column's operator
+        class must provide an overlaps operator.  Empty ranges and multiranges are
+        rejected, as they are for a constraint.
        </para>
        <para>
         This is not in the SQL standard, which defines

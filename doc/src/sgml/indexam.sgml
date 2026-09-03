@@ -119,6 +119,8 @@ typedef struct IndexAmRoutine
     bool        amcanbackward;
     /* does AM support UNIQUE indexes? */
     bool        amcanunique;
+    /* does AM support WITHOUT OVERLAPS keys? */
+    bool        amcantemporal;
     /* does AM support multi-column indexes? */
     bool        amcanmulticol;
     /* does AM require scans to have a constraint on the first index column? */
@@ -220,6 +222,10 @@ typedef struct IndexAmRoutine
    Some of the flag fields of <structname>IndexAmRoutine</structname> have nonobvious
    implications.  The requirements of <structfield>amcanunique</structfield>
    are discussed in <xref linkend="index-unique-checks"/>.
+   <structfield>amcantemporal</structfield> says the access method can enforce a
+   <literal>WITHOUT OVERLAPS</literal> key, whose last column must not overlap
+   rather than not be equal; it implies <structfield>amcanunique</structfield>,
+   since such a key is a unique index.
    The <structfield>amcanmulticol</structfield> flag asserts that the
    access method supports multi-key-column indexes, while
    <structfield>amoptionalkey</structfield> asserts that it allows scans
@@ -1344,6 +1350,44 @@ amtranslatecmptype (CompareType cmptype, Oid opfamily, Oid opcintype);
       </para>
      </listitem>
     </itemizedlist>
+  </para>
+
+  <para>
+   An access method that sets <structfield>amcantemporal</structfield> also
+   enforces <literal>WITHOUT OVERLAPS</literal> keys, in which the last key
+   column must not overlap rather than not be equal.  The executor does not
+   check these itself when the index's access method sets
+   <structfield>amcanunique</structfield>, so the access method has to do all
+   of it:
+   <itemizedlist>
+    <listitem>
+     <para>
+      Find the comparison for each key column: the index's operator class's
+      equality operator, except for the last column of an index whose
+      <structfield>indoption</structfield> carries
+      <literal>INDOPTION_WITHOUT_OVERLAPS</literal>, which uses the overlaps
+      operator.  When the index backs a constraint,
+      <structname>IndexInfo</structname>'s
+      <structfield>ii_ExclusionOps</structfield> already holds the constraint's
+      operators.
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      Reject an empty range or multirange in the last column, which no operator
+      can express, by calling
+      <function>ExecCheckWithoutOverlapsNotEmpty</function>.
+     </para>
+    </listitem>
+    <listitem>
+     <para>
+      Handle all of the <literal>UNIQUE_CHECK_*</literal> modes described above,
+      and check a new index's contents at build time unless
+      <function>index_build</function> does so, as it does for an index that
+      backs an exclusion constraint.
+     </para>
+    </listitem>
+   </itemizedlist>
   </para>
 
  </sect1>

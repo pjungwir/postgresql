@@ -56,6 +56,7 @@ typedef enum IndexAMProperty
 	AMPROP_CAN_MULTI_COL,
 	AMPROP_CAN_EXCLUDE,
 	AMPROP_CAN_INCLUDE,
+	AMPROP_CAN_TEMPORAL,
 } IndexAMProperty;
 
 /*
@@ -257,6 +258,8 @@ typedef struct IndexAmRoutine
 	bool		amcanbackward;
 	/* does AM support UNIQUE indexes? */
 	bool		amcanunique;
+	/* does AM support WITHOUT OVERLAPS keys? */
+	bool		amcantemporal;
 	/* does AM support multi-column indexes? */
 	bool		amcanmulticol;
 	/* does AM require scans to have a constraint on the first index column? */

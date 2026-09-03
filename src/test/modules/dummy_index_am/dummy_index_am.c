@@ -304,6 +304,7 @@ dihandler(PG_FUNCTION_ARGS)
 		.amconsistentordering = false,
 		.amcanbackward = false,
 		.amcanunique = false,
+		.amcantemporal = false,
 		.amcanmulticol = false,
 		.amoptionalkey = false,
 		.amsearcharray = false,

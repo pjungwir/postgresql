@@ -129,6 +129,7 @@ bthandler(PG_FUNCTION_ARGS)
 		.amconsistentordering = true,
 		.amcanbackward = true,
 		.amcanunique = true,
+		.amcantemporal = false,
 		.amcanmulticol = true,
 		.amoptionalkey = true,
 		.amsearcharray = true,

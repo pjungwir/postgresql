@@ -900,11 +900,35 @@ DefineIndex(ParseState *pstate,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("access method \"%s\" does not support exclusion constraints",
 						accessMethodName)));
-	if (stmt->iswithoutoverlaps && strcmp(accessMethodName, "gist") != 0)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("access method \"%s\" does not support WITHOUT OVERLAPS constraints",
-						accessMethodName)));
+
+	/*
+	 * WITHOUT OVERLAPS needs an access method that can enforce it, however
+	 * the statement said so: a PRIMARY KEY or UNIQUE constraint sets
+	 * iswithoutoverlaps, while CREATE INDEX marks the column itself.
+	 */
+	if (!amRoutine->amcantemporal)
+	{
+		bool		iswithoutoverlaps = stmt->iswithoutoverlaps;
+		ListCell   *elem;
+
+		if (!iswithoutoverlaps)
+		{
+			foreach(elem, stmt->indexParams)
+			{
+				if (((IndexElem *) lfirst(elem))->without_overlaps)
+				{
+					iswithoutoverlaps = true;
+					break;
+				}
+			}
+		}
+
+		if (iswithoutoverlaps)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("access method \"%s\" does not support WITHOUT OVERLAPS",
+							accessMethodName)));
+	}
 
 	amcanorder = amRoutine->amcanorder;
 	amoptions = amRoutine->amoptions;
