@@ -2449,6 +2449,14 @@ typedef struct ForPortionOfExpr
 	List	   *rangeTargetList;	/* List of TargetEntrys to set the time
 									 * column(s) */
 	Oid			withoutPortionProc; /* SRF proc for old_range - target_range */
+
+	/*
+	 * PARAM_EXEC slot holding the once-per-statement value of targetRange, or
+	 * -1 if we didn't need one.  The planner substitutes it into
+	 * rangeTargetList so that the range column's new value and the leftovers
+	 * computed from the same value can never disagree.
+	 */
+	int			targetParamId;
 	ParseLoc	location;		/* token location, or -1 if unknown */
 	ParseLoc	targetLocation; /* token location, or -1 if unknown */
 } ForPortionOfExpr;

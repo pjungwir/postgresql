@@ -1849,4 +1849,43 @@ SELECT * FROM fpo_rls ORDER BY valid_at;
 DROP TABLE fpo_rls;
 DROP ROLE regress_fpo_rls;
 
+--
+-- The range column's new value and the leftovers must come from a single
+-- evaluation of the FOR PORTION OF target.
+--
+-- Only volatile functions are rejected in the bounds, so a function that is
+-- labelled STABLE without being stable can hand out a different value at each
+-- evaluation site.  Whatever value it gives, the pieces the statement leaves
+-- behind must still tile the row's original range exactly: no overlapping and
+-- no gapped history.
+--
+
+CREATE TABLE fpo_drift (
+  id int,
+  valid_at daterange,
+  name text
+);
+INSERT INTO fpo_drift VALUES
+  (1, daterange('2000-01-01', '2010-01-01'), 'one');
+
+CREATE SEQUENCE fpo_drift_seq;
+CREATE FUNCTION fpo_drift_bound() RETURNS date LANGUAGE sql STABLE AS
+  $$ SELECT '2003-01-01'::date + nextval('fpo_drift_seq')::int $$;
+
+UPDATE fpo_drift
+  FOR PORTION OF valid_at FROM '2002-01-01' TO fpo_drift_bound()
+  SET name = 'x';
+
+-- The total length of the pieces equals the original 3653 days (so nothing
+-- overlaps), and they merge back into exactly the original range (so nothing
+-- is missing).  Deliberately not asserting how many times the bound was
+-- evaluated, which is an implementation detail.
+SELECT sum(upper(valid_at) - lower(valid_at)) AS total_days,
+       range_agg(valid_at) AS covered
+  FROM fpo_drift;
+
+DROP TABLE fpo_drift;
+DROP FUNCTION fpo_drift_bound();
+DROP SEQUENCE fpo_drift_seq;
+
 RESET datestyle;

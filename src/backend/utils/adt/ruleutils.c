@@ -9018,9 +9018,9 @@ find_param_referent(Param *param, deparse_context *context,
 	*ancestor_cell_p = NULL;
 
 	/*
-	 * If it's a PARAM_EXEC parameter, look for a matching NestLoopParam or
-	 * SubPlan argument.  This will necessarily be in some ancestor of the
-	 * current expression's Plan node.
+	 * If it's a PARAM_EXEC parameter, look for a matching NestLoopParam,
+	 * SubPlan argument, or FOR PORTION OF bound.  This will necessarily be in
+	 * some ancestor of the current expression's Plan node.
 	 */
 	if (param->paramkind == PARAM_EXEC)
 	{
@@ -9055,6 +9055,25 @@ find_param_referent(Param *param, deparse_context *context,
 						*ancestor_cell_p = lc;
 						return (Node *) nlp->paramval;
 					}
+				}
+			}
+
+			/*
+			 * If ancestor is a ModifyTable, see if it's a FOR PORTION OF bound.
+			 */
+			if (IsA(ancestor, ModifyTable))
+			{
+				ForPortionOfExpr *forPortionOf;
+
+				forPortionOf = (ForPortionOfExpr *)
+					((ModifyTable *) ancestor)->forPortionOf;
+
+				if (forPortionOf != NULL &&
+					forPortionOf->targetParamId == param->paramid)
+				{
+					*dpns_p = dpns;
+					*ancestor_cell_p = lc;
+					return forPortionOf->targetRange;
 				}
 			}
 

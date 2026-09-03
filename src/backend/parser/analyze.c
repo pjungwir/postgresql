@@ -1345,6 +1345,7 @@ transformForPortionOfClause(ParseState *pstate,
 				errmsg("WHERE CURRENT OF with FOR PORTION OF is not implemented"));
 
 	result = makeNode(ForPortionOfExpr);
+	result->targetParamId = -1;
 
 	/* Look up the FOR PORTION OF name requested. */
 	range_attno = attnameAttNum(targetrel, forPortionOf->range_name, false);

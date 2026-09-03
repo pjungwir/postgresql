@@ -5649,6 +5649,22 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 					 errmsg("FOR PORTION OF target must not be null"),
 					 executor_errposition(estate, forPortionOf->targetLocation)));
 
+		/*
+		 * If the planner routed the range column's new value through a
+		 * PARAM_EXEC slot, fill it in now, so that the value stored in the
+		 * range column and the leftovers computed below come from this one
+		 * evaluation of the target.
+		 */
+		if (forPortionOf->targetParamId >= 0)
+		{
+			ParamExecData *prm;
+
+			prm = &(estate->es_param_exec_vals[forPortionOf->targetParamId]);
+			prm->execPlan = NULL;
+			prm->value = targetRange;
+			prm->isnull = false;
+		}
+
 		/* Create state for FOR PORTION OF operation */
 
 		fpoState = makeNode(ForPortionOfState);
