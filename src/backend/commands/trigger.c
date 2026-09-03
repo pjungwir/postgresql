@@ -3379,6 +3379,25 @@ ExecASTruncateTriggers(EState *estate, ResultRelInfo *relinfo)
 
 
 /*
+ * Explain an "already modified by an operation triggered by the current
+ * command" error when FOR PORTION OF is involved.
+ *
+ * The accompanying hint blames a BEFORE trigger, which is the only way an
+ * ordinary statement reaches these errors.  But FOR PORTION OF gives a
+ * second way: temporal leftovers fire AFTER triggers before the main command
+ * completes.  We can't tell which one it was here, so just add some extra
+ * detail under FOR PORTION OF.
+ */
+int
+errdetail_temporal_leftovers(ResultRelInfo *relinfo)
+{
+	if (relinfo->ri_forPortionOf == NULL)
+		return 0;
+
+	return errdetail("FOR PORTION OF inserts temporal leftovers while the statement is still running, and those inserts fire their own triggers.");
+}
+
+/*
  * Fetch tuple into "oldslot", dealing with locking and EPQ if necessary
  */
 static bool
@@ -3439,6 +3458,7 @@ GetTupleForTrigger(EState *estate,
 					ereport(ERROR,
 							(errcode(ERRCODE_TRIGGERED_DATA_CHANGE_VIOLATION),
 							 errmsg("tuple to be updated was already modified by an operation triggered by the current command"),
+							 errdetail_temporal_leftovers(relinfo),
 							 errhint("Consider using an AFTER trigger instead of a BEFORE trigger to propagate changes to other rows.")));
 
 				/* treat it as deleted; do not process */

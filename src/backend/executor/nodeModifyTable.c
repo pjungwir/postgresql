@@ -1996,6 +1996,7 @@ ldelete:
 					ereport(ERROR,
 							(errcode(ERRCODE_TRIGGERED_DATA_CHANGE_VIOLATION),
 							 errmsg("tuple to be deleted was already modified by an operation triggered by the current command"),
+							 errdetail_temporal_leftovers(resultRelInfo),
 							 errhint("Consider using an AFTER trigger instead of a BEFORE trigger to propagate changes to other rows.")));
 
 				/* Else, already deleted by self; nothing to do */
@@ -2070,6 +2071,7 @@ ldelete:
 								ereport(ERROR,
 										(errcode(ERRCODE_TRIGGERED_DATA_CHANGE_VIOLATION),
 										 errmsg("tuple to be deleted was already modified by an operation triggered by the current command"),
+										 errdetail_temporal_leftovers(resultRelInfo),
 										 errhint("Consider using an AFTER trigger instead of a BEFORE trigger to propagate changes to other rows.")));
 							return NULL;
 
@@ -2918,6 +2920,7 @@ redo_act:
 					ereport(ERROR,
 							(errcode(ERRCODE_TRIGGERED_DATA_CHANGE_VIOLATION),
 							 errmsg("tuple to be updated was already modified by an operation triggered by the current command"),
+							 errdetail_temporal_leftovers(resultRelInfo),
 							 errhint("Consider using an AFTER trigger instead of a BEFORE trigger to propagate changes to other rows.")));
 
 				/* Else, already updated by self; nothing to do */
@@ -3008,6 +3011,7 @@ redo_act:
 								ereport(ERROR,
 										(errcode(ERRCODE_TRIGGERED_DATA_CHANGE_VIOLATION),
 										 errmsg("tuple to be updated was already modified by an operation triggered by the current command"),
+										 errdetail_temporal_leftovers(resultRelInfo),
 										 errhint("Consider using an AFTER trigger instead of a BEFORE trigger to propagate changes to other rows.")));
 							return NULL;
 
