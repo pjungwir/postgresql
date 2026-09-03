@@ -98,7 +98,10 @@ UPDATE [ ONLY ] <replaceable class="parameter">table_name</replaceable> [ * ]
    privilege on any column whose values are read in the
    <replaceable class="parameter">expressions</replaceable> or
    <replaceable class="parameter">condition</replaceable>.
-   When <literal>FOR PORTION OF</literal> is used, the secondary inserts do
+   When <literal>FOR PORTION OF</literal> is used, you must also have the
+   <literal>SELECT</literal> and <literal>UPDATE</literal> privileges on the
+   <replaceable class="parameter">range_column_name</replaceable> column.
+   The secondary inserts, however, do
    not require <literal>INSERT</literal> privilege on the table.  (This is
    because conceptually no new information is being added; the inserted rows
    only preserve existing data about the untargeted time period.)  Row-level
