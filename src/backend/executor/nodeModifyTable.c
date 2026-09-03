@@ -2656,6 +2656,19 @@ ExecUpdateEpilogue(ModifyTableContext *context, UpdateContext *updateCxt,
 											   NULL);
 	}
 
+	/*
+	 * Check any WITH CHECK OPTION constraints from parent views.  We are
+	 * required to do this after testing all constraints and uniqueness
+	 * violations per the SQL spec, so we do it after actually updating the
+	 * record in the heap and all indexes.
+	 *
+	 * ExecWithCheckOptions() will skip any WCOs which are not of the kind we
+	 * are looking for at this point.
+	 */
+	if (resultRelInfo->ri_WithCheckOptions != NIL)
+		ExecWithCheckOptions(WCO_VIEW_CHECK, resultRelInfo,
+							 slot, context->estate);
+
 	/* Compute temporal leftovers in FOR PORTION OF */
 	if (((ModifyTable *) context->mtstate->ps.plan)->forPortionOf)
 	{
@@ -2679,19 +2692,6 @@ ExecUpdateEpilogue(ModifyTableContext *context, UpdateContext *updateCxt,
 						 false);
 
 	list_free(recheckIndexes);
-
-	/*
-	 * Check any WITH CHECK OPTION constraints from parent views.  We are
-	 * required to do this after testing all constraints and uniqueness
-	 * violations per the SQL spec, so we do it after actually updating the
-	 * record in the heap and all indexes.
-	 *
-	 * ExecWithCheckOptions() will skip any WCOs which are not of the kind we
-	 * are looking for at this point.
-	 */
-	if (resultRelInfo->ri_WithCheckOptions != NIL)
-		ExecWithCheckOptions(WCO_VIEW_CHECK, resultRelInfo,
-							 slot, context->estate);
 }
 
 /*
