@@ -1329,8 +1329,6 @@ transformForPortionOfClause(ParseState *pstate,
 	Form_pg_attribute attr;
 	Oid			attbasetype;
 	Oid			opclass;
-	Oid			opfamily;
-	Oid			opcintype;
 	Oid			funcid = InvalidOid;
 	StrategyNumber strat;
 	Oid			opid;
@@ -1523,20 +1521,13 @@ transformForPortionOfClause(ParseState *pstate,
 	 * user-defined types. An opclass support function doesn't make sense,
 	 * since there is no index involved. Perhaps a type support function.
 	 */
-	if (get_opclass_opfamily_and_input_type(opclass, &opfamily, &opcintype))
-		switch (opcintype)
-		{
-			case ANYRANGEOID:
-				result->withoutPortionProc = F_RANGE_MINUS_MULTI;
-				break;
-			case ANYMULTIRANGEOID:
-				result->withoutPortionProc = F_MULTIRANGE_MINUS_MULTI;
-				break;
-			default:
-				elog(ERROR, "unexpected opcintype: %u", opcintype);
-		}
+	if (type_is_range(attbasetype))
+		result->withoutPortionProc = F_RANGE_MINUS_MULTI;
+	else if (type_is_multirange(attbasetype))
+		result->withoutPortionProc = F_MULTIRANGE_MINUS_MULTI;
 	else
-		elog(ERROR, "unexpected opclass: %u", opclass);
+		elog(ERROR, "unexpected type for FOR PORTION OF column: %u",
+			 attbasetype);
 
 	if (isUpdate)
 	{
@@ -1556,23 +1547,20 @@ transformForPortionOfClause(ParseState *pstate,
 		 * we can use its backing procedure for intersects in FOR PORTION OF.
 		 * XXX: Share code with FindFKPeriodOpers?
 		 */
-		switch (opcintype)
-		{
-			case ANYRANGEOID:
-				intersectoperoid = OID_RANGE_INTERSECT_RANGE_OP;
-				break;
-			case ANYMULTIRANGEOID:
-				intersectoperoid = OID_MULTIRANGE_INTERSECT_MULTIRANGE_OP;
-				break;
-			default:
-				elog(ERROR, "unexpected opcintype: %u", opcintype);
-		}
+		if (type_is_range(attbasetype))
+			intersectoperoid = OID_RANGE_INTERSECT_RANGE_OP;
+		else if (type_is_multirange(attbasetype))
+			intersectoperoid = OID_MULTIRANGE_INTERSECT_MULTIRANGE_OP;
+		else
+			elog(ERROR, "unexpected type for FOR PORTION OF column: %u",
+				 attbasetype);
+
 		funcid = get_opcode(intersectoperoid);
 		if (!OidIsValid(funcid))
 			ereport(ERROR,
 					errcode(ERRCODE_UNDEFINED_OBJECT),
 					errmsg("could not identify an intersect function for type %s",
-						   format_type_be(opcintype)));
+						   format_type_be(attbasetype)));
 
 		funcArgs = list_make2(copyObject(rangeVar),
 							  copyObject(result->targetRange));

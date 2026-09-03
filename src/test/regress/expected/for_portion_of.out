@@ -2793,4 +2793,126 @@ SELECT * FROM fpo_rls ORDER BY valid_at;
 
 DROP TABLE fpo_rls;
 DROP ROLE regress_fpo_rls;
+--
+-- A user-defined default GiST operator class whose opcintype is a concrete
+-- range (or multirange) type, rather than the polymorphic anyrange the
+-- built-in range_ops uses.
+--
+CREATE TYPE fpo_range AS RANGE (
+  subtype = date,
+  multirange_type_name = fpo_multirange
+);
+CREATE FUNCTION fpo_range_overlaps(fpo_range, fpo_range) RETURNS boolean
+  LANGUAGE sql IMMUTABLE STRICT
+  AS $$ SELECT $1 OPERATOR(pg_catalog.&&) $2 $$;
+CREATE OPERATOR && (
+  leftarg = fpo_range, rightarg = fpo_range,
+  procedure = fpo_range_overlaps, commutator = &&,
+  restrict = rangesel, join = areajoinsel
+);
+CREATE OPERATOR CLASS fpo_range_ops
+  DEFAULT FOR TYPE fpo_range USING gist AS
+  OPERATOR 3 &&(fpo_range, fpo_range),
+  FUNCTION 1 range_gist_consistent(internal, anyrange, smallint, oid, internal),
+  FUNCTION 2 range_gist_union(internal, internal),
+  FUNCTION 5 range_gist_penalty(internal, internal, internal),
+  FUNCTION 6 range_gist_picksplit(internal, internal),
+  FUNCTION 7 range_gist_same(anyrange, anyrange, internal);
+-- gistutil.c looks this one up with get_opfamily_proc(opfamily, ANYOID,
+-- ANYOID, GIST_TRANSLATE_CMPTYPE_PROC), so it must be registered that way.
+ALTER OPERATOR FAMILY fpo_range_ops USING gist
+  ADD FUNCTION 12 ("any", "any") gist_translate_cmptype_common(integer);
+CREATE FUNCTION fpo_multirange_overlaps(fpo_multirange, fpo_multirange)
+  RETURNS boolean LANGUAGE sql IMMUTABLE STRICT
+  AS $$ SELECT $1 OPERATOR(pg_catalog.&&) $2 $$;
+CREATE OPERATOR && (
+  leftarg = fpo_multirange, rightarg = fpo_multirange,
+  procedure = fpo_multirange_overlaps, commutator = &&,
+  restrict = multirangesel, join = areajoinsel
+);
+CREATE OPERATOR CLASS fpo_multirange_ops
+  DEFAULT FOR TYPE fpo_multirange USING gist AS
+  OPERATOR 3 &&(fpo_multirange, fpo_multirange),
+  FUNCTION 1 multirange_gist_consistent(internal, anymultirange, smallint, oid, internal),
+  FUNCTION 2 range_gist_union(internal, internal),
+  FUNCTION 3 multirange_gist_compress(internal),
+  FUNCTION 5 range_gist_penalty(internal, internal, internal),
+  FUNCTION 6 range_gist_picksplit(internal, internal),
+  FUNCTION 7 range_gist_same(anyrange, anyrange, internal);
+ALTER OPERATOR FAMILY fpo_multirange_ops USING gist
+  ADD FUNCTION 12 ("any", "any") gist_translate_cmptype_common(integer);
+CREATE TABLE fpo_opc (
+  id int,
+  valid_at fpo_range,
+  valid_ats fpo_multirange,
+  name text
+);
+-- The opclasses really are usable for indexing.
+CREATE INDEX fpo_opc_r_idx ON fpo_opc USING gist (valid_at);
+CREATE INDEX fpo_opc_mr_idx ON fpo_opc USING gist (valid_ats);
+INSERT INTO fpo_opc VALUES
+  (1, fpo_range('2000-01-01', '2010-01-01'),
+      fpo_multirange(fpo_range('2000-01-01', '2010-01-01')), 'one');
+-- control: an ordinary overlaps qual against the same opclass
+UPDATE fpo_opc SET name = 'ctl'
+  WHERE valid_at && fpo_range('2002-01-01', '2003-01-01');
+SELECT * FROM fpo_opc ORDER BY valid_at;
+ id |        valid_at         |         valid_ats         | name 
+----+-------------------------+---------------------------+------
+  1 | [2000-01-01,2010-01-01) | {[2000-01-01,2010-01-01)} | ctl
+(1 row)
+
+UPDATE fpo_opc FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01'
+  SET name = 'upd';
+SELECT id, valid_at, name FROM fpo_opc ORDER BY valid_at;
+ id |        valid_at         | name 
+----+-------------------------+------
+  1 | [2000-01-01,2002-01-01) | ctl
+  1 | [2002-01-01,2003-01-01) | upd
+  1 | [2003-01-01,2010-01-01) | ctl
+(3 rows)
+
+DELETE FROM fpo_opc FOR PORTION OF valid_at FROM '2005-01-01' TO '2006-01-01';
+SELECT id, valid_at, name FROM fpo_opc ORDER BY valid_at;
+ id |        valid_at         | name 
+----+-------------------------+------
+  1 | [2000-01-01,2002-01-01) | ctl
+  1 | [2002-01-01,2003-01-01) | upd
+  1 | [2003-01-01,2005-01-01) | ctl
+  1 | [2006-01-01,2010-01-01) | ctl
+(4 rows)
+
+DELETE FROM fpo_opc;
+INSERT INTO fpo_opc VALUES
+  (1, fpo_range('2000-01-01', '2010-01-01'),
+      fpo_multirange(fpo_range('2000-01-01', '2010-01-01')), 'one');
+UPDATE fpo_opc
+  FOR PORTION OF valid_ats
+    (fpo_multirange(fpo_range('2002-01-01', '2003-01-01')))
+  SET name = 'upd';
+SELECT id, valid_ats, name FROM fpo_opc ORDER BY valid_ats;
+ id |                     valid_ats                     | name 
+----+---------------------------------------------------+------
+  1 | {[2000-01-01,2002-01-01),[2003-01-01,2010-01-01)} | one
+  1 | {[2002-01-01,2003-01-01)}                         | upd
+(2 rows)
+
+DELETE FROM fpo_opc
+  FOR PORTION OF valid_ats
+    (fpo_multirange(fpo_range('2005-01-01', '2006-01-01')));
+SELECT id, valid_ats, name FROM fpo_opc ORDER BY valid_ats;
+ id |                                 valid_ats                                 | name 
+----+---------------------------------------------------------------------------+------
+  1 | {[2000-01-01,2002-01-01),[2003-01-01,2005-01-01),[2006-01-01,2010-01-01)} | one
+  1 | {[2002-01-01,2003-01-01)}                                                 | upd
+(2 rows)
+
+DROP TABLE fpo_opc;
+DROP OPERATOR CLASS fpo_multirange_ops USING gist;
+DROP OPERATOR && (fpo_multirange, fpo_multirange);
+DROP FUNCTION fpo_multirange_overlaps(fpo_multirange, fpo_multirange);
+DROP OPERATOR CLASS fpo_range_ops USING gist;
+DROP OPERATOR && (fpo_range, fpo_range);
+DROP FUNCTION fpo_range_overlaps(fpo_range, fpo_range);
+DROP TYPE fpo_range;
 RESET datestyle;
