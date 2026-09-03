@@ -1849,4 +1849,76 @@ SELECT * FROM fpo_rls ORDER BY valid_at;
 DROP TABLE fpo_rls;
 DROP ROLE regress_fpo_rls;
 
+--
+-- Diagnostics when a trigger on the leftover INSERTs changes rows the
+-- statement has not reached yet.
+--
+-- Leftovers are inserted as the scan proceeds and fire their own triggers, so
+-- an AFTER row trigger can trip the "already modified by an operation
+-- triggered by the current command" check.  The stock hint only mentions
+-- BEFORE triggers, so we add a detail naming the other possibility.
+--
+
+CREATE TABLE fpo_selfmod (
+  id int,
+  valid_at daterange,
+  name text,
+  touched int NOT NULL DEFAULT 0
+);
+INSERT INTO fpo_selfmod (id, valid_at, name) VALUES
+  (1, daterange('2000-01-01', '2010-01-01'), 'one'),
+  (2, daterange('2000-01-01', '2010-01-01'), 'two');
+
+CREATE FUNCTION fpo_touch_siblings() RETURNS TRIGGER LANGUAGE plpgsql AS
+$$
+BEGIN
+  IF pg_trigger_depth() > 1 THEN
+    RETURN NULL;
+  END IF;
+  UPDATE fpo_selfmod SET touched = touched + 1 WHERE id <> NEW.id;
+  RETURN NULL;
+END;
+$$;
+
+CREATE TRIGGER fpo_selfmod_ai AFTER INSERT ON fpo_selfmod
+  FOR EACH ROW EXECUTE PROCEDURE fpo_touch_siblings();
+
+UPDATE fpo_selfmod FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01'
+  SET name = name || '!';
+DELETE FROM fpo_selfmod FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01';
+
+-- The same detail appears for the check in GetTupleForTrigger(), which a
+-- BEFORE trigger reaches.  There the stock hint is the right advice, so it is
+-- still what we suggest.
+CREATE FUNCTION fpo_touch_siblings_bu() RETURNS TRIGGER LANGUAGE plpgsql AS
+$$
+BEGIN
+  IF pg_trigger_depth() = 1 THEN
+    UPDATE fpo_selfmod SET touched = touched + 1 WHERE id <> NEW.id;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER fpo_selfmod_bu BEFORE UPDATE ON fpo_selfmod
+  FOR EACH ROW EXECUTE PROCEDURE fpo_touch_siblings_bu();
+UPDATE fpo_selfmod FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01'
+  SET name = name || '!';
+DROP TRIGGER fpo_selfmod_bu ON fpo_selfmod;
+DROP FUNCTION fpo_touch_siblings_bu();
+
+-- Deferring the trigger works.
+DROP TRIGGER fpo_selfmod_ai ON fpo_selfmod;
+CREATE CONSTRAINT TRIGGER fpo_selfmod_ai AFTER INSERT ON fpo_selfmod
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE PROCEDURE fpo_touch_siblings();
+
+BEGIN;
+UPDATE fpo_selfmod FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01'
+  SET name = name || '!';
+COMMIT;
+SELECT * FROM fpo_selfmod ORDER BY id, valid_at;
+
+DROP TABLE fpo_selfmod;
+DROP FUNCTION fpo_touch_siblings();
+
 RESET datestyle;
