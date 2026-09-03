@@ -196,9 +196,13 @@ static TupleTableSlot *ExecMergeMatched(ModifyTableContext *context,
 static TupleTableSlot *ExecMergeNotMatched(ModifyTableContext *context,
 										   ResultRelInfo *resultRelInfo,
 										   bool canSetTag);
-static void ExecSetupTransitionCaptureState(ModifyTableState *mtstate, EState *estate);
-static void fireBSTriggers(ModifyTableState *node);
-static void fireASTriggers(ModifyTableState *node);
+static void ExecSetupTransitionCaptureState(ModifyTableState *mtstate,
+											EState *estate,
+											ResultRelInfo *targetRelInfo);
+static void fireBSTriggers(ModifyTableState *node,
+						   ResultRelInfo *resultRelInfo);
+static void fireASTriggers(ModifyTableState *node,
+						   ResultRelInfo *resultRelInfo);
 static void ExecInitForPortionOf(ModifyTableState *mtstate, EState *estate,
 								 ResultRelInfo *resultRelInfo);
 
@@ -1614,10 +1618,24 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 		 * diagnostic or the command tag, so we pass false for canSetTag.
 		 */
 		AfterTriggerBeginQuery();
-		ExecSetupTransitionCaptureState(mtstate, estate);
-		fireBSTriggers(mtstate);
+		ExecSetupTransitionCaptureState(mtstate, estate, resultRelInfo);
+
+		/*
+		 * When inserting directly into a child table (for traditional
+		 * inheritance), we must avoid converting to the root table's format.
+		 */
+		if (!partitionRouting && mtstate->mt_transition_capture != NULL)
+			mtstate->mt_transition_capture->tcs_original_insert_tuple =
+				leftoverSlot;
+
+		fireBSTriggers(mtstate, resultRelInfo);
 		ExecInsert(context, resultRelInfo, leftoverSlot, false, NULL, NULL);
-		fireASTriggers(mtstate);
+		fireASTriggers(mtstate, resultRelInfo);
+
+		/* Reset the transition state, as ExecCrossPartitionUpdate() does. */
+		if (mtstate->mt_transition_capture != NULL)
+			mtstate->mt_transition_capture->tcs_original_insert_tuple = NULL;
+
 		AfterTriggerEndQuery(estate);
 	}
 
@@ -4461,10 +4479,9 @@ ExecInitMergeTupleSlots(ModifyTableState *mtstate,
  * Process BEFORE EACH STATEMENT triggers
  */
 static void
-fireBSTriggers(ModifyTableState *node)
+fireBSTriggers(ModifyTableState *node, ResultRelInfo *resultRelInfo)
 {
 	ModifyTable *plan = (ModifyTable *) node->ps.plan;
-	ResultRelInfo *resultRelInfo = node->rootResultRelInfo;
 
 	switch (node->operation)
 	{
@@ -4498,10 +4515,9 @@ fireBSTriggers(ModifyTableState *node)
  * Process AFTER EACH STATEMENT triggers
  */
 static void
-fireASTriggers(ModifyTableState *node)
+fireASTriggers(ModifyTableState *node, ResultRelInfo *resultRelInfo)
 {
 	ModifyTable *plan = (ModifyTable *) node->ps.plan;
-	ResultRelInfo *resultRelInfo = node->rootResultRelInfo;
 
 	switch (node->operation)
 	{
@@ -4541,14 +4557,19 @@ fireASTriggers(ModifyTableState *node)
 /*
  * Set up the state needed for collecting transition tuples for AFTER
  * triggers.
+ *
+ * targetRelInfo is the relation whose transition tables we collect into.
+ * Normally this is the statement's target relation, but temporal leftovers are
+ * inserted directly into child tables (for traditional inheritance), so it
+ * needs to match.
  */
 static void
-ExecSetupTransitionCaptureState(ModifyTableState *mtstate, EState *estate)
+ExecSetupTransitionCaptureState(ModifyTableState *mtstate, EState *estate,
+								ResultRelInfo *targetRelInfo)
 {
 	ModifyTable *plan = (ModifyTable *) mtstate->ps.plan;
-	ResultRelInfo *targetRelInfo = mtstate->rootResultRelInfo;
 
-	/* Check for transition tables on the directly targeted relation. */
+	/* Check for transition tables on the given relation. */
 	mtstate->mt_transition_capture =
 		MakeTransitionCaptureState(targetRelInfo->ri_TrigDesc,
 								   RelationGetRelid(targetRelInfo->ri_RelationDesc),
@@ -4676,7 +4697,7 @@ ExecModifyTable(PlanState *pstate)
 	 */
 	if (node->fireBSTriggers)
 	{
-		fireBSTriggers(node);
+		fireBSTriggers(node, node->rootResultRelInfo);
 		node->fireBSTriggers = false;
 	}
 
@@ -5057,7 +5078,7 @@ ExecModifyTable(PlanState *pstate)
 	/*
 	 * We're done, but fire AFTER STATEMENT triggers before exiting.
 	 */
-	fireASTriggers(node);
+	fireASTriggers(node, node->rootResultRelInfo);
 
 	node->mt_done = true;
 
@@ -5302,7 +5323,8 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 	 * valid trigger query context, so skip it in explain-only mode.
 	 */
 	if (!(eflags & EXEC_FLAG_EXPLAIN_ONLY))
-		ExecSetupTransitionCaptureState(mtstate, estate);
+		ExecSetupTransitionCaptureState(mtstate, estate,
+										mtstate->rootResultRelInfo);
 
 	/*
 	 * Open all the result relations and initialize the ResultRelInfo structs.

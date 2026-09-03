@@ -1653,7 +1653,126 @@ SELECT * FROM fpo_inh_child ORDER BY valid_at;
 -- No rows should have leaked into the parent.
 SELECT * FROM ONLY fpo_inh_parent ORDER BY valid_at;
 
+-- Statement-level INSERT triggers for the leftovers must fire on the table
+-- the leftovers are actually inserted into, i.e. the child, just as they
+-- would for a plain INSERT into that child.
+CREATE FUNCTION fpo_inh_stmt_trigger()
+RETURNS TRIGGER LANGUAGE plpgsql AS
+$$
+BEGIN
+  RAISE NOTICE '% % % on %', TG_NAME, TG_WHEN, TG_OP, TG_TABLE_NAME;
+  RETURN NULL;
+END;
+$$;
+
+CREATE TRIGGER fpo_inh_parent_bs BEFORE INSERT ON fpo_inh_parent
+  FOR EACH STATEMENT EXECUTE PROCEDURE fpo_inh_stmt_trigger();
+CREATE TRIGGER fpo_inh_parent_as AFTER INSERT ON fpo_inh_parent
+  FOR EACH STATEMENT EXECUTE PROCEDURE fpo_inh_stmt_trigger();
+CREATE TRIGGER fpo_inh_child_bs BEFORE INSERT ON fpo_inh_child
+  FOR EACH STATEMENT EXECUTE PROCEDURE fpo_inh_stmt_trigger();
+CREATE TRIGGER fpo_inh_child_as AFTER INSERT ON fpo_inh_child
+  FOR EACH STATEMENT EXECUTE PROCEDURE fpo_inh_stmt_trigger();
+
+TRUNCATE fpo_inh_child, fpo_inh_parent;
+-- control: a plain INSERT into the child fires only the child's triggers
+INSERT INTO fpo_inh_child (id, valid_at, name, description) VALUES
+  ('[1,2)', '[2018-01-01,2019-01-01)', 'one', 'initial');
+
+-- One firing per leftover, all of them on the child.
+UPDATE fpo_inh_parent FOR PORTION OF valid_at FROM '2018-04-01' TO '2018-10-01'
+  SET name = 'one^1';
+SELECT tableoid::regclass, * FROM fpo_inh_parent ORDER BY valid_at;
+
+TRUNCATE fpo_inh_child, fpo_inh_parent;
+INSERT INTO fpo_inh_child (id, valid_at, name, description) VALUES
+  ('[1,2)', '[2018-01-01,2019-01-01)', 'one', 'initial');
+DELETE FROM fpo_inh_parent FOR PORTION OF valid_at FROM '2018-04-01' TO '2018-10-01';
+SELECT tableoid::regclass, * FROM fpo_inh_parent ORDER BY valid_at;
+
+-- The transition table for those inserts belongs to the child too, and holds
+-- the child's rows in the child's own format, including its extra columns.
+CREATE FUNCTION fpo_inh_transition_trigger()
+RETURNS TRIGGER LANGUAGE plpgsql AS
+$$
+BEGIN
+  RAISE NOTICE '% on %: %', TG_NAME, TG_TABLE_NAME,
+    (SELECT string_agg(new_table::text, ', ' ORDER BY new_table::text)
+       FROM new_table);
+  RETURN NULL;
+END;
+$$;
+
+CREATE TRIGGER fpo_inh_parent_tt AFTER INSERT ON fpo_inh_parent
+  REFERENCING NEW TABLE AS new_table
+  FOR EACH STATEMENT EXECUTE PROCEDURE fpo_inh_transition_trigger();
+CREATE TRIGGER fpo_inh_child_tt AFTER INSERT ON fpo_inh_child
+  REFERENCING NEW TABLE AS new_table
+  FOR EACH STATEMENT EXECUTE PROCEDURE fpo_inh_transition_trigger();
+
+TRUNCATE fpo_inh_child, fpo_inh_parent;
+-- control: a plain INSERT into the child reports description = 'initial'
+INSERT INTO fpo_inh_child (id, valid_at, name, description) VALUES
+  ('[1,2)', '[2018-01-01,2019-01-01)', 'one', 'initial');
+-- The leftovers must report it too: they are child rows and they keep it.
+UPDATE fpo_inh_parent FOR PORTION OF valid_at FROM '2018-04-01' TO '2018-10-01'
+  SET name = 'one^1';
+SELECT tableoid::regclass, * FROM fpo_inh_child ORDER BY valid_at;
+
+-- DELETE inserts its leftovers the same way.
+TRUNCATE fpo_inh_child, fpo_inh_parent;
+INSERT INTO fpo_inh_child (id, valid_at, name, description) VALUES
+  ('[1,2)', '[2018-01-01,2019-01-01)', 'one', 'initial');
+DELETE FROM fpo_inh_parent FOR PORTION OF valid_at FROM '2018-04-01' TO '2018-10-01';
+SELECT tableoid::regclass, * FROM fpo_inh_child ORDER BY valid_at;
+
 DROP TABLE fpo_inh_parent CASCADE;
+
+-- By contrast, leftovers in a partitioned table are inserted through the
+-- root to get tuple routing, so the root is where their statement-level
+-- triggers belong, exactly as for a plain INSERT into the root.
+CREATE TABLE fpo_part_parent (
+  id int4range,
+  valid_at daterange,
+  name text
+) PARTITION BY RANGE (id);
+CREATE TABLE fpo_part_child PARTITION OF fpo_part_parent
+  FOR VALUES FROM ('[1,1]') TO ('[9,9]');
+
+CREATE TRIGGER fpo_part_parent_bs BEFORE INSERT ON fpo_part_parent
+  FOR EACH STATEMENT EXECUTE PROCEDURE fpo_inh_stmt_trigger();
+CREATE TRIGGER fpo_part_parent_as AFTER INSERT ON fpo_part_parent
+  FOR EACH STATEMENT EXECUTE PROCEDURE fpo_inh_stmt_trigger();
+CREATE TRIGGER fpo_part_child_bs BEFORE INSERT ON fpo_part_child
+  FOR EACH STATEMENT EXECUTE PROCEDURE fpo_inh_stmt_trigger();
+CREATE TRIGGER fpo_part_child_as AFTER INSERT ON fpo_part_child
+  FOR EACH STATEMENT EXECUTE PROCEDURE fpo_inh_stmt_trigger();
+
+-- and so does their transition table, which still receives the rows converted
+-- to the root's format.
+CREATE FUNCTION fpo_part_transition_trigger()
+RETURNS TRIGGER LANGUAGE plpgsql AS
+$$
+BEGIN
+  RAISE NOTICE '% on %: %', TG_NAME, TG_TABLE_NAME,
+    (SELECT string_agg(new_table::text, ', ' ORDER BY new_table::text)
+       FROM new_table);
+  RETURN NULL;
+END;
+$$;
+CREATE TRIGGER fpo_part_parent_tt AFTER INSERT ON fpo_part_parent
+  REFERENCING NEW TABLE AS new_table
+  FOR EACH STATEMENT EXECUTE PROCEDURE fpo_part_transition_trigger();
+
+INSERT INTO fpo_part_parent VALUES
+  ('[1,2)', '[2018-01-01,2019-01-01)', 'one');
+UPDATE fpo_part_parent FOR PORTION OF valid_at FROM '2018-04-01' TO '2018-10-01'
+  SET name = 'one^1';
+SELECT tableoid::regclass, * FROM fpo_part_parent ORDER BY valid_at;
+DROP FUNCTION fpo_part_transition_trigger();
+
+DROP TABLE fpo_part_parent;
+DROP FUNCTION fpo_inh_stmt_trigger();
 
 -- UPDATE FOR PORTION OF with multiple inheritance
 -- Leftover rows must stay in the child table, even if the range column's
@@ -1668,6 +1787,12 @@ CREATE TABLE other_parent (
   note text
 );
 CREATE TABLE mi_child () INHERITS (other_parent, temporal_parent);
+
+-- The leftovers' transition table must use the child's format even when the
+-- child's columns are in a different order from the parent's.
+CREATE TRIGGER mi_child_tt AFTER INSERT ON mi_child
+  REFERENCING NEW TABLE AS new_table
+  FOR EACH STATEMENT EXECUTE PROCEDURE fpo_inh_transition_trigger();
 
 -- attnum of the range column is different in temporal_parent and mi_child
 SELECT attnum, attname
@@ -1704,6 +1829,7 @@ SELECT * FROM mi_child ORDER BY valid_at;
 SELECT * FROM ONLY temporal_parent ORDER BY valid_at;
 
 DROP TABLE temporal_parent CASCADE;
+DROP FUNCTION fpo_inh_transition_trigger();
 
 -- UPDATE FOR PORTION OF with generated columns
 -- The generated column depends on the range column, so it must be
