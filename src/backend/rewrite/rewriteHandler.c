@@ -4288,6 +4288,30 @@ RewriteQuery(Query *parsetree, List *rewrite_events, int orig_rt_length,
 					foreach(tl, parsetree->forPortionOf->rangeTargetList)
 					{
 						TargetEntry *tle = (TargetEntry *) lfirst(tl);
+						ListCell   *tl2;
+
+						/*
+						 * Detect multiple-assignment early, so that we can
+						 * report the same error as against a regular table.
+						 * If we detect it later, the error message will use the
+						 * column names of the base table, not the view.
+						 */
+						foreach(tl2, parsetree->targetList)
+						{
+							TargetEntry *prior = (TargetEntry *) lfirst(tl2);
+
+							if (prior->resjunk || prior->resno != tle->resno)
+								continue;
+
+							ereport(ERROR,
+									(errcode(ERRCODE_SYNTAX_ERROR),
+									 errmsg("cannot update column \"%s\" because it is used in FOR PORTION OF",
+											prior->resname),
+									 strcmp(prior->resname, tle->resname) != 0 ?
+									 errdetail("Columns \"%s\" and \"%s\" are the same column of relation \"%s\".",
+											   prior->resname, tle->resname,
+											   RelationGetRelationName(rt_entry_relation)) : 0));
+						}
 
 						parsetree->targetList = lappend(parsetree->targetList, tle);
 					}

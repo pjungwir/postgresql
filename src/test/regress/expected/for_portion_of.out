@@ -2793,4 +2793,51 @@ SELECT * FROM fpo_rls ORDER BY valid_at;
 
 DROP TABLE fpo_rls;
 DROP ROLE regress_fpo_rls;
+--
+-- Assigning the range column through a view that exposes it twice
+--
+-- transformUpdateTargetList() compares the names the user wrote, so it does
+-- not notice that two view columns are the same base column.  The rewriter
+-- must still say why the assignment is rejected.
+--
+CREATE TABLE fpo_dup (
+  id int,
+  valid_at daterange,
+  name text
+);
+INSERT INTO fpo_dup VALUES
+  (1, daterange('2000-01-01', '2010-01-01'), 'one');
+CREATE VIEW fpo_dup_v AS
+  SELECT id, valid_at AS a, valid_at AS b, name, name AS c, name AS d
+  FROM fpo_dup;
+UPDATE fpo_dup_v FOR PORTION OF a FROM '2002-01-01' TO '2003-01-01'
+  SET b = daterange('1990-01-01', '1991-01-01');
+ERROR:  cannot update column "b" because it is used in FOR PORTION OF
+DETAIL:  Columns "b" and "a" are the same column of relation "fpo_dup".
+-- Naming the same view column in both places is caught in parse analysis, as
+-- it is for a table.
+UPDATE fpo_dup_v FOR PORTION OF a FROM '2002-01-01' TO '2003-01-01'
+  SET a = daterange('1990-01-01', '1991-01-01');
+ERROR:  cannot update column "a" because it is used in FOR PORTION OF
+LINE 2:   SET a = daterange('1990-01-01', '1991-01-01');
+              ^
+-- Two view columns aliasing a column that is not the FOR PORTION OF column
+-- collide with each other, not with the clause, so they still get the generic
+-- error: the new check must not fire too eagerly.
+UPDATE fpo_dup_v FOR PORTION OF a FROM '2002-01-01' TO '2003-01-01'
+  SET c = 'x', d = 'y';
+ERROR:  multiple assignments to same column "name"
+-- Not assigning the range column through the view still works.
+UPDATE fpo_dup_v FOR PORTION OF a FROM '2002-01-01' TO '2003-01-01'
+  SET name = 'one^1';
+SELECT * FROM fpo_dup ORDER BY valid_at;
+ id |        valid_at         | name  
+----+-------------------------+-------
+  1 | [2000-01-01,2002-01-01) | one
+  1 | [2002-01-01,2003-01-01) | one^1
+  1 | [2003-01-01,2010-01-01) | one
+(3 rows)
+
+DROP VIEW fpo_dup_v;
+DROP TABLE fpo_dup;
 RESET datestyle;
