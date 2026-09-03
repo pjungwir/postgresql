@@ -2245,6 +2245,57 @@ delete from uv_fpo_instead_view
 drop view uv_fpo_instead_view;
 drop function uv_fpo_instead_trig();
 
+-- FOR PORTION OF is likewise not supported through an unqualified INSTEAD
+-- rule, which would replace the query (dropping the FOR PORTION OF clause)
+-- and so modify the whole temporal row instead of the requested portion.
+-- DO INSTEAD NOTHING is allowed though.
+create view uv_fpo_rule_view2 as select id, valid_at, b from uv_fpo_tab;
+create rule uv_fpo_rule_upd as on update to uv_fpo_rule_view2 do instead nothing;
+create rule uv_fpo_rule_del as on delete to uv_fpo_rule_view2 do instead nothing;
+update uv_fpo_rule_view2
+  for portion of valid_at from '2021-01-01' to '2022-01-01'
+  set b = 99 where id = '[1,1]'; -- ok
+delete from uv_fpo_rule_view2
+  for portion of valid_at from '2021-01-01' to '2022-01-01'
+  where id = '[1,1]'; -- ok
+
+create or replace rule uv_fpo_rule_upd as on update to uv_fpo_rule_view2 do instead
+  update uv_fpo_tab set b = new.b where id = old.id;
+create or replace rule uv_fpo_rule_del as on delete to uv_fpo_rule_view2 do instead
+  delete from uv_fpo_tab where id = old.id;
+
+update uv_fpo_rule_view2
+  for portion of valid_at from '2021-01-01' to '2022-01-01'
+  set b = 99 where id = '[1,1]'; -- error
+
+delete from uv_fpo_rule_view2
+  for portion of valid_at from '2021-01-01' to '2022-01-01'
+  where id = '[1,1]'; -- error
+
+-- As for INSTEAD OF triggers, the check does not depend on which rows match.
+update uv_fpo_rule_view2
+  for portion of valid_at from '2021-01-01' to '2022-01-01'
+  set b = 99 where id = '[9,9]'; -- error, even with no matching rows
+
+drop view uv_fpo_rule_view2 cascade;
+
+-- A DO ALSO rule does not replace the query, so FOR PORTION OF still works.
+create table uv_fpo_also_tab (id int4range, valid_at tsrange, b float,
+    constraint pk_uv_fpo_also_tab primary key (id, valid_at without overlaps));
+insert into uv_fpo_also_tab values ('[1,1]', '[2020-01-01, 2030-01-01)', 0);
+create view uv_fpo_also_view as select id, valid_at, b from uv_fpo_also_tab;
+create table uv_fpo_also_log (t text);
+create rule uv_fpo_also as on update to uv_fpo_also_view do also
+  insert into uv_fpo_also_log values ('updated');
+update uv_fpo_also_view
+  for portion of valid_at from '2022-01-01' to '2023-01-01'
+  set b = 88 where id = '[1,1]'; -- ok: splits the row and runs the DO ALSO action
+select id, valid_at, b from uv_fpo_also_tab order by valid_at;
+select count(*) from uv_fpo_also_log;
+drop view uv_fpo_also_view cascade;
+drop table uv_fpo_also_log;
+drop table uv_fpo_also_tab;
+
 -- Forbid INSTEAD OF triggers with FOR PORTION OF even if the FOR PORTION OF
 -- statement is parsed before the trigger exists.
 -- This can happen in at least a couple ways: a rewrite rule or a BEGIN ATOMIC function.
