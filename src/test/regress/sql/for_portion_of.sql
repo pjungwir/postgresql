@@ -1849,4 +1849,44 @@ SELECT * FROM fpo_rls ORDER BY valid_at;
 DROP TABLE fpo_rls;
 DROP ROLE regress_fpo_rls;
 
+--
+-- WITH CHECK OPTION on a view
+--
+-- The row the statement produced is checked first, so a violation names the
+-- row the user asked for and not an untouched leftover.
+--
+
+CREATE TABLE fpo_wco (
+  id int,
+  valid_at daterange,
+  name text
+);
+INSERT INTO fpo_wco VALUES
+  (1, daterange('2000-01-01', '2010-01-01'), 'keepme');
+
+CREATE VIEW fpo_wco_v AS
+  SELECT * FROM fpo_wco WHERE valid_at @> '2005-01-01'::date
+  WITH CHECK OPTION;
+
+-- Both the updated row and the leftovers fall outside the view.  The updated
+-- row is the one the user wrote, so that is the one to report.
+UPDATE fpo_wco_v FOR PORTION OF valid_at FROM '2002-01-01' TO '2003-01-01'
+  SET name = 'changed';
+
+-- Here the updated row still satisfies the view and only a leftover does not,
+-- so the leftover is correctly the one reported.
+UPDATE fpo_wco_v FOR PORTION OF valid_at FROM '2004-01-01' TO '2006-01-01'
+  SET name = 'changed';
+
+-- Nothing was written by either statement.
+SELECT * FROM fpo_wco ORDER BY valid_at;
+
+-- A portion covering the whole row leaves no leftovers and is accepted.
+UPDATE fpo_wco_v FOR PORTION OF valid_at FROM '2000-01-01' TO '2010-01-01'
+  SET name = 'changed';
+SELECT * FROM fpo_wco ORDER BY valid_at;
+
+DROP VIEW fpo_wco_v;
+DROP TABLE fpo_wco;
+
 RESET datestyle;

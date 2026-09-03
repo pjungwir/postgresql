@@ -2629,7 +2629,18 @@ ExecUpdateEpilogue(ModifyTableContext *context, UpdateContext *updateCxt,
 
 	/* Compute temporal leftovers in FOR PORTION OF */
 	if (((ModifyTable *) context->mtstate->ps.plan)->forPortionOf)
+	{
+		/*
+		 * Enforce WITH CHECK OPTION on views early.  If an update violates the
+		 * condition *and* a temporal leftover violates it, we want to complain
+		 * about the top-level update.
+		 */
+		if (resultRelInfo->ri_WithCheckOptions != NIL)
+			ExecWithCheckOptions(WCO_VIEW_CHECK, resultRelInfo,
+								 slot, context->estate);
+
 		ExecForPortionOfLeftovers(context, context->estate, resultRelInfo, tupleid);
+	}
 
 	/* AFTER ROW UPDATE Triggers */
 	ExecARUpdateTriggers(context->estate, resultRelInfo,
@@ -2651,8 +2662,11 @@ ExecUpdateEpilogue(ModifyTableContext *context, UpdateContext *updateCxt,
 	 *
 	 * ExecWithCheckOptions() will skip any WCOs which are not of the kind we
 	 * are looking for at this point.
+	 *
+	 * With FOR PORTION OF, we already did this just above.
 	 */
-	if (resultRelInfo->ri_WithCheckOptions != NIL)
+	if (resultRelInfo->ri_WithCheckOptions != NIL &&
+		!((ModifyTable *) context->mtstate->ps.plan)->forPortionOf)
 		ExecWithCheckOptions(WCO_VIEW_CHECK, resultRelInfo,
 							 slot, context->estate);
 }
