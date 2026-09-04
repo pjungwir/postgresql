@@ -764,6 +764,32 @@ ALTER TABLE for_portion_of_test2 DROP CONSTRAINT fpo2_check;
 SELECT * FROM for_portion_of_test2 WHERE id = 2 ORDER BY valid_at;
 DROP TABLE for_portion_of_test2;
 
+-- The domain is checked for every leftover, not just the first one.  The
+-- lookup is cached across rows, so make sure a violation is still caught on a
+-- row after one that passed.
+CREATE TABLE for_portion_of_test2 (
+  id integer,
+  valid_at daterange_d,
+  name text
+);
+INSERT INTO for_portion_of_test2 VALUES
+  (1, '[2006-01-01,2020-01-01)', 'one'),
+  (2, '[2000-01-01,2020-01-01)', 'two'),
+  (3, '[2000-01-01,2020-01-01)', 'three');
+
+-- Every row's leftovers are fine here: several rows, several checks.
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at FROM '2010-01-01' TO '2011-01-01'
+  SET name = name || '!';
+SELECT * FROM for_portion_of_test2 ORDER BY id, valid_at;
+
+-- Now the first row's leftovers pass but the second row's violate the domain.
+UPDATE for_portion_of_test2
+  FOR PORTION OF valid_at FROM '2005-05-05' TO '2007-01-01'
+  SET name = 'nope';
+SELECT * FROM for_portion_of_test2 ORDER BY id, valid_at;
+DROP TABLE for_portion_of_test2;
+
 -- With a domain on a multirangetype
 CREATE FUNCTION multirange_lowers(mr anymultirange) RETURNS anyarray LANGUAGE sql AS $$
   SELECT array_agg(lower(r)) FROM UNNEST(mr) u(r);

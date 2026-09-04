@@ -1554,7 +1554,8 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 		 * anything here for those.
 		 */
 		if (forPortionOf->isDomain)
-			domain_check(leftover, false, forPortionOf->rangeVar->vartype, NULL, NULL);
+			domain_check(leftover, false, forPortionOf->rangeVar->vartype,
+						 &fpoState->fp_domaininfo, estate->es_query_cxt);
 
 		if (!didInit)
 		{
