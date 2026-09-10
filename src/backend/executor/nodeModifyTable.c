@@ -196,9 +196,10 @@ static TupleTableSlot *ExecMergeMatched(ModifyTableContext *context,
 static TupleTableSlot *ExecMergeNotMatched(ModifyTableContext *context,
 										   ResultRelInfo *resultRelInfo,
 										   bool canSetTag);
-static void ExecSetupTransitionCaptureState(ModifyTableState *mtstate, EState *estate);
-static void fireBSTriggers(ModifyTableState *node);
-static void fireASTriggers(ModifyTableState *node);
+static void ExecSetupTransitionCaptureState(ModifyTableState *mtstate, EState *estate,
+											CmdType cmdType);
+static void fireBSTriggers(ModifyTableState *node, CmdType cmdType);
+static void fireASTriggers(ModifyTableState *node, CmdType cmdType);
 static void ExecInitForPortionOf(ModifyTableState *mtstate, EState *estate,
 								 ResultRelInfo *resultRelInfo);
 
@@ -1095,8 +1096,14 @@ ExecInsert(ModifyTableContext *context,
 		 *
 		 * If we're running MERGE, we refer to the action that we're executing
 		 * to know if we're doing an INSERT or UPDATE to a partition table.
+		 *
+		 * A FOR PORTION OF temporal leftover is an insert of its own, not a
+		 * row moving between partitions, so it gets INSERT policies even
+		 * though the enclosing statement is an UPDATE or DELETE.
 		 */
-		if (mtstate->operation == CMD_UPDATE)
+		if (mtstate->mt_forPortionOfLeftover)
+			wco_kind = WCO_RLS_INSERT_CHECK;
+		else if (mtstate->operation == CMD_UPDATE)
 			wco_kind = WCO_RLS_UPDATE_CHECK;
 		else if (mtstate->operation == CMD_MERGE)
 			wco_kind = (mtstate->mt_merge_action->mas_action->commandType == CMD_UPDATE) ?
@@ -1295,7 +1302,8 @@ ExecInsert(ModifyTableContext *context,
 	 * because they happen on different tables.
 	 */
 	ar_insert_trig_tcs = mtstate->mt_transition_capture;
-	if (mtstate->operation == CMD_UPDATE && mtstate->mt_transition_capture
+	if (mtstate->operation == CMD_UPDATE && !mtstate->mt_forPortionOfLeftover
+		&& mtstate->mt_transition_capture
 		&& mtstate->mt_transition_capture->tcs_update_new_table)
 	{
 		ExecARUpdateTriggers(estate, resultRelInfo,
@@ -1339,14 +1347,13 @@ ExecInsert(ModifyTableContext *context,
 	 * Process RETURNING if present.
 	 *
 	 * If this is an UPDATE/DELETE ... FOR PORTION OF, we do not return the
-	 * leftover rows inserted by ExecForPortionOfLeftovers().  Note that we
-	 * must check mtstate->operation here, because we *do* want to process the
-	 * newly inserted row of a cross-partition UPDATE with a FOR PORTION OF
-	 * clause (ExecCrossPartitionUpdate() leaves mtstate->operation set to
-	 * CMD_UPDATE, whereas ExecForPortionOfLeftovers() sets it to CMD_INSERT).
+	 * leftover rows inserted by ExecForPortionOfLeftovers().  We do still
+	 * want to process the newly inserted row of a cross-partition UPDATE with
+	 * a FOR PORTION OF clause, which is why this tests the leftover flag
+	 * rather than how we got here.
 	 */
 	if (resultRelInfo->ri_projectReturning &&
-		!(node->forPortionOf && mtstate->operation == CMD_INSERT))
+		!mtstate->mt_forPortionOfLeftover)
 	{
 		TupleTableSlot *oldSlot = NULL;
 
@@ -1610,7 +1617,6 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	TupleTableSlot *leftoverSlot;
 	TupleConversionMap *map = NULL;
 	HeapTuple	oldtuple = NULL;
-	CmdType		oldOperation;
 	TransitionCaptureState *oldTcs;
 	PgStat_FunctionCallUsage fcusage;
 	FunctionCallInfo fcinfo;
@@ -1728,11 +1734,14 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 				oldtuple = ExecFetchSlotHeapTuple(oldtupleSlot, false, &shouldFree);
 
 			/*
-			 * Save some mtstate things so we can restore them below. XXX:
-			 * Should we create our own ModifyTableState instead?
+			 * Mark that the inserts below are temporal leftovers, and save
+			 * the transition capture state, which we replace for each one.
+			 *
+			 * XXX: Should we create our own ModifyTableState instead?  That
+			 * would be tidier than borrowing this one, but it would have to
+			 * duplicate a fair amount of setup.
 			 */
-			oldOperation = mtstate->operation;
-			mtstate->operation = CMD_INSERT;
+			mtstate->mt_forPortionOfLeftover = true;
 			oldTcs = mtstate->mt_transition_capture;
 
 			didInit = true;
@@ -1768,16 +1777,16 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 		 * diagnostic or the command tag, so we pass false for canSetTag.
 		 */
 		AfterTriggerBeginQuery();
-		ExecSetupTransitionCaptureState(mtstate, estate);
-		fireBSTriggers(mtstate);
+		ExecSetupTransitionCaptureState(mtstate, estate, CMD_INSERT);
+		fireBSTriggers(mtstate, CMD_INSERT);
 		ExecInsert(context, resultRelInfo, leftoverSlot, false, NULL, NULL);
-		fireASTriggers(mtstate);
+		fireASTriggers(mtstate, CMD_INSERT);
 		AfterTriggerEndQuery(estate);
 	}
 
 	if (didInit)
 	{
-		mtstate->operation = oldOperation;
+		mtstate->mt_forPortionOfLeftover = false;
 		mtstate->mt_transition_capture = oldTcs;
 
 		if (shouldFree)
@@ -4673,12 +4682,12 @@ ExecInitMergeTupleSlots(ModifyTableState *mtstate,
  * Process BEFORE EACH STATEMENT triggers
  */
 static void
-fireBSTriggers(ModifyTableState *node)
+fireBSTriggers(ModifyTableState *node, CmdType cmdType)
 {
 	ModifyTable *plan = (ModifyTable *) node->ps.plan;
 	ResultRelInfo *resultRelInfo = node->rootResultRelInfo;
 
-	switch (node->operation)
+	switch (cmdType)
 	{
 		case CMD_INSERT:
 			ExecBSInsertTriggers(node->ps.state, resultRelInfo);
@@ -4710,12 +4719,12 @@ fireBSTriggers(ModifyTableState *node)
  * Process AFTER EACH STATEMENT triggers
  */
 static void
-fireASTriggers(ModifyTableState *node)
+fireASTriggers(ModifyTableState *node, CmdType cmdType)
 {
 	ModifyTable *plan = (ModifyTable *) node->ps.plan;
 	ResultRelInfo *resultRelInfo = node->rootResultRelInfo;
 
-	switch (node->operation)
+	switch (cmdType)
 	{
 		case CMD_INSERT:
 			if (plan->onConflictAction == ONCONFLICT_UPDATE)
@@ -4755,7 +4764,8 @@ fireASTriggers(ModifyTableState *node)
  * triggers.
  */
 static void
-ExecSetupTransitionCaptureState(ModifyTableState *mtstate, EState *estate)
+ExecSetupTransitionCaptureState(ModifyTableState *mtstate, EState *estate,
+								CmdType cmdType)
 {
 	ModifyTable *plan = (ModifyTable *) mtstate->ps.plan;
 	ResultRelInfo *targetRelInfo = mtstate->rootResultRelInfo;
@@ -4764,7 +4774,7 @@ ExecSetupTransitionCaptureState(ModifyTableState *mtstate, EState *estate)
 	mtstate->mt_transition_capture =
 		MakeTransitionCaptureState(targetRelInfo->ri_TrigDesc,
 								   RelationGetRelid(targetRelInfo->ri_RelationDesc),
-								   mtstate->operation);
+								   cmdType);
 	if (plan->operation == CMD_INSERT &&
 		plan->onConflictAction == ONCONFLICT_UPDATE)
 		mtstate->mt_oc_transition_capture =
@@ -4888,7 +4898,7 @@ ExecModifyTable(PlanState *pstate)
 	 */
 	if (node->fireBSTriggers)
 	{
-		fireBSTriggers(node);
+		fireBSTriggers(node, node->operation);
 		node->fireBSTriggers = false;
 	}
 
@@ -5269,7 +5279,7 @@ ExecModifyTable(PlanState *pstate)
 	/*
 	 * We're done, but fire AFTER STATEMENT triggers before exiting.
 	 */
-	fireASTriggers(node);
+	fireASTriggers(node, node->operation);
 
 	node->mt_done = true;
 
@@ -5514,7 +5524,7 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 	 * valid trigger query context, so skip it in explain-only mode.
 	 */
 	if (!(eflags & EXEC_FLAG_EXPLAIN_ONLY))
-		ExecSetupTransitionCaptureState(mtstate, estate);
+		ExecSetupTransitionCaptureState(mtstate, estate, mtstate->operation);
 
 	/*
 	 * Open all the result relations and initialize the ResultRelInfo structs.

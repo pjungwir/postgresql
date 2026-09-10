@@ -1484,6 +1484,15 @@ typedef struct ModifyTableState
 	/* controls transition table population for INSERT...ON CONFLICT UPDATE */
 	struct TransitionCaptureState *mt_oc_transition_capture;
 
+	/*
+	 * True while ExecForPortionOfLeftovers() is inserting a temporal
+	 * leftover.  Such an insert is a statement in its own right as far as
+	 * the SQL standard is concerned, even though mt_operation is CMD_UPDATE
+	 * or CMD_DELETE, so the few places that would otherwise treat it as part
+	 * of the enclosing statement consult this instead.
+	 */
+	bool		mt_forPortionOfLeftover;
+
 	/* Flags showing which subcommands are present INS/UPD/DEL/DO NOTHING */
 	int			mt_merge_subcommands;
 
