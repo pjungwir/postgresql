@@ -2421,7 +2421,6 @@ typedef struct ForPortionOfExpr
 	Node	   *targetFrom;		/* FOR PORTION OF FROM bound, if given */
 	Node	   *targetTo;		/* FOR PORTION OF TO bound, if given */
 	Node	   *targetRange;	/* FOR PORTION OF bounds as a range/multirange */
-	Oid			rangeType;		/* (base)type of targetRange */
 	bool		isDomain;		/* Is rangeVar a domain? */
 	Node	   *overlapsExpr;	/* range && targetRange */
 	List	   *rangeTargetList;	/* List of TargetEntrys to set the time

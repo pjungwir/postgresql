@@ -1379,7 +1379,6 @@ transformForPortionOfClause(ParseState *pstate,
 	 * Use the basetype for the target, which shouldn't be required to follow
 	 * domain rules. The table's column type is in the Var if we need it.
 	 */
-	result->rangeType = attbasetype;
 	result->isDomain = attbasetype != attr->atttypid;
 
 	if (forPortionOf->target)
