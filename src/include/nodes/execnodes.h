@@ -480,6 +480,9 @@ typedef struct ForPortionOfState
 	Datum		fp_targetRange; /* the range/multirange from FOR PORTION OF */
 	TupleTableSlot *fp_existing;	/* slot to store old tuple */
 	TupleTableSlot *fp_leftover;	/* slot to store leftover */
+	FmgrInfo   *fp_withoutPortionInfo;	/* without_portion flinfo */
+	FunctionCallInfo fp_withoutPortionFcinfo;	/* without_portion fcinfo */
+	ReturnSetInfo *fp_withoutPortionRsi;	/* without_portion rsi */
 } ForPortionOfState;
 
 /*

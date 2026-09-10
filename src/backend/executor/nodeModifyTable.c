@@ -1430,9 +1430,9 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	HeapTuple	oldtuple = NULL;
 	CmdType		oldOperation;
 	TransitionCaptureState *oldTcs;
-	FmgrInfo	flinfo;
 	PgStat_FunctionCallUsage fcusage;
-	ReturnSetInfo rsi;
+	FunctionCallInfo fcinfo;
+	ReturnSetInfo *rsi;
 	bool		didInit = false;
 	bool		shouldFree = false;
 	ResultRelInfo *rootRelInfo = mtstate->rootResultRelInfo;
@@ -1440,11 +1440,11 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 		rootRelInfo &&
 		rootRelInfo->ri_RelationDesc->rd_rel->relkind == RELKIND_PARTITIONED_TABLE;
 
-	LOCAL_FCINFO(fcinfo, 2);
-
 	fpoState = resultRelInfo->ri_forPortionOf;
 	oldtupleSlot = fpoState->fp_existing;
 	leftoverSlot = fpoState->fp_leftover;
+	fcinfo = fpoState->fp_withoutPortionFcinfo;
+	rsi = fpoState->fp_withoutPortionRsi;
 
 	/*
 	 * Get the old pre-UPDATE/DELETE tuple. We will use its range to compute
@@ -1476,21 +1476,7 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	 * other types may have more.
 	 */
 
-	fmgr_info(forPortionOf->withoutPortionProc, &flinfo);
-	rsi.type = T_ReturnSetInfo;
-	rsi.econtext = mtstate->ps.ps_ExprContext;
-	rsi.expectedDesc = NULL;
-	rsi.allowedModes = (int) (SFRM_ValuePerCall);
-	rsi.returnMode = SFRM_ValuePerCall;
-	/* isDone is filled below */
-	rsi.setResult = NULL;
-	rsi.setDesc = NULL;
-
-	InitFunctionCallInfoData(*fcinfo, &flinfo, 2, InvalidOid, NULL, (Node *) &rsi);
 	fcinfo->args[0].value = oldRange;
-	fcinfo->args[0].isnull = false;
-	fcinfo->args[1].value = fpoState->fp_targetRange;
-	fcinfo->args[1].isnull = false;
 
 	/*
 	 * For partitioned tables, we must read leftovers with the tuple
@@ -1519,17 +1505,22 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 		pgstat_init_function_usage(fcinfo, &fcusage);
 
 		fcinfo->isnull = false;
-		rsi.isDone = ExprSingleResult;
+		rsi->isDone = ExprSingleResult;
 		leftover = FunctionCallInvoke(fcinfo);
 
 		pgstat_end_function_usage(&fcusage,
-								  rsi.isDone != ExprMultipleResult);
+								  rsi->isDone != ExprMultipleResult);
 
-		if (rsi.returnMode != SFRM_ValuePerCall)
+		/*
+		 * XXX: Support other returnModes. For now we only call
+		 * range_minus_multi and multirange_minus_multi, so we can depend on
+		 * the value-per-call protocol.
+		 */
+		if (rsi->returnMode != SFRM_ValuePerCall)
 			elog(ERROR, "without_portion function violated function call protocol");
 
 		/* Are we done? */
-		if (rsi.isDone == ExprEndResult)
+		if (rsi->isDone == ExprEndResult)
 			break;
 
 		if (fcinfo->isnull)
@@ -5620,7 +5611,6 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 		ResultRelInfo *rootRelInfo;
 		TupleDesc	tupDesc;
 		ForPortionOfExpr *forPortionOf;
-		Datum		targetRange;
 		ForPortionOfState *fpoState;
 
 		rootRelInfo = mtstate->resultRelInfo;
@@ -5630,13 +5620,29 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 		tupDesc = rootRelInfo->ri_RelationDesc->rd_att;
 		forPortionOf = (ForPortionOfExpr *) node->forPortionOf;
 
-		/* Eval the FOR PORTION OF target */
+		/* Create state for FOR PORTION OF operation */
+
+		fpoState = makeNode(ForPortionOfState);
+		fpoState->fp_rangeAttno = forPortionOf->rangeVar->varattno;
+
+		/*
+		 * Evaluate the target and prepare to call the without_portion
+		 * set-returning function. None of this varies across partitions or
+		 * child tables.
+		 */
 		if (!(eflags & EXEC_FLAG_EXPLAIN_ONLY))
 		{
 			bool		isNull;
 			ExprContext *econtext;
 			ExprState  *exprState;
+			FmgrInfo   *flinfo;
+			FunctionCallInfo fcinfo;
+			ReturnSetInfo *rsi;
 
+			/*
+			 * We need an expression context to evaluate the target and to
+			 * call the without_portion support function.
+			 */
 			if (mtstate->ps.ps_ExprContext == NULL)
 				ExecAssignExprContext(estate, &mtstate->ps);
 			econtext = mtstate->ps.ps_ExprContext;
@@ -5645,7 +5651,7 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 			exprState = ExecInitExpr((Expr *) forPortionOf->targetRange,
 									 &mtstate->ps);
 
-			targetRange = ExecEvalExpr(exprState, econtext, &isNull);
+			fpoState->fp_targetRange = ExecEvalExpr(exprState, econtext, &isNull);
 
 			/*
 			 * FOR PORTION OF ... FROM ... TO should never give us a NULL
@@ -5656,15 +5662,37 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 						(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
 						 errmsg("FOR PORTION OF target must not be null"),
 						 executor_errposition(estate, forPortionOf->targetLocation)));
+
+			/*
+			 * Prepare the call to the without_portion support function. Only
+			 * its first arg varies row-by-row.
+			 */
+
+			flinfo = palloc0_object(FmgrInfo);
+			fcinfo = palloc0(SizeForFunctionCallInfo(2));
+			rsi = makeNode(ReturnSetInfo);
+
+			fmgr_info(forPortionOf->withoutPortionProc, flinfo);
+
+			rsi->econtext = econtext;
+			rsi->expectedDesc = NULL;
+			rsi->allowedModes = (int) (SFRM_ValuePerCall);
+			rsi->returnMode = SFRM_ValuePerCall;
+			/* isDone is filled in for each call */
+			rsi->setResult = NULL;
+			rsi->setDesc = NULL;
+
+			InitFunctionCallInfoData(*fcinfo, flinfo, 2, InvalidOid, NULL, (Node *) rsi);
+
+			/* Neither argument is ever null; only args[0] varies per row. */
+			fcinfo->args[0].isnull = false;
+			fcinfo->args[1].isnull = false;
+			fcinfo->args[1].value = fpoState->fp_targetRange;
+
+			fpoState->fp_withoutPortionInfo = flinfo;
+			fpoState->fp_withoutPortionFcinfo = fcinfo;
+			fpoState->fp_withoutPortionRsi = rsi;
 		}
-		else
-			targetRange = (Datum) 0;
-
-		/* Create state for FOR PORTION OF operation */
-
-		fpoState = makeNode(ForPortionOfState);
-		fpoState->fp_rangeAttno = forPortionOf->rangeVar->varattno;
-		fpoState->fp_targetRange = targetRange;
 
 		/* Initialize slot for the existing tuple */
 
@@ -5949,6 +5977,14 @@ ExecInitForPortionOf(ModifyTableState *mtstate, EState *estate,
 	leafState = makeNode(ForPortionOfState);
 
 	leafState->fp_targetRange = fpoState->fp_targetRange;
+
+	/*
+	 * The support function and its call state depend only on the range type,
+	 * which is the same for every child, so share the root's.
+	 */
+	leafState->fp_withoutPortionInfo = fpoState->fp_withoutPortionInfo;
+	leafState->fp_withoutPortionFcinfo = fpoState->fp_withoutPortionFcinfo;
+	leafState->fp_withoutPortionRsi = fpoState->fp_withoutPortionRsi;
 	map = ExecGetChildToRootMap(resultRelInfo);
 
 	/*
