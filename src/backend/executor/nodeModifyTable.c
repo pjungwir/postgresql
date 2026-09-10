@@ -5641,7 +5641,10 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 				ExecAssignExprContext(estate, &mtstate->ps);
 			econtext = mtstate->ps.ps_ExprContext;
 
-			exprState = ExecPrepareExpr((Expr *) forPortionOf->targetRange, estate);
+			/* The planner has already prepared the expression. */
+			exprState = ExecInitExpr((Expr *) forPortionOf->targetRange,
+									 &mtstate->ps);
+
 			targetRange = ExecEvalExpr(exprState, econtext, &isNull);
 
 			/*
