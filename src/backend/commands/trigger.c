@@ -34,6 +34,7 @@
 #include "commands/trigger.h"
 #include "executor/executor.h"
 #include "executor/instrument.h"
+#include "executor/nodeModifyTable.h"
 #include "miscadmin.h"
 #include "nodes/bitmapset.h"
 #include "nodes/makefuncs.h"
@@ -3400,6 +3401,7 @@ GetTupleForTrigger(EState *estate,
 		TM_Result	test;
 		TM_FailureData tmfd;
 		int			lockflags = 0;
+		ItemPointerData origtid = *tid;
 
 		*epqslot = NULL;
 
@@ -3448,6 +3450,20 @@ GetTupleForTrigger(EState *estate,
 				if (tmfd.traversed)
 				{
 					/*
+					 * For FOR PORTION OF, following the update chain isn't
+					 * enough: complain if the concurrent change moved part of
+					 * our target out of this row.  table_tuple_lock() has
+					 * advanced tid to the latest version, so look up the
+					 * range the row had when we chose it by its original tid.
+					 * See ExecForPortionOfCheckSplit().
+					 */
+					if (relinfo->ri_forPortionOf)
+						ExecForPortionOfCheckSplit(relinfo,
+												   ExecForPortionOfOldRange(relinfo,
+																			&origtid),
+												   oldslot);
+
+					/*
 					 * Recheck the tuple using EPQ, if requested.  Otherwise,
 					 * just return that it was concurrently updated.
 					 */
@@ -3490,6 +3506,8 @@ GetTupleForTrigger(EState *estate,
 					ereport(ERROR,
 							(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
 							 errmsg("could not serialize access due to concurrent delete")));
+				if (relinfo->ri_forPortionOf)
+					ExecForPortionOfConcurrentDelete();
 				/* tuple was deleted */
 				return false;
 

@@ -1407,6 +1407,170 @@ ExecInsert(ModifyTableContext *context,
 }
 
 /* ----------------------------------------------------------------
+ *		ExecForPortionOfOldRange
+ *
+ *		Return the range column of the row version at tupleid.
+ *
+ *		The result points into the FOR PORTION OF "existing tuple" slot, so
+ *		it is only valid until something else stores into that slot.
+ * ----------------------------------------------------------------
+ */
+Datum
+ExecForPortionOfOldRange(ResultRelInfo *resultRelInfo, ItemPointer tupleid)
+{
+	ForPortionOfState *fpoState = resultRelInfo->ri_forPortionOf;
+	TupleTableSlot *slot = fpoState->fp_existing;
+	Datum		range;
+	bool		isnull;
+
+	if (!table_tuple_fetch_row_version(resultRelInfo->ri_RelationDesc,
+									   tupleid, SnapshotAny, slot))
+		elog(ERROR, "failed to fetch tuple for FOR PORTION OF");
+
+	range = slot_getattr(slot, fpoState->fp_rangeAttno, &isnull);
+	if (isnull)
+		elog(ERROR, "found a NULL range in a temporal table");
+
+	return range;
+}
+
+/* ----------------------------------------------------------------
+ *		ExecForPortionOfCheckSplit
+ *
+ *		Complain if a concurrent transaction has moved part of the history
+ *		we were asked to change out of the row we are about to change.
+ *
+ *		In READ COMMITTED mode, when we find that the row we picked has
+ *		been updated by a concurrent transaction, we lock the latest
+ *		version and re-check it with EvalPlanQual().  That is enough for an
+ *		ordinary UPDATE, because a row has only one successor and
+ *		EvalPlanQual() reaches it by following the ctid chain.  It is not
+ *		enough here: a FOR PORTION OF update or delete narrows the row's
+ *		range and re-inserts the rest of its history as brand new rows,
+ *		which are not chained off the original and which our snapshot
+ *		cannot see.  If we simply carried on, we would change only the part
+ *		of the history that stayed in this row and silently leave the rest
+ *		alone -- a lost update.
+ *
+ *		We cannot go and find those rows: they are not reachable from the
+ *		row we hold, and re-scanning for them under a new snapshot would be
+ *		a different feature.  So we detect the case and report a
+ *		serialization failure, which is what the higher isolation levels
+ *		would have done, and which the client can retry.  MERGE does the
+ *		same thing when a concurrent update moves a row to another
+ *		partition and the executor cannot follow it.
+ *
+ *		The test is precise: we only complain if some part of the range the
+ *		row used to have, and no longer has, overlaps the portion this
+ *		statement targets.  A concurrent update that does not touch the
+ *		range column, or a FOR PORTION OF update whose target contains
+ *		ours, leaves nothing behind for us to miss.
+ * ----------------------------------------------------------------
+ */
+void
+ExecForPortionOfCheckSplit(ResultRelInfo *resultRelInfo,
+						   Datum oldRange,
+						   TupleTableSlot *newSlot)
+{
+	ForPortionOfState *fpoState = resultRelInfo->ri_forPortionOf;
+	PgStat_FunctionCallUsage fcusage;
+	FmgrInfo	flinfo;
+	ReturnSetInfo rsi_data;
+	ReturnSetInfo *rsi = &rsi_data;
+	Datum		newRange;
+	bool		isnull;
+
+	LOCAL_FCINFO(fcinfo, 2);
+
+	newRange = slot_getattr(newSlot, fpoState->fp_rangeAttno, &isnull);
+	if (isnull)
+		elog(ERROR, "found a NULL range in a temporal table");
+
+	/*
+	 * Ask for the parts of the old range that the row no longer covers.
+	 *
+	 * We call the same support function ExecForPortionOfLeftovers() does, but
+	 * with our own call state rather than the one prepared for it: its second
+	 * argument is the targeted range, set once at executor start-up, and we
+	 * would have to overwrite it here.  This path only runs when a concurrent
+	 * change was detected, so setting up a call each time costs nothing worth
+	 * saving.
+	 */
+	fmgr_info(fpoState->fp_withoutPortionInfo->fn_oid, &flinfo);
+
+	rsi->type = T_ReturnSetInfo;
+	rsi->econtext = fpoState->fp_withoutPortionRsi->econtext;
+	rsi->expectedDesc = NULL;
+	rsi->allowedModes = (int) (SFRM_ValuePerCall);
+	rsi->returnMode = SFRM_ValuePerCall;
+	/* isDone is filled in for each call */
+	rsi->setResult = NULL;
+	rsi->setDesc = NULL;
+
+	InitFunctionCallInfoData(*fcinfo, &flinfo, 2, InvalidOid, NULL, (Node *) rsi);
+
+	fcinfo->args[0].value = oldRange;
+	fcinfo->args[0].isnull = false;
+	fcinfo->args[1].value = newRange;
+	fcinfo->args[1].isnull = false;
+
+	while (true)
+	{
+		Datum		lost;
+
+		pgstat_init_function_usage(fcinfo, &fcusage);
+
+		fcinfo->isnull = false;
+		rsi->isDone = ExprSingleResult;
+		lost = FunctionCallInvoke(fcinfo);
+
+		pgstat_end_function_usage(&fcusage,
+								  rsi->isDone != ExprMultipleResult);
+
+		if (rsi->returnMode != SFRM_ValuePerCall)
+			elog(ERROR, "without_portion function violated function call protocol");
+
+		if (rsi->isDone == ExprEndResult)
+			break;
+
+		if (fcinfo->isnull)
+			elog(ERROR, "got a null from without_portion function");
+
+		if (DatumGetBool(FunctionCall2Coll(fpoState->fp_overlapsInfo,
+										   fpoState->fp_overlapsCollation,
+										   lost, fpoState->fp_targetRange)))
+			ereport(ERROR,
+					(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
+					 errmsg("could not serialize access due to concurrent update"),
+					 errdetail("A concurrent transaction moved part of the history targeted by FOR PORTION OF into a row this statement cannot see."),
+					 errhint("Retry the transaction.")));
+	}
+}
+
+/* ----------------------------------------------------------------
+ *		ExecForPortionOfConcurrentDelete
+ *
+ *		Report a concurrent delete of a row targeted by FOR PORTION OF.
+ *
+ *		A FOR PORTION OF delete that only covers part of a row's history
+ *		deletes the row and inserts the remaining history as new rows, so a
+ *		concurrently deleted row may have left behind history we were
+ *		supposed to change.  We cannot tell that case apart from a plain
+ *		delete, which we would be entitled to ignore, so we report a
+ *		serialization failure for both.
+ * ----------------------------------------------------------------
+ */
+void
+ExecForPortionOfConcurrentDelete(void)
+{
+	ereport(ERROR,
+			(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
+			 errmsg("could not serialize access due to concurrent delete"),
+			 errdetail("A concurrent transaction deleted a row targeted by FOR PORTION OF, which may have left behind history this statement cannot see."),
+			 errhint("Retry the transaction.")));
+}
+
+/* ----------------------------------------------------------------
  *		ExecForPortionOfLeftovers
  *
  *		Insert tuples for the untouched portion of a row in a FOR
@@ -1469,13 +1633,15 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	 * untouched parts of history, and if necessary we will insert copies with
 	 * truncated start/end times.
 	 *
-	 * We have already locked the tuple in ExecUpdate/ExecDelete, and it has
-	 * passed EvalPlanQual. This ensures that concurrent updates in READ
-	 * COMMITTED can't insert conflicting temporal leftovers.
+	 * We have already locked the tuple, in ExecUpdate/ExecDelete or, if there
+	 * is a BEFORE row trigger, in GetTupleForTrigger, and it has passed
+	 * EvalPlanQual. This ensures that concurrent updates in READ COMMITTED
+	 * can't insert conflicting temporal leftovers.
 	 *
-	 * It does *not* protect against concurrent update/deletes overlooking
-	 * each others' leftovers though. See our isolation tests for details
-	 * about that and a viable workaround.
+	 * That alone would not stop us from overlooking a concurrent update or
+	 * delete's leftovers, but if a concurrent change moved part of our target
+	 * out of this row, ExecForPortionOfCheckSplit() has already raised a
+	 * serialization failure.
 	 */
 	if (!table_tuple_fetch_row_version(resultRelInfo->ri_RelationDesc, tupleid, SnapshotAny, oldtupleSlot))
 		elog(ERROR, "failed to fetch tuple for FOR PORTION OF");
@@ -1574,8 +1740,8 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 
 		/*
 		 * Copy the pre-UPDATE row, then overwrite the range column. We need a
-		 * new copy for each leftover, because ExecInsert might pass the slot to
-		 * BEFORE ROW INSERT triggers, which can modify its contents.
+		 * new copy for each leftover, because ExecInsert might pass the slot
+		 * to BEFORE ROW INSERT triggers, which can modify its contents.
 		 *
 		 * If the table is partitioned, map back to the root's format, so that
 		 * we get tuple routing.
@@ -1969,11 +2135,23 @@ ldelete:
 				{
 					TupleTableSlot *inputslot;
 					TupleTableSlot *epqslot;
+					bool		forPortionOf;
+					Datum		oldRange = (Datum) 0;
 
 					if (IsolationUsesXactSnapshot())
 						ereport(ERROR,
 								(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
 								 errmsg("could not serialize access due to concurrent update")));
+
+					/*
+					 * For FOR PORTION OF, remember the range this row had
+					 * when we chose it, so we can tell below whether the
+					 * concurrent change split any of our target away.
+					 */
+					forPortionOf = resultRelInfo->ri_forPortionOf != NULL;
+					if (forPortionOf)
+						oldRange = ExecForPortionOfOldRange(resultRelInfo,
+															tupleid);
 
 					/*
 					 * Already know that we're going to need to do EPQ, so
@@ -1994,6 +2172,12 @@ ldelete:
 					{
 						case TM_Ok:
 							Assert(context->tmfd.traversed);
+
+							if (forPortionOf)
+								ExecForPortionOfCheckSplit(resultRelInfo,
+														   oldRange,
+														   inputslot);
+
 							epqslot = EvalPlanQual(context->epqstate,
 												   resultRelationDesc,
 												   resultRelInfo->ri_RangeTableIndex,
@@ -2035,6 +2219,8 @@ ldelete:
 							return NULL;
 
 						case TM_Deleted:
+							if (forPortionOf)
+								ExecForPortionOfConcurrentDelete();
 							/* tuple already deleted; nothing to do */
 							return NULL;
 
@@ -2064,6 +2250,8 @@ ldelete:
 					ereport(ERROR,
 							(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
 							 errmsg("could not serialize access due to concurrent delete")));
+				if (resultRelInfo->ri_forPortionOf)
+					ExecForPortionOfConcurrentDelete();
 				/* tuple already deleted; nothing to do */
 				return NULL;
 
@@ -2883,11 +3071,23 @@ redo_act:
 				{
 					TupleTableSlot *inputslot;
 					TupleTableSlot *epqslot;
+					bool		forPortionOf;
+					Datum		oldRange = (Datum) 0;
 
 					if (IsolationUsesXactSnapshot())
 						ereport(ERROR,
 								(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
 								 errmsg("could not serialize access due to concurrent update")));
+
+					/*
+					 * For FOR PORTION OF, remember the range this row had
+					 * when we chose it, so we can tell below whether the
+					 * concurrent change split any of our target away.
+					 */
+					forPortionOf = resultRelInfo->ri_forPortionOf != NULL;
+					if (forPortionOf)
+						oldRange = ExecForPortionOfOldRange(resultRelInfo,
+															tupleid);
 
 					/*
 					 * Already know that we're going to need to do EPQ, so
@@ -2907,6 +3107,11 @@ redo_act:
 					{
 						case TM_Ok:
 							Assert(context->tmfd.traversed);
+
+							if (forPortionOf)
+								ExecForPortionOfCheckSplit(resultRelInfo,
+														   oldRange,
+														   inputslot);
 
 							epqslot = EvalPlanQual(context->epqstate,
 												   resultRelationDesc,
@@ -2941,6 +3146,8 @@ redo_act:
 							goto redo_act;
 
 						case TM_Deleted:
+							if (forPortionOf)
+								ExecForPortionOfConcurrentDelete();
 							/* tuple already deleted; nothing to do */
 							return NULL;
 
@@ -2979,6 +3186,8 @@ redo_act:
 					ereport(ERROR,
 							(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
 							 errmsg("could not serialize access due to concurrent delete")));
+				if (resultRelInfo->ri_forPortionOf)
+					ExecForPortionOfConcurrentDelete();
 				/* tuple already deleted; nothing to do */
 				return NULL;
 
@@ -5648,6 +5857,7 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 			FmgrInfo   *flinfo;
 			FunctionCallInfo fcinfo;
 			ReturnSetInfo *rsi;
+			OpExpr	   *overlapsOp;
 
 			/*
 			 * We need an expression context to evaluate the target and to
@@ -5702,6 +5912,17 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 			fpoState->fp_withoutPortionInfo = flinfo;
 			fpoState->fp_withoutPortionFcinfo = fcinfo;
 			fpoState->fp_withoutPortionRsi = rsi;
+
+			/*
+			 * Also prepare the range column's "overlaps" function, which
+			 * ExecForPortionOfCheckSplit() uses.  The parser has already
+			 * looked up the operator to build the extra qual, so borrow it
+			 * from there.
+			 */
+			overlapsOp = castNode(OpExpr, forPortionOf->overlapsExpr);
+			fpoState->fp_overlapsInfo = palloc0_object(FmgrInfo);
+			fmgr_info(overlapsOp->opfuncid, fpoState->fp_overlapsInfo);
+			fpoState->fp_overlapsCollation = overlapsOp->inputcollid;
 		}
 
 		/* Initialize slot for the existing tuple */
@@ -6001,6 +6222,8 @@ ExecInitForPortionOf(ModifyTableState *mtstate, EState *estate,
 	leafState->fp_withoutPortionInfo = fpoState->fp_withoutPortionInfo;
 	leafState->fp_withoutPortionFcinfo = fpoState->fp_withoutPortionFcinfo;
 	leafState->fp_withoutPortionRsi = fpoState->fp_withoutPortionRsi;
+	leafState->fp_overlapsInfo = fpoState->fp_overlapsInfo;
+	leafState->fp_overlapsCollation = fpoState->fp_overlapsCollation;
 	map = ExecGetChildToRootMap(resultRelInfo);
 
 	/*

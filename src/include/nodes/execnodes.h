@@ -483,6 +483,8 @@ typedef struct ForPortionOfState
 	FmgrInfo   *fp_withoutPortionInfo;	/* without_portion flinfo */
 	FunctionCallInfo fp_withoutPortionFcinfo;	/* without_portion fcinfo */
 	ReturnSetInfo *fp_withoutPortionRsi;	/* without_portion rsi */
+	FmgrInfo   *fp_overlapsInfo;	/* overlaps flinfo, for CheckSplit */
+	Oid			fp_overlapsCollation;	/* overlaps input collation */
 } ForPortionOfState;
 
 /*
