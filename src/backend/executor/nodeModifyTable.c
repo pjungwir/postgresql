@@ -1444,8 +1444,8 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 	LOCAL_FCINFO(fcinfo, 2);
 
 	fpoState = resultRelInfo->ri_forPortionOf;
-	oldtupleSlot = fpoState->fp_Existing;
-	leftoverSlot = fpoState->fp_Leftover;
+	oldtupleSlot = fpoState->fp_existing;
+	leftoverSlot = fpoState->fp_leftover;
 
 	/*
 	 * Get the old pre-UPDATE/DELETE tuple. We will use its range to compute
@@ -5679,13 +5679,13 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 
 		/* Initialize slot for the existing tuple */
 
-		fpoState->fp_Existing =
+		fpoState->fp_existing =
 			table_slot_create(rootRelInfo->ri_RelationDesc,
 							  &mtstate->ps.state->es_tupleTable);
 
 		/* Create the tuple slot for INSERTing the temporal leftovers */
 
-		fpoState->fp_Leftover =
+		fpoState->fp_leftover =
 			ExecInitExtraTupleSlot(mtstate->ps.state, tupDesc, &TTSOpsVirtual);
 
 		rootRelInfo->ri_forPortionOf = fpoState;
@@ -5982,15 +5982,15 @@ ExecInitForPortionOf(ModifyTableState *mtstate, EState *estate,
 	 * this resultRelInfo; no tuple routing via the parent is required.
 	 */
 	if (rootRelInfo->ri_RelationDesc->rd_rel->relkind == RELKIND_PARTITIONED_TABLE)
-		leafState->fp_Leftover = fpoState->fp_Leftover;
+		leafState->fp_leftover = fpoState->fp_leftover;
 	else
-		leafState->fp_Leftover =
+		leafState->fp_leftover =
 			ExecInitExtraTupleSlot(mtstate->ps.state,
 								   RelationGetDescr(resultRelInfo->ri_RelationDesc),
 								   &TTSOpsVirtual);
 
 	/* Each child relation needs a slot matching its tuple descriptor. */
-	leafState->fp_Existing =
+	leafState->fp_existing =
 		table_slot_create(resultRelInfo->ri_RelationDesc,
 						  &mtstate->ps.state->es_tupleTable);
 
