@@ -1410,7 +1410,25 @@ ExecInsert(ModifyTableContext *context,
  *		ExecForPortionOfLeftovers
  *
  *		Insert tuples for the untouched portion of a row in a FOR
- *		PORTION OF UPDATE/DELETE
+ *		PORTION OF UPDATE/DELETE.
+ *
+ *		If a row's history exceeds the portion targeted, we need to insert
+ *		temporal leftovers to avoid changing more than the user requested. So we
+ *		fetch the pre-UPDATE tuple, set just its start/end time, and insert a
+ *		copy as a leftover.
+ *
+ *		To find the untouched portion(s) of history, we call a set-returning
+ *		support function based on the type of the application-time column. (XXX:
+ *		Currently only rangetypes and multirangetypes are supported, but we
+ *		would like to support any type that offers the necessary
+ *		functions/operators.) For a rangetype, there can be zero, one, or two
+ *		leftovers. For a multirange, which can accommodate gaps, there can be at
+ *		most one. User-defined types may return more.
+ *
+ *		Each temporal leftover gets its own insert "statement", per the SQL
+ *		standard. So we fire statement triggers and row triggers (complete with
+ *		transition tables). These leftovers do not contribute to the command tag
+ *		or ROW_COUNT.
  * ----------------------------------------------------------------
  */
 static void
@@ -5692,7 +5710,13 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 			table_slot_create(rootRelInfo->ri_RelationDesc,
 							  &mtstate->ps.state->es_tupleTable);
 
-		/* Create the tuple slot for INSERTing the temporal leftovers */
+		/*
+		 * Create the tuple slot for INSERTing the temporal leftovers.
+		 *
+		 * A virtual slot lets us set the range column and re-map attributes
+		 * for partitions. A heap tuple would still need deforming and
+		 * re-forming.
+		 */
 
 		fpoState->fp_leftover =
 			ExecInitExtraTupleSlot(mtstate->ps.state, tupDesc, &TTSOpsVirtual);
