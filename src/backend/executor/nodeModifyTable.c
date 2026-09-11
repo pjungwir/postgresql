@@ -1537,22 +1537,11 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 		if (!didInit)
 		{
 			/*
-			 * Make a copy of the pre-UPDATE row. Then we'll overwrite the
-			 * range column below. Only partitioned targets need conversion to
-			 * the root table's format, because they reinsert through the root
-			 * relation for tuple routing.
+			 * Get the pre-UPDATE row. We'll make copies of it below for each
+			 * leftover we need to insert.
 			 */
-			if (map != NULL)
-			{
-				leftoverSlot = execute_attr_map_slot(map->attrMap,
-													 oldtupleSlot,
-													 leftoverSlot);
-			}
-			else
-			{
+			if (map == NULL)
 				oldtuple = ExecFetchSlotHeapTuple(oldtupleSlot, false, &shouldFree);
-				ExecForceStoreHeapTuple(oldtuple, leftoverSlot, false);
-			}
 
 			/*
 			 * Save some mtstate things so we can restore them below. XXX:
@@ -1564,18 +1553,21 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 
 			didInit = true;
 		}
+
+		/*
+		 * Copy the pre-UPDATE row, then overwrite the range column. We need a
+		 * new copy for each leftover, because ExecInsert might pass the slot to
+		 * BEFORE ROW INSERT triggers, which can modify its contents.
+		 *
+		 * If the table is partitioned, map back to the root's format, so that
+		 * we get tuple routing.
+		 */
+		if (map != NULL)
+			leftoverSlot = execute_attr_map_slot(map->attrMap,
+												 oldtupleSlot,
+												 leftoverSlot);
 		else
-		{
-			/*
-			 * Re-copy the original row into leftoverSlot because ExecInsert
-			 * might pass leftoverSlot to BEFORE ROW INSERT triggers, which
-			 * can modify the slot contents.
-			 */
-			if (map != NULL)
-				execute_attr_map_slot(map->attrMap, oldtupleSlot, leftoverSlot);
-			else
-				ExecForceStoreHeapTuple(oldtuple, leftoverSlot, false);
-		}
+			ExecForceStoreHeapTuple(oldtuple, leftoverSlot, false);
 
 		leftoverSlot->tts_values[resultRelInfo->ri_forPortionOf->fp_rangeAttno - 1] = leftover;
 		leftoverSlot->tts_isnull[resultRelInfo->ri_forPortionOf->fp_rangeAttno - 1] = false;
