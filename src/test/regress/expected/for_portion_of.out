@@ -660,7 +660,7 @@ END;
          RETURNS text
          LANGUAGE sql
 1       BEGIN ATOMIC
-2        UPDATE for_portion_of_test FOR PORTION OF valid_at FROM '2018-01-15'::date TO '2019-01-01'::date SET name = 'one^1'::text
+2        UPDATE for_portion_of_test FOR PORTION OF valid_at FROM ('2018-01-15'::date) TO ('2019-01-01'::date) SET name = 'one^1'::text
 3          RETURNING for_portion_of_test.name;
 4       END
 CREATE OR REPLACE function fpo_update()
@@ -1044,7 +1044,7 @@ END;
          RETURNS text
          LANGUAGE sql
 1       BEGIN ATOMIC
-2        DELETE FROM for_portion_of_test FOR PORTION OF valid_at FROM '2018-01-15'::date TO '2019-01-01'::date
+2        DELETE FROM for_portion_of_test FOR PORTION OF valid_at FROM ('2018-01-15'::date) TO ('2019-01-01'::date)
 3          RETURNING for_portion_of_test.name;
 4       END
 CREATE OR REPLACE function fpo_delete()
@@ -2362,7 +2362,7 @@ CREATE RULE fpo_rename_rule2 AS ON DELETE TO fpo_rename_src
  x      | integer |           |          |         | plain   |              | 
 Rules:
     fpo_rename_rule1 AS
-    ON UPDATE TO fpo_rename_src DO INSTEAD  UPDATE fpo_rename FOR PORTION OF f2 FROM 3 TO 6 SET f1 = 2
+    ON UPDATE TO fpo_rename_src DO INSTEAD  UPDATE fpo_rename FOR PORTION OF f2 FROM (3) TO (6) SET f1 = 2
     fpo_rename_rule2 AS
     ON DELETE TO fpo_rename_src DO INSTEAD  DELETE FROM fpo_rename FOR PORTION OF f2 (int4range(3, 6))
 
@@ -2375,11 +2375,42 @@ ALTER TABLE fpo_rename RENAME COLUMN f2 TO ff2;
  x      | integer |           |          |         | plain   |              | 
 Rules:
     fpo_rename_rule1 AS
-    ON UPDATE TO fpo_rename_src DO INSTEAD  UPDATE fpo_rename FOR PORTION OF ff2 FROM 3 TO 6 SET ff1 = 2
+    ON UPDATE TO fpo_rename_src DO INSTEAD  UPDATE fpo_rename FOR PORTION OF ff2 FROM (3) TO (6) SET ff1 = 2
     fpo_rename_rule2 AS
     ON DELETE TO fpo_rename_src DO INSTEAD  DELETE FROM fpo_rename FOR PORTION OF ff2 (int4range(3, 6))
 
 DROP TABLE fpo_rename, fpo_rename_src;
+-- Deparsed FROM/TO bounds must be re-loadable.  A bound ending in an interval
+-- type name with a field qualifier would otherwise run into the following TO,
+-- since "interval hour to minute" is a type name too.
+CREATE TYPE fpo_intervalrange AS RANGE (subtype = interval);
+CREATE TABLE fpo_interval (r fpo_intervalrange);
+CREATE RULE fpo_interval_rule AS ON INSERT TO fpo_interval DO ALSO
+  DELETE FROM fpo_interval
+    FOR PORTION OF r FROM (INTERVAL '1' HOUR) TO INTERVAL '2' HOUR;
+SELECT definition FROM pg_rules WHERE rulename = 'fpo_interval_rule';
+                                                                      definition                                                                      
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ CREATE RULE fpo_interval_rule AS                                                                                                                    +
+     ON INSERT TO public.fpo_interval DO  DELETE FROM fpo_interval FOR PORTION OF r FROM ('@ 1 hour'::interval hour) TO ('@ 2 hours'::interval hour);
+(1 row)
+
+SELECT 'DROP RULE fpo_interval_rule ON fpo_interval'
+  UNION ALL
+  SELECT pg_get_ruledef(oid) FROM pg_rewrite
+    WHERE rulename = 'fpo_interval_rule' \gexec
+DROP RULE fpo_interval_rule ON fpo_interval
+CREATE RULE fpo_interval_rule AS
+    ON INSERT TO public.fpo_interval DO  DELETE FROM fpo_interval FOR PORTION OF r FROM ('@ 1 hour'::interval hour) TO ('@ 2 hours'::interval hour);
+SELECT definition FROM pg_rules WHERE rulename = 'fpo_interval_rule';
+                                                                      definition                                                                      
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ CREATE RULE fpo_interval_rule AS                                                                                                                    +
+     ON INSERT TO public.fpo_interval DO  DELETE FROM fpo_interval FOR PORTION OF r FROM ('@ 1 hour'::interval hour) TO ('@ 2 hours'::interval hour);
+(1 row)
+
+DROP TABLE fpo_interval;
+DROP TYPE fpo_intervalrange;
 -- UPDATE/DELETE FOR PORTION OF on a GENERATED VIRTUAL range column:
 CREATE TABLE fpo_gen_virtual (
   a int,
@@ -2902,10 +2933,10 @@ CREATE TABLE fpo_param_src (id int);
 CREATE RULE fpo_param_r AS ON DELETE TO fpo_param_src DO INSTEAD
   DELETE FROM fpo_param FOR PORTION OF valid_at FROM NULL TO '2001-01-01';
 SELECT definition FROM pg_rules WHERE rulename = 'fpo_param_r';
-                                                               definition                                                               
-----------------------------------------------------------------------------------------------------------------------------------------
- CREATE RULE fpo_param_r AS                                                                                                            +
-     ON DELETE TO public.fpo_param_src DO INSTEAD  DELETE FROM fpo_param FOR PORTION OF valid_at FROM NULL::date TO '2001-01-01'::date;
+                                                                 definition                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------
+ CREATE RULE fpo_param_r AS                                                                                                                +
+     ON DELETE TO public.fpo_param_src DO INSTEAD  DELETE FROM fpo_param FOR PORTION OF valid_at FROM (NULL::date) TO ('2001-01-01'::date);
 (1 row)
 
 DROP TABLE fpo_param_src;
@@ -2994,14 +3025,14 @@ BEGIN ATOMIC
   DELETE FROM fpo_name FOR PORTION OF valid_at FROM $1 TO $2;
 END;
 SELECT pg_get_functiondef('fpo_name_sql(int,int)'::regprocedure);
-                                   pg_get_functiondef                                   
-----------------------------------------------------------------------------------------
- CREATE OR REPLACE FUNCTION public.fpo_name_sql(lo integer, hi integer)                +
-  RETURNS void                                                                         +
-  LANGUAGE sql                                                                         +
- BEGIN ATOMIC                                                                          +
-  DELETE FROM fpo_name FOR PORTION OF valid_at FROM fpo_name_sql.lo TO fpo_name_sql.hi;+
- END                                                                                   +
+                                     pg_get_functiondef                                     
+--------------------------------------------------------------------------------------------
+ CREATE OR REPLACE FUNCTION public.fpo_name_sql(lo integer, hi integer)                    +
+  RETURNS void                                                                             +
+  LANGUAGE sql                                                                             +
+ BEGIN ATOMIC                                                                              +
+  DELETE FROM fpo_name FOR PORTION OF valid_at FROM (fpo_name_sql.lo) TO (fpo_name_sql.hi);+
+ END                                                                                       +
  
 (1 row)
 
@@ -3010,7 +3041,7 @@ CREATE OR REPLACE FUNCTION public.fpo_name_sql(lo integer, hi integer)
  RETURNS void
  LANGUAGE sql
 BEGIN ATOMIC
- DELETE FROM fpo_name FOR PORTION OF valid_at FROM fpo_name_sql.lo TO fpo_name_sql.hi;
+ DELETE FROM fpo_name FOR PORTION OF valid_at FROM (fpo_name_sql.lo) TO (fpo_name_sql.hi);
 END
 
 SELECT fpo_name_sql(60, 70);

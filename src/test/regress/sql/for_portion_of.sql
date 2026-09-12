@@ -1572,6 +1572,24 @@ ALTER TABLE fpo_rename RENAME COLUMN f2 TO ff2;
 
 DROP TABLE fpo_rename, fpo_rename_src;
 
+-- Deparsed FROM/TO bounds must be re-loadable.  A bound ending in an interval
+-- type name with a field qualifier would otherwise run into the following TO,
+-- since "interval hour to minute" is a type name too.
+CREATE TYPE fpo_intervalrange AS RANGE (subtype = interval);
+CREATE TABLE fpo_interval (r fpo_intervalrange);
+CREATE RULE fpo_interval_rule AS ON INSERT TO fpo_interval DO ALSO
+  DELETE FROM fpo_interval
+    FOR PORTION OF r FROM (INTERVAL '1' HOUR) TO INTERVAL '2' HOUR;
+SELECT definition FROM pg_rules WHERE rulename = 'fpo_interval_rule';
+SELECT 'DROP RULE fpo_interval_rule ON fpo_interval'
+  UNION ALL
+  SELECT pg_get_ruledef(oid) FROM pg_rewrite
+    WHERE rulename = 'fpo_interval_rule' \gexec
+SELECT definition FROM pg_rules WHERE rulename = 'fpo_interval_rule';
+
+DROP TABLE fpo_interval;
+DROP TYPE fpo_intervalrange;
+
 -- UPDATE/DELETE FOR PORTION OF on a GENERATED VIRTUAL range column:
 CREATE TABLE fpo_gen_virtual (
   a int,

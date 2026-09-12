@@ -12943,13 +12943,21 @@ get_for_portion_of(ForPortionOfExpr *forPortionOf, RangeTblEntry *rte,
 		/*
 		 * Try to write it as FROM ... TO ... if we received it that way,
 		 * otherwise (targetRange).
+		 *
+		 * The bounds get parentheses of their own.  A bound is a full a_expr,
+		 * and one that ends in an interval type name with a field qualifier
+		 * (`'01:00:00'::interval hour`) runs straight into the TO that
+		 * follows it, since `interval hour to minute` is a type name too.  So
+		 * we can't just hand the bounds to the grammar bare, and only
+		 * parenthesizing the ones that need it would be no easier to read.
 		 */
 		if (forPortionOf->targetFrom && forPortionOf->targetTo)
 		{
-			appendStringInfoString(context->buf, " FROM ");
+			appendStringInfoString(context->buf, " FROM (");
 			get_rule_expr(forPortionOf->targetFrom, context, false);
-			appendStringInfoString(context->buf, " TO ");
+			appendStringInfoString(context->buf, ") TO (");
 			get_rule_expr(forPortionOf->targetTo, context, false);
+			appendStringInfoChar(context->buf, ')');
 		}
 		else
 		{
