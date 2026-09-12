@@ -1930,6 +1930,69 @@ DROP TABLE fpo_param_src;
 DROP TABLE fpo_param;
 
 --
+-- Names in the FOR PORTION OF bounds
+--
+-- A bound may not read the row being changed, but a name in that position
+-- doesn't necessarily mean a column: it may belong to a PL/pgSQL variable or
+-- to a parameter of the SQL-bodied function we are part of.
+--
+
+CREATE TABLE fpo_name (valid_at int4range, name text);
+INSERT INTO fpo_name VALUES ('[1,100)', 'one');
+
+-- Columns of the target relation are still rejected, whether they are named
+-- directly or reached through a whole-row reference.
+UPDATE fpo_name FOR PORTION OF valid_at FROM lower(valid_at) TO 5
+  SET name = 'nope';
+UPDATE fpo_name FOR PORTION OF valid_at (valid_at) SET name = 'nope';
+DELETE FROM fpo_name FOR PORTION OF valid_at ((ROW(fpo_name.*)).f1);
+DELETE FROM fpo_name FOR PORTION OF valid_at FROM (ROW(fpo_name.*)).f2 TO 5;
+
+-- PL/pgSQL variables may be bounds, under either #variable_conflict rule.
+CREATE FUNCTION fpo_name_plpgsql(lo int, hi int) RETURNS void
+LANGUAGE plpgsql AS $$
+BEGIN
+  UPDATE fpo_name FOR PORTION OF valid_at FROM lo TO hi SET name = 'plpgsql';
+END $$;
+SELECT fpo_name_plpgsql(10, 20);
+
+CREATE FUNCTION fpo_name_plpgsql_var(lo int, hi int) RETURNS void
+LANGUAGE plpgsql AS $$
+#variable_conflict use_variable
+BEGIN
+  UPDATE fpo_name FOR PORTION OF valid_at FROM lo TO hi SET name = 'variable';
+END $$;
+SELECT fpo_name_plpgsql_var(30, 40);
+SELECT * FROM fpo_name ORDER BY valid_at;
+
+-- A PL/pgSQL variable that shares its name with a column of the target is
+-- still ambiguous, just as it would be anywhere else in the statement.
+CREATE FUNCTION fpo_name_plpgsql_ambig(valid_at int) RETURNS void
+LANGUAGE plpgsql AS $$
+BEGIN
+  UPDATE fpo_name FOR PORTION OF valid_at FROM valid_at TO 50 SET name = 'amb';
+END $$;
+SELECT fpo_name_plpgsql_ambig(45);
+
+-- Parameters of a SQL-bodied function may be bounds too.  They deparse by
+-- name, so pg_get_functiondef() output has to be re-loadable.
+CREATE FUNCTION fpo_name_sql(lo int, hi int) RETURNS void
+LANGUAGE SQL
+BEGIN ATOMIC
+  DELETE FROM fpo_name FOR PORTION OF valid_at FROM $1 TO $2;
+END;
+SELECT pg_get_functiondef('fpo_name_sql(int,int)'::regprocedure);
+SELECT pg_get_functiondef('fpo_name_sql(int,int)'::regprocedure) \gexec
+SELECT fpo_name_sql(60, 70);
+SELECT * FROM fpo_name ORDER BY valid_at;
+
+DROP FUNCTION fpo_name_plpgsql;
+DROP FUNCTION fpo_name_plpgsql_var;
+DROP FUNCTION fpo_name_plpgsql_ambig;
+DROP FUNCTION fpo_name_sql;
+DROP TABLE fpo_name;
+
+--
 -- EXPLAIN without ANALYZE must only plan the statement, so it must not
 -- evaluate the FOR PORTION OF target.
 --

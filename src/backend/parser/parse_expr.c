@@ -572,14 +572,24 @@ checkColumnRefAllowed(ParseState *pstate, ParseExprKind exprKind, int location)
 			/* okay */
 			break;
 
+		case EXPR_KIND_FOR_PORTION:
+
+			/*
+			 * FOR PORTION OF bounds may not reference the row being changed
+			 * either, but we can't tell that from the ColumnRef: the target
+			 * relation is in scope here, so a name in this position might
+			 * still be resolved to something else by a parser hook, e.g. a
+			 * PL/pgSQL variable or a SQL function parameter.  So we let
+			 * resolution finish and transformForPortionOfClause() complains
+			 * if the result turns out to contain a Var.
+			 */
+			break;
+
 		case EXPR_KIND_COLUMN_DEFAULT:
 			err = _("cannot use column reference in DEFAULT expression");
 			break;
 		case EXPR_KIND_PARTITION_BOUND:
 			err = _("cannot use column reference in partition bound expression");
-			break;
-		case EXPR_KIND_FOR_PORTION:
-			err = _("cannot use column reference in FOR PORTION OF expression");
 			break;
 
 			/*

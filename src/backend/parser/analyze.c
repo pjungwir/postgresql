@@ -83,6 +83,7 @@ static ForPortionOfExpr *transformForPortionOfClause(ParseState *pstate,
 													 const ForPortionOfClause *forPortionOf,
 													 const Node *whereClause,
 													 bool isUpdate);
+static void checkForPortionOfBound(ParseState *pstate, Node *expr);
 static int	count_rowexpr_columns(ParseState *pstate, Node *expr);
 static Query *transformSelectStmt(ParseState *pstate, SelectStmt *stmt,
 								  SelectStmtPassthrough *passthru);
@@ -1395,6 +1396,7 @@ transformForPortionOfClause(ParseState *pstate,
 		result->targetRange = transformExpr(pstate,
 											forPortionOf->target,
 											EXPR_KIND_FOR_PORTION);
+		checkForPortionOfBound(pstate, result->targetRange);
 
 		actual_target_type = exprType(result->targetRange);
 
@@ -1460,9 +1462,11 @@ transformForPortionOfClause(ParseState *pstate,
 		result->targetFrom = transformExpr(pstate,
 										   forPortionOf->target_start,
 										   EXPR_KIND_FOR_PORTION);
+		checkForPortionOfBound(pstate, result->targetFrom);
 		result->targetTo = transformExpr(pstate,
 										 forPortionOf->target_end,
 										 EXPR_KIND_FOR_PORTION);
+		checkForPortionOfBound(pstate, result->targetTo);
 		actual_arg_types[0] = exprType(result->targetFrom);
 		actual_arg_types[1] = exprType(result->targetTo);
 		args = list_make2(result->targetFrom, result->targetTo);
@@ -1621,6 +1625,31 @@ transformForPortionOfClause(ParseState *pstate,
 	result->targetLocation = forPortionOf->target_location;
 
 	return result;
+}
+
+/*
+ * checkForPortionOfBound
+ *
+ *	  Complain if a transformed FOR PORTION OF bound references a column.
+ *
+ *	  The bound must give the same answer for every row, since it says which
+ *	  portion of history the whole statement targets, so it may not read the
+ *	  row being changed.  We check the transformed expression rather than the
+ *	  ColumnRef, because the target relation is in scope while we transform
+ *	  the bound, and a name there might still be resolved to something that is
+ *	  constant for the statement: a PL/pgSQL variable, or a parameter of the
+ *	  SQL-bodied function we are part of.  Looking at the result also catches
+ *	  Vars that never passed through transformColumnRef at all, such as those
+ *	  a whole-row reference expands to.
+ */
+static void
+checkForPortionOfBound(ParseState *pstate, Node *expr)
+{
+	if (contain_var_clause(expr))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot use column reference in FOR PORTION OF expression"),
+				 parser_errposition(pstate, locate_var_of_level(expr, 0))));
 }
 
 /*
