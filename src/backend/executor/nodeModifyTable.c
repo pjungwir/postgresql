@@ -1782,6 +1782,19 @@ ExecForPortionOfLeftovers(ModifyTableContext *context,
 		ExecInsert(context, resultRelInfo, leftoverSlot, false, NULL, NULL);
 		fireASTriggers(mtstate, CMD_INSERT);
 		AfterTriggerEndQuery(estate);
+
+		/*
+		 * Each pass sets up its own capture state, since each is its own
+		 * statement and needs its own transition tables. AfterTriggerEndQuery
+		 * has just released the tuplestores this one points at, so it is of
+		 * no further use: free it now, or we would accumulate one per
+		 * leftover until the query ends.
+		 */
+		if (mtstate->mt_transition_capture != NULL)
+		{
+			pfree(mtstate->mt_transition_capture);
+			mtstate->mt_transition_capture = NULL;
+		}
 	}
 
 	if (didInit)
