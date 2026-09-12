@@ -4450,6 +4450,21 @@ RewriteQuery(Query *parsetree, List *rewrite_events, int orig_rt_length,
 										 gettext_noop("Views with conditional DO INSTEAD rules are not automatically updatable."));
 
 			/*
+			 * We don't support FOR PORTION OF on views with DO ALSO rules
+			 * either.  product_queries holds their actions, and fireRules()
+			 * built those from a query that does not carry the FOR PORTION OF
+			 * restriction yet: we add the overlaps qual and the range
+			 * assignment only after the view has been rewritten down to its
+			 * base relation, so as not to add them twice.  So a rule action
+			 * would see an unnarrowed NEW range and would not be limited to
+			 * the rows the statement targets.
+			 */
+			if (parsetree->forPortionOf && product_queries != NIL)
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("views with DO ALSO rules do not support FOR PORTION OF")));
+
+			/*
 			 * Attempt to rewrite the query to automatically update the view.
 			 * This throws an error if the view can't be automatically
 			 * updated.

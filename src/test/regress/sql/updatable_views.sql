@@ -2245,6 +2245,46 @@ delete from uv_fpo_instead_view
 drop view uv_fpo_instead_view;
 drop function uv_fpo_instead_trig();
 
+-- FOR PORTION OF is not supported on views with DO ALSO rules either.  The
+-- rule action is built before we narrow the view's query, so it would see an
+-- unnarrowed NEW range and would not be limited to the targeted rows.
+create table uv_fpo_also_log (tag text, valid_at tsrange, b float);
+create view uv_fpo_also_view as select id, valid_at, b from uv_fpo_tab;
+create rule uv_fpo_also_upd as on update to uv_fpo_also_view
+  do also insert into uv_fpo_also_log values ('upd', new.valid_at, new.b);
+create rule uv_fpo_also_del as on delete to uv_fpo_also_view
+  do also insert into uv_fpo_also_log values ('del', old.valid_at, old.b);
+
+update uv_fpo_also_view
+  for portion of valid_at from '2015-01-01' to '2020-01-01'
+  set b = 99 where id = '[1,1]'; -- error
+
+delete from uv_fpo_also_view
+  for portion of valid_at from '2017-01-01' to '2022-01-01'
+  where id = '[1,1]'; -- error
+
+-- Without FOR PORTION OF the rules work as always.
+update uv_fpo_also_view set b = 98 where id = '[1,1]';
+delete from uv_fpo_also_view where id = '[1,1]';
+select * from uv_fpo_also_log order by tag, valid_at;
+
+drop view uv_fpo_also_view;
+drop table uv_fpo_also_log;
+
+-- A DO ALSO rule on the base table is fine: the rule action is built from a
+-- query that already carries the FOR PORTION OF restriction.
+create table uv_fpo_also_tab (id int4range, valid_at tsrange, b float);
+insert into uv_fpo_also_tab values ('[1,1]', '[2000-01-01,2030-01-01)', 0);
+create table uv_fpo_also_tab_log (valid_at tsrange, b float);
+create rule uv_fpo_also_tab_upd as on update to uv_fpo_also_tab
+  do also insert into uv_fpo_also_tab_log values (new.valid_at, new.b);
+update uv_fpo_also_tab
+  for portion of valid_at from '2010-01-01' to '2020-01-01'
+  set b = 99 where id = '[1,1]';
+select * from uv_fpo_also_tab order by valid_at;
+select * from uv_fpo_also_tab_log order by valid_at;
+drop table uv_fpo_also_tab, uv_fpo_also_tab_log;
+
 -- Forbid INSTEAD OF triggers with FOR PORTION OF even if the FOR PORTION OF
 -- statement is parsed before the trigger exists.
 -- This can happen in at least a couple ways: a rewrite rule or a BEGIN ATOMIC function.
