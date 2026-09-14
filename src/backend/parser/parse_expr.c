@@ -502,35 +502,27 @@ transformIndirection(ParseState *pstate, A_Indirection *ind)
 }
 
 /*
- * Transform a ColumnRef.
+ * checkColumnRefAllowed
+ *		Complain if a column reference is not allowed in the given kind of
+ *		expression.
  *
- * If you find yourself changing this code, see also ExpandColumnRefStar.
+ * We allow column references in most places, except in a few kinds of
+ * expression that must produce the same value for every row.
+ *
+ * A whole-row reference is a column reference too, and
+ * transformExpressionList() expands one without ever reaching
+ * transformColumnRef(), so it has to apply this test for itself.  That is also
+ * why the expression kind is passed in rather than read from the ParseState:
+ * the callers that expand "something.*" are not always reached through
+ * transformExpr(), so pstate->p_expr_kind may not have been set yet.
  */
-static Node *
-transformColumnRef(ParseState *pstate, ColumnRef *cref)
+void
+checkColumnRefAllowed(ParseState *pstate, ParseExprKind exprKind, int location)
 {
-	Node	   *node = NULL;
-	char	   *nspname = NULL;
-	char	   *relname = NULL;
-	char	   *colname = NULL;
-	ParseNamespaceItem *nsitem;
-	int			levels_up;
-	enum
-	{
-		CRERR_NO_COLUMN,
-		CRERR_NO_RTE,
-		CRERR_WRONG_DB,
-		CRERR_TOO_MANY
-	}			crerr = CRERR_NO_COLUMN;
 	const char *err;
 
-	/*
-	 * Check to see if the column reference is in an invalid place within the
-	 * query.  We allow column references in most places, except in default
-	 * expressions and partition bound expressions.
-	 */
 	err = NULL;
-	switch (pstate->p_expr_kind)
+	switch (exprKind)
 	{
 		case EXPR_KIND_NONE:
 			Assert(false);		/* can't happen */
@@ -602,7 +594,33 @@ transformColumnRef(ParseState *pstate, ColumnRef *cref)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg_internal("%s", err),
-				 parser_errposition(pstate, cref->location)));
+				 parser_errposition(pstate, location)));
+}
+
+/*
+ * Transform a ColumnRef.
+ *
+ * If you find yourself changing this code, see also ExpandColumnRefStar.
+ */
+static Node *
+transformColumnRef(ParseState *pstate, ColumnRef *cref)
+{
+	Node	   *node = NULL;
+	char	   *nspname = NULL;
+	char	   *relname = NULL;
+	char	   *colname = NULL;
+	ParseNamespaceItem *nsitem;
+	int			levels_up;
+	enum
+	{
+		CRERR_NO_COLUMN,
+		CRERR_NO_RTE,
+		CRERR_WRONG_DB,
+		CRERR_TOO_MANY
+	}			crerr = CRERR_NO_COLUMN;
+
+	/* Check to see if the column reference is in an invalid place. */
+	checkColumnRefAllowed(pstate, pstate->p_expr_kind, cref->location);
 
 	/*
 	 * Give the PreParseColumnRefHook, if any, first shot.  If it returns
