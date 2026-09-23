@@ -1668,6 +1668,33 @@ ALTER TABLE temporal_fk_rng2rng
   FOREIGN KEY (parent_id, PERIOD valid_at)
   REFERENCES temporal_rng;
 --
+-- test VALIDATE CONSTRAINT
+--
+CREATE TABLE temporal_validate_rng (
+  id int4range NOT NULL,
+  valid_at int4range NOT NULL,
+  PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+CREATE TABLE temporal_validate_fk_rng2rng (id int4range NOT NULL, valid_at int4range NOT NULL);
+INSERT INTO temporal_validate_rng VALUES ('[1,2)', '[0,5)');
+INSERT INTO temporal_validate_fk_rng2rng VALUES ('[1,2)', '[0,10)');
+-- Creation of a new, immediately valid, constraint correctly rejects this
+-- uncovered period.
+ALTER TABLE temporal_validate_fk_rng2rng ADD CONSTRAINT validation_fk
+  FOREIGN KEY (id, PERIOD valid_at)
+  REFERENCES temporal_validate_rng (id, PERIOD valid_at);
+ERROR:  insert or update on table "temporal_validate_fk_rng2rng" violates foreign key constraint "validation_fk"
+DETAIL:  Key (id, valid_at)=([1,2), [0,10)) is not present in table "temporal_validate_rng".
+ALTER TABLE temporal_validate_fk_rng2rng ADD CONSTRAINT validation_fk
+  FOREIGN KEY (id, PERIOD valid_at)
+  REFERENCES temporal_validate_rng (id, PERIOD valid_at)
+  NOT VALID;
+-- VALIDATE rejects the same uncovered period:
+ALTER TABLE temporal_validate_fk_rng2rng VALIDATE CONSTRAINT validation_fk;
+ERROR:  insert or update on table "temporal_validate_fk_rng2rng" violates foreign key constraint "validation_fk"
+DETAIL:  Key (id, valid_at)=([1,2), [0,10)) is not present in table "temporal_validate_rng".
+DROP TABLE temporal_validate_rng, temporal_validate_fk_rng2rng;
+--
 -- test pg_get_constraintdef
 --
 SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'temporal_fk_rng2rng_fk';

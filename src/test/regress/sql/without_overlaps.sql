@@ -1205,6 +1205,35 @@ ALTER TABLE temporal_fk_rng2rng
   REFERENCES temporal_rng;
 
 --
+-- test VALIDATE CONSTRAINT
+--
+
+CREATE TABLE temporal_validate_rng (
+  id int4range NOT NULL,
+  valid_at int4range NOT NULL,
+  PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+
+CREATE TABLE temporal_validate_fk_rng2rng (id int4range NOT NULL, valid_at int4range NOT NULL);
+INSERT INTO temporal_validate_rng VALUES ('[1,2)', '[0,5)');
+INSERT INTO temporal_validate_fk_rng2rng VALUES ('[1,2)', '[0,10)');
+
+-- Creation of a new, immediately valid, constraint correctly rejects this
+-- uncovered period.
+ALTER TABLE temporal_validate_fk_rng2rng ADD CONSTRAINT validation_fk
+  FOREIGN KEY (id, PERIOD valid_at)
+  REFERENCES temporal_validate_rng (id, PERIOD valid_at);
+
+ALTER TABLE temporal_validate_fk_rng2rng ADD CONSTRAINT validation_fk
+  FOREIGN KEY (id, PERIOD valid_at)
+  REFERENCES temporal_validate_rng (id, PERIOD valid_at)
+  NOT VALID;
+-- VALIDATE rejects the same uncovered period:
+ALTER TABLE temporal_validate_fk_rng2rng VALIDATE CONSTRAINT validation_fk;
+
+DROP TABLE temporal_validate_rng, temporal_validate_fk_rng2rng;
+
+--
 -- test pg_get_constraintdef
 --
 

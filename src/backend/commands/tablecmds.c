@@ -13511,6 +13511,7 @@ QueueFKConstraintValidation(List **wqueue, Relation conrel, Relation fkrel,
 		newcon->refindid = con->conindid;
 		newcon->conid = con->oid;
 		newcon->qual = (Node *) fkconstraint;
+		newcon->conwithperiod = con->conperiod;
 
 		/* Find or create work queue entry for this table */
 		tab = ATGetQueueEntry(wqueue, fkrel);
