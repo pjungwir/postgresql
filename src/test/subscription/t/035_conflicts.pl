@@ -865,4 +865,90 @@ $node_subscriber->safe_psql('clt_ts_test', "DROP SUBSCRIPTION sub_ts_test");
 $node_subscriber->safe_psql('postgres', "DROP DATABASE clt_ts_test");
 $node_subscriber->safe_psql('postgres', "DROP TABLESPACE backup_space");
 
+###############################################################################
+# Check that update_deleted vs update_missing is classified correctly when the
+# replica identity is a lossy index (a WITHOUT OVERLAPS multirange GiST index).
+#
+# RelationFindDeletedTupleInfoByIndex() probes the identity index for a
+# recently-dead tuple to decide whether a missing update target was deleted
+# (update_deleted) or never existed (update_missing).  A GiST index on a
+# multirange is lossy: two multiranges with the same bounding range, e.g.
+# {[1,5)} and {[1,2),[3,5)}, are indistinguishable to the index.  Without a
+# recheck, a dead tuple that merely shares the bounding range is accepted,
+# misreporting update_deleted (and blaming the transaction that deleted the
+# unrelated row) when the answer should be update_missing.
+###############################################################################
+
+my $node_pub_mr = PostgreSQL::Test::Cluster->new('pub_mr');
+$node_pub_mr->init(allows_streaming => 'logical');
+$node_pub_mr->append_conf('postgresql.conf', 'track_commit_timestamp = on');
+$node_pub_mr->start;
+
+my $node_sub_mr = PostgreSQL::Test::Cluster->new('sub_mr');
+$node_sub_mr->init(allows_streaming => 'logical');
+$node_sub_mr->append_conf('postgresql.conf',
+	qq(track_commit_timestamp = on
+autovacuum = off));
+$node_sub_mr->start;
+
+my $mr_ddl = qq(
+	CREATE TABLE tmr (
+		id int4multirange,
+		valid_at daterange,
+		b text,
+		PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)));
+$node_pub_mr->safe_psql('postgres', $mr_ddl);
+$node_sub_mr->safe_psql('postgres', $mr_ddl);
+
+# The target row exists on the publisher before the subscription, and the
+# subscription uses copy_data = false, so the subscriber never holds a copy of
+# it (neither live nor dead).  A later UPDATE of it is therefore a missing
+# target on the subscriber.
+$node_pub_mr->safe_psql('postgres',
+	"INSERT INTO tmr VALUES ('{[1,5)}', '[2000-01-01,2001-01-01)', 'orig')");
+$node_pub_mr->safe_psql('postgres', "CREATE PUBLICATION pub_mr FOR TABLE tmr");
+
+my $connstr_mr = $node_pub_mr->connstr . ' dbname=postgres';
+$node_sub_mr->safe_psql('postgres',
+	"CREATE SUBSCRIPTION sub_mr CONNECTION '$connstr_mr' PUBLICATION pub_mr WITH (copy_data = false, retain_dead_tuples = true)"
+);
+$node_sub_mr->wait_for_subscription_sync($node_pub_mr, 'sub_mr');
+
+# Wait until dead tuples are being retained for conflict detection.
+ok( $node_sub_mr->poll_query_until(
+		'postgres',
+		"SELECT xmin IS NOT NULL FROM pg_replication_slots WHERE slot_name = 'pg_conflict_detection'"
+	),
+	"conflict detection slot xmin is valid on the multirange subscriber");
+
+# Create a dead tuple whose multirange differs from the target's but shares the
+# same bounding range [1,5).  Deleted locally, so its origin differs from the
+# apply worker's.
+$node_sub_mr->safe_psql('postgres',
+	"INSERT INTO tmr VALUES ('{[1,2),[3,5)}', '[2000-01-01,2001-01-01)', 'twin')");
+$node_sub_mr->safe_psql('postgres', "DELETE FROM tmr WHERE id = '{[1,2),[3,5)}'");
+
+my $mr_log_offset = -s $node_sub_mr->logfile;
+
+# Update the target on the publisher.  On the subscriber there is no matching
+# row, only the lossy-bounding-range twin's dead tuple.
+$node_pub_mr->safe_psql('postgres',
+	"UPDATE tmr SET b = 'upd' WHERE id = '{[1,5)}'");
+$node_pub_mr->wait_for_catchup('sub_mr');
+
+my $mr_log = slurp_file($node_sub_mr->logfile, $mr_log_offset);
+like(
+	$mr_log,
+	qr/conflict detected on relation "public.tmr": conflict=update_missing/,
+	'missing update target is not misreported as update_deleted (lossy identity index)'
+);
+unlike(
+	$mr_log,
+	qr/conflict detected on relation "public.tmr": conflict=update_deleted/,
+	'lossy dead twin does not cause a spurious update_deleted');
+
+$node_sub_mr->safe_psql('postgres', "DROP SUBSCRIPTION sub_mr");
+$node_sub_mr->stop;
+$node_pub_mr->stop;
+
 done_testing();

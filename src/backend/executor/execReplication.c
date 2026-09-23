@@ -179,7 +179,9 @@ should_refetch_tuple(TM_Result res, TM_FailureData *tmfd)
  * contents, and return true.  Return false otherwise.
  *
  * 'skipduplicates' specifies whether the first matching tuple can be used
- * without comparing it against 'searchslot'. If false, all matching tuples are
+ * without comparing it against 'searchslot', or at worst by comparing just
+ * the index attributes (when the index requires a recheck, as with a lossy
+ * GiST index for WITHOUT OVERLAPS).  If false, all matching tuples are
  * compared against 'searchslot', which must contain a complete row.
  */
 bool
@@ -197,6 +199,7 @@ RelationFindReplTupleByIndex(Relation rel, Oid idxoid,
 	Relation	idxrel;
 	bool		found;
 	TypeCacheEntry **eq = NULL;
+	Bitmapset  *indexbitmap = NULL;
 
 	/* Open the index. */
 	idxrel = index_open(idxoid, RowExclusiveLock);
@@ -219,15 +222,26 @@ retry:
 	while (table_index_getnext_slot(scan, ForwardScanDirection, outslot))
 	{
 		/*
-		 * Avoid expensive equality check if the index is primary key or
-		 * replica identity index.
+		 * Avoid expensive equality check if the index is a primary key or
+		 * replica identity index.  But a WITHOUT OVERLAPS key might require a
+		 * recheck (e.g. GiST multirange).
 		 */
-		if (!skipduplicates)
+		if (!skipduplicates || scan->xs_recheck)
 		{
 			if (eq == NULL)
 				eq = palloc0_array(TypeCacheEntry *, outslot->tts_tupleDescriptor->natts);
 
-			if (!tuples_equal(outslot, searchslot, eq, NULL))
+			/* Look up the key columns if we have a PK/RI index. */
+			if (skipduplicates && indexbitmap == NULL)
+			{
+				indexbitmap = RelationGetIndexAttrBitmap(rel,
+														 INDEX_ATTR_BITMAP_IDENTITY_KEY);
+				if (!indexbitmap)
+					indexbitmap = RelationGetIndexAttrBitmap(rel,
+															 INDEX_ATTR_BITMAP_PRIMARY_KEY);
+			}
+
+			if (!tuples_equal(outslot, searchslot, eq, indexbitmap))
 				continue;
 		}
 
@@ -668,6 +682,7 @@ RelationFindDeletedTupleInfoByIndex(Relation rel, Oid idxoid,
 	IndexScanDesc scan;
 	TupleTableSlot *scanslot;
 	TypeCacheEntry **eq = NULL;
+	Bitmapset  *indexbitmap = NULL;
 	TupleDesc	desc PG_USED_FOR_ASSERTS_ONLY = RelationGetDescr(rel);
 
 	Assert(equalTupleDescs(desc, searchslot->tts_tupleDescriptor));
@@ -699,15 +714,26 @@ RelationFindDeletedTupleInfoByIndex(Relation rel, Oid idxoid,
 	while (table_index_getnext_slot(scan, ForwardScanDirection, scanslot))
 	{
 		/*
-		 * Avoid expensive equality check if the index is primary key or
-		 * replica identity index.
+		 * Avoid expensive equality check if the index is a primary key or
+		 * replica identity index.  But a WITHOUT OVERLAPS key might require a
+		 * recheck (e.g. GiST multirange).
 		 */
-		if (!skipduplicates)
+		if (!skipduplicates || scan->xs_recheck)
 		{
 			if (eq == NULL)
 				eq = palloc0_array(TypeCacheEntry *, scanslot->tts_tupleDescriptor->natts);
 
-			if (!tuples_equal(scanslot, searchslot, eq, NULL))
+			/* Look up the key columns if we have a PK/RI index. */
+			if (skipduplicates && indexbitmap == NULL)
+			{
+				indexbitmap = RelationGetIndexAttrBitmap(rel,
+														 INDEX_ATTR_BITMAP_IDENTITY_KEY);
+				if (!indexbitmap)
+					indexbitmap = RelationGetIndexAttrBitmap(rel,
+															 INDEX_ATTR_BITMAP_PRIMARY_KEY);
+			}
+
+			if (!tuples_equal(scanslot, searchslot, eq, indexbitmap))
 				continue;
 		}
 
