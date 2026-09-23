@@ -208,3 +208,58 @@ EXECUTE foo;
 ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT;
 
 EXECUTE foo;  -- fail
+
+
+-- Temporal (WITHOUT OVERLAPS) primary keys can prove functional dependency,
+-- but only if each key column's operator class uses the same equality as
+-- GROUP BY does for that column.
+
+CREATE TEMP TABLE temporal_articles (
+    id int4range,
+    valid_at int4range,
+    title text NOT NULL,
+    PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+
+-- group by a temporal primary key (OK)
+SELECT id, valid_at, title
+FROM temporal_articles
+GROUP BY id, valid_at;
+
+-- group by a temporal primary key, but with a different equality operator
+CREATE TYPE fdrange AS RANGE (subtype = int4);
+CREATE FUNCTION fdrange_eq(fdrange, fdrange) RETURNS bool
+    LANGUAGE sql IMMUTABLE AS 'SELECT range_eq($1, $2)';
+CREATE OPERATOR === (
+    LEFTARG = fdrange, RIGHTARG = fdrange,
+    FUNCTION = fdrange_eq, COMMUTATOR = ===
+);
+CREATE OPERATOR CLASS fdrange_gist_ops DEFAULT FOR TYPE fdrange USING gist AS
+    OPERATOR 18 ===,
+    FUNCTION 1 range_gist_consistent(internal, anyrange, smallint, oid, internal),
+    FUNCTION 2 range_gist_union(internal, internal),
+    FUNCTION 5 range_gist_penalty(internal, internal, internal),
+    FUNCTION 6 range_gist_picksplit(internal, internal),
+    FUNCTION 7 range_gist_same(anyrange, anyrange, internal),
+    FUNCTION 12 ("any", "any") gist_translate_cmptype_common(int);
+
+CREATE TEMP TABLE temporal_articles2 (
+    id fdrange,
+    valid_at int4range,
+    title text NOT NULL,
+    PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+
+-- fail
+SELECT id, valid_at, title
+FROM temporal_articles2
+GROUP BY id, valid_at;
+
+-- but grouping by all the selected columns is fine
+SELECT id, valid_at, title
+FROM temporal_articles2
+GROUP BY id, valid_at, title;
+
+DROP TABLE temporal_articles;
+DROP TABLE temporal_articles2;
+DROP TYPE fdrange CASCADE;

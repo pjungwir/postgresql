@@ -24,7 +24,9 @@
 #include "catalog/heap.h"
 #include "catalog/indexing.h"
 #include "catalog/objectaccess.h"
+#include "catalog/pg_am.h"
 #include "catalog/pg_constraint.h"
+#include "catalog/pg_index.h"
 #include "catalog/pg_operator.h"
 #include "catalog/pg_type.h"
 #include "commands/defrem.h"
@@ -35,6 +37,7 @@
 #include "utils/lsyscache.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
+#include "utils/typcache.h"
 
 
 /*
@@ -1727,6 +1730,82 @@ FindFKPeriodOpers(Oid opclass,
 }
 
 /*
+ * index_equality_matches_grouping
+ *		Check whether the given primary key index enforces uniqueness using the
+ *		same notion of equality that GROUP BY uses for its key columns.
+ *
+ * A btree index trivially matches, since GROUP BY uses the btree default
+ * opclass, and primary keys don't allow choosing a different one.
+ *
+ * For GiST (reachable with WITHOUT OVERLAPS), we check that each column's
+ * opclass equality operator has the same underlying function as GROUP BY's
+ * choice.  We assume that the WITHOUT OVERLAPS part's opclass has a coherent
+ * relationship between overlaps and equals (which for ranges and multiranges
+ * depends on forbidding empties), since overlaps is what the constraint
+ * enforces.  But if it didn't, there would be bigger problems.
+ */
+static bool
+index_equality_matches_grouping(Oid relid, Oid indexOid)
+{
+	HeapTuple	indexTuple;
+	Form_pg_index indexForm;
+	Datum		indclassDatum;
+	oidvector  *indclass;
+	bool		result = true;
+
+	if (get_rel_relam(indexOid) == BTREE_AM_OID)
+		return true;
+
+	indexTuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(indexOid));
+	if (!HeapTupleIsValid(indexTuple))
+		elog(ERROR, "cache lookup failed for index %u", indexOid);
+	indexForm = (Form_pg_index) GETSTRUCT(indexTuple);
+
+	indclassDatum = SysCacheGetAttrNotNull(INDEXRELID, indexTuple,
+										   Anum_pg_index_indclass);
+	indclass = (oidvector *) DatumGetPointer(indclassDatum);
+
+	for (int i = 0; i < indexForm->indnkeyatts; i++)
+	{
+		AttrNumber	attnum = indexForm->indkey.values[i];
+		Oid			opfamily;
+		Oid			opcintype;
+		Oid			idx_eqop;
+		TypeCacheEntry *typentry;
+
+		/* PRIMARY KEY indexes can't have expressions */
+		if (attnum == 0)
+			elog(ERROR, "unexpected expression in primary key index %u",
+				 indexOid);
+
+		/*
+		 * Get the opfamily's equals operator from the CompareType, since GiST
+		 * doesn't mandate specific strategy numbers.
+		 */
+		if (!get_opclass_opfamily_and_input_type(indclass->values[i],
+												 &opfamily, &opcintype))
+			elog(ERROR, "cache lookup failed for opclass %u",
+				 indclass->values[i]);
+
+		idx_eqop = get_opfamily_member_for_cmptype(opfamily, opcintype,
+												   opcintype, COMPARE_EQ);
+		typentry = lookup_type_cache(get_atttype(relid, attnum),
+									 TYPECACHE_EQ_OPR);
+
+		if (!OidIsValid(idx_eqop) || !OidIsValid(typentry->eq_opr) ||
+			get_opcode(idx_eqop) != get_opcode(typentry->eq_opr))
+		{
+			result = false;
+			break;
+		}
+	}
+
+	ReleaseSysCache(indexTuple);
+
+	return result;
+}
+
+/*
  * Determine whether a relation can be proven functionally dependent on
  * a set of grouping columns.  If so, return true and add the pg_constraint
  * OIDs of the constraints needed for the proof to the *constraintDeps list.
@@ -1772,6 +1851,14 @@ check_functional_grouping(Oid relid,
 
 	if (bms_is_subset(pkattnos, groupbyattnos))
 	{
+		/*
+		 * GROUP BY uses each type's default equality operator, so the index
+		 * must enforce uniqueness with that same notion of equality.
+		 */
+		if (!index_equality_matches_grouping(relid,
+											 get_constraint_index(constraintOid)))
+			return false;
+
 		/* The PK is a subset of grouping_columns, so we win */
 		*constraintDeps = lappend_oid(*constraintDeps, constraintOid);
 		return true;

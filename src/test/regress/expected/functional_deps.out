@@ -230,3 +230,64 @@ EXECUTE foo;
 ALTER TABLE articles DROP CONSTRAINT articles_pkey RESTRICT;
 EXECUTE foo;  -- fail
 ERROR:  column "articles.keywords" must appear in the GROUP BY clause or be used in an aggregate function
+-- Temporal (WITHOUT OVERLAPS) primary keys can prove functional dependency,
+-- but only if each key column's operator class uses the same equality as
+-- GROUP BY does for that column.
+CREATE TEMP TABLE temporal_articles (
+    id int4range,
+    valid_at int4range,
+    title text NOT NULL,
+    PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+-- group by a temporal primary key (OK)
+SELECT id, valid_at, title
+FROM temporal_articles
+GROUP BY id, valid_at;
+ id | valid_at | title 
+----+----------+-------
+(0 rows)
+
+-- group by a temporal primary key, but with a different equality operator
+CREATE TYPE fdrange AS RANGE (subtype = int4);
+CREATE FUNCTION fdrange_eq(fdrange, fdrange) RETURNS bool
+    LANGUAGE sql IMMUTABLE AS 'SELECT range_eq($1, $2)';
+CREATE OPERATOR === (
+    LEFTARG = fdrange, RIGHTARG = fdrange,
+    FUNCTION = fdrange_eq, COMMUTATOR = ===
+);
+CREATE OPERATOR CLASS fdrange_gist_ops DEFAULT FOR TYPE fdrange USING gist AS
+    OPERATOR 18 ===,
+    FUNCTION 1 range_gist_consistent(internal, anyrange, smallint, oid, internal),
+    FUNCTION 2 range_gist_union(internal, internal),
+    FUNCTION 5 range_gist_penalty(internal, internal, internal),
+    FUNCTION 6 range_gist_picksplit(internal, internal),
+    FUNCTION 7 range_gist_same(anyrange, anyrange, internal),
+    FUNCTION 12 ("any", "any") gist_translate_cmptype_common(int);
+CREATE TEMP TABLE temporal_articles2 (
+    id fdrange,
+    valid_at int4range,
+    title text NOT NULL,
+    PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)
+);
+-- fail
+SELECT id, valid_at, title
+FROM temporal_articles2
+GROUP BY id, valid_at;
+ERROR:  column "temporal_articles2.title" must appear in the GROUP BY clause or be used in an aggregate function
+LINE 1: SELECT id, valid_at, title
+                             ^
+-- but grouping by all the selected columns is fine
+SELECT id, valid_at, title
+FROM temporal_articles2
+GROUP BY id, valid_at, title;
+ id | valid_at | title 
+----+----------+-------
+(0 rows)
+
+DROP TABLE temporal_articles;
+DROP TABLE temporal_articles2;
+DROP TYPE fdrange CASCADE;
+NOTICE:  drop cascades to 3 other objects
+DETAIL:  drop cascades to function fdrange_eq(fdrange,fdrange)
+drop cascades to operator ===(fdrange,fdrange)
+drop cascades to operator class fdrange_gist_ops for access method gist
