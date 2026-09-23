@@ -139,7 +139,8 @@ static bool check_exclusion_or_unique_constraint(Relation heap, Relation index,
 
 static bool index_recheck_constraint(Relation index, const Oid *constr_procs,
 									 const Datum *existing_values, const bool *existing_isnull,
-									 const Datum *new_values);
+									 const Datum *new_values, const bool *new_isnull,
+									 bool nulls_not_distinct);
 static bool index_unchanged_by_update(ResultRelInfo *resultRelInfo,
 									  EState *estate, IndexInfo *indexInfo,
 									  Relation indexRelation);
@@ -865,7 +866,9 @@ retry:
 										  constr_procs,
 										  existing_values,
 										  existing_isnull,
-										  values))
+										  values,
+										  isnull,
+										  indexInfo->ii_NullsNotDistinct))
 				continue;		/* tuple doesn't actually match, so no
 								 * conflict */
 		}
@@ -1007,16 +1010,29 @@ check_exclusion_constraint(Relation heap, Relation index,
 static bool
 index_recheck_constraint(Relation index, const Oid *constr_procs,
 						 const Datum *existing_values, const bool *existing_isnull,
-						 const Datum *new_values)
+						 const Datum *new_values, const bool *new_isnull,
+						 bool nulls_not_distinct)
 {
 	int			indnkeyatts = IndexRelationGetNumberOfKeyAttributes(index);
 	int			i;
 
 	for (i = 0; i < indnkeyatts; i++)
 	{
-		/* Assume the exclusion operators are strict */
-		if (existing_isnull[i])
+		/*
+		 * If either value is NULL, the exclusion operators are strict and so
+		 * cannot match, with one exception: under NULLS NOT DISTINCT (only
+		 * possible for a unique constraint) two NULLs in the same column are
+		 * considered equal, so that column matches when both are NULL.  This
+		 * mirrors the NULL handling in check_exclusion_or_unique_constraint(),
+		 * which we must repeat here because a lossy index scan returns tuples
+		 * that satisfied only the (NULL-blind) index qual.
+		 */
+		if (existing_isnull[i] || new_isnull[i])
+		{
+			if (nulls_not_distinct && existing_isnull[i] && new_isnull[i])
+				continue;
 			return false;
+		}
 
 		if (!DatumGetBool(OidFunctionCall2Coll(constr_procs[i],
 											   index->rd_indcollation[i],
