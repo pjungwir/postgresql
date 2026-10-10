@@ -2917,13 +2917,6 @@ transformUpdateStmt(ParseState *pstate, UpdateStmt *stmt)
 				errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				errmsg("WHERE CURRENT OF on a view is not implemented"));
 
-	if (stmt->forPortionOf)
-		qry->forPortionOf = transformForPortionOfClause(pstate,
-														qry->resultRelation,
-														stmt->forPortionOf,
-														stmt->whereClause,
-														true);
-
 	nsitem = pstate->p_target_nsitem;
 
 	/* subqueries in FROM cannot access the result relation */
@@ -2939,6 +2932,17 @@ transformUpdateStmt(ParseState *pstate, UpdateStmt *stmt)
 	/* remaining clauses can reference the result relation normally */
 	nsitem->p_lateral_only = false;
 	nsitem->p_lateral_ok = true;
+
+	/*
+	 * Like DELETE, do this after FROM, so that a name in the bounds means
+	 * what it would mean anywhere else in the statement.
+	 */
+	if (stmt->forPortionOf)
+		qry->forPortionOf = transformForPortionOfClause(pstate,
+														qry->resultRelation,
+														stmt->forPortionOf,
+														stmt->whereClause,
+														true);
 
 	qual = transformWhereClause(pstate, stmt->whereClause,
 								EXPR_KIND_WHERE, "WHERE");

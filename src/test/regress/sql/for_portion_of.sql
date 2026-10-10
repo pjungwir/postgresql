@@ -2034,6 +2034,42 @@ DROP FUNCTION fpo_name_plpgsql_ambig;
 DROP FUNCTION fpo_name_sql;
 DROP TABLE fpo_name;
 
+-- The bounds see UPDATE's FROM list, as they see DELETE's USING list, so a
+-- name resolves in them as it does in the rest of the statement, and a
+-- column of another table is rejected like any other column.
+CREATE TABLE fpo_from (id int, valid_at int4range, name text);
+INSERT INTO fpo_from VALUES (1, '[1,100)', 'a');
+CREATE TABLE fpo_from_src (lo int, hi int);
+INSERT INTO fpo_from_src VALUES (5, 6);
+UPDATE fpo_from FOR PORTION OF valid_at FROM fpo_from_src.lo TO fpo_from_src.hi
+  SET name = 'x' FROM fpo_from_src; -- fails
+UPDATE fpo_from FOR PORTION OF valid_at FROM lo TO hi
+  SET name = 'x' FROM fpo_from_src; -- fails
+DELETE FROM fpo_from FOR PORTION OF valid_at FROM lo TO hi
+  USING fpo_from_src; -- fails
+-- In PL/pgSQL, a variable named like a FROM/USING column is ambiguous in
+-- the bounds of both.
+CREATE FUNCTION fpo_from_upd(lo int, hi int) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+  UPDATE fpo_from FOR PORTION OF valid_at FROM lo TO hi SET name = 'u'
+    FROM fpo_from_src WHERE fpo_from_src.lo = 5;
+END $$;
+CREATE FUNCTION fpo_from_del(lo int, hi int) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+  DELETE FROM fpo_from FOR PORTION OF valid_at FROM lo TO hi
+    USING fpo_from_src WHERE fpo_from_src.lo = 5;
+END $$;
+SELECT fpo_from_upd(50, 60); -- fails
+SELECT fpo_from_del(70, 80); -- fails
+-- In a SQL function, the column hides the parameter, in the bounds as in SET.
+CREATE FUNCTION fpo_from_sql(lo int) RETURNS void LANGUAGE sql AS $$
+  UPDATE fpo_from FOR PORTION OF valid_at FROM lo TO lo + 1 SET name = 'u' || lo
+    FROM fpo_from_src WHERE fpo_from.id = 1
+$$; -- fails
+SELECT * FROM fpo_from ORDER BY valid_at;
+DROP FUNCTION fpo_from_upd, fpo_from_del;
+DROP TABLE fpo_from, fpo_from_src;
+
 --
 -- EXPLAIN without ANALYZE must only plan the statement, so it must not
 -- evaluate the FOR PORTION OF target.
