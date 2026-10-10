@@ -2411,6 +2411,74 @@ SELECT definition FROM pg_rules WHERE rulename = 'fpo_interval_rule';
 
 DROP TABLE fpo_interval;
 DROP TYPE fpo_intervalrange;
+-- A target alias that follows FOR PORTION OF must be deparsed with AS, or a
+-- keyword like YEAR or SET would be read as part of the bound or the next
+-- clause.
+CREATE TABLE fpo_alias (id int, valid_at int4range, name text);
+INSERT INTO fpo_alias VALUES (1, '[1,10)', 'a');
+CREATE FUNCTION fpo_alias_fn() RETURNS void
+LANGUAGE SQL
+BEGIN ATOMIC
+  UPDATE fpo_alias FOR PORTION OF valid_at FROM 2 TO 3 AS year
+    SET name = year.name || 'u' WHERE year.id = 1;
+  UPDATE fpo_alias FOR PORTION OF valid_at FROM 3 TO 4 AS set
+    SET name = set.name || 's';
+  DELETE FROM fpo_alias FOR PORTION OF valid_at FROM 5 TO 6 AS month
+    WHERE month.id = 1;
+  DELETE FROM fpo_alias FOR PORTION OF valid_at (int4range(7, 8)) AS filter
+    WHERE filter.id = 1;
+END;
+SELECT pg_get_functiondef('fpo_alias_fn'::regproc);
+                                          pg_get_functiondef                                           
+-------------------------------------------------------------------------------------------------------
+ CREATE OR REPLACE FUNCTION public.fpo_alias_fn()                                                     +
+  RETURNS void                                                                                        +
+  LANGUAGE sql                                                                                        +
+ BEGIN ATOMIC                                                                                         +
+  UPDATE fpo_alias FOR PORTION OF valid_at FROM (2) TO (3) AS year SET name = (year.name || 'u'::text)+
+    WHERE (year.id = 1);                                                                              +
+  UPDATE fpo_alias FOR PORTION OF valid_at FROM (3) TO (4) AS set SET name = (set.name || 's'::text); +
+  DELETE FROM fpo_alias FOR PORTION OF valid_at FROM (5) TO (6) AS month                              +
+    WHERE (month.id = 1);                                                                             +
+  DELETE FROM fpo_alias FOR PORTION OF valid_at (int4range(7, 8)) AS filter                           +
+    WHERE (filter.id = 1);                                                                            +
+ END                                                                                                  +
+ 
+(1 row)
+
+SELECT pg_get_functiondef('fpo_alias_fn'::regproc) \gexec
+CREATE OR REPLACE FUNCTION public.fpo_alias_fn()
+ RETURNS void
+ LANGUAGE sql
+BEGIN ATOMIC
+ UPDATE fpo_alias FOR PORTION OF valid_at FROM (2) TO (3) AS year SET name = (year.name || 'u'::text)
+   WHERE (year.id = 1);
+ UPDATE fpo_alias FOR PORTION OF valid_at FROM (3) TO (4) AS set SET name = (set.name || 's'::text);
+ DELETE FROM fpo_alias FOR PORTION OF valid_at FROM (5) TO (6) AS month
+   WHERE (month.id = 1);
+ DELETE FROM fpo_alias FOR PORTION OF valid_at (int4range(7, 8)) AS filter
+   WHERE (filter.id = 1);
+END
+
+SELECT fpo_alias_fn();
+ fpo_alias_fn 
+--------------
+ 
+(1 row)
+
+SELECT * FROM fpo_alias ORDER BY valid_at;
+ id | valid_at | name 
+----+----------+------
+  1 | [1,2)    | a
+  1 | [2,3)    | au
+  1 | [3,4)    | as
+  1 | [4,5)    | a
+  1 | [6,7)    | a
+  1 | [8,10)   | a
+(6 rows)
+
+DROP FUNCTION fpo_alias_fn;
+DROP TABLE fpo_alias;
 -- UPDATE/DELETE FOR PORTION OF on a GENERATED VIRTUAL range column:
 CREATE TABLE fpo_gen_virtual (
   a int,

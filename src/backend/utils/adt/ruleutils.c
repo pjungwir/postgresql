@@ -7202,8 +7202,13 @@ get_update_query_def(Query *query, deparse_context *context)
 	/* Print the FOR PORTION OF, if needed */
 	get_for_portion_of(query->forPortionOf, rte, context);
 
-	/* Print the relation alias, if needed */
-	get_rte_alias(rte, query->resultRelation, false, context);
+	/*
+	 * Print the relation alias, if needed.  After FOR PORTION OF it needs AS:
+	 * without it, an alias such as "set" is read as the next keyword, and one
+	 * such as "year" doesn't parse after the bound.
+	 */
+	get_rte_alias(rte, query->resultRelation, query->forPortionOf != NULL,
+				  context);
 
 	appendStringInfoString(buf, " SET ");
 
@@ -7409,8 +7414,13 @@ get_delete_query_def(Query *query, deparse_context *context)
 	/* Print the FOR PORTION OF, if needed */
 	get_for_portion_of(query->forPortionOf, rte, context);
 
-	/* Print the relation alias, if needed */
-	get_rte_alias(rte, query->resultRelation, false, context);
+	/*
+	 * Print the relation alias, if needed.  After FOR PORTION OF it needs AS:
+	 * without it, an alias such as "set" is read as the next keyword, and one
+	 * such as "year" doesn't parse after the bound.
+	 */
+	get_rte_alias(rte, query->resultRelation, query->forPortionOf != NULL,
+				  context);
 
 	/* Add the USING clause if given */
 	get_from_clause(query, " USING ", context);

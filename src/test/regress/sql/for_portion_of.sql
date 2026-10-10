@@ -1590,6 +1590,30 @@ SELECT definition FROM pg_rules WHERE rulename = 'fpo_interval_rule';
 DROP TABLE fpo_interval;
 DROP TYPE fpo_intervalrange;
 
+-- A target alias that follows FOR PORTION OF must be deparsed with AS, or a
+-- keyword like YEAR or SET would be read as part of the bound or the next
+-- clause.
+CREATE TABLE fpo_alias (id int, valid_at int4range, name text);
+INSERT INTO fpo_alias VALUES (1, '[1,10)', 'a');
+CREATE FUNCTION fpo_alias_fn() RETURNS void
+LANGUAGE SQL
+BEGIN ATOMIC
+  UPDATE fpo_alias FOR PORTION OF valid_at FROM 2 TO 3 AS year
+    SET name = year.name || 'u' WHERE year.id = 1;
+  UPDATE fpo_alias FOR PORTION OF valid_at FROM 3 TO 4 AS set
+    SET name = set.name || 's';
+  DELETE FROM fpo_alias FOR PORTION OF valid_at FROM 5 TO 6 AS month
+    WHERE month.id = 1;
+  DELETE FROM fpo_alias FOR PORTION OF valid_at (int4range(7, 8)) AS filter
+    WHERE filter.id = 1;
+END;
+SELECT pg_get_functiondef('fpo_alias_fn'::regproc);
+SELECT pg_get_functiondef('fpo_alias_fn'::regproc) \gexec
+SELECT fpo_alias_fn();
+SELECT * FROM fpo_alias ORDER BY valid_at;
+DROP FUNCTION fpo_alias_fn;
+DROP TABLE fpo_alias;
+
 -- UPDATE/DELETE FOR PORTION OF on a GENERATED VIRTUAL range column:
 CREATE TABLE fpo_gen_virtual (
   a int,
