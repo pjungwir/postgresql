@@ -86,6 +86,9 @@ DELETE FROM [ ONLY ] <replaceable class="parameter">table_name</replaceable> [ *
    application time was completely deleted, extended before/after the change,
    or both.  Multiranges never require two temporal leftovers, because one
    value can always contain whatever application time remains.
+   <literal>INSERT</literal> triggers fire for each inserted leftover. If a
+   row-level <literal>BEFORE INSERT</literal> trigger returns
+   <literal>NULL</literal>, no leftover is inserted.
   </para>
 
   <para>
@@ -366,6 +369,12 @@ DELETE FROM films
    who don't have <literal>INSERT</literal> privileges firing
    <literal>INSERT</literal> triggers.  This should be considered when
    using <literal>SECURITY DEFINER</literal> trigger functions.
+  </para>
+
+  <para>
+   <literal>FOR PORTION OF</literal> is not supported on a view that has an
+   <literal>INSTEAD OF DELETE</literal> trigger, or that has
+   <literal>ON DELETE DO ALSO</literal> rules.
   </para>
  </refsect1>
 

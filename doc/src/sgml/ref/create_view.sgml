@@ -466,7 +466,10 @@ CREATE VIEW vista AS SELECT text 'Hello World' AS hello;
     linkend="sql-createtrigger"/>.  Another possibility is to create rules
     (see <xref linkend="sql-createrule"/>), but in practice triggers are
     easier to understand and use correctly.  Also note that <command>MERGE</command>
-    is not supported on relations with rules.
+    is not supported on relations with rules, and <command>UPDATE</command>
+    or <command>DELETE</command> with <literal>FOR PORTION OF</literal> is
+    not supported on views with <literal>INSTEAD OF</literal> triggers or
+    <literal>DO ALSO</literal> rules.
    </para>
 
    <para>

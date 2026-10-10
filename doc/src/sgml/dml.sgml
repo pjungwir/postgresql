@@ -391,8 +391,9 @@ DELETE FROM products
 
   <para>
    When temporal leftovers are inserted, all <literal>INSERT</literal>
-   triggers are fired, but permission checks for inserting rows are
-   skipped.
+   triggers are fired, but the <literal>INSERT</literal> privilege on the
+   table is not required.  Row-level security <literal>INSERT</literal>
+   policies still apply to the leftovers.
   </para>
 
   <para>
