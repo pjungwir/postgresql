@@ -223,6 +223,14 @@ UPDATE for_portion_of_test
 ERROR:  cannot use column reference in FOR PORTION OF expression
 LINE 2:   FOR PORTION OF valid_at FROM lower(valid_at) TO NULL
                                              ^
+-- and so does a whole-row reference, which takes a different path
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at ((ROW(for_portion_of_test.*)).f2)
+  SET name = 'nope'
+  WHERE id = '[3,4)';
+ERROR:  cannot use column reference in FOR PORTION OF expression
+LINE 2:   FOR PORTION OF valid_at ((ROW(for_portion_of_test.*)).f2)
+                                        ^
 -- Updating with timestamps equal does nothing
 UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-04-01' TO '2018-04-01'
@@ -737,6 +745,13 @@ DELETE FROM for_portion_of_test
 ERROR:  cannot use column reference in FOR PORTION OF expression
 LINE 2:   FOR PORTION OF valid_at FROM lower(valid_at) TO NULL
                                              ^
+-- and so does a whole-row reference, which takes a different path
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at ((ROW(for_portion_of_test.*)).f2)
+  WHERE id = '[3,4)';
+ERROR:  cannot use column reference in FOR PORTION OF expression
+LINE 2:   FOR PORTION OF valid_at ((ROW(for_portion_of_test.*)).f2)
+                                        ^
 -- Deleting with timestamps equal does nothing
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM '2018-04-01' TO '2018-04-01'

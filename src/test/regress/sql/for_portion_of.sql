@@ -168,6 +168,11 @@ UPDATE for_portion_of_test
   FOR PORTION OF valid_at FROM lower(valid_at) TO NULL
   SET name = 'nope'
   WHERE id = '[3,4)';
+-- and so does a whole-row reference, which takes a different path
+UPDATE for_portion_of_test
+  FOR PORTION OF valid_at ((ROW(for_portion_of_test.*)).f2)
+  SET name = 'nope'
+  WHERE id = '[3,4)';
 
 -- Updating with timestamps equal does nothing
 UPDATE for_portion_of_test
@@ -487,6 +492,10 @@ DELETE FROM for_portion_of_test
 -- Deleting with a column fails
 DELETE FROM for_portion_of_test
   FOR PORTION OF valid_at FROM lower(valid_at) TO NULL
+  WHERE id = '[3,4)';
+-- and so does a whole-row reference, which takes a different path
+DELETE FROM for_portion_of_test
+  FOR PORTION OF valid_at ((ROW(for_portion_of_test.*)).f2)
   WHERE id = '[3,4)';
 
 -- Deleting with timestamps equal does nothing
