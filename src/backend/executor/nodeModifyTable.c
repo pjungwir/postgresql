@@ -5907,6 +5907,22 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 						 executor_errposition(estate, forPortionOf->targetLocation)));
 
 			/*
+			 * If the planner routed the target through a PARAM_EXEC slot,
+			 * fill it in now, so that the rows we choose, the new value of
+			 * the range column, and the leftovers all come from this one
+			 * evaluation of the target.
+			 */
+			if (forPortionOf->targetParamId >= 0)
+			{
+				ParamExecData *prm;
+
+				prm = &(estate->es_param_exec_vals[forPortionOf->targetParamId]);
+				prm->execPlan = NULL;
+				prm->value = fpoState->fp_targetRange;
+				prm->isnull = false;
+			}
+
+			/*
 			 * Prepare the call to the without_portion support function. Only
 			 * its first arg varies row-by-row.
 			 */

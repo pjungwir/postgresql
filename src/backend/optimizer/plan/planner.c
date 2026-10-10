@@ -153,6 +153,8 @@ typedef struct
 } preprocess_subquery_phvs_context;
 
 /* Local functions */
+static Node *substitute_for_portion_of_target(Node *node, Node *targetRange,
+											  Param *param);
 static Node *preprocess_expression(PlannerInfo *root, Node *expr, int kind);
 static void preprocess_qual_conditions(PlannerInfo *root, Node *jtnode);
 static Bitmapset *find_having_conflicts(Query *parse, Index group_rtindex);
@@ -1103,14 +1105,45 @@ subquery_planner(PlannerGlobal *glob, Query *parse, char *plan_name,
 
 	if (parse->forPortionOf)
 	{
-		parse->forPortionOf->targetRange =
+		ForPortionOfExpr *forPortionOf = parse->forPortionOf;
+
+		forPortionOf->targetRange =
 			preprocess_expression(root,
-								  parse->forPortionOf->targetRange,
+								  forPortionOf->targetRange,
 								  EXPRKIND_TARGET);
-		if (contain_volatile_functions(parse->forPortionOf->targetRange))
+		if (contain_volatile_functions(forPortionOf->targetRange))
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("FOR PORTION OF bounds cannot contain volatile functions")));
+
+		/*
+		 * A non-Const target goes through a PARAM_EXEC, which the executor
+		 * sets once at start-up from the same evaluation it computes the
+		 * temporal leftovers from.  Otherwise each copy of the target would
+		 * be evaluated separately: in the qual that chooses the rows (both
+		 * UPDATE and DELETE), in the target list (UPDATE), and for the
+		 * leftovers.  A stable expression can still give different results
+		 * if, say, a trigger calls set_config() between them, and then the
+		 * rows we change and the history we keep would disagree.
+		 */
+		if (!IsA(forPortionOf->targetRange, Const))
+		{
+			Param	   *prm;
+
+			prm = generate_new_exec_param(root,
+										  exprType(forPortionOf->targetRange),
+										  exprTypmod(forPortionOf->targetRange),
+										  exprCollation(forPortionOf->targetRange));
+			forPortionOf->targetParamId = prm->paramid;
+			parse->targetList = (List *)
+				substitute_for_portion_of_target((Node *) parse->targetList,
+												 forPortionOf->targetRange,
+												 prm);
+			parse->jointree = (FromExpr *)
+				substitute_for_portion_of_target((Node *) parse->jointree,
+												 forPortionOf->targetRange,
+												 prm);
+		}
 	}
 
 	foreach(l, parse->mergeActionList)
@@ -1413,6 +1446,15 @@ subquery_planner(PlannerGlobal *glob, Query *parse, char *plan_name,
 	SS_identify_outer_params(root);
 
 	/*
+	 * The FOR PORTION OF target Param is supplied by the ModifyTable node
+	 * above the plan that references it, so tell finalize_plan() it is
+	 * validly referenceable here.
+	 */
+	if (parse->forPortionOf && parse->forPortionOf->targetParamId >= 0)
+		root->outer_params = bms_add_member(root->outer_params,
+											parse->forPortionOf->targetParamId);
+
+	/*
 	 * If any initPlans were created in this query level, adjust the surviving
 	 * Paths' costs and parallel-safety flags to account for them.  The
 	 * initPlans won't actually get attached to the plan tree till
@@ -1429,6 +1471,45 @@ subquery_planner(PlannerGlobal *glob, Query *parse, char *plan_name,
 	set_cheapest(final_rel);
 
 	return root;
+}
+
+
+/*
+ * Replace every occurrence of the FOR PORTION OF target range with a Param.
+ *
+ * The copies we are looking for were made by transformForPortionOfClause(),
+ * for the SET entry of the range column and for the overlaps qual the
+ * rewriter adds to WHERE.  They have been through the same preprocessing as
+ * targetRange itself, so an equal() comparison finds them.
+ */
+typedef struct
+{
+	Node	   *targetRange;
+	Param	   *param;
+}			substitute_for_portion_of_target_context;
+
+static Node *
+substitute_for_portion_of_target_mutator(Node *node,
+										 substitute_for_portion_of_target_context * context)
+{
+	if (node == NULL)
+		return NULL;
+	if (equal(node, context->targetRange))
+		return (Node *) copyObject(context->param);
+	return expression_tree_mutator(node,
+								   substitute_for_portion_of_target_mutator,
+								   context);
+}
+
+static Node *
+substitute_for_portion_of_target(Node *node, Node *targetRange, Param *param)
+{
+	substitute_for_portion_of_target_context context;
+
+	context.targetRange = targetRange;
+	context.param = param;
+
+	return substitute_for_portion_of_target_mutator(node, &context);
 }
 
 /*

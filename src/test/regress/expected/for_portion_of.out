@@ -3588,4 +3588,148 @@ SELECT id, valid_at, tenant, name FROM fpo_rls_using ORDER BY id, valid_at;
 
 DROP TABLE fpo_rls_using;
 DROP ROLE regress_fpo_rls_using;
+--
+-- The range column's new value and the leftovers must come from a single
+-- evaluation of the FOR PORTION OF target.
+--
+-- Only volatile functions are rejected in the bounds, so a function that is
+-- labelled STABLE without being stable can hand out a different value at each
+-- evaluation site.  Whatever value it gives, the pieces the statement leaves
+-- behind must still tile the row's original range exactly: no overlapping and
+-- no gapped history.
+--
+CREATE TABLE fpo_drift (
+  id int,
+  valid_at daterange,
+  name text
+);
+INSERT INTO fpo_drift VALUES
+  (1, daterange('2000-01-01', '2010-01-01'), 'one');
+CREATE SEQUENCE fpo_drift_seq;
+CREATE FUNCTION fpo_drift_bound() RETURNS date LANGUAGE sql STABLE AS
+  $$ SELECT '2003-01-01'::date + nextval('fpo_drift_seq')::int $$;
+UPDATE fpo_drift
+  FOR PORTION OF valid_at FROM '2002-01-01' TO fpo_drift_bound()
+  SET name = 'x';
+-- The total length of the pieces equals the original 3653 days (so nothing
+-- overlaps), and they merge back into exactly the original range (so nothing
+-- is missing).  Deliberately not asserting how many times the bound was
+-- evaluated, which is an implementation detail.
+SELECT sum(upper(valid_at) - lower(valid_at)) AS total_days,
+       range_agg(valid_at) AS covered
+  FROM fpo_drift;
+ total_days |          covered          
+------------+---------------------------
+       3653 | {[2000-01-01,2010-01-01)}
+(1 row)
+
+DROP TABLE fpo_drift;
+DROP FUNCTION fpo_drift_bound();
+DROP SEQUENCE fpo_drift_seq;
+-- The same goes for the rows the statement chooses: the overlaps qual it adds
+-- to WHERE must use that same evaluation, for DELETE as well as UPDATE.  Here
+-- the bound is current_setting(), which really is stable, but triggers change
+-- the setting partway through the statement.
+CREATE TABLE fpo_bound_drift (id int, valid_at int4range, name text);
+CREATE FUNCTION fpo_bound_drift_stmt() RETURNS trigger LANGUAGE plpgsql AS
+$$ BEGIN PERFORM set_config('fpo.lo', '40', false); RETURN NULL; END $$;
+CREATE FUNCTION fpo_bound_drift_row() RETURNS trigger LANGUAGE plpgsql AS
+$$
+BEGIN
+  PERFORM set_config('fpo.lo', '150', false);
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+  RETURN NEW;
+END
+$$;
+-- A BEFORE STATEMENT trigger changes the setting after the target is
+-- evaluated, but before any row is chosen.  The target is [200,300), which
+-- overlaps nothing, so nothing must be deleted or updated.
+CREATE TRIGGER fpo_bound_drift_stmt BEFORE UPDATE OR DELETE ON fpo_bound_drift
+  FOR EACH STATEMENT EXECUTE FUNCTION fpo_bound_drift_stmt();
+INSERT INTO fpo_bound_drift VALUES (1, '[1,100)', 'a');
+SET fpo.lo = '200';
+DELETE FROM fpo_bound_drift
+  FOR PORTION OF valid_at FROM current_setting('fpo.lo')::int TO 300
+  RETURNING *;
+ id | valid_at | name 
+----+----------+------
+(0 rows)
+
+SET fpo.lo = '200';
+UPDATE fpo_bound_drift
+  FOR PORTION OF valid_at FROM current_setting('fpo.lo')::int TO 300
+  SET name = 'b'
+  RETURNING *;
+ id | valid_at | name 
+----+----------+------
+(0 rows)
+
+SELECT * FROM fpo_bound_drift ORDER BY id, valid_at;
+ id | valid_at | name 
+----+----------+------
+  1 | [1,100)  | a
+(1 row)
+
+DROP TRIGGER fpo_bound_drift_stmt ON fpo_bound_drift;
+-- A BEFORE ROW trigger changes the setting after the first row.  The target
+-- is [40,300), so both rows, which are alike, must be trimmed alike.
+CREATE TRIGGER fpo_bound_drift_row BEFORE UPDATE OR DELETE ON fpo_bound_drift
+  FOR EACH ROW EXECUTE FUNCTION fpo_bound_drift_row();
+TRUNCATE fpo_bound_drift;
+INSERT INTO fpo_bound_drift VALUES (1, '[1,100)', 'a'), (2, '[1,100)', 'b');
+SET fpo.lo = '40';
+DELETE FROM fpo_bound_drift
+  FOR PORTION OF valid_at FROM current_setting('fpo.lo')::int TO 300;
+SELECT * FROM fpo_bound_drift ORDER BY id, valid_at;
+ id | valid_at | name 
+----+----------+------
+  1 | [1,40)   | a
+  2 | [1,40)   | b
+(2 rows)
+
+TRUNCATE fpo_bound_drift;
+INSERT INTO fpo_bound_drift VALUES (1, '[1,100)', 'a'), (2, '[1,100)', 'b');
+SET fpo.lo = '40';
+UPDATE fpo_bound_drift
+  FOR PORTION OF valid_at FROM current_setting('fpo.lo')::int TO 300
+  SET name = name || '!';
+SELECT * FROM fpo_bound_drift ORDER BY id, valid_at;
+ id | valid_at | name 
+----+----------+------
+  1 | [1,40)   | a
+  1 | [40,100) | a!
+  2 | [1,40)   | b
+  2 | [40,100) | b!
+(4 rows)
+
+-- EXPLAIN still shows the target expression, not the Param.
+EXPLAIN (VERBOSE, COSTS OFF)
+DELETE FROM fpo_bound_drift
+  FOR PORTION OF valid_at FROM current_setting('fpo.lo')::int TO 300;
+                                                 QUERY PLAN                                                 
+------------------------------------------------------------------------------------------------------------
+ Delete on public.fpo_bound_drift
+   ->  Seq Scan on public.fpo_bound_drift
+         Output: ctid
+         Filter: (fpo_bound_drift.valid_at && (int4range((current_setting('fpo.lo'::text))::integer, 300)))
+(4 rows)
+
+EXPLAIN (VERBOSE, COSTS OFF)
+UPDATE fpo_bound_drift
+  FOR PORTION OF valid_at FROM current_setting('fpo.lo')::int TO 300
+  SET name = 'c';
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Update on public.fpo_bound_drift
+   ->  Seq Scan on public.fpo_bound_drift
+         Output: range_intersect(valid_at, (int4range((current_setting('fpo.lo'::text))::integer, 300))), 'c'::text, ctid
+         Filter: (fpo_bound_drift.valid_at && (int4range((current_setting('fpo.lo'::text))::integer, 300)))
+(4 rows)
+
+RESET fpo.lo;
+DROP TABLE fpo_bound_drift;
+DROP FUNCTION fpo_bound_drift_stmt();
+DROP FUNCTION fpo_bound_drift_row();
 RESET datestyle;
